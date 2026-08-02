@@ -1,0 +1,44 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── AI tool config ────────────────────────────────────────────────────────────
+.claude/
+CLAUDE.md
+.worktrees/
+.superpowers/
+.claude-flow/
+.serena/
+.swarm/
+.playwright-mcp/
+
+
+# ── .NET build artifacts ─────────────────────────────────────────────────────
+backend/**/bin/
+backend/**/obj/
+backend/.vs/
+backend/**/*.user
+backend/**/TestResults/
+backend/**/*.ncrunchproject
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.idea/
+*.suo
+*.sln.docstates
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+
+# ── Frontend build artifacts ──────────────────────────────────────────────────
+frontend/dist/
+frontend/node_modules/
+
+# ── Root-level Node artifacts (claude-flow / other tooling) ──────────────────
+node_modules/
+package-lock.json

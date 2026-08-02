@@ -1,0 +1,1326 @@
+using System.ComponentModel.DataAnnotations;
+using Odip.Domain.Enums;
+
+namespace Odip.Application.DTOs;
+
+// ══════════════════════════════════════════════════════════════
+// PARTICIPANT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record ParticipantListDto
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string? PreferredName { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public string? MaskedNdisNumber { get; init; }
+    public PlanType PlanType { get; init; }
+    public string? Region { get; init; }
+    public bool IsRepeatClient { get; init; }
+    public bool IsActive { get; init; }
+    public bool WheelchairRequired { get; init; }
+    public bool IsHighSupport { get; init; }
+    public bool IsIntensiveSupport { get; init; }
+    public SupportRatio SupportRatio { get; init; }
+}
+
+public record ParticipantDetailDto : ParticipantListDto
+{
+    public DateOnly? DateOfBirth { get; init; }
+    public string? NdisNumber { get; init; }
+    public string? FundingOrganisation { get; init; }
+    public bool RequiresOvernightSupport { get; init; }
+    public bool HasRestrictivePracticeFlag { get; init; }
+    public string? MobilityNotes { get; init; }
+    public string? EquipmentRequirements { get; init; }
+    public string? TransportRequirements { get; init; }
+    public string? MedicalSummary { get; init; }
+    public string? BehaviourRiskSummary { get; init; }
+    public string? Notes { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
+    public Guid? PreferredStaffId { get; init; }
+    public string? PreferredStaffName { get; init; }
+}
+
+public record CreateParticipantDto
+{
+    [Required, StringLength(100, MinimumLength = 1)]
+    public string FirstName { get; init; } = string.Empty;
+    [Required, StringLength(100, MinimumLength = 1)]
+    public string LastName { get; init; } = string.Empty;
+    [StringLength(100)]
+    public string? PreferredName { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    [StringLength(20)]
+    public string? NdisNumber { get; init; }
+    public PlanType PlanType { get; init; }
+    [StringLength(100)]
+    public string? Region { get; init; }
+    [StringLength(200)]
+    public string? FundingOrganisation { get; init; }
+    public bool IsRepeatClient { get; init; }
+    public bool WheelchairRequired { get; init; }
+    public bool IsHighSupport { get; init; }
+    public bool IsIntensiveSupport { get; init; }
+    public bool RequiresOvernightSupport { get; init; }
+    public bool HasRestrictivePracticeFlag { get; init; }
+    public SupportRatio SupportRatio { get; init; }
+    [StringLength(2000)]
+    public string? MobilityNotes { get; init; }
+    [StringLength(2000)]
+    public string? EquipmentRequirements { get; init; }
+    [StringLength(2000)]
+    public string? TransportRequirements { get; init; }
+    [StringLength(4000)]
+    public string? MedicalSummary { get; init; }
+    [StringLength(4000)]
+    public string? BehaviourRiskSummary { get; init; }
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+    public Guid? PreferredStaffId { get; init; }
+}
+
+public record UpdateParticipantDto : CreateParticipantDto
+{
+    public bool IsActive { get; init; } = true;
+}
+
+public record SupportProfileDto
+{
+    public Guid Id { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string? CommunicationNotes { get; init; }
+    public string? BehaviourSupportNotes { get; init; }
+    public string? RestrictivePracticeDetails { get; init; }
+    public string? ManualHandlingNotes { get; init; }
+    public string? MedicationHealthSummary { get; init; }
+    public string? EmergencyConsiderations { get; init; }
+    public string? TravelSpecificNotes { get; init; }
+    public DateOnly? ReviewDate { get; init; }
+}
+
+public record UpdateSupportProfileDto
+{
+    public string? CommunicationNotes { get; init; }
+    public string? BehaviourSupportNotes { get; init; }
+    public string? RestrictivePracticeDetails { get; init; }
+    public string? ManualHandlingNotes { get; init; }
+    public string? MedicationHealthSummary { get; init; }
+    public string? EmergencyConsiderations { get; init; }
+    public string? TravelSpecificNotes { get; init; }
+    public DateOnly? ReviewDate { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTACT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record ContactDto
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string? RoleRelationship { get; init; }
+    public string? Organisation { get; init; }
+    public string? Email { get; init; }
+    public string? Mobile { get; init; }
+    public string? Phone { get; init; }
+    public PreferredContactMethod PreferredContactMethod { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TRIP DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record TripListDto
+{
+    public Guid Id { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public string? TripCode { get; init; }
+    public string? Destination { get; init; }
+    public string? Region { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    public int DurationDays { get; init; }
+    public TripStatus Status { get; init; }
+    public int? MaxParticipants { get; init; }
+    public int CurrentParticipantCount { get; init; }
+    public int WaitlistCount { get; init; }
+    public string? LeadCoordinatorName { get; init; }
+}
+
+public record TripDetailDto : TripListDto
+{
+    public Guid? EventTemplateId { get; init; }
+    public string? EventTemplateName { get; init; }
+    public DateOnly OopDueDate { get; init; }
+    public DateOnly? BookingCutoffDate { get; init; }
+    public Guid? LeadCoordinatorId { get; init; }
+    public int? MinParticipants { get; init; }
+    public int? RequiredWheelchairCapacity { get; init; }
+    public int? RequiredBeds { get; init; }
+    public int? RequiredBedrooms { get; init; }
+    public int? MinStaffRequired { get; init; }
+    public decimal CalculatedStaffRequired { get; init; }
+    public string? Notes { get; init; }
+    public int HighSupportCount { get; init; }
+    public int WheelchairCount { get; init; }
+    public int OvernightSupportCount { get; init; }
+    public int StaffAssignedCount { get; init; }
+    public int OutstandingTaskCount { get; init; }
+    public int InsuranceConfirmedCount { get; init; }
+    public int InsuranceOutstandingCount { get; init; }
+    public decimal ActiveHoursPerDay { get; init; }
+    public TimeOnly? DepartureTime { get; init; }
+    public TimeOnly? ReturnTime { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
+}
+
+public record CreateTripDto
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string TripName { get; init; } = string.Empty;
+    [StringLength(50)]
+    public string? TripCode { get; init; }
+    public Guid? EventTemplateId { get; init; }
+    [StringLength(200)]
+    public string? Destination { get; init; }
+    [StringLength(100)]
+    public string? Region { get; init; }
+    public DateOnly StartDate { get; init; }
+    [Range(1, 365)]
+    public int DurationDays { get; init; }
+    public DateOnly? BookingCutoffDate { get; init; }
+    public Guid? LeadCoordinatorId { get; init; }
+    [Range(0, 1000)]
+    public int? MinParticipants { get; init; }
+    [Range(0, 1000)]
+    public int? MaxParticipants { get; init; }
+    [Range(0, 100)]
+    public int? RequiredWheelchairCapacity { get; init; }
+    [Range(0, 1000)]
+    public int? RequiredBeds { get; init; }
+    [Range(0, 1000)]
+    public int? RequiredBedrooms { get; init; }
+    [Range(0, 100)]
+    public int? MinStaffRequired { get; init; }
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+}
+
+public record UpdateTripDto : CreateTripDto
+{
+    public TripStatus Status { get; init; } = TripStatus.Draft;
+    public TimeOnly? DepartureTime { get; init; }
+    public TimeOnly? ReturnTime { get; init; }
+}
+
+public record PatchTripDto
+{
+    public TripStatus? Status { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOKING DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record BookingListDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string? TripName { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string? ParticipantName { get; init; }
+    public BookingStatus BookingStatus { get; init; }
+    public DateOnly BookingDate { get; init; }
+    public bool WheelchairRequired { get; init; }
+    public bool HighSupportRequired { get; init; }
+    public bool NightSupportRequired { get; init; }
+    public bool HasRestrictivePracticeFlag { get; init; }
+    public SupportRatio? SupportRatioOverride { get; init; }
+    public bool ActionRequired { get; init; }
+    public InsuranceStatus InsuranceStatus { get; init; }
+    public PaymentStatus PaymentStatus { get; init; }
+}
+
+public record BookingDetailDto : BookingListDto
+{
+    public PlanType? PlanTypeOverride { get; init; }
+    public string? FundingNotes { get; init; }
+    public string? RoomPreference { get; init; }
+    public string? TransportNotes { get; init; }
+    public string? EquipmentNotes { get; init; }
+    public string? RiskSupportNotes { get; init; }
+    public string? BookingNotes { get; init; }
+    public string? CancellationReason { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
+    public string? InsuranceProvider { get; init; }
+    public string? InsurancePolicyNumber { get; init; }
+    public DateOnly? InsuranceCoverageStart { get; init; }
+    public DateOnly? InsuranceCoverageEnd { get; init; }
+    public bool IsInsuranceValid { get; init; }
+}
+
+public record CreateBookingDto
+{
+    [Required]
+    public Guid TripInstanceId { get; init; }
+    [Required]
+    public Guid ParticipantId { get; init; }
+    public BookingStatus BookingStatus { get; init; } = BookingStatus.Enquiry;
+    public DateOnly? BookingDate { get; init; }
+    public SupportRatio? SupportRatioOverride { get; init; }
+    public bool NightSupportRequired { get; init; }
+    public bool WheelchairRequired { get; init; }
+    public bool HighSupportRequired { get; init; }
+    public bool HasRestrictivePracticeFlag { get; init; }
+    public PlanType? PlanTypeOverride { get; init; }
+    [StringLength(2000)]
+    public string? FundingNotes { get; init; }
+    [StringLength(500)]
+    public string? RoomPreference { get; init; }
+    [StringLength(2000)]
+    public string? TransportNotes { get; init; }
+    [StringLength(2000)]
+    public string? EquipmentNotes { get; init; }
+    [StringLength(4000)]
+    public string? RiskSupportNotes { get; init; }
+    [StringLength(4000)]
+    public string? BookingNotes { get; init; }
+    [StringLength(200)]
+    public string? InsuranceProvider { get; init; }
+    [StringLength(100)]
+    public string? InsurancePolicyNumber { get; init; }
+    public DateOnly? InsuranceCoverageStart { get; init; }
+    public DateOnly? InsuranceCoverageEnd { get; init; }
+    public InsuranceStatus InsuranceStatus { get; init; } = InsuranceStatus.None;
+}
+
+public record UpdateBookingDto : CreateBookingDto
+{
+    public PaymentStatus PaymentStatus { get; init; }
+    public bool ActionRequired { get; init; }
+    public string? CancellationReason { get; init; }
+}
+
+public record PatchBookingDto
+{
+    public BookingStatus? BookingStatus { get; init; }
+    public InsuranceStatus? InsuranceStatus { get; init; }
+    public PaymentStatus? PaymentStatus { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ACCOMMODATION DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record AccommodationListDto
+{
+    public Guid Id { get; init; }
+    public string PropertyName { get; init; } = string.Empty;
+    public string? Location { get; init; }
+    public string? Region { get; init; }
+    public string? Address { get; init; }
+    public string? Suburb { get; init; }
+    public string? State { get; init; }
+    public string? Postcode { get; init; }
+    public bool IsFullyModified { get; init; }
+    public bool IsSemiModified { get; init; }
+    public bool IsWheelchairAccessible { get; init; }
+    public int? BedroomCount { get; init; }
+    public int? BedCount { get; init; }
+    public int? MaxCapacity { get; init; }
+    public bool IsActive { get; init; }
+}
+
+public record AccommodationDetailDto : AccommodationListDto
+{
+    public string? ProviderOwner { get; init; }
+    public string? ContactPerson { get; init; }
+    public string? Email { get; init; }
+    public string? Phone { get; init; }
+    public string? Mobile { get; init; }
+    public string? Website { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? BeddingConfiguration { get; init; }
+    public string? HoistBathroomNotes { get; init; }
+    public string? GeneralNotes { get; init; }
+}
+
+public record CreateAccommodationDto
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string PropertyName { get; init; } = string.Empty;
+    [StringLength(200)]
+    public string? ProviderOwner { get; init; }
+    [StringLength(200)]
+    public string? Location { get; init; }
+    [StringLength(100)]
+    public string? Region { get; init; }
+    [StringLength(500)]
+    public string? Address { get; init; }
+    [StringLength(100)]
+    public string? Suburb { get; init; }
+    [StringLength(50)]
+    public string? State { get; init; }
+    [StringLength(10)]
+    public string? Postcode { get; init; }
+    [StringLength(200)]
+    public string? ContactPerson { get; init; }
+    [StringLength(200), EmailAddress]
+    public string? Email { get; init; }
+    [StringLength(50)]
+    public string? Phone { get; init; }
+    [StringLength(50)]
+    public string? Mobile { get; init; }
+    [StringLength(500)]
+    public string? Website { get; init; }
+    public bool IsFullyModified { get; init; }
+    public bool IsSemiModified { get; init; }
+    public bool IsWheelchairAccessible { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public int? BedroomCount { get; init; }
+    public int? BedCount { get; init; }
+    public int? MaxCapacity { get; init; }
+    public string? BeddingConfiguration { get; init; }
+    public string? HoistBathroomNotes { get; init; }
+    public string? GeneralNotes { get; init; }
+    public bool IsActive { get; init; } = true;
+}
+
+public record UpdateAccommodationDto : CreateAccommodationDto { }
+
+// ══════════════════════════════════════════════════════════════
+// RESERVATION DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record ReservationDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string? TripName { get; init; }
+    public Guid AccommodationPropertyId { get; init; }
+    public string? PropertyName { get; init; }
+    public DateOnly? RequestSentDate { get; init; }
+    public DateOnly? DateBooked { get; init; }
+    public DateOnly? DateConfirmed { get; init; }
+    public DateOnly CheckInDate { get; init; }
+    public DateOnly CheckOutDate { get; init; }
+    public int? BedroomsReserved { get; init; }
+    public int? BedsReserved { get; init; }
+    public decimal? Cost { get; init; }
+    public string? ConfirmationReference { get; init; }
+    public ReservationStatus ReservationStatus { get; init; }
+    public string? Comments { get; init; }
+    public string? CancellationReason { get; init; }
+    public bool HasOverlapConflict { get; init; }
+}
+
+public record CreateReservationDto
+{
+    public Guid TripInstanceId { get; init; }
+    public Guid AccommodationPropertyId { get; init; }
+    public DateOnly? RequestSentDate { get; init; }
+    public DateOnly CheckInDate { get; init; }
+    public DateOnly CheckOutDate { get; init; }
+    public int? BedroomsReserved { get; init; }
+    public int? BedsReserved { get; init; }
+    public decimal? Cost { get; init; }
+    public string? Comments { get; init; }
+    public ReservationStatus ReservationStatus { get; init; } = ReservationStatus.Researching;
+}
+
+public record UpdateReservationDto : CreateReservationDto
+{
+    public DateOnly? DateBooked { get; init; }
+    public DateOnly? DateConfirmed { get; init; }
+    public string? ConfirmationReference { get; init; }
+    public string? CancellationReason { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// VEHICLE DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record VehicleListDto
+{
+    public Guid Id { get; init; }
+    public string VehicleName { get; init; } = string.Empty;
+    public string? Registration { get; init; }
+    public VehicleType VehicleType { get; init; }
+    public int TotalSeats { get; init; }
+    public int WheelchairPositions { get; init; }
+    public bool IsInternal { get; init; }
+    public bool IsActive { get; init; }
+    public DateOnly? ServiceDueDate { get; init; }
+    public DateOnly? RegistrationDueDate { get; init; }
+}
+
+public record VehicleDetailDto : VehicleListDto
+{
+    public string? RampHoistDetails { get; init; }
+    public string? DriverRequirements { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record CreateVehicleDto
+{
+    [Required, StringLength(200, MinimumLength = 1)]
+    public string VehicleName { get; init; } = string.Empty;
+    [StringLength(20)]
+    public string? Registration { get; init; }
+    public VehicleType VehicleType { get; init; }
+    [Range(0, 100)]
+    public int TotalSeats { get; init; }
+    [Range(0, 20)]
+    public int WheelchairPositions { get; init; }
+    [StringLength(1000)]
+    public string? RampHoistDetails { get; init; }
+    [StringLength(1000)]
+    public string? DriverRequirements { get; init; }
+    public bool IsInternal { get; init; } = true;
+    public bool IsActive { get; init; } = true;
+    public DateOnly? ServiceDueDate { get; init; }
+    public DateOnly? RegistrationDueDate { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record UpdateVehicleDto : CreateVehicleDto { }
+
+// ══════════════════════════════════════════════════════════════
+// VEHICLE ASSIGNMENT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record VehicleAssignmentDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public Guid VehicleId { get; init; }
+    public string? VehicleName { get; init; }
+    public string? Registration { get; init; }
+    public VehicleAssignmentStatus Status { get; init; }
+    public DateOnly? RequestedDate { get; init; }
+    public DateOnly? ConfirmedDate { get; init; }
+    public Guid? DriverStaffId { get; init; }
+    public string? DriverName { get; init; }
+    public int? SeatRequirement { get; init; }
+    public int? WheelchairPositionRequirement { get; init; }
+    public string? PickupTravelNotes { get; init; }
+    public string? Comments { get; init; }
+    public bool HasOverlapConflict { get; init; }
+}
+
+public record CreateVehicleAssignmentDto
+{
+    public Guid TripInstanceId { get; init; }
+    public Guid VehicleId { get; init; }
+    public Guid? DriverStaffId { get; init; }
+    public int? SeatRequirement { get; init; }
+    public int? WheelchairPositionRequirement { get; init; }
+    public string? PickupTravelNotes { get; init; }
+    public string? Comments { get; init; }
+}
+
+public record UpdateVehicleAssignmentDto : CreateVehicleAssignmentDto
+{
+    public VehicleAssignmentStatus Status { get; init; }
+    public DateOnly? ConfirmedDate { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// STAFF DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record StaffListDto
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public StaffRole Role { get; init; }
+    public string? Email { get; init; }
+    public string? Mobile { get; init; }
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public bool IsActive { get; init; }
+    public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? DriverLicenceExpiryDate { get; init; }
+    public DateOnly? ManualHandlingExpiryDate { get; init; }
+    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public bool HasExpiredQualifications { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record StaffDetailDto : StaffListDto { }
+
+public record CreateStaffDto
+{
+    [Required, StringLength(100, MinimumLength = 1)]
+    public string FirstName { get; init; } = string.Empty;
+    [Required, StringLength(100, MinimumLength = 1)]
+    public string LastName { get; init; } = string.Empty;
+    public StaffRole Role { get; init; }
+    [StringLength(200), EmailAddress]
+    public string? Email { get; init; }
+    [StringLength(50)]
+    public string? Mobile { get; init; }
+    [StringLength(100)]
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public bool IsActive { get; init; } = true;
+    public string? Notes { get; init; }
+    public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? DriverLicenceExpiryDate { get; init; }
+    public DateOnly? ManualHandlingExpiryDate { get; init; }
+    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+}
+
+public record UpdateStaffDto : CreateStaffDto { }
+
+// ══════════════════════════════════════════════════════════════
+// APP SETTINGS DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record AppSettingsDto
+{
+    public int QualificationWarningDays { get; init; }
+}
+
+public record UpdateAppSettingsDto
+{
+    [System.ComponentModel.DataAnnotations.Range(1, 365)]
+    public int QualificationWarningDays { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// STAFF AVAILABILITY DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record StaffAvailabilityDto
+{
+    public Guid Id { get; init; }
+    public Guid StaffId { get; init; }
+    public DateTime StartDateTime { get; init; }
+    public DateTime EndDateTime { get; init; }
+    public AvailabilityType AvailabilityType { get; init; }
+    public bool IsRecurring { get; init; }
+    public string? RecurrenceNotes { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record CreateStaffAvailabilityDto
+{
+    public Guid StaffId { get; init; }
+    public DateTime StartDateTime { get; init; }
+    public DateTime EndDateTime { get; init; }
+    public AvailabilityType AvailabilityType { get; init; }
+    public bool IsRecurring { get; init; }
+    public string? RecurrenceNotes { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record UpdateStaffAvailabilityDto : CreateStaffAvailabilityDto { }
+
+// ══════════════════════════════════════════════════════════════
+// STAFF ASSIGNMENT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record StaffAssignmentDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string? TripName { get; init; }
+    public Guid StaffId { get; init; }
+    public string? StaffName { get; init; }
+    public string? AssignmentRole { get; init; }
+    public DateOnly AssignmentStart { get; init; }
+    public DateOnly AssignmentEnd { get; init; }
+    public AssignmentStatus Status { get; init; }
+    public bool IsDriver { get; init; }
+    public SleepoverType SleepoverType { get; init; }
+    public string? ShiftNotes { get; init; }
+    public bool HasConflict { get; init; }
+}
+
+public record CreateStaffAssignmentDto
+{
+    public Guid TripInstanceId { get; init; }
+    public Guid StaffId { get; init; }
+    public string? AssignmentRole { get; init; }
+    public DateOnly AssignmentStart { get; init; }
+    public DateOnly AssignmentEnd { get; init; }
+    public bool IsDriver { get; init; }
+    public SleepoverType SleepoverType { get; init; } = SleepoverType.None;
+    public string? ShiftNotes { get; init; }
+}
+
+public record UpdateStaffAssignmentDto : CreateStaffAssignmentDto
+{
+    public AssignmentStatus Status { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SCHEDULE DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record TripDayDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public int DayNumber { get; init; }
+    public DateOnly Date { get; init; }
+    public string? DayTitle { get; init; }
+    public string? DayNotes { get; init; }
+    public List<ScheduledActivityDto> ScheduledActivities { get; init; } = new();
+}
+
+public record UpdateTripDayDto
+{
+    public string? DayTitle { get; init; }
+    public string? DayNotes { get; init; }
+}
+
+public record ScheduledActivityDto
+{
+    public Guid Id { get; init; }
+    public Guid TripDayId { get; init; }
+    public Guid? ActivityId { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public TimeOnly? StartTime { get; init; }
+    public TimeOnly? EndTime { get; init; }
+    public string? Location { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? Notes { get; init; }
+    public int SortOrder { get; init; }
+    public ScheduledActivityStatus Status { get; init; }
+    public string? BookingReference { get; init; }
+    public string? ProviderName { get; init; }
+    public string? ProviderPhone { get; init; }
+    public string? ProviderEmail { get; init; }
+    public string? ProviderWebsite { get; init; }
+    public decimal? EstimatedCost { get; init; }
+    public ActivityCategory? Category { get; init; }
+}
+
+public record CreateScheduledActivityDto
+{
+    public Guid? ActivityId { get; init; }
+    [Required, StringLength(300, MinimumLength = 1)]
+    public string Title { get; init; } = string.Empty;
+    public TimeOnly? StartTime { get; init; }
+    public TimeOnly? EndTime { get; init; }
+    [StringLength(300)]
+    public string? Location { get; init; }
+    [StringLength(2000)]
+    public string? AccessibilityNotes { get; init; }
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+    [Range(0, 1000)]
+    public int SortOrder { get; init; }
+    public ScheduledActivityStatus Status { get; init; } = ScheduledActivityStatus.Planned;
+    [StringLength(200)]
+    public string? BookingReference { get; init; }
+    [StringLength(200)]
+    public string? ProviderName { get; init; }
+    [StringLength(50)]
+    public string? ProviderPhone { get; init; }
+    [StringLength(200), EmailAddress]
+    public string? ProviderEmail { get; init; }
+    [StringLength(500), Url]
+    public string? ProviderWebsite { get; init; }
+    [Range(0, 999999.99)]
+    public decimal? EstimatedCost { get; init; }
+}
+
+public record UpdateScheduledActivityDto
+{
+    public Guid? ActivityId { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public TimeOnly? StartTime { get; init; }
+    public TimeOnly? EndTime { get; init; }
+    public string? Location { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? Notes { get; init; }
+    public int SortOrder { get; init; }
+    public ScheduledActivityStatus Status { get; init; }
+    public string? BookingReference { get; init; }
+    public string? ProviderName { get; init; }
+    public string? ProviderPhone { get; init; }
+    public string? ProviderEmail { get; init; }
+    public string? ProviderWebsite { get; init; }
+    public decimal? EstimatedCost { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TASK DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record TaskDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string? TripName { get; init; }
+    public Guid? ParticipantBookingId { get; init; }
+    public Guid? AccommodationReservationId { get; init; }
+    public Guid? VehicleAssignmentId { get; init; }
+    public Guid? StaffAssignmentId { get; init; }
+    public TaskType TaskType { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public Guid? OwnerId { get; init; }
+    public string? OwnerName { get; init; }
+    public TaskPriority Priority { get; init; }
+    public DateOnly? DueDate { get; init; }
+    public TaskItemStatus Status { get; init; }
+    public DateOnly? CompletedDate { get; init; }
+    public string? Notes { get; init; }
+}
+
+public record CreateTaskDto
+{
+    [Required]
+    public Guid TripInstanceId { get; init; }
+    public Guid? ParticipantBookingId { get; init; }
+    public Guid? AccommodationReservationId { get; init; }
+    public Guid? VehicleAssignmentId { get; init; }
+    public Guid? StaffAssignmentId { get; init; }
+    public TaskType TaskType { get; init; }
+    [Required, StringLength(300, MinimumLength = 1)]
+    public string Title { get; init; } = string.Empty;
+    public Guid? OwnerId { get; init; }
+    public TaskPriority Priority { get; init; } = TaskPriority.Medium;
+    public DateOnly? DueDate { get; init; }
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+}
+
+public record UpdateTaskDto : CreateTaskDto
+{
+    public TaskItemStatus Status { get; init; }
+    public DateOnly? CompletedDate { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ACTIVITY DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record ActivityDto
+{
+    public Guid Id { get; init; }
+    public Guid? EventTemplateId { get; init; }
+    public string ActivityName { get; init; } = string.Empty;
+    public ActivityCategory Category { get; init; }
+    public string? Location { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? SuitabilityNotes { get; init; }
+    public string? Notes { get; init; }
+    public bool IsActive { get; init; }
+}
+
+public record CreateActivityDto
+{
+    public Guid? EventTemplateId { get; init; }
+    public string ActivityName { get; init; } = string.Empty;
+    public ActivityCategory Category { get; init; }
+    public string? Location { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? SuitabilityNotes { get; init; }
+    public string? Notes { get; init; }
+    public bool IsActive { get; init; } = true;
+}
+
+public record UpdateActivityDto : CreateActivityDto { }
+
+// ══════════════════════════════════════════════════════════════
+// EVENT TEMPLATE DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record EventTemplateDto
+{
+    public Guid Id { get; init; }
+    public string EventCode { get; init; } = string.Empty;
+    public string EventName { get; init; } = string.Empty;
+    public string? DefaultDestination { get; init; }
+    public string? DefaultRegion { get; init; }
+    public string? PreferredTimeOfYear { get; init; }
+    public int? StandardDurationDays { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? FullyModifiedAccommodationNotes { get; init; }
+    public string? SemiModifiedAccommodationNotes { get; init; }
+    public string? WheelchairAccessNotes { get; init; }
+    public string? TypicalActivities { get; init; }
+    public bool IsActive { get; init; }
+}
+
+public record CreateEventTemplateDto
+{
+    public string EventCode { get; init; } = string.Empty;
+    public string EventName { get; init; } = string.Empty;
+    public string? DefaultDestination { get; init; }
+    public string? DefaultRegion { get; init; }
+    public string? PreferredTimeOfYear { get; init; }
+    public int? StandardDurationDays { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? FullyModifiedAccommodationNotes { get; init; }
+    public string? SemiModifiedAccommodationNotes { get; init; }
+    public string? WheelchairAccessNotes { get; init; }
+    public string? TypicalActivities { get; init; }
+    public bool IsActive { get; init; } = true;
+}
+
+public record UpdateEventTemplateDto : CreateEventTemplateDto { }
+
+// ══════════════════════════════════════════════════════════════
+// DOCUMENT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record TripDocumentDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public Guid? ParticipantBookingId { get; init; }
+    public DocumentType DocumentType { get; init; }
+    public string FileName { get; init; } = string.Empty;
+    public string? FilePath { get; init; }
+    public long? FileSize { get; init; }
+    public DateOnly? DocumentDate { get; init; }
+    public string? Notes { get; init; }
+    public DateTime UploadedAt { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record DashboardSummaryDto
+{
+    public int UpcomingTripCount { get; init; }
+    public int ActiveParticipantCount { get; init; }
+    public int OutstandingTaskCount { get; init; }
+    public int OverdueTaskCount { get; init; }
+    public int ConflictCount { get; init; }
+    public int TripsMissingAccommodation { get; init; }
+    public int TripsMissingVehicles { get; init; }
+    public int TripsMissingStaff { get; init; }
+    public int OpenIncidentCount { get; init; }
+    public int QscOverdueCount { get; init; }
+    public List<TripListDto> UpcomingTrips { get; init; } = new();
+    public List<TaskDto> OverdueTasks { get; init; } = new();
+}
+
+// ══════════════════════════════════════════════════════════════
+// ITINERARY DTOs (read-only composite view)
+// ══════════════════════════════════════════════════════════════
+
+public record ItineraryDto
+{
+    public Guid TripId { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public string? TripCode { get; init; }
+    public string? Destination { get; init; }
+    public string? Region { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    public int DurationDays { get; init; }
+    public TripStatus Status { get; init; }
+    public string? LeadCoordinatorName { get; init; }
+    public string? Notes { get; init; }
+    public int ParticipantCount { get; init; }
+    public int StaffCount { get; init; }
+    public decimal TotalEstimatedCost { get; init; }
+    public List<ItineraryParticipantDto> Participants { get; init; } = new();
+    public List<ItineraryAccommodationDto> Accommodation { get; init; } = new();
+    public List<ItineraryVehicleDto> Vehicles { get; init; } = new();
+    public List<ItineraryStaffDto> Staff { get; init; } = new();
+    public List<ItineraryDayDto> Days { get; init; } = new();
+}
+
+public record ItineraryParticipantDto
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public bool WheelchairRequired { get; init; }
+    public bool HighSupportRequired { get; init; }
+    public bool NightSupportRequired { get; init; }
+    public SupportRatio? SupportRatio { get; init; }
+    public string? MobilityNotes { get; init; }
+    public string? MedicalSummary { get; init; }
+}
+
+public record ItineraryAccommodationDto
+{
+    public string PropertyName { get; init; } = string.Empty;
+    public string? Address { get; init; }
+    public string? Suburb { get; init; }
+    public string? State { get; init; }
+    public string? Phone { get; init; }
+    public DateOnly CheckInDate { get; init; }
+    public DateOnly CheckOutDate { get; init; }
+    public int? BedroomsReserved { get; init; }
+    public int? BedsReserved { get; init; }
+    public string? ConfirmationReference { get; init; }
+    public ReservationStatus ReservationStatus { get; init; }
+    public decimal? Cost { get; init; }
+    public string? Comments { get; init; }
+}
+
+public record ItineraryVehicleDto
+{
+    public string VehicleName { get; init; } = string.Empty;
+    public string? Registration { get; init; }
+    public VehicleType VehicleType { get; init; }
+    public int TotalSeats { get; init; }
+    public int WheelchairPositions { get; init; }
+    public string? DriverName { get; init; }
+    public VehicleAssignmentStatus Status { get; init; }
+    public string? PickupTravelNotes { get; init; }
+}
+
+public record ItineraryStaffDto
+{
+    public string Name { get; init; } = string.Empty;
+    public string? Role { get; init; }
+    public string? Email { get; init; }
+    public string? Mobile { get; init; }
+    public DateOnly AssignmentStart { get; init; }
+    public DateOnly AssignmentEnd { get; init; }
+    public bool IsDriver { get; init; }
+    public SleepoverType SleepoverType { get; init; }
+    public AssignmentStatus Status { get; init; }
+}
+
+public record ItineraryDayDto
+{
+    public int DayNumber { get; init; }
+    public DateOnly Date { get; init; }
+    public string? DayTitle { get; init; }
+    public string? DayNotes { get; init; }
+    public List<ItineraryActivityDto> Activities { get; init; } = new();
+    public List<ItineraryDayAccommodationEventDto> AccommodationEvents { get; init; } = new();
+    public List<string> StaffOnDuty { get; init; } = new();
+}
+
+public record ItineraryActivityDto
+{
+    public string Title { get; init; } = string.Empty;
+    public TimeOnly? StartTime { get; init; }
+    public TimeOnly? EndTime { get; init; }
+    public string? Location { get; init; }
+    public ActivityCategory? Category { get; init; }
+    public ScheduledActivityStatus Status { get; init; }
+    public string? AccessibilityNotes { get; init; }
+    public string? Notes { get; init; }
+    public string? BookingReference { get; init; }
+    public string? ProviderName { get; init; }
+    public string? ProviderPhone { get; init; }
+    public decimal? EstimatedCost { get; init; }
+}
+
+public record ItineraryDayAccommodationEventDto
+{
+    public string EventType { get; init; } = string.Empty; // "Check-in" or "Check-out"
+    public string PropertyName { get; init; } = string.Empty;
+    public string? Address { get; init; }
+    public string? ConfirmationReference { get; init; }
+}
+
+public record AuthResponseDto
+{
+    public string Token { get; init; } = string.Empty;
+    public DateTime ExpiresAt { get; init; }
+    public string Username { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public string? TenantName { get; init; }
+    public Guid? TenantId { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SCHEDULE OVERVIEW DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record ScheduleOverviewDto
+{
+    public List<ScheduleTripDto> Trips { get; init; } = new();
+    public List<ScheduleStaffDto> Staff { get; init; } = new();
+    public List<ScheduleVehicleDto> Vehicles { get; init; } = new();
+}
+
+public record ScheduleTripDto
+{
+    public Guid Id { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public string? TripCode { get; init; }
+    public string? Destination { get; init; }
+    public string? Region { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    public int DurationDays { get; init; }
+    public TripStatus Status { get; init; }
+    public int? MaxParticipants { get; init; }
+    public int CurrentParticipantCount { get; init; }
+    public int? MinStaffRequired { get; init; }
+    public int? StaffRequired { get; init; }
+    public int StaffAssignedCount { get; init; }
+    public int VehicleAssignedCount { get; init; }
+    public string? LeadCoordinatorName { get; init; }
+    public int PreferenceMatchCount { get; init; }
+}
+
+public record ScheduleStaffDto
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public StaffRole Role { get; init; }
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public List<ScheduleStaffTripStatusDto> TripStatuses { get; init; } = new();
+    public List<StaffAvailabilityDto> Availability { get; init; } = new();
+    public List<TripPreferenceDto> PreferredForTrips { get; init; } = new();
+}
+
+public record ScheduleStaffTripStatusDto
+{
+    public Guid TripId { get; init; }
+    /// Available, Unavailable, Assigned, Conflict
+    public string Status { get; init; } = string.Empty;
+    public string? AssignmentRole { get; init; }
+    public AssignmentStatus? AssignmentStatus { get; init; }
+    public Guid? AssignmentId { get; init; }
+}
+
+public record TripPreferenceDto(Guid TripId, int ParticipantCount);
+
+public record ScheduleVehicleDto
+{
+    public Guid Id { get; init; }
+    public string VehicleName { get; init; } = string.Empty;
+    public string? Registration { get; init; }
+    public VehicleType VehicleType { get; init; }
+    public int TotalSeats { get; init; }
+    public int WheelchairPositions { get; init; }
+    public bool IsInternal { get; init; }
+    public List<ScheduleVehicleTripStatusDto> TripStatuses { get; init; } = new();
+}
+
+public record ScheduleVehicleTripStatusDto
+{
+    public Guid TripId { get; init; }
+    /// Available, Assigned, Conflict
+    public string Status { get; init; } = string.Empty;
+    public VehicleAssignmentStatus? AssignmentStatus { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// INCIDENT REPORT DTOs
+// ══════════════════════════════════════════════════════════════
+
+public record IncidentListDto
+{
+    public Guid Id { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string? TripName { get; init; }
+    public IncidentType IncidentType { get; init; }
+    public IncidentSeverity Severity { get; init; }
+    public IncidentStatus Status { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public DateTime IncidentDateTime { get; init; }
+    public string? Location { get; init; }
+    public string? ReportedByName { get; init; }
+    public string? InvolvedParticipantName { get; init; }
+    public QscReportingStatus QscReportingStatus { get; init; }
+    public bool IsOverdue24h { get; init; }
+    public DateTime CreatedAt { get; init; }
+}
+
+public record IncidentDetailDto : IncidentListDto
+{
+    public Guid? ParticipantBookingId { get; init; }
+    public Guid? InvolvedParticipantId { get; init; }
+    public Guid? InvolvedStaffId { get; init; }
+    public string? InvolvedStaffName { get; init; }
+    public Guid ReportedByStaffId { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public string? ImmediateActionsTaken { get; init; }
+    public bool WereEmergencyServicesCalled { get; init; }
+    public string? EmergencyServicesDetails { get; init; }
+    public string? WitnessNames { get; init; }
+    public string? WitnessStatements { get; init; }
+    public DateTime? QscReportedAt { get; init; }
+    public string? QscReferenceNumber { get; init; }
+    public Guid? ReviewedByStaffId { get; init; }
+    public string? ReviewedByName { get; init; }
+    public DateTime? ReviewedAt { get; init; }
+    public string? ReviewNotes { get; init; }
+    public string? CorrectiveActions { get; init; }
+    public DateTime? ResolvedAt { get; init; }
+    public bool FamilyNotified { get; init; }
+    public DateTime? FamilyNotifiedAt { get; init; }
+    public bool SupportCoordinatorNotified { get; init; }
+    public DateTime? SupportCoordinatorNotifiedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
+}
+
+public record CreateIncidentDto
+{
+    [Required]
+    public Guid TripInstanceId { get; init; }
+    public Guid? ParticipantBookingId { get; init; }
+    public Guid? InvolvedParticipantId { get; init; }
+    public Guid? InvolvedStaffId { get; init; }
+    [Required]
+    public Guid ReportedByStaffId { get; init; }
+    public IncidentType IncidentType { get; init; }
+    public IncidentSeverity Severity { get; init; }
+    [Required, StringLength(300, MinimumLength = 1)]
+    public string Title { get; init; } = string.Empty;
+    [Required, StringLength(10000, MinimumLength = 1)]
+    public string Description { get; init; } = string.Empty;
+    public DateTime IncidentDateTime { get; init; }
+    [StringLength(300)]
+    public string? Location { get; init; }
+    [StringLength(4000)]
+    public string? ImmediateActionsTaken { get; init; }
+    public bool WereEmergencyServicesCalled { get; init; }
+    [StringLength(2000)]
+    public string? EmergencyServicesDetails { get; init; }
+    [StringLength(1000)]
+    public string? WitnessNames { get; init; }
+    [StringLength(4000)]
+    public string? WitnessStatements { get; init; }
+}
+
+public record UpdateIncidentDto : CreateIncidentDto
+{
+    public IncidentStatus Status { get; init; }
+    public QscReportingStatus QscReportingStatus { get; init; }
+    public DateTime? QscReportedAt { get; init; }
+    public string? QscReferenceNumber { get; init; }
+    public Guid? ReviewedByStaffId { get; init; }
+    public string? ReviewNotes { get; init; }
+    public string? CorrectiveActions { get; init; }
+    public bool FamilyNotified { get; init; }
+    public DateTime? FamilyNotifiedAt { get; init; }
+    public bool SupportCoordinatorNotified { get; init; }
+    public DateTime? SupportCoordinatorNotifiedAt { get; init; }
+}
+
+// ── Tenant DTOs ─────────────────────────────────────────────────────────────
+
+public record TenantDto(
+    Guid Id,
+    string Name,
+    string EmailDomain,
+    bool IsActive,
+    DateTime CreatedAt);
+
+public record CreateTenantDto(
+    string Name,
+    string EmailDomain);
+
+public record UpdateTenantDto(
+    string Name,
+    string EmailDomain,
+    bool IsActive);
+
+public record TenantUserDto(
+    Guid Id,
+    string FullName,
+    string Role,
+    bool IsActive);
+
+// ── Admin User DTOs ────────────────────────────────────────────────────────
+
+public record AdminUserDto(
+    Guid Id,
+    string FirstName,
+    string LastName,
+    string FullName,
+    string Email,
+    string Username,
+    string Role,
+    Guid TenantId,
+    string TenantName,
+    Guid? StaffId,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime? LastLoginAt);
+
+public record CreateAdminUserDto(
+    string FirstName,
+    string LastName,
+    string Email,
+    string Username,
+    string Role,
+    Guid TenantId,
+    Guid? StaffId,
+    string? Password);
+
+public record UpdateAdminUserDto(
+    string FirstName,
+    string LastName,
+    string Email,
+    string Username,
+    string Role,
+    Guid? StaffId,
+    bool IsActive);
+
+// ── Tenant Summary DTO (includes user count) ──────────────────────────────
+
+public record TenantSummaryDto(
+    Guid Id,
+    string Name,
+    string EmailDomain,
+    bool IsActive,
+    DateTime CreatedAt,
+    int UserCount);
+
+// ── Bundled Tenant Creation ───────────────────────────────────────────────
+
+public record CreateTenantWithSetupDto(
+    string Name,
+    string EmailDomain,
+    UpsertProviderSettingsDto? ProviderSettings,
+    CreateInitialUserDto? InitialUser);
+
+public record CreateInitialUserDto(
+    string FirstName,
+    string LastName,
+    string Email,
+    string Username,
+    string Role,
+    string? Password);
+
+// ── Public Holidays Sync DTOs ──────────────────────────────────────────────
+
+public record SyncHolidaysDto
+{
+    public int? FromYear { get; init; }
+    public int? ToYear { get; init; }
+}
+
+public record SyncResultDto
+{
+    public int YearsProcessed { get; init; }
+    public int HolidaysAdded { get; init; }
+    public int HolidaysUpdated { get; init; }
+    public string[] Errors { get; init; } = [];
+}

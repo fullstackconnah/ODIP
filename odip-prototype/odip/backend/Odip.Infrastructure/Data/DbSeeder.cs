@@ -1,0 +1,859 @@
+using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+
+namespace Odip.Infrastructure.Data;
+
+/// <summary>
+/// Seeds realistic Australian NDIS sample data for development and demonstration.
+/// </summary>
+public static class DbSeeder
+{
+    public static async Task SeedAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        var hasParticipants = await context.Participants.IgnoreQueryFilters().AnyAsync(ct);
+
+        // ── Tenant ───────────────────────────────────────────────
+        // Always ensure the Odip tenant exists (runs unconditionally on every startup)
+        var tenantId = Guid.Parse("a0000000-0000-0000-0000-000000000001");
+        var odipTenant = await context.Tenants
+            .FirstOrDefaultAsync(t => t.EmailDomain == "odip.com.au", ct);
+        if (odipTenant is null)
+        {
+            context.Tenants.Add(new Tenant
+            {
+                Id = tenantId,
+                Name = "Odip",
+                EmailDomain = "odip.com.au",
+                IsActive = true
+            });
+            await context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            tenantId = odipTenant.Id;
+        }
+
+        // ── Demo Tenant ───────────────────────────────────────────
+        // Always ensure the Demo tenant exists (runs unconditionally on every startup)
+        var demoTenantId = Guid.Parse("b0000000-0000-0000-0000-000000000001");
+        var demoTenant = await context.Tenants
+            .FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+        {
+            context.Tenants.Add(new Tenant
+            {
+                Id = demoTenantId,
+                Name = "Demo",
+                EmailDomain = "demo.odip.com.au",
+                IsActive = true
+            });
+            await context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            demoTenantId = demoTenant.Id;
+        }
+
+        // Seed fixed-ID users — guard each individually so this is safe on redeploy.
+        // Use IgnoreQueryFilters() so global tenant filters don't cause a false-negative.
+        var existingStaff = await context.Staff.IgnoreQueryFilters().ToListAsync(ct);
+
+        var seedUsers = new[]
+        {
+            // Real SuperAdmin — stays on Odip tenant
+            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000001"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000001"), TenantId = tenantId, Username = "admin", Email = "admin@odip.com.au", FirstName = "System", LastName = "Admin", Role = UserRole.SuperAdmin }),
+            // Demo users — assigned to the Demo tenant
+            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000002"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "sarah.mitchell", Email = "sarah.mitchell@demo.odip.com.au", FirstName = "Sarah", LastName = "Mitchell", Role = UserRole.Coordinator, StaffId = existingStaff.Count > 0 ? existingStaff[0].Id : (Guid?)null }),
+            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000003"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "james.obrien", Email = "james.obrien@demo.odip.com.au", FirstName = "James", LastName = "O'Brien", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 1 ? existingStaff[1].Id : (Guid?)null }),
+            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000001"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, Username = "rachel.thompson", Email = "rachel.thompson@demo.odip.com.au", FirstName = "Rachel", LastName = "Thompson", Role = UserRole.Coordinator, StaffId = existingStaff.Count > 4 ? existingStaff[4].Id : (Guid?)null }),
+            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000002"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "emily.nguyen", Email = "emily.nguyen@demo.odip.com.au", FirstName = "Emily", LastName = "Nguyen", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 2 ? existingStaff[2].Id : (Guid?)null }),
+            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000003"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "daniel.williams", Email = "daniel.williams@demo.odip.com.au", FirstName = "Daniel", LastName = "Williams", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 3 ? existingStaff[3].Id : (Guid?)null }),
+            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000004"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, Username = "coordinator.read", Email = "readonly@demo.odip.com.au", FirstName = "Read", LastName = "Only", Role = UserRole.ReadOnly }),
+        };
+
+        var usersAdded = false;
+        foreach (var (id, user) in seedUsers)
+        {
+            var exists = await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == id, ct);
+            if (!exists)
+            {
+                context.Users.Add(user);
+                usersAdded = true;
+            }
+        }
+        if (usersAdded)
+            await context.SaveChangesAsync(ct);
+
+        // Ensure SuperAdmin user exists for Connah tenant
+        var connahTenantId = new Guid("00000000-0000-0000-0000-000000000001");
+        var superAdminExists = await context.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(u => u.Email == "info@connah.com.au" && u.TenantId == connahTenantId, ct);
+        if (!superAdminExists)
+        {
+            context.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                TenantId = connahTenantId,
+                Username = "superadmin",
+                Email = "info@connah.com.au",
+                FirstName = "Super",
+                LastName = "Admin",
+                Role = UserRole.SuperAdmin,
+                IsActive = true,
+            });
+            await context.SaveChangesAsync(ct);
+        }
+
+        // Fix any existing seeded users that have Guid.Empty TenantId
+        var orphanedUsers = await context.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.TenantId == Guid.Empty)
+            .ToListAsync(ct);
+        if (orphanedUsers.Count > 0)
+        {
+            foreach (var u in orphanedUsers) u.TenantId = tenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        // Fixup: reassign demo users previously placed on Odip tenant to Demo tenant
+        var demoUserIds = new[]
+        {
+            Guid.Parse("b1000000-0000-0000-0000-000000000002"),
+            Guid.Parse("b1000000-0000-0000-0000-000000000003"),
+            Guid.Parse("b2000000-0000-0000-0000-000000000001"),
+            Guid.Parse("b2000000-0000-0000-0000-000000000002"),
+            Guid.Parse("b2000000-0000-0000-0000-000000000003"),
+            Guid.Parse("b2000000-0000-0000-0000-000000000004"),
+        };
+        var misplacedDemoUsers = await context.Users
+            .IgnoreQueryFilters()
+            .Where(u => demoUserIds.Contains(u.Id) && u.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedDemoUsers.Count > 0)
+        {
+            foreach (var u in misplacedDemoUsers) u.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        // Ensure admin@odip.com.au has SuperAdmin role (upgrade from Admin if already seeded)
+        var adminUser = await context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email == "admin@odip.com.au", ct);
+        if (adminUser is not null && adminUser.Role != UserRole.SuperAdmin)
+        {
+            adminUser.Role = UserRole.SuperAdmin;
+            await context.SaveChangesAsync(ct);
+        }
+
+        // Fixup: reassign existing demo entities (Staff, Participants, EventTemplates,
+        // AccommodationProperties, Vehicles, TripInstances) to the Demo tenant if they
+        // were previously seeded under the Odip tenant.
+        var demoStaffIds = new[]
+        {
+            Guid.Parse("a1000000-0000-0000-0000-000000000001"), Guid.Parse("a1000000-0000-0000-0000-000000000002"),
+            Guid.Parse("a1000000-0000-0000-0000-000000000003"), Guid.Parse("a1000000-0000-0000-0000-000000000004"),
+            Guid.Parse("a1000000-0000-0000-0000-000000000005"), Guid.Parse("a2000000-0000-0000-0000-000000000001"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000002"), Guid.Parse("a2000000-0000-0000-0000-000000000003"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000004"), Guid.Parse("a2000000-0000-0000-0000-000000000005"),
+        };
+        var misplacedStaff = await context.Staff
+            .IgnoreQueryFilters()
+            .Where(s => demoStaffIds.Contains(s.Id) && s.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedStaff.Count > 0)
+        {
+            foreach (var s in misplacedStaff) s.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        var demoTemplateIds = new[]
+        {
+            Guid.Parse("c1000000-0000-0000-0000-000000000001"), Guid.Parse("c1000000-0000-0000-0000-000000000002"),
+            Guid.Parse("c1000000-0000-0000-0000-000000000003"), Guid.Parse("c2000000-0000-0000-0000-000000000001"),
+        };
+        var misplacedTemplates = await context.EventTemplates
+            .IgnoreQueryFilters()
+            .Where(t => demoTemplateIds.Contains(t.Id) && t.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedTemplates.Count > 0)
+        {
+            foreach (var t in misplacedTemplates) t.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        var demoParticipantIds = new[]
+        {
+            Guid.Parse("d1000000-0000-0000-0000-000000000001"), Guid.Parse("d1000000-0000-0000-0000-000000000002"),
+            Guid.Parse("d1000000-0000-0000-0000-000000000003"), Guid.Parse("d1000000-0000-0000-0000-000000000004"),
+            Guid.Parse("d1000000-0000-0000-0000-000000000005"), Guid.Parse("d1000000-0000-0000-0000-000000000006"),
+            Guid.Parse("d1000000-0000-0000-0000-000000000007"), Guid.Parse("d1000000-0000-0000-0000-000000000008"),
+            Guid.Parse("d1000000-0000-0000-0000-000000000009"), Guid.Parse("d1000000-0000-0000-0000-000000000010"),
+            Guid.Parse("d2000000-0000-0000-0000-000000000001"), Guid.Parse("d2000000-0000-0000-0000-000000000002"),
+            Guid.Parse("d2000000-0000-0000-0000-000000000003"), Guid.Parse("d2000000-0000-0000-0000-000000000004"),
+            Guid.Parse("d2000000-0000-0000-0000-000000000005"), Guid.Parse("d2000000-0000-0000-0000-000000000006"),
+            Guid.Parse("d2000000-0000-0000-0000-000000000007"), Guid.Parse("d2000000-0000-0000-0000-000000000008"),
+            Guid.Parse("d2000000-0000-0000-0000-000000000009"), Guid.Parse("d2000000-0000-0000-0000-000000000010"),
+        };
+        var misplacedParticipants = await context.Participants
+            .IgnoreQueryFilters()
+            .Where(p => demoParticipantIds.Contains(p.Id) && p.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedParticipants.Count > 0)
+        {
+            foreach (var p in misplacedParticipants) p.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        var demoPropertyIds = new[]
+        {
+            Guid.Parse("f1000000-0000-0000-0000-000000000001"), Guid.Parse("f1000000-0000-0000-0000-000000000002"),
+            Guid.Parse("f1000000-0000-0000-0000-000000000003"), Guid.Parse("f1000000-0000-0000-0000-000000000004"),
+            Guid.Parse("f3000000-0000-0000-0000-000000000001"), Guid.Parse("f3000000-0000-0000-0000-000000000002"),
+        };
+        var misplacedProperties = await context.AccommodationProperties
+            .IgnoreQueryFilters()
+            .Where(p => demoPropertyIds.Contains(p.Id) && p.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedProperties.Count > 0)
+        {
+            foreach (var p in misplacedProperties) p.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        var demoVehicleIds = new[]
+        {
+            Guid.Parse("f2000000-0000-0000-0000-000000000001"), Guid.Parse("f2000000-0000-0000-0000-000000000002"),
+            Guid.Parse("f4000000-0000-0000-0000-000000000001"), Guid.Parse("f4000000-0000-0000-0000-000000000002"),
+        };
+        var misplacedVehicles = await context.Vehicles
+            .IgnoreQueryFilters()
+            .Where(v => demoVehicleIds.Contains(v.Id) && v.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedVehicles.Count > 0)
+        {
+            foreach (var v in misplacedVehicles) v.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        var demoTripIds = new[]
+        {
+            Guid.Parse("01000000-0000-0000-0000-000000000001"), Guid.Parse("01000000-0000-0000-0000-000000000002"),
+            Guid.Parse("01000000-0000-0000-0000-000000000003"), Guid.Parse("01000000-0000-0000-0000-000000000004"),
+            Guid.Parse("01000000-0000-0000-0000-000000000005"), Guid.Parse("09000000-0000-0000-0000-000000000001"),
+            Guid.Parse("09000000-0000-0000-0000-000000000002"), Guid.Parse("09000000-0000-0000-0000-000000000003"),
+            Guid.Parse("09000000-0000-0000-0000-000000000004"), Guid.Parse("09000000-0000-0000-0000-000000000005"),
+        };
+        var misplacedTrips = await context.TripInstances
+            .IgnoreQueryFilters()
+            .Where(t => demoTripIds.Contains(t.Id) && t.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedTrips.Count > 0)
+        {
+            foreach (var t in misplacedTrips) t.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
+        if (hasParticipants)
+            return;
+
+        // ── Staff (10) ───────────────────────────────────────────
+        var staff = new List<Staff>
+        {
+            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Sarah", LastName = "Mitchell", Role = StaffRole.Coordinator, Email = "sarah.mitchell@demo.odip.com.au", Mobile = "0412345001", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "James", LastName = "O'Brien", Role = StaffRole.SeniorSupportWorker, Email = "james.obrien@demo.odip.com.au", Mobile = "0412345002", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Emily", LastName = "Nguyen", Role = StaffRole.SupportWorker, Email = "emily.nguyen@demo.odip.com.au", Mobile = "0412345003", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Daniel", LastName = "Williams", Role = StaffRole.SupportWorker, Email = "daniel.williams@demo.odip.com.au", Mobile = "0412345004", Region = "South East QLD", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = false, IsOvernightEligible = false },
+            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Rachel", LastName = "Thompson", Role = StaffRole.TeamLeader, Email = "rachel.thompson@demo.odip.com.au", Mobile = "0412345005", Region = "Melbourne Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            // New staff
+            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Marcus", LastName = "Papadopoulos", Role = StaffRole.SeniorSupportWorker, Email = "marcus.papadopoulos@demo.odip.com.au", Mobile = "0412345006", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "Priya", LastName = "Sharma", Role = StaffRole.SupportWorker, Email = "priya.sharma@demo.odip.com.au", Mobile = "0412345007", Region = "Melbourne Metro", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Lachlan", LastName = "Robertson", Role = StaffRole.SupportWorker, Email = "lachlan.robertson@demo.odip.com.au", Mobile = "0412345008", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = false, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = false, Notes = "Currently completing First Aid renewal." },
+            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Jade", LastName = "Watkins", Role = StaffRole.Coordinator, Email = "jade.watkins@demo.odip.com.au", Mobile = "0412345009", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Brendan", LastName = "Nguyen", Role = StaffRole.TeamLeader, Email = "brendan.nguyen@demo.odip.com.au", Mobile = "0412345010", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
+        };
+        context.Staff.AddRange(staff);
+
+        // Link existing users to staff
+        var existingUsers = await context.Users.IgnoreQueryFilters().ToListAsync(ct);
+        void LinkUser(string username, Guid staffId)
+        {
+            var u = existingUsers.FirstOrDefault(x => x.Username == username);
+            if (u != null && u.StaffId == null) u.StaffId = staffId;
+        }
+        LinkUser("sarah.mitchell", staff[0].Id);
+        LinkUser("james.obrien", staff[1].Id);
+        LinkUser("emily.nguyen", staff[2].Id);
+        LinkUser("daniel.williams", staff[3].Id);
+        LinkUser("rachel.thompson", staff[4].Id);
+
+        // ── Event Templates (4) ──────────────────────────────────
+        var templates = new List<EventTemplate>
+        {
+            new() { Id = Guid.Parse("c1000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, EventCode = "GCBB", EventName = "Gold Coast Beach Break", DefaultDestination = "Gold Coast, QLD", DefaultRegion = "South East QLD", PreferredTimeOfYear = "March-May, September-November", StandardDurationDays = 5, AccessibilityNotes = "Beach wheelchair available from Surfers Paradise SLSC. Accessible boardwalk at Broadwater Parklands.", FullyModifiedAccommodationNotes = "Fully modified units available at Mermaid Waters complex", WheelchairAccessNotes = "Flat terrain, accessible tram and bus network" },
+            new() { Id = Guid.Parse("c1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, EventCode = "BMA", EventName = "Blue Mountains Adventure", DefaultDestination = "Katoomba, NSW", DefaultRegion = "Greater Sydney", PreferredTimeOfYear = "October-April", StandardDurationDays = 4, AccessibilityNotes = "Some lookouts wheelchair accessible. Scenic Railway has limited wheelchair access.", FullyModifiedAccommodationNotes = "Mountain Heritage Lodge has two fully modified rooms", WheelchairAccessNotes = "Steep terrain — plan carefully for wheelchair users" },
+            new() { Id = Guid.Parse("c1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, EventCode = "MAW", EventName = "Melbourne Arts Weekend", DefaultDestination = "Melbourne, VIC", DefaultRegion = "Melbourne Metro", PreferredTimeOfYear = "Year-round, avoid Jan school holidays", StandardDurationDays = 3, AccessibilityNotes = "Most galleries and museums are fully accessible. Trams have low-floor access.", FullyModifiedAccommodationNotes = "Several CBD hotels with accessible rooms", WheelchairAccessNotes = "Generally flat CBD, excellent public transport accessibility" },
+            new() { Id = Guid.Parse("c2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, EventCode = "CAIRNS", EventName = "Cairns Tropical Getaway", DefaultDestination = "Cairns, QLD", DefaultRegion = "North QLD", PreferredTimeOfYear = "May-October (dry season)", StandardDurationDays = 7, AccessibilityNotes = "Esplanade boardwalk fully accessible. Great Barrier Reef pontoon has accessible boarding. Some rainforest walks are not suitable for wheelchairs.", FullyModifiedAccommodationNotes = "Several accessible apartments available near the Esplanade", WheelchairAccessNotes = "Flat CBD. Esplanade and waterfront areas accessible. Plan ahead for reef tours." },
+        };
+        context.EventTemplates.AddRange(templates);
+
+        // ── Participants (20) ────────────────────────────────────
+        var participants = new List<Participant>
+        {
+            // Original 10
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Liam", LastName = "Johnson", DateOfBirth = new DateOnly(1995, 3, 15), NdisNumber = "430567891", PlanType = PlanType.PlanManaged, Region = "South East QLD", FundingOrganisation = "Maple Plan Management", IsRepeatClient = true, WheelchairRequired = true, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Manual wheelchair user, independent transfers", EquipmentRequirements = "Standard manual wheelchair", TransportRequirements = "Vehicle with wheelchair ramp", MedicalSummary = "Spinal cord injury L1-L2. Independent with ADLs.", Notes = "Loves the beach. Very social." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "Sophie", LastName = "Brown", PreferredName = "Soph", DateOfBirth = new DateOnly(1988, 7, 22), NdisNumber = "430567892", PlanType = PlanType.AgencyManaged, Region = "South East QLD", FundingOrganisation = "NDIA", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = true, RequiresOvernightSupport = true, HasRestrictivePracticeFlag = true, SupportRatio = SupportRatio.TwoToOne, MobilityNotes = "Ambulant with some support for balance", MedicalSummary = "Acquired brain injury. Epilepsy — breakthrough seizures.", BehaviourRiskSummary = "Can become distressed in loud environments. De-escalation strategies in BSP.", Notes = "Enjoys art and music. Needs structured routine." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Noah", LastName = "Taylor", DateOfBirth = new DateOnly(2001, 11, 5), NdisNumber = "430567893", PlanType = PlanType.SelfManaged, Region = "Greater Sydney", IsRepeatClient = false, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.SharedSupport, MobilityNotes = "Fully ambulant", Notes = "First trip with us. Interested in bushwalking." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Olivia", LastName = "Wilson", DateOfBirth = new DateOnly(1992, 1, 30), NdisNumber = "430567894", PlanType = PlanType.PlanManaged, Region = "Melbourne Metro", FundingOrganisation = "MyCareSpace Plan Management", IsRepeatClient = true, WheelchairRequired = true, IsHighSupport = true, RequiresOvernightSupport = true, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Electric wheelchair. Requires hoist for transfers.", EquipmentRequirements = "Electric wheelchair, ceiling hoist or mobile hoist", TransportRequirements = "Accessible vehicle with tie-down system", MedicalSummary = "Cerebral palsy — quadriplegia. PEG feeding.", Notes = "Loves galleries and live music." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Ethan", LastName = "Davis", DateOfBirth = new DateOnly(1999, 5, 18), NdisNumber = "430567895", PlanType = PlanType.AgencyManaged, Region = "South East QLD", FundingOrganisation = "NDIA", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToTwo, Notes = "Enjoys outdoor activities. Good swimmer." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, FirstName = "Mia", LastName = "Anderson", DateOfBirth = new DateOnly(1997, 9, 12), NdisNumber = "430567896", PlanType = PlanType.PlanManaged, Region = "South East QLD", FundingOrganisation = "My Plan Manager", IsRepeatClient = false, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.SharedSupport, Notes = "Quiet personality. Enjoys reading and cooking." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, FirstName = "Jack", LastName = "Thomas", DateOfBirth = new DateOnly(1990, 12, 3), NdisNumber = "430567897", PlanType = PlanType.SelfManaged, Region = "Greater Sydney", IsRepeatClient = true, WheelchairRequired = true, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Manual wheelchair. Independent pusher.", TransportRequirements = "Accessible vehicle", Notes = "Very independent. Likes photography." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, FirstName = "Charlotte", LastName = "White", PreferredName = "Charlie", DateOfBirth = new DateOnly(2003, 4, 25), NdisNumber = "430567898", PlanType = PlanType.AgencyManaged, Region = "Melbourne Metro", FundingOrganisation = "NDIA", IsRepeatClient = false, WheelchairRequired = false, IsHighSupport = true, RequiresOvernightSupport = true, HasRestrictivePracticeFlag = true, SupportRatio = SupportRatio.OneToOne, MedicalSummary = "Autism spectrum — level 3. Anxiety disorder.", BehaviourRiskSummary = "Flight risk in unfamiliar environments. Requires 1:1 line-of-sight supervision.", Notes = "Loves animals and nature." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, FirstName = "William", LastName = "Martin", DateOfBirth = new DateOnly(1985, 8, 14), NdisNumber = "430567899", PlanType = PlanType.PlanManaged, Region = "South East QLD", FundingOrganisation = "Maple Plan Management", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToTwo, Notes = "Experienced traveller. Enjoys sports." },
+            new() { Id = Guid.Parse("d1000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, FirstName = "Amelia", LastName = "Garcia", DateOfBirth = new DateOnly(1994, 6, 8), NdisNumber = "430567900", PlanType = PlanType.PlanManaged, Region = "Melbourne Metro", FundingOrganisation = "MyCareSpace Plan Management", IsRepeatClient = true, WheelchairRequired = true, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Electric wheelchair. Independent.", TransportRequirements = "Accessible vehicle with ramp", Notes = "Very social. Enjoys cafes and shopping." },
+            // New 10
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Isabella", LastName = "Clarke", DateOfBirth = new DateOnly(1993, 2, 14), NdisNumber = "430567901", PlanType = PlanType.PlanManaged, Region = "Brisbane Metro", FundingOrganisation = "Maple Plan Management", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToTwo, Notes = "Enthusiastic traveller. Loves live music and cafes." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "Mason", LastName = "Nguyen", DateOfBirth = new DateOnly(1998, 7, 3), NdisNumber = "430567902", PlanType = PlanType.AgencyManaged, Region = "South East QLD", FundingOrganisation = "NDIA", IsRepeatClient = false, WheelchairRequired = true, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Power wheelchair user. Independent with transfers on level surfaces.", TransportRequirements = "Accessible vehicle with power wheelchair capacity", Notes = "First-time traveller. Very excited about the Cairns trip." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Chloe", LastName = "Robinson", PreferredName = "Chlo", DateOfBirth = new DateOnly(2000, 10, 20), NdisNumber = "430567903", PlanType = PlanType.SelfManaged, Region = "Greater Sydney", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = true, RequiresOvernightSupport = true, HasRestrictivePracticeFlag = true, SupportRatio = SupportRatio.TwoToOne, MedicalSummary = "Down syndrome. Congenital heart condition — cleared for travel.", BehaviourRiskSummary = "Can become upset with sudden changes. Needs prior warning and visual schedule.", Notes = "Loves dancing and craft activities." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Thomas", LastName = "Patel", DateOfBirth = new DateOnly(1987, 4, 11), NdisNumber = "430567904", PlanType = PlanType.PlanManaged, Region = "Melbourne Metro", FundingOrganisation = "My Plan Manager", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.SharedSupport, Notes = "Avid sports fan. Happy to share room with others." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Grace", LastName = "O'Sullivan", DateOfBirth = new DateOnly(1996, 12, 1), NdisNumber = "430567905", PlanType = PlanType.AgencyManaged, Region = "South East QLD", FundingOrganisation = "NDIA", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToTwo, Notes = "Loves cooking and gardening. Good communicator." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, FirstName = "Harrison", LastName = "Lee", DateOfBirth = new DateOnly(1991, 9, 7), NdisNumber = "430567906", PlanType = PlanType.PlanManaged, Region = "Brisbane Metro", FundingOrganisation = "Maple Plan Management", IsRepeatClient = false, WheelchairRequired = true, IsHighSupport = true, RequiresOvernightSupport = true, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Manual wheelchair. Requires two-person assist for some transfers.", EquipmentRequirements = "Manual wheelchair, shower commode", TransportRequirements = "Accessible vehicle with ramp", MedicalSummary = "Multiple sclerosis. Fatigue management important.", Notes = "Keen to travel north. Prefers morning activities." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, FirstName = "Zoe", LastName = "Campbell", DateOfBirth = new DateOnly(2002, 5, 28), NdisNumber = "430567907", PlanType = PlanType.SelfManaged, Region = "Greater Sydney", IsRepeatClient = false, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToTwo, Notes = "Interested in art and photography. Very independent." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, FirstName = "Ryan", LastName = "Murphy", PreferredName = "Ry", DateOfBirth = new DateOnly(1989, 3, 18), NdisNumber = "430567908", PlanType = PlanType.AgencyManaged, Region = "Melbourne Metro", FundingOrganisation = "NDIA", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = true, RequiresOvernightSupport = true, HasRestrictivePracticeFlag = true, SupportRatio = SupportRatio.OneToOne, MedicalSummary = "Acquired brain injury — stroke at 32. Aphasia and right-side weakness.", BehaviourRiskSummary = "Can become frustrated when communication is difficult. Allow extra time.", Notes = "Loves AFL. Comfortable traveller since ABI rehab." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, FirstName = "Natalie", LastName = "Walsh", DateOfBirth = new DateOnly(1994, 8, 22), NdisNumber = "430567909", PlanType = PlanType.PlanManaged, Region = "South East QLD", FundingOrganisation = "Maple Plan Management", IsRepeatClient = true, WheelchairRequired = false, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToThree, Notes = "Social butterfly. Gets on well with everyone." },
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, FirstName = "Dylan", LastName = "Foster", DateOfBirth = new DateOnly(1997, 1, 9), NdisNumber = "430567910", PlanType = PlanType.PlanManaged, Region = "Brisbane Metro", FundingOrganisation = "My Plan Manager", IsRepeatClient = false, WheelchairRequired = true, IsHighSupport = false, RequiresOvernightSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Manual wheelchair. Active pusher, independent outdoors on flat terrain.", TransportRequirements = "Accessible vehicle", Notes = "Loves the outdoors. Eager to try the reef." },
+        };
+        context.Participants.AddRange(participants);
+
+        // ── Support Profiles (8) ─────────────────────────────────
+        var supportProfiles = new List<SupportProfile>
+        {
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[1].Id, CommunicationNotes = "Uses key word signing and some verbal communication. Allow extra processing time.", BehaviourSupportNotes = "BSP in place. Avoid loud/crowded environments. Use visual schedule. De-escalation: quiet space, deep pressure.", RestrictivePracticeDetails = "Environmental restriction — locked doors during sleep. Authorised by NDIS Commission.", MedicationHealthSummary = "Epilepsy medication — Keppra 500mg BD. PRN Midazolam nasal spray for prolonged seizures.", EmergencyConsiderations = "Seizure first aid protocol attached. Ambulance if seizure > 5 min.", TravelSpecificNotes = "Needs own room with staff nearby. Extra transition time between activities.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[3].Id, CommunicationNotes = "Uses AAC device (Proloquo2Go on iPad). Understands verbal communication well.", ManualHandlingNotes = "Requires ceiling hoist or mobile hoist for all transfers. Two-person assist for bed positioning.", MedicationHealthSummary = "Multiple medications — see medication chart. PEG feeding schedule attached.", EmergencyConsiderations = "Autonomic dysreflexia risk — see emergency protocol.", TravelSpecificNotes = "Equipment list attached. Check accommodation has ceiling hoists or book mobile hoist.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[7].Id, CommunicationNotes = "Limited verbal. Uses PECS. Responds well to visual schedules and social stories.", BehaviourSupportNotes = "Runs when anxious — line-of-sight supervision required at all times in community. Social stories prepared before each new environment.", RestrictivePracticeDetails = "Continuous supervision in community settings. GPS tracker watch. Authorised.", EmergencyConsiderations = "If missing — call 000 immediately. Has limited safety awareness around roads and water.", TravelSpecificNotes = "Pre-trip social stories essential. Visit photos of accommodation/activities sent to family 2 weeks prior.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)) },
+            // New support profiles
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[12].Id, CommunicationNotes = "Verbal with good receptive language. Responds well to calm, clear instructions. Upset by raised voices.", BehaviourSupportNotes = "BSP in place. Provide 5-minute warnings before transitions. Comfort item (stress ball) always in bag.", RestrictivePracticeDetails = "No restrictive practices. BSP preventative strategies only.", MedicationHealthSummary = "Cardiac medication — Digoxin 0.25mg daily. Take with breakfast. No missed doses.", EmergencyConsiderations = "Cardiac history — if chest pain or SOB, call 000. Do not wait.", TravelSpecificNotes = "Shorter activity sessions preferred. Rest periods mid-morning and mid-afternoon.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(4)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[15].Id, CommunicationNotes = "Limited verbal output. Uses communication board and gestures. Responds to simple instructions.", ManualHandlingNotes = "Two-person assist for all transfers from wheelchair. Shower commode required. Morning routine takes 45 min.", MedicationHealthSummary = "Baclofen 20mg TDS for spasticity. Movicol daily. Pain management — Panadol PRN.", EmergencyConsiderations = "Skin integrity — check pressure areas every 2 hrs during day trips. Report any redness immediately.", TravelSpecificNotes = "Needs fully accessible room with wide doorways. Morning routine must not be rushed. Fatigue management — no more than 4 hours active per day.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[17].Id, CommunicationNotes = "Aphasia — expressive language impaired. Uses word board and yes/no responses. Understands most conversation.", BehaviourSupportNotes = "Frustration possible when communication fails. Allow 20+ seconds for responses. Do not finish sentences for him.", MedicationHealthSummary = "Aspirin 100mg daily. Atorvastatin 40mg nocte. Clopidogrel 75mg daily.", EmergencyConsiderations = "Stroke history — FAST signs. Call 000 immediately if new neurological symptoms.", TravelSpecificNotes = "Seat near window on vehicles. Prefers quiet environments. Group size 4-6 maximum.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[5].Id, CommunicationNotes = "Verbal. Friendly and communicative. May repeat questions when anxious — respond consistently.", BehaviourSupportNotes = "Mild anxiety in new environments. Positive reinforcement. Predictable routine reduces anxiety.", MedicationHealthSummary = "Sertraline 50mg morning. No other regular medications.", TravelSpecificNotes = "Introduce new environments with photos/videos beforehand. Carry fidget toy.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12)) },
+            new() { Id = Guid.NewGuid(), ParticipantId = participants[19].Id, CommunicationNotes = "Verbal with good communication skills.", ManualHandlingNotes = "Independent on flat terrain. Requires assistance on uneven ground and ramps.", MedicationHealthSummary = "No regular medications.", TravelSpecificNotes = "Enthusiastic about reef tours. Confirm snorkelling suitability with GP.", ReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(8)) },
+        };
+        context.SupportProfiles.AddRange(supportProfiles);
+
+        // ── Contacts (10) ────────────────────────────────────────
+        var contacts = new List<Contact>
+        {
+            new() { Id = Guid.Parse("e1000000-0000-0000-0000-000000000001"), FirstName = "Margaret", LastName = "Johnson", RoleRelationship = "Mother", Email = "margaret.johnson@email.com.au", Mobile = "0498765001", Phone = "07 3456 7891", Address = "42 Jacaranda Street", Suburb = "Coorparoo", State = "QLD", Postcode = "4151", PreferredContactMethod = PreferredContactMethod.Mobile },
+            new() { Id = Guid.Parse("e1000000-0000-0000-0000-000000000002"), FirstName = "David", LastName = "Brown", RoleRelationship = "Father / Guardian", Email = "david.brown@email.com.au", Mobile = "0498765002", Address = "18 Banksia Avenue", Suburb = "Toowong", State = "QLD", Postcode = "4066", PreferredContactMethod = PreferredContactMethod.Email },
+            new() { Id = Guid.Parse("e1000000-0000-0000-0000-000000000003"), FirstName = "Karen", LastName = "Wilson", RoleRelationship = "Support Coordinator", Organisation = "Inclusive Support Solutions", Email = "karen.wilson@iss.com.au", Mobile = "0498765003", PreferredContactMethod = PreferredContactMethod.Email },
+            new() { Id = Guid.Parse("e1000000-0000-0000-0000-000000000004"), FirstName = "Robert", LastName = "White", RoleRelationship = "Father", Email = "robert.white@email.com.au", Mobile = "0498765004", Address = "7 Elm Court", Suburb = "Hawthorn", State = "VIC", Postcode = "3122", PreferredContactMethod = PreferredContactMethod.Phone, Phone = "03 9876 5432" },
+            new() { Id = Guid.Parse("e1000000-0000-0000-0000-000000000005"), FirstName = "Lisa", LastName = "Thomas", RoleRelationship = "House Manager", Organisation = "Compass Living", Email = "lisa.thomas@compassliving.com.au", Mobile = "0498765005", PreferredContactMethod = PreferredContactMethod.Mobile },
+            // New contacts
+            new() { Id = Guid.Parse("e2000000-0000-0000-0000-000000000001"), FirstName = "Anne", LastName = "Clarke", RoleRelationship = "Mother", Email = "anne.clarke@email.com.au", Mobile = "0498765006", Address = "14 Wattle Drive", Suburb = "Sunnybank", State = "QLD", Postcode = "4109", PreferredContactMethod = PreferredContactMethod.Mobile },
+            new() { Id = Guid.Parse("e2000000-0000-0000-0000-000000000002"), FirstName = "Peter", LastName = "Robinson", RoleRelationship = "Father / Guardian", Email = "peter.robinson@email.com.au", Mobile = "0498765007", Phone = "02 9876 1234", Address = "9 Frangipani Close", Suburb = "Penrith", State = "NSW", Postcode = "2750", PreferredContactMethod = PreferredContactMethod.Phone },
+            new() { Id = Guid.Parse("e2000000-0000-0000-0000-000000000003"), FirstName = "Sandra", LastName = "Lee", RoleRelationship = "Spouse / Carer", Email = "sandra.lee@email.com.au", Mobile = "0498765008", Address = "22 Coral Street", Suburb = "Chermside", State = "QLD", Postcode = "4032", PreferredContactMethod = PreferredContactMethod.SMS },
+            new() { Id = Guid.Parse("e2000000-0000-0000-0000-000000000004"), FirstName = "Dr Jason", LastName = "Park", RoleRelationship = "GP", Organisation = "Southside Medical Centre", Email = "j.park@southsidemedical.com.au", Phone = "07 3211 5555", PreferredContactMethod = PreferredContactMethod.Phone },
+            new() { Id = Guid.Parse("e2000000-0000-0000-0000-000000000005"), FirstName = "Belinda", LastName = "Murphy", RoleRelationship = "Sister / Next of Kin", Email = "belinda.murphy@email.com.au", Mobile = "0498765010", Address = "3 Kurrajong Way", Suburb = "Box Hill", State = "VIC", Postcode = "3128", PreferredContactMethod = PreferredContactMethod.Email },
+        };
+        context.Contacts.AddRange(contacts);
+
+        // ── ParticipantContacts ──────────────────────────────────
+        var participantContacts = new List<ParticipantContact>
+        {
+            new() { ParticipantId = participants[0].Id, ContactId = contacts[0].Id },
+            new() { ParticipantId = participants[1].Id, ContactId = contacts[1].Id },
+            new() { ParticipantId = participants[3].Id, ContactId = contacts[2].Id },
+            new() { ParticipantId = participants[3].Id, ContactId = contacts[3].Id },
+            new() { ParticipantId = participants[7].Id, ContactId = contacts[3].Id },
+            new() { ParticipantId = participants[6].Id, ContactId = contacts[4].Id },
+            // New participant contacts
+            new() { ParticipantId = participants[10].Id, ContactId = contacts[5].Id },
+            new() { ParticipantId = participants[12].Id, ContactId = contacts[6].Id },
+            new() { ParticipantId = participants[15].Id, ContactId = contacts[7].Id },
+            new() { ParticipantId = participants[15].Id, ContactId = contacts[8].Id },
+            new() { ParticipantId = participants[17].Id, ContactId = contacts[9].Id },
+        };
+        context.ParticipantContacts.AddRange(participantContacts);
+
+        // ── Accommodation Properties (6) ─────────────────────────
+        var properties = new List<AccommodationProperty>
+        {
+            new() { Id = Guid.Parse("f1000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, PropertyName = "Mermaid Waters Accessible Villas", ProviderOwner = "Accessible Holidays QLD", Location = "Gold Coast, QLD", Region = "South East QLD", Address = "123 Markeri Street", Suburb = "Mermaid Waters", State = "QLD", Postcode = "4218", ContactPerson = "Jenny Park", Email = "bookings@accessibleholidaysqld.com.au", Phone = "07 5555 1234", IsFullyModified = true, IsWheelchairAccessible = true, BedroomCount = 4, BedCount = 6, MaxCapacity = 8, BeddingConfiguration = "2x king (adjustable), 2x single, 1x double", HoistBathroomNotes = "Ceiling hoists in master and bedroom 2. Roll-in showers both bathrooms.", AccessibilityNotes = "Fully ramped entry, wide doorways, accessible kitchen." },
+            new() { Id = Guid.Parse("f1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, PropertyName = "Mountain Heritage Lodge", ProviderOwner = "Blue Mountains Retreats", Location = "Katoomba, NSW", Region = "Greater Sydney", Address = "45 Great Western Highway", Suburb = "Katoomba", State = "NSW", Postcode = "2780", ContactPerson = "Tom Henderson", Email = "stays@mountainheritage.com.au", Phone = "02 4782 1234", IsFullyModified = false, IsSemiModified = true, IsWheelchairAccessible = true, BedroomCount = 6, BedCount = 10, MaxCapacity = 12, BeddingConfiguration = "3x queen, 4x single, 1x double", AccessibilityNotes = "Ground floor rooms accessible. Upper floor via stairs only." },
+            new() { Id = Guid.Parse("f1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, PropertyName = "CBD Accessible Apartments", ProviderOwner = "Inclusive Stay Melbourne", Location = "Melbourne, VIC", Region = "Melbourne Metro", Address = "200 Spencer Street", Suburb = "Melbourne", State = "VIC", Postcode = "3000", ContactPerson = "Alicia Tran", Email = "reservations@inclusivestay.com.au", Phone = "03 9000 1234", IsFullyModified = true, IsWheelchairAccessible = true, BedroomCount = 3, BedCount = 4, MaxCapacity = 6, BeddingConfiguration = "1x king (adjustable), 2x single, 1x sofa bed", HoistBathroomNotes = "Mobile hoist available. Roll-in shower.", AccessibilityNotes = "Lift access, auto doors, close to Southern Cross Station." },
+            new() { Id = Guid.Parse("f1000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, PropertyName = "Surfers Paradise Holiday Unit", ProviderOwner = "GC Stays", Location = "Gold Coast, QLD", Region = "South East QLD", Address = "88 Surfers Paradise Boulevard", Suburb = "Surfers Paradise", State = "QLD", Postcode = "4217", ContactPerson = "Mark Chen", Email = "bookings@gcstays.com.au", Phone = "07 5555 5678", IsFullyModified = false, IsSemiModified = true, IsWheelchairAccessible = false, BedroomCount = 3, BedCount = 5, MaxCapacity = 6, BeddingConfiguration = "1x queen, 2x single, 1x double", AccessibilityNotes = "Step-free entry but narrow bathroom doorway. Not suitable for wheelchair users." },
+            // New properties
+            new() { Id = Guid.Parse("f3000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, PropertyName = "Kangaroo Point Accessible Units", ProviderOwner = "Brisbane River Stays", Location = "Brisbane, QLD", Region = "Brisbane Metro", Address = "42 River Terrace", Suburb = "Kangaroo Point", State = "QLD", Postcode = "4169", ContactPerson = "Wayne Burns", Email = "stays@brisbaneriverstays.com.au", Phone = "07 3391 2200", IsFullyModified = true, IsWheelchairAccessible = true, BedroomCount = 4, BedCount = 7, MaxCapacity = 9, BeddingConfiguration = "2x king (adjustable), 3x single, 1x double", HoistBathroomNotes = "Mobile hoist available. Roll-in shower in master. Grab rails throughout.", AccessibilityNotes = "Level entry from car park. Wide doorways. Lift to all floors. City views." },
+            new() { Id = Guid.Parse("f3000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, PropertyName = "Cairns Esplanade Accessible Apartments", ProviderOwner = "North QLD Accessible Travel", Location = "Cairns, QLD", Region = "North QLD", Address = "212 The Esplanade", Suburb = "Cairns", State = "QLD", Postcode = "4870", ContactPerson = "Trish Lawson", Email = "bookings@nqat.com.au", Phone = "07 4031 8800", IsFullyModified = true, IsWheelchairAccessible = true, BedroomCount = 5, BedCount = 8, MaxCapacity = 10, BeddingConfiguration = "2x king (adjustable), 2x queen, 2x single", HoistBathroomNotes = "Ceiling hoist in master. Two roll-in showers. Shower commode available.", AccessibilityNotes = "Ground floor. 50m to Esplanade boardwalk. Pool with hoist. Parking onsite." },
+        };
+        context.AccommodationProperties.AddRange(properties);
+
+        // ── Vehicles (4) ─────────────────────────────────────────
+        var vehicles = new List<Vehicle>
+        {
+            new() { Id = Guid.Parse("f2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, VehicleName = "Toyota HiAce Accessible Van", Registration = "123ABC", VehicleType = VehicleType.AccessibleVan, TotalSeats = 8, WheelchairPositions = 2, RampHoistDetails = "Electric rear ramp, 300kg capacity. Wheelchair tie-down system.", DriverRequirements = "LR licence. Manual handling cert for ramp operation.", IsInternal = true, ServiceDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(2)), RegistrationDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(8)) },
+            new() { Id = Guid.Parse("f2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, VehicleName = "Kia Carnival", Registration = "456XYZ", VehicleType = VehicleType.Van, TotalSeats = 8, WheelchairPositions = 0, DriverRequirements = "Standard C licence", IsInternal = true, ServiceDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(4)), RegistrationDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(10)) },
+            // New vehicles
+            new() { Id = Guid.Parse("f4000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, VehicleName = "Toyota HiAce Accessible Van 2", Registration = "789DEF", VehicleType = VehicleType.AccessibleVan, TotalSeats = 9, WheelchairPositions = 2, RampHoistDetails = "Hydraulic side ramp, 350kg capacity. 2x Q-straint tie-down positions.", DriverRequirements = "LR licence. Manual handling cert for ramp operation.", IsInternal = true, ServiceDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)), RegistrationDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(14)), Notes = "Newer model. Air suspension for smoother ride." },
+            new() { Id = Guid.Parse("f4000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, VehicleName = "Toyota Coaster Minibus", Registration = "321GHI", VehicleType = VehicleType.MiniBus, TotalSeats = 21, WheelchairPositions = 0, DriverRequirements = "MR licence required.", IsInternal = false, ServiceDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1)), RegistrationDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(5)), Notes = "Hire vehicle. Contact Gold Coast Charter Bus for booking." },
+        };
+        context.Vehicles.AddRange(vehicles);
+
+        // ── Trip Instances (10) ──────────────────────────────────
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var trips = new List<TripInstance>
+        {
+            // Original 5
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Autumn 2026", TripCode = "GCBB-2026A", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(45), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = staff[0].Id, MinParticipants = 4, MaxParticipants = 6, RequiredWheelchairCapacity = 2, RequiredBeds = 6, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Main autumn trip. Focus on beach and water activities." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Spring 2026", TripCode = "BMA-2026S", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(90), DurationDays = 4, Status = TripStatus.Planning, LeadCoordinatorId = staff[0].Id, MinParticipants = 3, MaxParticipants = 5, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Nature and adventure focus." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — June 2026", TripCode = "MAW-2026J", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(120), DurationDays = 3, Status = TripStatus.Draft, LeadCoordinatorId = staff[4].Id, MinParticipants = 2, MaxParticipants = 4, RequiredWheelchairCapacity = 1, RequiredBeds = 4, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Arts and culture experience." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Summer 2025/26", TripCode = "GCBB-2025S", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(-30), DurationDays = 5, Status = TripStatus.Completed, LeadCoordinatorId = staff[0].Id, MaxParticipants = 6, MinStaffRequired = 3, Notes = "Successfully completed." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, TripName = "Adelaide Food & Wine", TripCode = "AFW-2026", Destination = "Adelaide, SA", Region = "Adelaide", StartDate = today.AddDays(60), DurationDays = 3, Status = TripStatus.Cancelled, Notes = "Cancelled due to insufficient bookings." },
+            // New 5
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Cairns Tropical Getaway — July 2026", TripCode = "CAIRNS-2026J", EventTemplateId = templates[3].Id, Destination = "Cairns, QLD", Region = "North QLD", StartDate = today.AddDays(150), DurationDays = 7, Status = TripStatus.Planning, LeadCoordinatorId = staff[9].Id, MinParticipants = 4, MaxParticipants = 8, RequiredWheelchairCapacity = 2, RequiredBeds = 8, RequiredBedrooms = 5, MinStaffRequired = 3, Notes = "First Cairns trip. Reef and rainforest focus. Confirm wheelchair access for reef pontoon." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Winter 2026", TripCode = "GCBB-2026W", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(200), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = staff[0].Id, MinParticipants = 4, MaxParticipants = 7, RequiredWheelchairCapacity = 2, RequiredBeds = 7, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Winter break — mild weather ideal for outdoor activities." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Autumn 2026", TripCode = "BMA-2026A", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(-90), DurationDays = 4, Status = TripStatus.Completed, LeadCoordinatorId = staff[3].Id, MaxParticipants = 5, MinStaffRequired = 2, Notes = "Autumn colours trip. Completed successfully." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — March 2026", TripCode = "MAW-2026M", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(-1), DurationDays = 3, Status = TripStatus.InProgress, LeadCoordinatorId = staff[4].Id, MinParticipants = 2, MaxParticipants = 5, RequiredWheelchairCapacity = 1, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "In progress. Day 2 of 3." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, TripName = "Brisbane Day Trips — April 2026", TripCode = "BDT-2026", Destination = "Brisbane, QLD", Region = "Brisbane Metro", StartDate = today.AddDays(30), DurationDays = 2, Status = TripStatus.Cancelled, LeadCoordinatorId = staff[5].Id, Notes = "Cancelled — lead coordinator unavailable. Rescheduling for later in year." },
+        };
+        context.TripInstances.AddRange(trips);
+
+        // ── Bookings (30) ────────────────────────────────────────
+        var bookings = new List<ParticipantBooking>
+        {
+            // Trip 1 — Gold Coast Autumn (OpenForBookings)
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, ParticipantId = participants[0].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-20), WheelchairRequired = true, SupportRatioOverride = SupportRatio.OneToOne },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, ParticipantId = participants[1].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-18), HighSupportRequired = true, NightSupportRequired = true, HasRestrictivePracticeFlag = true, SupportRatioOverride = SupportRatio.TwoToOne, RiskSupportNotes = "See BSP. Seizure protocol in place." },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, ParticipantId = participants[4].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-15) },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000004"), TripInstanceId = trips[0].Id, ParticipantId = participants[5].Id, BookingStatus = BookingStatus.Held, BookingDate = today.AddDays(-10), BookingNotes = "Awaiting OOC payment confirmation" },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000005"), TripInstanceId = trips[0].Id, ParticipantId = participants[8].Id, BookingStatus = BookingStatus.Waitlist, BookingDate = today.AddDays(-5) },
+            // Trip 2 — Blue Mountains (Planning)
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000006"), TripInstanceId = trips[1].Id, ParticipantId = participants[2].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today.AddDays(-7) },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000007"), TripInstanceId = trips[1].Id, ParticipantId = participants[6].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today.AddDays(-3), WheelchairRequired = true },
+            // Trip 3 — Melbourne Arts (Draft)
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000008"), TripInstanceId = trips[2].Id, ParticipantId = participants[3].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today, WheelchairRequired = true, HighSupportRequired = true, NightSupportRequired = true },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000009"), TripInstanceId = trips[2].Id, ParticipantId = participants[9].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today, WheelchairRequired = true },
+            // Trip 4 — Completed
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000010"), TripInstanceId = trips[3].Id, ParticipantId = participants[0].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-60), WheelchairRequired = true },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000011"), TripInstanceId = trips[3].Id, ParticipantId = participants[4].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-55) },
+            new() { Id = Guid.Parse("02000000-0000-0000-0000-000000000012"), TripInstanceId = trips[3].Id, ParticipantId = participants[8].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-50) },
+            // New bookings
+            // Trip 6 — Cairns (Planning)
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, ParticipantId = participants[19].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today.AddDays(-14), WheelchairRequired = true, BookingNotes = "Keen on reef tour. Confirm wheelchair access for pontoon." },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, ParticipantId = participants[10].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-20) },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, ParticipantId = participants[14].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-18) },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000004"), TripInstanceId = trips[5].Id, ParticipantId = participants[15].Id, BookingStatus = BookingStatus.Held, BookingDate = today.AddDays(-10), WheelchairRequired = true, HighSupportRequired = true, NightSupportRequired = true, BookingNotes = "Awaiting medical clearance from GP." },
+            // Trip 7 — GC Winter (OpenForBookings)
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, ParticipantId = participants[0].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-5), WheelchairRequired = true },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000006"), TripInstanceId = trips[6].Id, ParticipantId = participants[11].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-3), WheelchairRequired = true },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000007"), TripInstanceId = trips[6].Id, ParticipantId = participants[4].Id, BookingStatus = BookingStatus.Enquiry, BookingDate = today.AddDays(-2) },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000008"), TripInstanceId = trips[6].Id, ParticipantId = participants[18].Id, BookingStatus = BookingStatus.Waitlist, BookingDate = today },
+            // Trip 8 — BMA Completed
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000009"), TripInstanceId = trips[7].Id, ParticipantId = participants[2].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-120), WheelchairRequired = false },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000010"), TripInstanceId = trips[7].Id, ParticipantId = participants[6].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-115), WheelchairRequired = true },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000011"), TripInstanceId = trips[7].Id, ParticipantId = participants[16].Id, BookingStatus = BookingStatus.Completed, BookingDate = today.AddDays(-110) },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000012"), TripInstanceId = trips[7].Id, ParticipantId = participants[12].Id, BookingStatus = BookingStatus.Cancelled, BookingDate = today.AddDays(-100), CancellationReason = "Medical — cardiac clearance not obtained in time." },
+            // Trip 9 — Melbourne InProgress
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000013"), TripInstanceId = trips[8].Id, ParticipantId = participants[3].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-40), WheelchairRequired = true, HighSupportRequired = true, NightSupportRequired = true },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000014"), TripInstanceId = trips[8].Id, ParticipantId = participants[13].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-35) },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000015"), TripInstanceId = trips[8].Id, ParticipantId = participants[17].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-30), HighSupportRequired = true, NightSupportRequired = true, HasRestrictivePracticeFlag = true },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000016"), TripInstanceId = trips[8].Id, ParticipantId = participants[7].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-28), HighSupportRequired = true, HasRestrictivePracticeFlag = true, RiskSupportNotes = "Flight risk in unfamiliar environments. Line-of-sight at all times." },
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000017"), TripInstanceId = trips[8].Id, ParticipantId = participants[9].Id, BookingStatus = BookingStatus.NoLongerAttending, BookingDate = today.AddDays(-45), CancellationReason = "Family obligations — withdrew 2 weeks prior." },
+            // Trip 1 extra — Cairns additional confirmed
+            new() { Id = Guid.Parse("0a000000-0000-0000-0000-000000000018"), TripInstanceId = trips[5].Id, ParticipantId = participants[16].Id, BookingStatus = BookingStatus.Confirmed, BookingDate = today.AddDays(-8) },
+        };
+        context.ParticipantBookings.AddRange(bookings);
+
+        // ── Accommodation Reservations (6) ───────────────────────
+        var reservations = new List<AccommodationReservation>
+        {
+            new() { Id = Guid.Parse("03000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, AccommodationPropertyId = properties[0].Id, CheckInDate = trips[0].StartDate, CheckOutDate = trips[0].StartDate.AddDays(trips[0].DurationDays), ReservationStatus = ReservationStatus.Confirmed, ConfirmationReference = "AHQ-2026-0451", DateBooked = today.AddDays(-15), DateConfirmed = today.AddDays(-10), BedroomsReserved = 4, BedsReserved = 6, Cost = 2800.00m, Comments = "Full villa booked. Confirmed ceiling hoist in master bedroom." },
+            new() { Id = Guid.Parse("03000000-0000-0000-0000-000000000002"), TripInstanceId = trips[1].Id, AccommodationPropertyId = properties[1].Id, CheckInDate = trips[1].StartDate, CheckOutDate = trips[1].StartDate.AddDays(trips[1].DurationDays), ReservationStatus = ReservationStatus.Requested, RequestSentDate = today.AddDays(-5), BedroomsReserved = 3, BedsReserved = 5, Comments = "Awaiting confirmation from Mountain Heritage." },
+            // New reservations
+            new() { Id = Guid.Parse("0b000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, AccommodationPropertyId = properties[5].Id, CheckInDate = trips[5].StartDate, CheckOutDate = trips[5].StartDate.AddDays(trips[5].DurationDays), ReservationStatus = ReservationStatus.Requested, RequestSentDate = today.AddDays(-10), BedroomsReserved = 5, BedsReserved = 8, Comments = "Requested for 8 participants + 3 staff. Confirm hoist availability." },
+            new() { Id = Guid.Parse("0b000000-0000-0000-0000-000000000002"), TripInstanceId = trips[6].Id, AccommodationPropertyId = properties[0].Id, CheckInDate = trips[6].StartDate, CheckOutDate = trips[6].StartDate.AddDays(trips[6].DurationDays), ReservationStatus = ReservationStatus.Booked, DateBooked = today.AddDays(-2), BedroomsReserved = 4, BedsReserved = 7, Cost = 3150.00m, ConfirmationReference = "AHQ-2026-0612" },
+            new() { Id = Guid.Parse("0b000000-0000-0000-0000-000000000003"), TripInstanceId = trips[8].Id, AccommodationPropertyId = properties[2].Id, CheckInDate = trips[8].StartDate, CheckOutDate = trips[8].StartDate.AddDays(trips[8].DurationDays), ReservationStatus = ReservationStatus.Confirmed, DateBooked = today.AddDays(-35), DateConfirmed = today.AddDays(-30), BedroomsReserved = 3, BedsReserved = 5, Cost = 1650.00m, ConfirmationReference = "ISM-2026-8831", Comments = "CBD apartments. Mobile hoist confirmed. In progress." },
+            new() { Id = Guid.Parse("0b000000-0000-0000-0000-000000000004"), TripInstanceId = trips[7].Id, AccommodationPropertyId = properties[1].Id, CheckInDate = trips[7].StartDate, CheckOutDate = trips[7].StartDate.AddDays(trips[7].DurationDays), ReservationStatus = ReservationStatus.Confirmed, DateBooked = today.AddDays(-110), DateConfirmed = today.AddDays(-105), BedroomsReserved = 3, BedsReserved = 5, Cost = 1900.00m, ConfirmationReference = "MHL-2025-4422", Comments = "Completed stay. No issues reported." },
+        };
+        context.AccommodationReservations.AddRange(reservations);
+
+        // ── Vehicle Assignments (6) ──────────────────────────────
+        var vehicleAssignments = new List<VehicleAssignment>
+        {
+            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-10), DriverStaffId = staff[1].Id, SeatRequirement = 6, WheelchairPositionRequirement = 1, PickupTravelNotes = "Pickup from Coorparoo 7:00 AM, then Toowong 7:30 AM" },
+            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Requested, DriverStaffId = staff[2].Id, SeatRequirement = 4 },
+            // New vehicle assignments
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Requested, DriverStaffId = staff[9].Id, SeatRequirement = 8, WheelchairPositionRequirement = 2, PickupTravelNotes = "Airport transfers required. Confirm flight times 2 weeks prior." },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000002"), TripInstanceId = trips[6].Id, VehicleId = vehicles[2].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-2), DriverStaffId = staff[5].Id, SeatRequirement = 7, WheelchairPositionRequirement = 2 },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000003"), TripInstanceId = trips[8].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-30), DriverStaffId = staff[4].Id, SeatRequirement = 5, PickupTravelNotes = "Depart Melbourne CBD. Southern Cross Station pickup." },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000004"), TripInstanceId = trips[7].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-100), DriverStaffId = staff[3].Id, SeatRequirement = 5, WheelchairPositionRequirement = 1, Comments = "Completed. No issues." },
+        };
+        context.VehicleAssignments.AddRange(vehicleAssignments);
+
+        // ── Staff Assignments (10) ───────────────────────────────
+        var staffAssignments = new List<StaffAssignment>
+        {
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, StaffId = staff[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, StaffId = staff[1].Id, AssignmentRole = "Senior Support / Driver", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, StaffId = staff[2].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.Sleepover },
+            // New staff assignments
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, StaffId = staff[9].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, StaffId = staff[5].Id, AssignmentRole = "Senior Support", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, StaffId = staff[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.PassiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000004"), TripInstanceId = trips[6].Id, StaffId = staff[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, StaffId = staff[5].Id, AssignmentRole = "Support Worker / Driver", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000006"), TripInstanceId = trips[8].Id, StaffId = staff[4].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, StaffId = staff[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
+        };
+        context.StaffAssignments.AddRange(staffAssignments);
+
+        // ── Staff Availability ───────────────────────────────────
+        var staffAvailability = new List<StaffAvailability>
+        {
+            new() { Id = Guid.NewGuid(), StaffId = staff[0].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for GC Autumn trip" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[1].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
+            new() { Id = Guid.NewGuid(), StaffId = staff[3].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(3).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Leave, Notes = "Annual leave" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[4].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Melbourne trip in progress" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[6].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
+            new() { Id = Guid.NewGuid(), StaffId = staff[2].Id, StartDateTime = today.AddDays(10).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(17).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Training, Notes = "Manual handling refresher course" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[5].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for Cairns trip" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[9].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Lead for Cairns trip" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[7].Id, StartDateTime = today.AddDays(20).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(27).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Unavailable, Notes = "Personal leave — approved" },
+            new() { Id = Guid.NewGuid(), StaffId = staff[8].Id, StartDateTime = today.ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(60).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Preferred, Notes = "Available for all Sydney-region trips" },
+        };
+        context.StaffAvailabilities.AddRange(staffAvailability);
+
+        // ── Activities (25) ──────────────────────────────────────
+        var activities = new List<Activity>
+        {
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000001"), EventTemplateId = templates[0].Id, ActivityName = "Beach Morning — Surfers Paradise", Category = ActivityCategory.Leisure, Location = "Surfers Paradise Beach", AccessibilityNotes = "Beach wheelchair available", SuitabilityNotes = "All abilities" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000002"), EventTemplateId = templates[0].Id, ActivityName = "Currumbin Wildlife Sanctuary", Category = ActivityCategory.Sightseeing, Location = "Currumbin", AccessibilityNotes = "Fully wheelchair accessible", SuitabilityNotes = "All abilities. Some animal encounters may not suit sensory sensitivities." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000003"), EventTemplateId = templates[0].Id, ActivityName = "Broadwater Parklands Picnic", Category = ActivityCategory.Leisure, Location = "Southport", AccessibilityNotes = "Accessible paths and facilities" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000004"), EventTemplateId = templates[0].Id, ActivityName = "Pacific Fair Shopping", Category = ActivityCategory.Leisure, Location = "Broadbeach", AccessibilityNotes = "Fully accessible shopping centre" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000005"), EventTemplateId = templates[0].Id, ActivityName = "Gold Coast Aquatic Centre", Category = ActivityCategory.Sport, Location = "Southport", AccessibilityNotes = "Pool hoist available. Accessible change rooms.", SuitabilityNotes = "Swimming ability varies — assess individually" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000006"), EventTemplateId = templates[1].Id, ActivityName = "Three Sisters Lookout", Category = ActivityCategory.Sightseeing, Location = "Echo Point, Katoomba", AccessibilityNotes = "Main lookout wheelchair accessible", SuitabilityNotes = "All abilities at lookout. Walking tracks require mobility." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000007"), EventTemplateId = templates[1].Id, ActivityName = "Scenic World", Category = ActivityCategory.Adventure, Location = "Katoomba", AccessibilityNotes = "Skyway and Railway have accessibility limitations. Cableway is accessible.", SuitabilityNotes = "May not suit anxiety/heights" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000008"), EventTemplateId = templates[1].Id, ActivityName = "Leura Village Walk", Category = ActivityCategory.Leisure, Location = "Leura", AccessibilityNotes = "Footpaths mostly level. Some shops have steps." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000009"), EventTemplateId = templates[1].Id, ActivityName = "Govetts Leap Lookout", Category = ActivityCategory.Sightseeing, Location = "Blackheath", AccessibilityNotes = "Lookout accessible. Walking tracks are not." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000010"), EventTemplateId = templates[2].Id, ActivityName = "National Gallery of Victoria", Category = ActivityCategory.Cultural, Location = "Melbourne CBD", AccessibilityNotes = "Fully accessible", SuitabilityNotes = "All abilities. Quiet hours available." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000011"), EventTemplateId = templates[2].Id, ActivityName = "Melbourne Museum", Category = ActivityCategory.Cultural, Location = "Carlton", AccessibilityNotes = "Fully accessible. Sensory guides available." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000012"), EventTemplateId = templates[2].Id, ActivityName = "Lygon Street Lunch", Category = ActivityCategory.Dining, Location = "Carlton", AccessibilityNotes = "Most restaurants have step-free access" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000013"), EventTemplateId = templates[2].Id, ActivityName = "Queen Victoria Market", Category = ActivityCategory.Sightseeing, Location = "Melbourne CBD", AccessibilityNotes = "Outdoor areas accessible. Some indoor sheds have narrow aisles." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000014"), ActivityName = "Group Dinner Out", Category = ActivityCategory.Dining, Location = "Various", SuitabilityNotes = "Check dietary requirements and sensory environment" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000015"), ActivityName = "Movie Night In", Category = ActivityCategory.Leisure, Location = "Accommodation", SuitabilityNotes = "All abilities. Good wind-down activity." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000016"), ActivityName = "Arrival & Settling In", Category = ActivityCategory.Transport, SuitabilityNotes = "Allow extra time for transitions" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000017"), ActivityName = "Departure & Travel Home", Category = ActivityCategory.Transport },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000018"), ActivityName = "Free Time / Rest", Category = ActivityCategory.Leisure, SuitabilityNotes = "All abilities. Build into every day." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000019"), ActivityName = "Bowling", Category = ActivityCategory.Sport, AccessibilityNotes = "Most bowling alleys have ramps and lightweight balls", SuitabilityNotes = "All abilities with support" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000020"), ActivityName = "Local Café Visit", Category = ActivityCategory.Dining, Location = "Various", AccessibilityNotes = "Check accessibility per venue" },
+            // New activities for Cairns
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000021"), EventTemplateId = templates[3].Id, ActivityName = "Cairns Esplanade Lagoon", Category = ActivityCategory.Leisure, Location = "Cairns Esplanade", AccessibilityNotes = "Free public pool. Accessible entry ramps. Changing facilities accessible.", SuitabilityNotes = "All abilities. Lifeguards on duty." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000022"), EventTemplateId = templates[3].Id, ActivityName = "Great Barrier Reef Pontoon Tour", Category = ActivityCategory.Adventure, Location = "Outer Great Barrier Reef", AccessibilityNotes = "Accessible boarding ramp on pontoon. Semi-submersible suitable for non-swimmers. Call ahead for wheelchair boarding.", SuitabilityNotes = "Confirm medical suitability. Not suitable for participants with severe epilepsy unless cleared." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000023"), EventTemplateId = templates[3].Id, ActivityName = "Kuranda Scenic Railway & Village", Category = ActivityCategory.Sightseeing, Location = "Kuranda, QLD", AccessibilityNotes = "Train carriages accessible. Kuranda village mostly accessible.", SuitabilityNotes = "All abilities. Long journey — bring snacks." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000024"), EventTemplateId = templates[3].Id, ActivityName = "Cairns Night Markets", Category = ActivityCategory.Dining, Location = "Cairns CBD", AccessibilityNotes = "Accessible paths. Some vendor stalls may have narrow access.", SuitabilityNotes = "Evening sensory environment — assess individually." },
+            // Generic
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000025"), ActivityName = "Sensory Art Session", Category = ActivityCategory.Cultural, Location = "Accommodation / Community Hall", AccessibilityNotes = "All abilities. Low sensory environment.", SuitabilityNotes = "Particularly good for participants with ABI or sensory sensitivities." },
+        };
+        context.Activities.AddRange(activities);
+
+        // ── Trip Days + Scheduled Activities (Trips 1, 2, 3) ─────
+        var tripDays = new List<TripDay>();
+        var scheduledActivities = new List<ScheduledActivity>();
+
+        // Trip 1 — Gold Coast Autumn
+        for (int i = 0; i < trips[0].DurationDays; i++)
+        {
+            var day = new TripDay
+            {
+                Id = Guid.Parse($"07000000-0000-0000-0000-00000000000{i + 1}"),
+                TripInstanceId = trips[0].Id,
+                DayNumber = i + 1,
+                Date = trips[0].StartDate.AddDays(i),
+                DayTitle = i == 0 ? "Arrival Day" : i == trips[0].DurationDays - 1 ? "Departure Day" : $"Day {i + 1} — {(i == 1 ? "Beach Day" : i == 2 ? "Wildlife & Shopping" : "Pool & Relaxation")}"
+            };
+            tripDays.Add(day);
+
+            if (i == 0)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[15].Id, Title = "Arrival & Settling In", StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0), SortOrder = 1, Status = ScheduledActivityStatus.Confirmed, Notes = "Meet at accommodation. Unpack, room allocation, house orientation." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[2].Id, Title = "Broadwater Parklands Picnic", StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(17, 0), SortOrder = 2, Status = ScheduledActivityStatus.Booked, BookingReference = "BPK-2026-0503", ProviderName = "Gold Coast City Council Parks", EstimatedCost = 0m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[13].Id, Title = "Group Dinner Out", StartTime = new TimeOnly(18, 0), EndTime = new TimeOnly(20, 0), SortOrder = 3, Status = ScheduledActivityStatus.Booked, BookingReference = "RES-88412", ProviderName = "The Fish House", ProviderPhone = "07 5527 1122", EstimatedCost = 320.00m });
+            }
+            else if (i == 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[0].Id, Title = "Beach Morning — Surfers Paradise", StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), SortOrder = 1, Status = ScheduledActivityStatus.Confirmed, EstimatedCost = 0m, Location = "Surfers Paradise Beach" });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[17].Id, Title = "Free Time / Rest", StartTime = new TimeOnly(12, 30), EndTime = new TimeOnly(14, 0), SortOrder = 2, Status = ScheduledActivityStatus.Planned });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[14].Id, Title = "Movie Night In", StartTime = new TimeOnly(19, 0), EndTime = new TimeOnly(21, 0), SortOrder = 3, Status = ScheduledActivityStatus.Planned, EstimatedCost = 45.00m });
+            }
+            else if (i == 2)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[1].Id, Title = "Currumbin Wildlife Sanctuary", StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(13, 0), SortOrder = 1, Status = ScheduledActivityStatus.Booked, BookingReference = "CWS-GRP-4821", ProviderName = "Currumbin Wildlife Sanctuary", ProviderPhone = "07 5534 1266", EstimatedCost = 270.00m, Location = "28 Tomewin St, Currumbin" });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[17].Id, Title = "Lunch & Rest", StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(14, 30), SortOrder = 2, Status = ScheduledActivityStatus.Planned, EstimatedCost = 90.00m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[3].Id, Title = "Pacific Fair Shopping", StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(17, 30), SortOrder = 3, Status = ScheduledActivityStatus.Confirmed, EstimatedCost = 50.00m, Location = "Hooker Blvd, Broadbeach" });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[13].Id, Title = "Pizza Night", StartTime = new TimeOnly(18, 30), EndTime = new TimeOnly(20, 0), SortOrder = 4, Status = ScheduledActivityStatus.Planned, EstimatedCost = 120.00m, Location = "Accommodation" });
+            }
+            else if (i == 3)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[4].Id, Title = "Gold Coast Aquatic Centre", StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(12, 0), SortOrder = 1, Status = ScheduledActivityStatus.Booked, BookingReference = "GCAC-20260506-AM", ProviderName = "Gold Coast Aquatic Centre", ProviderPhone = "07 5581 7946", EstimatedCost = 72.00m, Location = "Marine Pde, Southport" });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[17].Id, Title = "Free Time / Rest", StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(15, 0), SortOrder = 2, Status = ScheduledActivityStatus.Planned });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[18].Id, Title = "Bowling", StartTime = new TimeOnly(15, 30), EndTime = new TimeOnly(17, 30), SortOrder = 3, Status = ScheduledActivityStatus.Confirmed, BookingReference = "INF-BK-7743", ProviderName = "Infinity Bowling Gold Coast", EstimatedCost = 108.00m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[19].Id, Title = "Farewell Dinner — Local Café", StartTime = new TimeOnly(18, 30), EndTime = new TimeOnly(20, 30), SortOrder = 4, Status = ScheduledActivityStatus.Booked, ProviderName = "The Banana Grind Café", EstimatedCost = 280.00m });
+            }
+            else if (i == trips[0].DurationDays - 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[16].Id, Title = "Departure & Travel Home", StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(14, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Notes = "Pack up by 10am. Checkout 10:30am. Estimated arrival back 2pm." });
+            }
+        }
+
+        // Trip 2 — Blue Mountains Adventure (4 days)
+        var bmaTrip = trips[1];
+        var bmaDayTitles = new[] { "Arrival Day", "Day 2 — Blue Mountains & Scenic World", "Day 3 — Leura & Blackheath", "Departure Day" };
+        for (int i = 0; i < bmaTrip.DurationDays; i++)
+        {
+            var day = new TripDay
+            {
+                Id = Guid.Parse($"17000000-0000-0000-0000-00000000000{i + 1}"),
+                TripInstanceId = bmaTrip.Id,
+                DayNumber = i + 1,
+                Date = bmaTrip.StartDate.AddDays(i),
+                DayTitle = bmaDayTitles[i]
+            };
+            tripDays.Add(day);
+
+            if (i == 0)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[15].Id, Title = "Arrival & Settling In", StartTime = new TimeOnly(12, 0), EndTime = new TimeOnly(15, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Notes = "Check in at Mountain Heritage Lodge. Room allocation." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[13].Id, Title = "Welcome Dinner", StartTime = new TimeOnly(18, 0), EndTime = new TimeOnly(20, 0), SortOrder = 2, Status = ScheduledActivityStatus.Planned, Location = "Mountain Heritage Lodge dining room", EstimatedCost = 180.00m });
+            }
+            else if (i == 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[5].Id, Title = "Three Sisters Lookout", StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(11, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Location = "Echo Point, Katoomba", AccessibilityNotes = "Main lookout accessible. Giant Stairway not suitable for wheelchairs." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[6].Id, Title = "Scenic World", StartTime = new TimeOnly(11, 30), EndTime = new TimeOnly(14, 0), SortOrder = 2, Status = ScheduledActivityStatus.Planned, Location = "Scenic World, Katoomba", EstimatedCost = 220.00m, Notes = "Skyway and Cableway recommended. Assess anxiety re: heights." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[19].Id, Title = "Lunch at Katoomba Café", StartTime = new TimeOnly(14, 30), EndTime = new TimeOnly(15, 30), SortOrder = 3, Status = ScheduledActivityStatus.Planned, EstimatedCost = 120.00m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[17].Id, Title = "Free Time / Rest", StartTime = new TimeOnly(16, 0), EndTime = new TimeOnly(18, 0), SortOrder = 4, Status = ScheduledActivityStatus.Planned });
+            }
+            else if (i == 2)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[7].Id, Title = "Leura Village Walk & Shopping", StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(12, 30), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Location = "Leura Mall, Leura" });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[13].Id, Title = "Leura Lunch", StartTime = new TimeOnly(12, 30), EndTime = new TimeOnly(14, 0), SortOrder = 2, Status = ScheduledActivityStatus.Planned, EstimatedCost = 150.00m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[8].Id, Title = "Govetts Leap Lookout", StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(16, 30), SortOrder = 3, Status = ScheduledActivityStatus.Planned, Location = "Blackheath", Notes = "Afternoon light excellent for photos." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[14].Id, Title = "Movie Night In", StartTime = new TimeOnly(19, 0), EndTime = new TimeOnly(21, 0), SortOrder = 4, Status = ScheduledActivityStatus.Planned, EstimatedCost = 30.00m });
+            }
+            else if (i == bmaTrip.DurationDays - 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[16].Id, Title = "Departure & Travel Home", StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(15, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Notes = "Checkout by 10am. Return trip to Sydney. Drop-off by 3pm." });
+            }
+        }
+
+        // Trip 3 — Melbourne Arts Weekend (3 days)
+        var mawTrip = trips[2];
+        var mawDayTitles = new[] { "Arrival Day — Gallery & Dinner", "Day 2 — Museum & Market", "Departure Day" };
+        for (int i = 0; i < mawTrip.DurationDays; i++)
+        {
+            var day = new TripDay
+            {
+                Id = Guid.Parse($"27000000-0000-0000-0000-00000000000{i + 1}"),
+                TripInstanceId = mawTrip.Id,
+                DayNumber = i + 1,
+                Date = mawTrip.StartDate.AddDays(i),
+                DayTitle = mawDayTitles[i]
+            };
+            tripDays.Add(day);
+
+            if (i == 0)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[15].Id, Title = "Arrival & Settling In", StartTime = new TimeOnly(11, 0), EndTime = new TimeOnly(14, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Notes = "Check in at CBD Accessible Apartments. Southern Cross station nearby." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[9].Id, Title = "National Gallery of Victoria", StartTime = new TimeOnly(14, 30), EndTime = new TimeOnly(17, 30), SortOrder = 2, Status = ScheduledActivityStatus.Confirmed, Location = "180 St Kilda Rd, Melbourne", AccessibilityNotes = "Fully accessible. Free entry to permanent collection.", EstimatedCost = 0m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[11].Id, Title = "Lygon Street Dinner", StartTime = new TimeOnly(18, 30), EndTime = new TimeOnly(20, 30), SortOrder = 3, Status = ScheduledActivityStatus.Planned, Location = "Lygon Street, Carlton", EstimatedCost = 260.00m });
+            }
+            else if (i == 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[10].Id, Title = "Melbourne Museum", StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(13, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Location = "11 Nicholson St, Carlton", EstimatedCost = 60.00m, AccessibilityNotes = "Fully accessible. Sensory guide available at entry." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[17].Id, Title = "Lunch & Rest", StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(14, 30), SortOrder = 2, Status = ScheduledActivityStatus.Planned, EstimatedCost = 80.00m });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[12].Id, Title = "Queen Victoria Market", StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(17, 0), SortOrder = 3, Status = ScheduledActivityStatus.Planned, Location = "Queen St, Melbourne", Notes = "Afternoon session less crowded. Budget $20pp for souvenirs." });
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[13].Id, Title = "Farewell Dinner", StartTime = new TimeOnly(18, 30), EndTime = new TimeOnly(20, 30), SortOrder = 4, Status = ScheduledActivityStatus.Planned, Location = "Melbourne CBD", EstimatedCost = 300.00m });
+            }
+            else if (i == mawTrip.DurationDays - 1)
+            {
+                scheduledActivities.Add(new() { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = activities[16].Id, Title = "Departure & Travel Home", StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0), SortOrder = 1, Status = ScheduledActivityStatus.Planned, Notes = "Checkout by 10am. Transfers to airport or Southern Cross Station." });
+            }
+        }
+
+        context.TripDays.AddRange(tripDays);
+        context.ScheduledActivities.AddRange(scheduledActivities);
+
+        // ── Tasks (20) ───────────────────────────────────────────
+        var tasks = new List<BookingTask>
+        {
+            // Original tasks — Trip 1
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm accommodation booking — Mermaid Waters Villas", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-6) },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[1].Id, TaskType = TaskType.RiskReview, Title = "Review BSP and seizure protocol — Sophie Brown", OwnerId = staff[0].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[3].Id, TaskType = TaskType.InvoiceOop, Title = "Chase OOC payment — Mia Anderson", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000004"), TripInstanceId = trips[0].Id, TaskType = TaskType.VehicleConfirmation, Title = "Confirm second vehicle — Kia Carnival", OwnerId = staff[1].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000005"), TripInstanceId = trips[0].Id, TaskType = TaskType.StaffingAllocation, Title = "Confirm third staff member for GC trip", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000006"), TripInstanceId = trips[0].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart updated — all confirmed participants", OwnerId = staff[1].Id, Priority = TaskPriority.High, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000007"), TripInstanceId = trips[0].Id, TaskType = TaskType.PreDeparture, Title = "Send pre-trip info packs to families", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(35), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000008"), TripInstanceId = trips[1].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Mountain Heritage Lodge", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(10), Status = TaskItemStatus.InProgress },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000009"), TripInstanceId = trips[0].Id, TaskType = TaskType.FamilyContact, Title = "Contact Sophie's guardian re: trip consent", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-3), Status = TaskItemStatus.Overdue },
+            // New tasks
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Cairns Esplanade Apartments", OwnerId = staff[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.RiskReview, Title = "Review support profile — Harrison Lee (Cairns)", OwnerId = staff[9].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress, Notes = "Manual handling assessment required for reef tour. Two-person assist confirmed?" },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, TaskType = TaskType.InsuranceConfirmation, Title = "Confirm travel insurance — all Cairns participants", OwnerId = staff[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000004"), TripInstanceId = trips[5].Id, TaskType = TaskType.VehicleRequest, Title = "Request accessible transport — Cairns airport transfers", OwnerId = staff[9].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm Mermaid Waters booking — GC Winter", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-1) },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000006"), TripInstanceId = trips[6].Id, TaskType = TaskType.ParticipantConfirmation, Title = "Confirm all bookings and send info pack — GC Winter", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, TaskType = TaskType.PostTrip, Title = "Post-trip report — Melbourne Arts March 2026", OwnerId = staff[4].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.InProgress, Notes = "Trip in progress. Complete within 48hrs of return." },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000008"), TripInstanceId = trips[8].Id, ParticipantBookingId = bookings[25].Id, TaskType = TaskType.FamilyContact, Title = "Contact Ryan Murphy's next of kin — post-trip update", OwnerId = staff[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(4), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000009"), TripInstanceId = trips[1].Id, TaskType = TaskType.StaffingAllocation, Title = "Allocate second staff for Blue Mountains trip", OwnerId = staff[3].Id, Priority = TaskPriority.High, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000010"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart review — Harrison Lee pre-Cairns", OwnerId = staff[5].Id, Priority = TaskPriority.High, DueDate = today.AddDays(45), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000011"), TripInstanceId = trips[2].Id, TaskType = TaskType.AccommodationRequest, Title = "Research accessible accommodation options — Melbourne June", OwnerId = staff[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(40), Status = TaskItemStatus.NotStarted },
+        };
+        context.BookingTasks.AddRange(tasks);
+
+        await context.SaveChangesAsync(ct);
+    }
+
+    public static async Task SeedNdisDataAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.SupportActivityGroups.AnyAsync(ct))
+            return;
+
+        var groupId = Guid.Parse("c0000000-0000-0000-0000-000000000001");
+        var group = new SupportActivityGroup
+        {
+            Id = groupId,
+            GroupCode = "GRP_COMMUNITY_ACCESS",
+            DisplayName = "Group Community Access",
+            SupportCategory = 4,
+            IsActive = true
+        };
+        context.SupportActivityGroups.Add(group);
+
+        var items = new List<SupportCatalogueItem>
+        {
+            new()
+            {
+                Id = Guid.Parse("d0000000-0000-0000-0000-000000000001"),
+                ActivityGroupId = groupId,
+                ItemNumber = "04_210_0125_6_1",
+                Description = "Group Activities - Standard - Weekday Daytime - TTP",
+                Unit = "H",
+                DayType = ClaimDayType.Weekday,
+                PriceLimit_ACT = 67.56m,
+                PriceLimit_NSW = 67.56m,
+                PriceLimit_NT = 67.56m,
+                PriceLimit_QLD = 67.56m,
+                PriceLimit_SA = 67.56m,
+                PriceLimit_TAS = 67.56m,
+                PriceLimit_VIC = 67.56m,
+                PriceLimit_WA = 67.56m,
+                PriceLimit_Remote = 94.58m,
+                PriceLimit_VeryRemote = 101.34m,
+                CatalogueVersion = "2024-25",
+                EffectiveFrom = new DateOnly(2024, 7, 1),
+                IsActive = true
+            },
+            new()
+            {
+                Id = Guid.Parse("d0000000-0000-0000-0000-000000000002"),
+                ActivityGroupId = groupId,
+                ItemNumber = "04_212_0125_6_1",
+                Description = "Group Activities - Standard - Saturday - TTP",
+                Unit = "H",
+                DayType = ClaimDayType.Saturday,
+                PriceLimit_ACT = 94.91m,
+                PriceLimit_NSW = 94.91m,
+                PriceLimit_NT = 94.91m,
+                PriceLimit_QLD = 94.91m,
+                PriceLimit_SA = 94.91m,
+                PriceLimit_TAS = 94.91m,
+                PriceLimit_VIC = 94.91m,
+                PriceLimit_WA = 94.91m,
+                PriceLimit_Remote = 132.87m,
+                PriceLimit_VeryRemote = 142.37m,
+                CatalogueVersion = "2024-25",
+                EffectiveFrom = new DateOnly(2024, 7, 1),
+                IsActive = true
+            },
+            new()
+            {
+                Id = Guid.Parse("d0000000-0000-0000-0000-000000000003"),
+                ActivityGroupId = groupId,
+                ItemNumber = "04_213_0125_6_1",
+                Description = "Group Activities - Standard - Sunday - TTP",
+                Unit = "H",
+                DayType = ClaimDayType.Sunday,
+                PriceLimit_ACT = 122.25m,
+                PriceLimit_NSW = 122.25m,
+                PriceLimit_NT = 122.25m,
+                PriceLimit_QLD = 122.25m,
+                PriceLimit_SA = 122.25m,
+                PriceLimit_TAS = 122.25m,
+                PriceLimit_VIC = 122.25m,
+                PriceLimit_WA = 122.25m,
+                PriceLimit_Remote = 171.15m,
+                PriceLimit_VeryRemote = 183.38m,
+                CatalogueVersion = "2024-25",
+                EffectiveFrom = new DateOnly(2024, 7, 1),
+                IsActive = true
+            },
+            new()
+            {
+                Id = Guid.Parse("d0000000-0000-0000-0000-000000000004"),
+                ActivityGroupId = groupId,
+                ItemNumber = "04_214_0125_6_1",
+                Description = "Group Activities - Standard - Public Holiday - TTP",
+                Unit = "H",
+                DayType = ClaimDayType.PublicHoliday,
+                PriceLimit_ACT = 149.60m,
+                PriceLimit_NSW = 149.60m,
+                PriceLimit_NT = 149.60m,
+                PriceLimit_QLD = 149.60m,
+                PriceLimit_SA = 149.60m,
+                PriceLimit_TAS = 149.60m,
+                PriceLimit_VIC = 149.60m,
+                PriceLimit_WA = 149.60m,
+                PriceLimit_Remote = 209.44m,
+                PriceLimit_VeryRemote = 224.40m,
+                CatalogueVersion = "2024-25",
+                EffectiveFrom = new DateOnly(2024, 7, 1),
+                IsActive = true
+            }
+        };
+        context.SupportCatalogueItems.AddRange(items);
+
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Clears all data in FK-safe order then re-seeds fresh data.
+    /// </summary>
+    public static async Task ReseedAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        // Delete in reverse FK dependency order
+        context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
+        context.TripDays.RemoveRange(context.TripDays);
+        context.BookingTasks.RemoveRange(context.BookingTasks);
+        context.StaffAssignments.RemoveRange(context.StaffAssignments);
+        context.VehicleAssignments.RemoveRange(context.VehicleAssignments);
+        context.AccommodationReservations.RemoveRange(context.AccommodationReservations);
+        context.ParticipantBookings.RemoveRange(context.ParticipantBookings);
+        context.ParticipantContacts.RemoveRange(context.ParticipantContacts);
+        context.SupportProfiles.RemoveRange(context.SupportProfiles);
+        context.TripInstances.RemoveRange(context.TripInstances);
+        context.Participants.RemoveRange(context.Participants);
+        context.Contacts.RemoveRange(context.Contacts);
+        context.Activities.RemoveRange(context.Activities);
+        context.EventTemplates.RemoveRange(context.EventTemplates);
+        context.AccommodationProperties.RemoveRange(context.AccommodationProperties);
+        context.Vehicles.RemoveRange(context.Vehicles);
+        context.StaffAvailabilities.RemoveRange(context.StaffAvailabilities);
+        context.Users.RemoveRange(context.Users);
+        context.Staff.RemoveRange(context.Staff);
+
+        await context.SaveChangesAsync(ct);
+        await SeedAsync(context, ct);
+    }
+
+}

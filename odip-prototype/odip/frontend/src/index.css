@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@theme {
+  /* Organic Ledger Green palette - light theme */
+  --color-background: #fbf9f5;
+  --color-foreground: #1b1c1a;
+  --color-card: #ffffff;
+  --color-card-foreground: #1b1c1a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1b1c1a;
+  --color-primary: #396200;
+  --color-primary-foreground: #ffffff;
+  --color-primary-container: #4d7c0f;
+  --color-primary-fixed: #bbf37c;
+  --color-on-primary-fixed: #0f2000;
+  --color-secondary: #515f74;
+  --color-secondary-foreground: #ffffff;
+  --color-secondary-container: #d5e3fc;
+  --color-muted: #efeeea;
+  --color-muted-foreground: #43493a;
+  --color-accent: #efeeea;
+  --color-accent-foreground: #1b1c1a;
+  --color-destructive: #ba1a1a;
+  --color-destructive-foreground: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-border: #c3c9b5;
+  --color-input: #e4e2de;
+  --color-ring: #396200;
+  --color-sidebar: #f5f3ef;
+  --color-sidebar-foreground: #1b1c1a;
+  --color-sidebar-accent: rgba(255,255,255,0.4);
+  --color-surface-container: #efeeea;
+  --color-surface-container-low: #f5f3ef;
+  --color-surface-container-high: #eae8e4;
+  --color-surface-container-lowest: #ffffff;
+  --color-outline-variant: #c3c9b5;
+
+  --color-success: #396200;
+  --color-warning: #f59e0b;
+  --color-info: #515f74;
+  --color-conflict: #ba1a1a;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
+  --radius-lg: 2rem;
+
+  --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+
+  /* Prevent iOS zoom on input focus */
+  @media screen and (max-width: 767px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Mobile-friendly table card view */
+@media screen and (max-width: 767px) {
+  .mobile-card-table thead {
+    display: none;
+  }
+  .mobile-card-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .mobile-card-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 1rem;
+    border-radius: 1rem;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .mobile-card-table tbody td {
+    padding: 0 !important;
+  }
+  .mobile-card-table tbody td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-muted-foreground);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .mobile-card-table .divide-y > * + * {
+    border-top: none;
+  }
+}
+
+/* Material Symbols support */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-size: 24px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+/* Status badge colors - adapted to light theme */
+.badge-confirmed { background-color: #bbf37c; color: #0f2000; }
+.badge-pending { background-color: #fef3c7; color: #92400e; }
+.badge-cancelled { background-color: #ffdad6; color: #93000a; }
+.badge-draft { background-color: #e4e2de; color: #43493a; }
+.badge-info { background-color: #d5e3fc; color: #0d1c2e; }
+.badge-conflict { background-color: #ffdad6; color: #93000a; }
+.badge-overdue { background-color: #ffdad6; color: #93000a; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
+
+/* Hide scrollbar for tab bars */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }

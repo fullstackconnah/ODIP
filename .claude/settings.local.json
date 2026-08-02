@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(& \"C:\\\\Program Files\\\\dotnet\\\\dotnet.exe\" --info)",
+      "PowerShell(Invoke-WebRequest -Uri \"https://dot.net/v1/dotnet-install.ps1\" -OutFile \"$env:TEMP\\\\dotnet-install.ps1\" -UseBasicParsing; & \"$env:TEMP\\\\dotnet-install.ps1\" -Channel 8.0 -InstallDir \"$env:USERPROFILE\\\\.dotnet\")",
+      "PowerShell(New-Item *)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.dotnet\\\\dotnet.exe\" --version)",
+      "PowerShell(dotnet restore *)",
+      "PowerShell($env:PATH = \"$env:USERPROFILE\\\\tools\\\\node;$env:PATH\"; Set-Location \"C:\\\\Users\\\\Jobi.OASSIST\\\\Claude\\\\Projects\\\\Oassist Integrated Data Interface Pr\\\\odip-prototype\\\\odip\\\\frontend\"; npx tsc -b 2>$null; if \\($?\\) { \"TYPECHECK OK\" } else { \"TYPECHECK FAILED\" })",
+      "PowerShell($env:PATH = \"$env:USERPROFILE\\\\.dotnet;$env:PATH\"; $env:DOTNET_ROOT = \"$env:USERPROFILE\\\\.dotnet\"; Set-Location \"C:\\\\Users\\\\Jobi.OASSIST\\\\Claude\\\\Projects\\\\Oassist Integrated Data Interface Pr\\\\odip-prototype\\\\odip\\\\backend\"; dotnet run --project Odip.ProtoTests --no-build; \"--- PROTO EXIT: $LASTEXITCODE ---\"; dotnet test Odip.Tests --no-build --verbosity minimal; \"--- XUNIT EXIT: $LASTEXITCODE ---\")",
+      "PowerShell(dotnet run *)",
+      "PowerShell(npm run *)",
+      "PowerShell(Start-Process -FilePath \"$env:USERPROFILE\\\\tools\\\\node\\\\node.exe\" -ArgumentList \"server.js\" -WorkingDirectory \"C:\\\\Users\\\\Jobi.OASSIST\\\\Claude\\\\Projects\\\\Oassist Integrated Data Interface Pr\\\\odip-prototype\\\\odip\\\\mock-api\" -PassThru -WindowStyle Hidden | Select-Object Id | Format-List)",
+      "PowerShell($r1 = Invoke-WebRequest -UseBasicParsing http://localhost:5050/api/v1/participants; $r2 = Invoke-WebRequest -UseBasicParsing http://localhost:5050/api/v1/dashboard/summary; $r3 = Invoke-WebRequest -UseBasicParsing http://localhost:5050/api/v1/trips/t-0002; $r4 = Invoke-WebRequest -UseBasicParsing http://localhost:5050/api/v1/some/unknown/route; Write-Output \\(\"participants: \" + $r1.StatusCode + \" len=\" + $r1.Content.Length\\); Write-Output $r1.Content.Substring\\(0,200\\); Write-Output \\(\"dashboard: \" + $r2.StatusCode\\); Write-Output $r2.Content.Substring\\(0,200\\); Write-Output \\(\"trip detail: \" + $r3.StatusCode\\); Write-Output $r3.Content.Substring\\(0,300\\); Write-Output \\(\"unknown: \" + $r4.StatusCode + \" -> \" + $r4.Content\\))",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Jobi.OASSIST\\\\Claude\\\\Projects\\\\Oassist Integrated Data Interface Pr\\\\odip-prototype\\\\odip\\\\mock-api\"; & \"$env:USERPROFILE\\\\tools\\\\node\\\\node.exe\" server.js)",
+      "PowerShell(Start-Sleep -Seconds 2; \\(Invoke-WebRequest -Uri \"http://localhost:5050/api/v1/dashboard/summary\" -UseBasicParsing\\).StatusCode; \\(Invoke-WebRequest -Uri \"http://localhost:5173/\" -UseBasicParsing\\).StatusCode)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Start-Sleep -Seconds 3; \\(Invoke-WebRequest -Uri \"http://localhost:5173/api/v1/dashboard/summary\" -UseBasicParsing\\).Content.Substring\\(0, 200\\))",
+      "PowerShell(dotnet test *)",
+      "PowerShell(dotnet build *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(exit 0 *)",
+      "PowerShell(& \"$env:USERPROFILE\\\\tools\\\\pgsql\\\\bin\\\\initdb.exe\" -D \"$env:USERPROFILE\\\\tools\\\\pgdata\" -U postgres -A trust -E UTF8 2>&1 | Out-String -Width 300)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(& \"$env:USERPROFILE\\\\tools\\\\pgsql\\\\bin\\\\pg_ctl.exe\" -D \"$env:USERPROFILE\\\\tools\\\\pgdata\" -l \"$env:USERPROFILE\\\\tools\\\\pgdata\\\\server.log\" start 2>&1 | Out-String -Width 300)",
+      "Bash([ -f \"$LOG\" ])",
+      "Bash(break)",
+      "Bash([ -s \"$ERRLOG\" ])",
+      "PowerShell(Get-Process *)"
+    ]
+  }
+}

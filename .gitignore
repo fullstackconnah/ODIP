@@ -1,0 +1,22 @@
+# Required exclusions
+odip-prototype/odip/backend/**/bin/
+odip-prototype/odip/backend/**/obj/
+odip-prototype/odip/frontend/node_modules/
+odip-prototype.zip
+_to_delete/
+odip-prototype/odip/frontend/.env.local
+odip-prototype/odip/local-test/fake-firebase-sa.json
+odip-prototype/odip/local-test/*.log
+odip-prototype/odip/local-test/*.pid
+
+# Additional boilerplate
+*.user
+.vs/
+.vscode/
+*.suo
+npm-debug.log*
+.DS_Store
+Thumbs.db
+odip-prototype/odip/local-test/api.pid.txt
+odip-prototype/odip/local-test/*_token.txt
+odip-prototype/odip/local-test/*.log.crash1
