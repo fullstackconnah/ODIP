@@ -1,7 +1,6 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
@@ -36,6 +35,21 @@ const participantSchema = z.object({
 
 type ParticipantFormData = z.infer<typeof participantSchema>
 
+// @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
+// favour of .issues), so it throws past react-hook-form instead of populating
+// formState.errors on validation failure. Resolve directly against zod's safeParse/.issues
+// API instead of routing through that resolver.
+const participantResolver: Resolver<ParticipantFormData> = (values) => {
+  const result = participantSchema.safeParse(values)
+  if (result.success) return { values: result.data, errors: {} }
+  const errors: FieldErrors<ParticipantFormData> = {}
+  for (const issue of result.error.issues) {
+    const field = String(issue.path[0]) as keyof ParticipantFormData
+    if (!errors[field]) errors[field] = { type: issue.code, message: issue.message }
+  }
+  return { values: {}, errors }
+}
+
 export default function ParticipantCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -48,7 +62,7 @@ export default function ParticipantCreatePage() {
   const mutation = isEdit ? updateParticipant : createParticipant
 
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm<ParticipantFormData>({
-    resolver: zodResolver(participantSchema),
+    resolver: participantResolver,
     defaultValues: {
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
@@ -152,7 +166,7 @@ export default function ParticipantCreatePage() {
 
         {/* Plan & Region */}
         <Card title="Plan & Region" className="space-y-4">
-          <FormField label="Plan Type" required>
+          <FormField label="Plan Type" required error={errors.planType?.message}>
             <Controller
               control={control}
               name="planType"
@@ -203,11 +217,22 @@ export default function ParticipantCreatePage() {
             <input type="checkbox" {...register('requiresOvernightSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
-          <FormField label="Restrictive Practice Flag" layout="checkbox">
-            <input type="checkbox" {...register('hasRestrictivePracticeFlag')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1">
+            <FormField
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span>
+                  Restrictive Practice Flag
+                </span>
+              }
+              layout="checkbox"
+              hint="This flag is recorded in the participant's restrictive practices register."
+            >
+              <input type="checkbox" {...register('hasRestrictivePracticeFlag')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
+          </div>
 
-          <FormField label="Support Ratio" required>
+          <FormField label="Support Ratio" required error={errors.supportRatio?.message}>
             <Controller
               control={control}
               name="supportRatio"

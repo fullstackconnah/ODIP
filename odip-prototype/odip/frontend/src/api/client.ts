@@ -12,6 +12,21 @@ export const apiClient = axios.create({
 // Singleton refresh promise — prevents concurrent 401s from each calling /auth/exchange
 let refreshPromise: Promise<string | null> | null = null
 
+// Guards against logout() re-running (e.g. if a stale/rejected token keeps triggering
+// 401s while the redirect to /login is still in flight)
+let loggingOut = false
+
+function logout() {
+  if (loggingOut) return
+  loggingOut = true
+  localStorage.removeItem('odip_token')
+  localStorage.removeItem('odip_user')
+  localStorage.removeItem('odip_viewing_tenant')
+  localStorage.removeItem('odip_viewing_user')
+  localStorage.removeItem('odip_superadmin_user')
+  window.location.href = '/login'
+}
+
 // JWT interceptor
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('odip_token')
@@ -33,6 +48,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config as typeof error.config & { _retried?: boolean }
+    if (error.response?.status === 401 && config?.url?.endsWith('/auth/logout')) {
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401 && !config._retried) {
       config._retried = true
       try {
@@ -66,12 +84,7 @@ apiClient.interceptors.response.use(
         // Firebase refresh failed — fall through to logout
       }
       try { await apiClient.post('/auth/logout') } catch { /* ignore */ }
-      localStorage.removeItem('odip_token')
-      localStorage.removeItem('odip_user')
-      localStorage.removeItem('odip_viewing_tenant')
-      localStorage.removeItem('odip_viewing_user')
-      localStorage.removeItem('odip_superadmin_user')
-      window.location.href = '/login'
+      logout()
     }
     return Promise.reject(error)
   }

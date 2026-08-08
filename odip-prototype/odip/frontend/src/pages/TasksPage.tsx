@@ -2,11 +2,21 @@ import { useTasks, useUpdateTask, useDeleteTask } from '@/api/hooks'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { Dropdown } from '@/components/Dropdown'
+import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, CheckCircle, Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+
+const TASK_STATUS_ITEMS = [
+  { value: 'NotStarted', label: 'Not Started' },
+  { value: 'InProgress', label: 'In Progress' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Overdue', label: 'Overdue' },
+  { value: 'Cancelled', label: 'Cancelled' },
+]
 
 export default function TasksPage() {
   const { canWrite } = usePermissions()
@@ -57,7 +67,28 @@ export default function TasksPage() {
       header: 'Priority',
       render: (t) => <StatusBadge status={t.priority} />,
     },
-    { key: 'status', header: 'Status', type: 'badge', sortable: true },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      render: (t) => (
+        <Dropdown
+          variant="pill"
+          value={t.status}
+          onChange={val => updateTask.mutate({
+            id: t.id,
+            data: {
+              ...t,
+              status: val,
+              ...(val === 'Completed' ? { completedDate: new Date().toISOString().split('T')[0] } : {}),
+            },
+          })}
+          colorClass={getStatusColor(t.status)}
+          items={TASK_STATUS_ITEMS}
+          disabled={!canWrite}
+        />
+      ),
+    },
     { key: 'actions', header: '', render: (t) => canWrite ? actionButtons(t) : null },
   ]
 

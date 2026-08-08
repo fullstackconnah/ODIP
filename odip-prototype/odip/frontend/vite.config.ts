@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5062',
+        target: process.env.ODIP_API_TARGET || 'http://localhost:5100',
         changeOrigin: true,
       },
     },

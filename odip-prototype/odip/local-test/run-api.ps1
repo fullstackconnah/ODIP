@@ -34,9 +34,9 @@ if (-not (Test-Path $FirebaseSaPath)) {
 
 # ── .NET SDK on PATH for this process only ─────────────────────────
 $env:DOTNET_ROOT = $DotnetRoot
-if ($env:PATH -notlike "*$DotnetRoot*") {
-    $env:PATH = "$DotnetRoot;$env:PATH"
-}
+# Always prepend: a -notlike guard here falsely matched "$DotnetRoot\tools" already on
+# PATH, leaving the SDK-less system dotnet (C:\Program Files\dotnet) resolving first.
+$env:PATH = "$DotnetRoot;$env:PATH"
 
 # ── App configuration (process-scoped env vars) ─────────────────────
 $env:ConnectionStrings__DefaultConnection = 'Host=localhost;Port=5432;Database=odip;Username=postgres;Password=postgres'

@@ -1,11 +1,21 @@
 import { useStaff, useDeleteStaff, useUpdateStaff } from '@/api/hooks'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
-import { StatusBadge } from '@/components/StatusBadge'
+import { Dropdown } from '@/components/Dropdown'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+
+const ACTIVE_STATUS_ITEMS = [
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' },
+]
+
+const ACTIVE_STATUS_COLORS: Record<string, string> = {
+  Active: 'bg-[#bbf37c] text-[#0f2000]',
+  Inactive: 'bg-[#ffdad6] text-[#93000a]',
+}
 
 export default function StaffPage() {
   const { canWrite } = usePermissions()
@@ -31,7 +41,24 @@ export default function StaffPage() {
     { key: 'isMedicationCompetent', header: 'Meds', type: 'boolean', align: 'center' },
     { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center' },
     { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center' },
-    { key: 'status', header: 'Status', sortable: true, render: (s) => <StatusBadge status={s.isActive ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      render: (s) => {
+        const current = s.isActive ? 'Active' : 'Inactive'
+        return (
+          <Dropdown
+            variant="pill"
+            value={current}
+            onChange={val => updateStaff.mutate({ id: s.id, data: { ...s, isActive: val === 'Active' } })}
+            colorClass={ACTIVE_STATUS_COLORS[current]}
+            items={ACTIVE_STATUS_ITEMS}
+            disabled={!canWrite}
+          />
+        )
+      },
+    },
     { key: 'actions', header: '', render: (s) => actionButtons(s) },
   ]
 

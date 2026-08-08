@@ -100,17 +100,20 @@ namespace Odip.Infrastructure.Migrations
                 nullable: false,
                 defaultValue: 0);
 
-            migrationBuilder.CreateTable(
-                name: "AppSettings",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false),
-                    QualificationWarningDays = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_AppSettings", x => x.Id);
-                });
+            // AppSettings is also created by AddTenants (which runs immediately before this
+            // migration) using the newer Guid Id + TenantId schema, so on a fresh database the
+            // table already exists by the time this runs. Use IF NOT EXISTS so this is a no-op
+            // in that case instead of failing with "relation already exists"; this mirrors the
+            // AddAuditLog migration's own guarded copy of this same statement further down the
+            // chain. Kept for compatibility with any legacy database whose history predates
+            // AddTenants (see the __EFMigrationsHistory repair logic in Program.cs).
+            migrationBuilder.Sql("""
+                CREATE TABLE IF NOT EXISTS "AppSettings" (
+                    "Id" integer NOT NULL,
+                    "QualificationWarningDays" integer NOT NULL,
+                    CONSTRAINT "PK_AppSettings" PRIMARY KEY ("Id")
+                );
+            """);
 
             migrationBuilder.CreateTable(
                 name: "ProviderSettings",
@@ -393,8 +396,11 @@ namespace Odip.Infrastructure.Migrations
                 name: "FK_TripInstances_SupportActivityGroups_DefaultActivityGroupId",
                 table: "TripInstances");
 
-            migrationBuilder.DropTable(
-                name: "AppSettings");
+            // Up() no longer unconditionally creates AppSettings (see comment there), and this
+            // migration doesn't actually own the table's lifecycle — AddTenants does. Use
+            // IF EXISTS so rolling back doesn't fail if AddTenants (or a later migration's own
+            // guarded copy) already removed it.
+            migrationBuilder.Sql("""DROP TABLE IF EXISTS "AppSettings";""");
 
             migrationBuilder.DropTable(
                 name: "ClaimLineItems");

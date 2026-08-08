@@ -1,10 +1,14 @@
-import { useBookings } from '@/api/hooks'
+import { useBookings, usePatchBooking } from '@/api/hooks'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
+import { Dropdown } from '@/components/Dropdown'
+import { getStatusColor } from '@/lib/utils'
+import type { BookingStatus } from '@/api/types/enums'
 
 export default function BookingsPage() {
   const { data: bookings = [], isLoading, isError } = useBookings()
+  const patchBooking = usePatchBooking()
 
   if (isError) return (
     <div className="p-8 text-center text-red-600">Failed to load bookings. Please refresh the page.</div>
@@ -43,7 +47,28 @@ export default function BookingsPage() {
                 </Link>
               ),
             },
-            { key: 'bookingStatus', header: 'Status', type: 'badge', sortable: true },
+            {
+              key: 'bookingStatus',
+              header: 'Status',
+              sortable: true,
+              render: (b) => (
+                <Dropdown
+                  variant="pill"
+                  value={b.bookingStatus}
+                  onChange={val => patchBooking.mutate({ id: b.id, data: { bookingStatus: val as BookingStatus } })}
+                  colorClass={getStatusColor(b.bookingStatus)}
+                  items={[
+                    { value: 'Enquiry', label: 'Enquiry' },
+                    { value: 'Held', label: 'Held' },
+                    { value: 'Confirmed', label: 'Confirmed' },
+                    { value: 'Waitlist', label: 'Waitlist' },
+                    { value: 'Cancelled', label: 'Cancelled' },
+                    { value: 'Completed', label: 'Completed' },
+                    { value: 'NoLongerAttending', label: 'No Longer Attending' },
+                  ]}
+                />
+              ),
+            },
             { key: 'bookingDate', header: 'Booking Date', type: 'date', sortable: true },
             {
               key: 'wheelchairRequired',

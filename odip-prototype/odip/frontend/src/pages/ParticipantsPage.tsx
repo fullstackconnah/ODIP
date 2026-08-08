@@ -3,12 +3,22 @@ import { maskNdisNumber } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
-import { StatusBadge } from '@/components/StatusBadge'
+import { Dropdown } from '@/components/Dropdown'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+
+const ACTIVE_STATUS_ITEMS = [
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' },
+]
+
+const ACTIVE_STATUS_COLORS: Record<string, string> = {
+  Active: 'bg-[#bbf37c] text-[#0f2000]',
+  Inactive: 'bg-[#ffdad6] text-[#93000a]',
+}
 
 export default function ParticipantsPage() {
   const { canWrite } = usePermissions()
@@ -39,7 +49,26 @@ export default function ParticipantsPage() {
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
     { key: 'supportRatio', header: 'Support Ratio' },
     { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
-    { key: 'status', header: 'Status', sortable: true, render: (p) => <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      render: (p) => {
+        const current = p.isActive ? 'Active' : 'Inactive'
+        return (
+          <span onClick={e => e.stopPropagation()}>
+            <Dropdown
+              variant="pill"
+              value={current}
+              onChange={val => updateParticipant.mutate({ id: p.id, data: { ...p, isActive: val === 'Active' } })}
+              colorClass={ACTIVE_STATUS_COLORS[current]}
+              items={ACTIVE_STATUS_ITEMS}
+              disabled={!canWrite}
+            />
+          </span>
+        )
+      },
+    },
     { key: 'actions', header: '', render: (p) => canWrite ? actionButtons(p) : null },
   ]
 
