@@ -1,0 +1,130 @@
+name: Deploy to homelab
+
+# Runs on a self-hosted runner ON the homelab box (192.168.4.70), because the
+# server is on a private LAN that GitHub-hosted runners cannot reach.
+#
+# A merged PR produces a push to main, so this covers merges and direct pushes.
+# Only paths that affect the running app trigger a deploy — doc-only commits
+# (Platform Plan/, *.md) are ignored.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'odip-prototype/odip/backend/**'
+      - 'odip-prototype/odip/frontend/**'
+      - 'odip-prototype/odip/nginx/**'
+      - 'deploy/compose.yaml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+# Never let two deploys touch the stack at once.
+concurrency:
+  group: deploy-homelab
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, odip]
+    timeout-minutes: 45
+
+    env:
+      STACK_DIR: /mnt/docker/stacks/odip
+      SRC_DIR: odip-prototype/odip
+      HEALTH_URL: http://localhost:8475
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify stack directory exists
+        run: |
+          set -euo pipefail
+          test -d "$STACK_DIR" || { echo "::error::$STACK_DIR not found — run the one-time server setup first"; exit 1; }
+          test -f "$STACK_DIR/.env" || { echo "::error::$STACK_DIR/.env missing — secrets live on the server and are never committed"; exit 1; }
+
+      - name: Tag rollback images
+        run: |
+          set -euo pipefail
+          for img in odip-api odip-frontend; do
+            if docker image inspect "$img:local" >/dev/null 2>&1; then
+              docker tag "$img:local" "$img:rollback"
+              echo "Tagged $img:rollback"
+            else
+              echo "No existing $img:local — first deploy, nothing to roll back to"
+            fi
+          done
+
+      - name: Sync source into stack directory
+        run: |
+          set -euo pipefail
+          # --delete keeps the stack tree honest, but .env holds the generated
+          # Postgres password / JWT secret and must survive every deploy.
+          rsync -a --delete \
+            --exclude='.env' \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='bin' \
+            --exclude='obj' \
+            --exclude='dist' \
+            "$SRC_DIR"/ "$STACK_DIR"/
+          cp deploy/compose.yaml "$STACK_DIR"/compose.yaml
+
+      - name: Build images
+        # This is the gate. If either image fails to compile the job stops here
+        # and the currently running containers are left untouched.
+        run: |
+          set -euo pipefail
+          cd "$STACK_DIR"
+          docker compose build
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          cd "$STACK_DIR"
+          docker compose up -d
+
+      - name: Health check
+        id: health
+        run: |
+          set -uo pipefail
+          cd "$STACK_DIR"
+          for i in $(seq 1 30); do
+            FE=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/" || echo 000)
+            # Unauthenticated API call must return 401 — proves the API is up
+            # AND still enforcing auth.
+            API=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/api/v1/participants" || echo 000)
+            echo "attempt $i: frontend=$FE api=$API"
+            if [ "$FE" = "200" ] && [ "$API" = "401" ]; then
+              echo "Healthy."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed after 150s (frontend=$FE api=$API)"
+          exit 1
+
+      - name: Roll back on failed health check
+        if: failure() && steps.health.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          cd "$STACK_DIR"
+          ROLLED=0
+          for img in odip-api odip-frontend; do
+            if docker image inspect "$img:rollback" >/dev/null 2>&1; then
+              docker tag "$img:rollback" "$img:local"
+              ROLLED=1
+            fi
+          done
+          if [ "$ROLLED" = "1" ]; then
+            docker compose up -d
+            echo "::warning::Deploy failed health check — rolled back to previous images"
+          else
+            echo "::error::Deploy failed and no rollback images exist"
+          fi
+
+      - name: Report
+        if: always()
+        run: |
+          cd "$STACK_DIR"
+          docker compose ps --format '{{.Name}}\t{{.State}}\t{{.Status}}'

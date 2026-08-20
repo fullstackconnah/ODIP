@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: odip-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: odip
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: odip-api:local
+    container_name: odip-api
+    restart: unless-stopped
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=odip;Username=postgres;Password=${POSTGRES_PASSWORD};Trust Server Certificate=true;SSL Mode=Disable
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - FIREBASE_SERVICE_ACCOUNT_JSON=/credentials/firebase.json
+      # Password-less dev login. LAN-only instances ONLY — never set this on an
+      # internet-reachable host or one holding real participant data.
+      - DEV_AUTH_ENABLED=${DEV_AUTH_ENABLED:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - documents:/data/documents
+      - /home/connah/secrets/odip/firebase-credentials.json:/credentials/firebase.json:ro
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Placeholder values — replace with a real Firebase web app config and
+        # rebuild this image to enable login.
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID}
+        # Must match DEV_AUTH_ENABLED on the api service. Baked in at build time,
+        # so changing it requires rebuilding this image.
+        VITE_DEV_AUTH: ${VITE_DEV_AUTH:-false}
+    image: odip-frontend:local
+    container_name: odip-frontend
+    restart: unless-stopped
+    ports:
+      - "8475:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  documents:

@@ -60,7 +60,7 @@ apiClient.interceptors.response.use(
           refreshPromise = (async () => {
             try {
               const { auth } = await import('../lib/firebase')
-              const currentUser = auth.currentUser
+              const currentUser = auth?.currentUser
               if (!currentUser) return null
               const idToken = await currentUser.getIdToken(true)
               const exchangeRes = await apiClient.post<ApiResponse<{ token: string }>>(

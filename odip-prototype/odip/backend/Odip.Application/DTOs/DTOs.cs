@@ -1047,6 +1047,14 @@ public record AuthResponseDto
     public Guid? TenantId { get; init; }
 }
 
+// NOTE: ExchangeTokenDto (the Firebase-token-exchange request DTO this record sits next to per
+// spec) actually lives in its own file, Odip.Application/DTOs/ExchangeTokenDto.cs — this record
+// is placed here instead, next to its response counterpart AuthResponseDto above.
+public record DevLoginDto
+{
+    public string? Username { get; init; }
+}
+
 // ══════════════════════════════════════════════════════════════
 // SCHEDULE OVERVIEW DTOs
 // ══════════════════════════════════════════════════════════════

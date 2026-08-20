@@ -116,17 +116,43 @@ if (string.IsNullOrEmpty(firebaseServiceAccount))
     }
 }
 
-if (string.IsNullOrEmpty(firebaseServiceAccount))
+var devAuthEnabled = string.Equals(
+    Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
+if (devAuthEnabled)
+{
+    Console.WriteLine("***********************************************************************");
+    Console.WriteLine("*** DEV AUTH ENABLED — /api/v1/auth/dev-login and /api/v1/auth/dev-users  ***");
+    Console.WriteLine("*** will issue tokens without a password. Do NOT expose this instance   ***");
+    Console.WriteLine("*** to the internet.                                                     ***");
+    Console.WriteLine("***********************************************************************");
+}
+
+if (string.IsNullOrEmpty(firebaseServiceAccount) && !devAuthEnabled)
     throw new InvalidOperationException(
         "Firebase credentials not configured. Provide one of: " +
         "Firebase:ServiceAccountJson (config/env with full JSON), " +
         "FIREBASE_SERVICE_ACCOUNT_JSON (file path), " +
         "or FIREBASE_PROJECT_ID + FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL (individual env vars).");
 
-FirebaseApp.Create(new AppOptions
+if (string.IsNullOrEmpty(firebaseServiceAccount) && devAuthEnabled)
 {
-    Credential = GoogleCredential.FromJson(firebaseServiceAccount)
-});
+    Console.WriteLine("***********************************************************************");
+    Console.WriteLine("*** DEV AUTH ENABLED — Firebase disabled, /api/v1/auth/dev-login will   ***");
+    Console.WriteLine("*** issue tokens without a password. Do NOT expose this instance to     ***");
+    Console.WriteLine("*** the internet.                                                        ***");
+    Console.WriteLine("***********************************************************************");
+}
+else
+{
+    // Firebase credentials are present (or dev auth is off, in which case the throw above
+    // already fired) — initialise Firebase normally so the real login keeps working even
+    // when dev auth is also enabled.
+    FirebaseApp.Create(new AppOptions
+    {
+        Credential = GoogleCredential.FromJson(firebaseServiceAccount)
+    });
+}
 
 // ── NDIS Claiming Services ────────────────────────────────────
 builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimGenerationService>();

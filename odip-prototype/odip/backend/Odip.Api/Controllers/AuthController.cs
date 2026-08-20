@@ -135,6 +135,103 @@ public class AuthController : ControllerBase
         return Ok(ApiResponse<object>.Ok(null, "Logged out."));
     }
 
+    /// <summary>
+    /// Developer-only login that bypasses Firebase entirely. Only reachable when the
+    /// DEV_AUTH_ENABLED environment variable is set to "true" — otherwise this route behaves
+    /// as if it does not exist. Must never be enabled on an internet-facing deployment.
+    /// </summary>
+    [HttpPost("dev-login")]
+    [AllowAnonymous]
+    [EnableRateLimiting("login")]
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> DevLogin([FromBody] DevLoginDto? dto, CancellationToken ct)
+    {
+        if (!IsDevAuthEnabled())
+            return NotFound();
+
+        var username = string.IsNullOrEmpty(dto?.Username) ? "admin" : dto.Username;
+
+        var user = await _db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Username == username && u.IsActive, ct);
+
+        if (user is null)
+            return NotFound(ApiResponse<AuthResponseDto>.Fail($"Dev user '{username}' not found"));
+
+        _logger.LogWarning("DEV AUTH: issuing token for {Username} ({Email}) — Firebase bypassed. This must never be enabled on an internet-facing deployment.", user.Username, user.Email);
+
+        user.LastLoginAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        if (user.Role == Domain.Enums.UserRole.SuperAdmin)
+        {
+            var superAdminToken = GenerateSuperAdminJwtToken(user);
+            SetJwtCookie(superAdminToken);
+
+            return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
+            {
+                Token = superAdminToken,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+                Username = user.Username,
+                FullName = user.FullName,
+                Role = "SuperAdmin",
+                TenantName = null,
+                TenantId = null
+            }));
+        }
+
+        var tenant = await _db.Tenants
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Id == user.TenantId, ct);
+
+        if (tenant is null)
+            return NotFound(ApiResponse<AuthResponseDto>.Fail("Tenant not found for dev user"));
+
+        var tenantToken = GenerateJwtToken(user, tenant.Id);
+        SetJwtCookie(tenantToken);
+
+        return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
+        {
+            Token = tenantToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            Username = user.Username,
+            FullName = user.FullName,
+            Role = user.Role.ToString(),
+            TenantName = tenant.Name,
+            TenantId = tenant.Id
+        }));
+    }
+
+    /// <summary>
+    /// Lists active users available for dev-login, for discovery in local/dev environments.
+    /// Only reachable when DEV_AUTH_ENABLED is "true" — otherwise this route behaves as if it
+    /// does not exist.
+    /// </summary>
+    [HttpGet("dev-users")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<IEnumerable<object>>>> DevUsers(CancellationToken ct)
+    {
+        if (!IsDevAuthEnabled())
+            return NotFound();
+
+        var users = await _db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.Username)
+            .Select(u => new
+            {
+                u.Username,
+                u.Email,
+                Role = u.Role.ToString(),
+                TenantName = u.Tenant != null ? u.Tenant.Name : null
+            })
+            .ToListAsync(ct);
+
+        return Ok(ApiResponse<IEnumerable<object>>.Ok(users));
+    }
+
+    private static bool IsDevAuthEnabled()
+        => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
     private void SetJwtCookie(string token)
     {
         Response.Cookies.Append("odip_jwt", token, new CookieOptions
