@@ -41,6 +41,21 @@ const participantSchema = z.object({
   behaviourRiskSummary: z.string().optional(),
   notes: z.string().optional(),
   preferredStaffId: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  const hasAnyEquipment = !!(
+    data.requiresHiLoBed
+    || data.requiresHoist
+    || data.requiresShowerChair
+    || data.requiresCommode
+    || data.requiresStandingMachine
+  )
+  if (data.equipmentRequirements && data.equipmentRequirements.trim() !== '' && !hasAnyEquipment) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['equipmentRequirements'],
+      message: 'Select an equipment item, or clear these notes.',
+    })
+  }
 })
 
 type ParticipantFormData = z.infer<typeof participantSchema>
@@ -289,8 +304,8 @@ export default function ParticipantCreatePage() {
 
         {/* Mobility Aids & Support */}
         <Card title="Mobility Aids & Support" className="space-y-4">
-          <div>
-            <p className={labelClass}>Mobility Aids</p>
+          <fieldset className="m-0 p-0 border-0">
+            <legend className={labelClass}>Mobility Aids</legend>
             <div>
               <FormField label="Wheelchair" layout="checkbox">
                 <input type="checkbox" {...register('mobilityAidWheelchair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
@@ -299,10 +314,10 @@ export default function ParticipantCreatePage() {
                 <input type="checkbox" {...register('mobilityAidWalker')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
             </div>
-          </div>
+          </fieldset>
 
-          <div>
-            <p className={labelClass}>Mobility Support</p>
+          <fieldset className="m-0 p-0 border-0">
+            <legend className={labelClass}>Mobility Support</legend>
             <Controller
               control={control}
               name="mobilitySupportOptions"
@@ -332,7 +347,7 @@ export default function ParticipantCreatePage() {
                 </div>
               )}
             />
-          </div>
+          </fieldset>
         </Card>
 
         {/* Overnight Support */}
@@ -358,25 +373,30 @@ export default function ParticipantCreatePage() {
 
         {/* Equipment */}
         <Card title="Equipment" className="space-y-4">
-          <FormField label="Hi-Lo Bed" layout="checkbox">
-            <input type="checkbox" {...register('requiresHiLoBed')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+          <fieldset className="m-0 p-0 border-0 space-y-4">
+            {/* Card already renders a visible "Equipment" heading above; this legend exists
+                only to give the fieldset an accessible group name for screen readers. */}
+            <legend className="sr-only">Equipment</legend>
+            <FormField label="Hi-Lo Bed" layout="checkbox">
+              <input type="checkbox" {...register('requiresHiLoBed')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
 
-          <FormField label="Hoist" layout="checkbox">
-            <input type="checkbox" {...register('requiresHoist')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+            <FormField label="Hoist" layout="checkbox">
+              <input type="checkbox" {...register('requiresHoist')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
 
-          <FormField label="Shower Chair" layout="checkbox">
-            <input type="checkbox" {...register('requiresShowerChair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+            <FormField label="Shower Chair" layout="checkbox">
+              <input type="checkbox" {...register('requiresShowerChair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
 
-          <FormField label="Commode" layout="checkbox">
-            <input type="checkbox" {...register('requiresCommode')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+            <FormField label="Commode" layout="checkbox">
+              <input type="checkbox" {...register('requiresCommode')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
 
-          <FormField label="Standing Machine" layout="checkbox">
-            <input type="checkbox" {...register('requiresStandingMachine')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+            <FormField label="Standing Machine" layout="checkbox">
+              <input type="checkbox" {...register('requiresStandingMachine')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
+          </fieldset>
         </Card>
 
         {/* Notes & Requirements */}
@@ -387,14 +407,17 @@ export default function ParticipantCreatePage() {
 
           <FormField
             label="Equipment Requirements"
+            error={errors.equipmentRequirements?.message}
             hint={!hasAnyEquipment ? 'Select at least one equipment option above to enable notes.' : undefined}
           >
             <textarea
               {...register('equipmentRequirements')}
               rows={2}
               placeholder="Required equipment..."
-              disabled={!hasAnyEquipment}
+              readOnly={!hasAnyEquipment}
+              aria-disabled={!hasAnyEquipment}
               title={!hasAnyEquipment ? 'Select at least one equipment option above to enable notes.' : undefined}
+              className={!hasAnyEquipment ? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] cursor-not-allowed' : undefined}
             />
           </FormField>
 

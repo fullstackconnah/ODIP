@@ -129,8 +129,8 @@ export default function AppLayout() {
                     onClick={() => toggleGroup(item.label)}
                     className={`flex items-center w-full gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
                       isGroupActive
-                        ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
-                        : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                        ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[#e3e0d8]'
+                        : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
                     }`}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{item.msIcon}</span>
@@ -140,15 +140,22 @@ export default function AppLayout() {
                       className={`w-4 h-4 shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
                     />
                   </button>
-                  {isOpen && (
-                    <div id={groupId} className="space-y-0.5">
+                  <div
+                    id={groupId}
+                    aria-hidden={!isOpen}
+                    className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${
+                      isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                    }`}
+                  >
+                    <div className="min-h-0 space-y-0.5">
                       {visibleChildren.map(({ to, label, msIcon }) => (
                         <NavLink key={to} to={to} end={to === '/'}
+                          tabIndex={isOpen ? undefined : -1}
                           className={({ isActive }) =>
                             `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
                               isActive
-                                ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
-                                : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                                ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+                                : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
                             }`
                           }
                           onClick={() => setSidebarOpen(false)}
@@ -158,7 +165,7 @@ export default function AppLayout() {
                         </NavLink>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               )
             }
@@ -171,8 +178,8 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
                     isActive
-                      ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
-                      : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                      ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+                      : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
                   }`
                 }
                 onClick={() => setSidebarOpen(false)}

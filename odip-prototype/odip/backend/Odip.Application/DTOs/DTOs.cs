@@ -24,6 +24,8 @@ public record ParticipantListDto
     public bool IsHighSupport { get; init; }
     public bool IsIntensiveSupport { get; init; }
     public SupportRatio SupportRatio { get; init; }
+    public OvernightSupportType OvernightSupport { get; init; }
+    public bool HasRestrictivePracticeFlag { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto
@@ -32,14 +34,12 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? NdisNumber { get; init; }
     public string? FundingOrganisation { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
-    public OvernightSupportType OvernightSupport { get; init; }
     public SupportRatio OvernightRatio { get; init; }
     public bool RequiresHiLoBed { get; init; }
     public bool RequiresHoist { get; init; }
     public bool RequiresShowerChair { get; init; }
     public bool RequiresCommode { get; init; }
     public bool RequiresStandingMachine { get; init; }
-    public bool HasRestrictivePracticeFlag { get; init; }
     public string? MobilityNotes { get; init; }
     public string? EquipmentRequirements { get; init; }
     public string? TransportRequirements { get; init; }
