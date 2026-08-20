@@ -23,6 +23,7 @@
   --color-destructive: #ba1a1a;
   --color-destructive-foreground: #ffffff;
   --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
   --color-border: #c3c9b5;
   --color-input: #e4e2de;
   --color-ring: #396200;
@@ -121,11 +122,11 @@
 /* Status badge colors - adapted to light theme */
 .badge-confirmed { background-color: #bbf37c; color: #0f2000; }
 .badge-pending { background-color: #fef3c7; color: #92400e; }
-.badge-cancelled { background-color: #ffdad6; color: #93000a; }
+.badge-cancelled { background-color: #ffdad6; color: var(--color-on-error-container); }
 .badge-draft { background-color: #e4e2de; color: #43493a; }
 .badge-info { background-color: #d5e3fc; color: #0d1c2e; }
-.badge-conflict { background-color: #ffdad6; color: #93000a; }
-.badge-overdue { background-color: #ffdad6; color: #93000a; }
+.badge-conflict { background-color: #ffdad6; color: var(--color-on-error-container); }
+.badge-overdue { background-color: #ffdad6; color: var(--color-on-error-container); }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

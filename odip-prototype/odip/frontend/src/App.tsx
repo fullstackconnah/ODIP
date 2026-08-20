@@ -30,6 +30,9 @@ const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
+const BillingPage = React.lazy(() => import('@/pages/BillingPage'))
+const ClaimBatchDetailPage = React.lazy(() => import('@/pages/ClaimBatchDetailPage'))
+const ClaimBatchBuilderPage = React.lazy(() => import('@/pages/ClaimBatchBuilderPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +88,9 @@ const router = createBrowserRouter(
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
+        <Route path="/billing" element={<PrivateRoute page="billing"><BillingPage /></PrivateRoute>} />
+        <Route path="/billing/claim-batches/new" element={<PrivateRoute page="billing" requiresWrite><ClaimBatchBuilderPage /></PrivateRoute>} />
+        <Route path="/billing/claim-batches/:id" element={<PrivateRoute page="billing"><ClaimBatchDetailPage /></PrivateRoute>} />
       </Route>
     </Route>
   )

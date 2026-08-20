@@ -21,7 +21,7 @@ const getActivityStatusColor = (status: string) => {
     case 'Booked': return 'bg-[#fef3c7] text-[#92400e]'
     case 'Confirmed': return 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
     case 'Completed': return 'bg-[var(--color-secondary-container)] text-[#0d1c2e]'
-    case 'Cancelled': return 'bg-[var(--color-error-container)] text-[#93000a]'
+    case 'Cancelled': return 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
     default: return 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]'
   }
 }

@@ -63,7 +63,7 @@ const activityStatusStyle: Record<string, string> = {
   Booked: 'bg-[#fef3c7] text-[#92400e]',
   Confirmed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   Completed: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
-  Cancelled: 'bg-[var(--color-error-container)] text-[#93000a]',
+  Cancelled: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
