@@ -388,8 +388,9 @@ public class ClaimGenerationServiceTests
         var participant = CreateParticipant();
         db.Participants.Add(participant);
 
-        // Depart at 18:00, 8 active hours means activity extends to 02:00 next day
-        // Evening threshold is 20:00, so 2 hours after threshold = evening
+        // Depart at 18:00, 8 active hours means activity extends to 02:00 next day.
+        // Evening threshold is 20:00: 18:00-20:00 is 2 daytime (weekday) hours,
+        // 20:00-02:00 (crossing midnight) is 6 evening hours.
         var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant,
             activityGroupId: group.Id, activeHoursPerDay: 8m,
             departureTime: new TimeOnly(18, 0));
@@ -403,9 +404,9 @@ public class ClaimGenerationServiceTests
 
         Assert.NotNull(weekdayLine);
         Assert.NotNull(eveningLine);
-        // Daytime: 6 hours, Evening: 2 hours
-        Assert.Equal(6m, weekdayLine!.Hours);
-        Assert.Equal(2m, eveningLine!.Hours);
+        // Daytime: 2 hours, Evening: 6 hours
+        Assert.Equal(2m, weekdayLine!.Hours);
+        Assert.Equal(6m, eveningLine!.Hours);
     }
 
     // ── GenerateDraftClaimAsync Tests ─────────────────────────────
