@@ -10,7 +10,6 @@ export interface AuthResponseDto {
 
 export interface DevUserDto {
   username: string
-  email: string
   role: string
-  tenantName: string
+  tenantName: string | null
 }

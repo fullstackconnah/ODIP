@@ -13,7 +13,12 @@ ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
 ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=20000 \
+      --fetch-retry-maxtimeout=180000 \
+ && test -x node_modules/.bin/tsc \
+ || (echo "ERROR: npm ci left an incomplete node_modules (tsc missing)" >&2; exit 1)
 
 COPY frontend/ .
 RUN npm run build
