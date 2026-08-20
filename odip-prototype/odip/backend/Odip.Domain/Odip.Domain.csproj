@@ -6,4 +6,13 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Ships the data dictionary JSON to every downstream project's output/publish
+         directory (Domain -> Infrastructure -> Api), so DbSeeder can resolve it at
+         runtime via AppContext.BaseDirectory in both dev and published layouts. -->
+    <Content Include="SeedData\DataDictionarySeed.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
