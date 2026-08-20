@@ -207,7 +207,7 @@ export function DataTable<T>({
                       onSelectionChange?.(new Set())
                     }
                   }}
-                  className="rounded border-[var(--color-border)] accent-[#396200] cursor-pointer"
+                  className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
                   aria-label="Select all rows"
                 />
               </th>
@@ -242,7 +242,7 @@ export function DataTable<T>({
                           variant="pill"
                           items={col.bulkEditable.items}
                           label={`${selectedRows.size} row${selectedRows.size === 1 ? '' : 's'}`}
-                          colorClass="bg-[#396200]/15 text-[#396200]"
+                          colorClass="bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
                           onChange={value => col.bulkEditable!.onBulkChange(Array.from(selectedRows), value)}
                         />
                       </span>
@@ -303,7 +303,7 @@ export function DataTable<T>({
                         }
                         onSelectionChange?.(next)
                       }}
-                      className="rounded border-[var(--color-border)] accent-[#396200] cursor-pointer"
+                      className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
                       aria-label={`Select row ${rowKey}`}
                     />
                   </td>

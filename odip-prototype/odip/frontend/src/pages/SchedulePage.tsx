@@ -172,11 +172,11 @@ export default function SchedulePage() {
             <div className="bg-white p-3 rounded-[0.75rem]">
               <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Conflicts</p>
               <div className="flex justify-between items-center">
-                <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[#ba1a1a]' : 'text-[var(--color-foreground)]'}`}>
+                <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[var(--color-conflict)]' : 'text-[var(--color-foreground)]'}`}>
                   {String(conflictsCount).padStart(2, '0')}
                 </span>
                 {conflictsCount > 0
-                  ? <AlertTriangle className="w-4 h-4 text-[#ba1a1a]" />
+                  ? <AlertTriangle className="w-4 h-4 text-[var(--color-conflict)]" />
                   : <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
                 }
               </div>
@@ -258,8 +258,9 @@ export default function SchedulePage() {
                       style={{ borderBottom: '1px solid var(--color-surface-container)' }}
                     >
                       <td className="sticky left-0 z-10 bg-white px-4 py-2.5 min-w-[200px]">
-                        <div
-                          className="flex items-center gap-2 cursor-pointer"
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 cursor-pointer text-left"
                           onClick={() => toggleStaff(s.id)}
                         >
                           <div className="w-7 h-7 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center flex-shrink-0">
@@ -277,7 +278,7 @@ export default function SchedulePage() {
                               {s.role?.replace(/([A-Z])/g, ' $1').trim()}{s.region ? ` · ${s.region}` : ''}
                             </div>
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-1 mt-1 pl-9">
                           <QualBadge active={s.isDriverEligible} icon={Car} title="Driver Eligible" />
                           <QualBadge active={s.isFirstAidQualified} icon={Shield} title="First Aid" />

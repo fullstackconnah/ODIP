@@ -24,8 +24,8 @@ const TRIP_STATUS_ITEMS = [
   { value: 'Archived', label: 'Archived' },
 ]
 
-const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all'
-const labelClass = 'block text-xs font-medium text-[#43493a] mb-1'
+const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
 function buildEditForm(t: TripDetailDto) {
   return {
@@ -151,20 +151,20 @@ export default function TripsPage() {
         subtitle={`${trips.length} trip${trips.length !== 1 ? 's' : ''}`}
         action={canWrite && (
           <Link to="/trips/new"
-            className="flex items-center gap-2 px-4 md:px-5 py-2 md:py-2.5 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white text-sm font-bold shadow-lg shadow-[#396200]/20 hover:opacity-90 transition-all flex-shrink-0">
+            className="flex items-center gap-2 px-4 md:px-5 py-2 md:py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white text-sm font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 transition-all flex-shrink-0">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Trip</span><span className="sm:hidden">New</span>
           </Link>
         )}
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-full bg-[#efeeea] w-fit">
+      <div className="flex gap-1 p-1 rounded-full bg-[var(--color-surface-container)] w-fit">
         <button
           onClick={() => switchTab('active')}
           className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
             tab === 'active'
-              ? 'bg-white text-[#1b1c1a] shadow-sm'
-              : 'text-[#43493a] hover:text-[#1b1c1a]'
+              ? 'bg-white text-[var(--color-foreground)] shadow-sm'
+              : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
           }`}
         >
           Active Trips
@@ -173,8 +173,8 @@ export default function TripsPage() {
           onClick={() => switchTab('completed')}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
             tab === 'completed'
-              ? 'bg-white text-[#1b1c1a] shadow-sm'
-              : 'text-[#43493a] hover:text-[#1b1c1a]'
+              ? 'bg-white text-[var(--color-foreground)] shadow-sm'
+              : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
           }`}
         >
           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -185,16 +185,16 @@ export default function TripsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 md:gap-3">
         <div className="relative flex-1 min-w-0 md:min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#43493a]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'completed' ? 'Search completed trips...' : 'Search trips...'}
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
         </div>
         {statusOptions.length > 0 && (
           <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#43493a]" />
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="pl-10 pr-8 py-2.5 rounded-2xl bg-[#f5f3ef] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#396200]/30 transition-all">
+              className="pl-10 pr-8 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
               <option value="">All Statuses</option>
               {statusOptions.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -206,14 +206,14 @@ export default function TripsPage() {
 
       {/* Trips grid */}
       {isLoading ? (
-        <div className="text-center py-12 text-[#43493a]">Loading trips...</div>
+        <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading trips...</div>
       ) : trips.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-[#43493a]">
+          <p className="text-[var(--color-muted-foreground)]">
             {tab === 'completed' ? 'No completed trips yet' : 'No trips found'}
           </p>
           {tab === 'completed' && (
-            <p className="text-xs text-[#43493a] mt-1">
+            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
               Trips will appear here once they are marked as completed
             </p>
           )}
@@ -224,12 +224,12 @@ export default function TripsPage() {
             <div key={t.id} className="bg-white rounded-2xl p-5 hover:shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)] transition-all group">
               {/* Title row */}
               <Link to={`/trips/${t.id}`} className="block mb-3">
-                <h3 className="font-semibold group-hover:text-[#396200] transition-colors truncate">{t.tripName}</h3>
-                {t.tripCode && <span className="text-xs text-[#43493a] font-mono">{t.tripCode}</span>}
+                <h3 className="font-semibold group-hover:text-[var(--color-primary)] transition-colors truncate">{t.tripName}</h3>
+                {t.tripCode && <span className="text-xs text-[var(--color-muted-foreground)] font-mono">{t.tripCode}</span>}
               </Link>
               {/* Body */}
               <Link to={`/trips/${t.id}`} className="block">
-                <div className="space-y-2 text-sm text-[#43493a]">
+                <div className="space-y-2 text-sm text-[var(--color-muted-foreground)]">
                   <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {t.destination || 'TBD'} {t.region ? `· ${t.region}` : ''}</p>
                   <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">calendar_today</span> {formatDateAu(t.startDate)} — {formatDateAu(t.endDate)} ({t.durationDays}d)</p>
                 </div>
@@ -242,9 +242,9 @@ export default function TripsPage() {
                       <button
                         onClick={e => handleOpenEdit(t.id, e)}
                         title="Edit trip"
-                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-[#f5f3ef] transition-opacity"
+                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-container-low)] transition-opacity"
                       >
-                        <Pencil className="w-3.5 h-3.5 text-[#43493a]" />
+                        <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                       </button>
                     </div>
                   )}
@@ -256,7 +256,7 @@ export default function TripsPage() {
                     items={TRIP_STATUS_ITEMS}
                   />
                 </div>
-                <div className="flex items-center gap-2 text-sm text-[#43493a]">
+                <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>
                   {t.waitlistCount > 0 && <span className="badge-pending text-xs px-2 py-0.5 rounded-full">{t.waitlistCount} waitlist</span>}
                   {t.leadCoordinatorName && <span className="text-xs">{t.leadCoordinatorName}</span>}
@@ -274,11 +274,11 @@ export default function TripsPage() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[rgba(195,201,181,0.2)]">
               <div>
-                <h2 className="text-lg font-bold text-[#1b1c1a]">Edit Trip</h2>
-                {!editForm && <p className="text-xs text-[#43493a] mt-0.5">Loading trip details…</p>}
+                <h2 className="text-lg font-bold text-[var(--color-foreground)]">Edit Trip</h2>
+                {!editForm && <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">Loading trip details…</p>}
               </div>
-              <button onClick={handleCloseEdit} className="p-2 rounded-full hover:bg-[#f5f3ef] transition-colors">
-                <X className="w-4 h-4 text-[#43493a]" />
+              <button onClick={handleCloseEdit} className="p-2 rounded-full hover:bg-[var(--color-surface-container-low)] transition-colors">
+                <X className="w-4 h-4 text-[var(--color-muted-foreground)]" />
               </button>
             </div>
 
@@ -287,7 +287,7 @@ export default function TripsPage() {
               <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
                 {/* Basic Info */}
                 <div className="space-y-3">
-                  <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Basic Info</p>
+                  <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="sm:col-span-2">
                       <label className={labelClass}>Trip Name *</label>
@@ -327,7 +327,7 @@ export default function TripsPage() {
 
                 {/* Dates & Status */}
                 <div className="space-y-3">
-                  <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Dates & Status</p>
+                  <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={labelClass}>Start Date *</label>
@@ -380,7 +380,7 @@ export default function TripsPage() {
 
                 {/* Capacity */}
                 <div className="space-y-3">
-                  <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Capacity & Requirements</p>
+                  <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Capacity & Requirements</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
                       <label className={labelClass}>Min Participants</label>
@@ -417,13 +417,13 @@ export default function TripsPage() {
 
                 {/* Notes */}
                 <div className="space-y-2">
-                  <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Notes</p>
+                  <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Notes</p>
                   <textarea value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
                     rows={3} className={inputClass} placeholder="Any additional notes..." />
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center py-12 text-[#43493a] text-sm">
+              <div className="flex-1 flex items-center justify-center py-12 text-[var(--color-muted-foreground)] text-sm">
                 Loading trip details…
               </div>
             )}
@@ -431,13 +431,13 @@ export default function TripsPage() {
             {/* Modal footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
               <button onClick={handleCloseEdit}
-                className="px-5 py-2.5 rounded-full text-sm font-medium text-[#43493a] hover:bg-[#f5f3ef] transition-colors">
+                className="px-5 py-2.5 rounded-full text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-colors">
                 Cancel
               </button>
               <button
                 onClick={handleSaveEdit}
                 disabled={!editForm || updateTrip.isPending}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white shadow-lg shadow-[#396200]/20 hover:opacity-90 disabled:opacity-50 transition-all"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all"
               >
                 {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
               </button>

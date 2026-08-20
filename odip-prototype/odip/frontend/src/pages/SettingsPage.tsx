@@ -229,8 +229,8 @@ function ProviderSettingsTab() {
 
   if (settings && !init) { setForm(settings); setInit(true) }
 
-  const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all'
-  const labelClass = 'block text-xs font-medium text-[#43493a] mb-1'
+  const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
     value: (form[field] as string) ?? '',
@@ -256,9 +256,9 @@ function ProviderSettingsTab() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="font-semibold text-[#1b1c1a] mb-1">Organisation Details</h2>
-        <p className="text-sm text-[#43493a] mb-4">Used on NDIS claims, BPR CSV files, and invoices.</p>
-        <div className="grid grid-cols-2 gap-4">
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Organisation Details</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">Used on NDIS claims, BPR CSV files, and invoices.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div><label className={labelClass}>Registration Number</label><input {...f('registrationNumber')} /></div>
           <div><label className={labelClass}>ABN</label><input {...f('abn')} /></div>
           <div className="col-span-2"><label className={labelClass}>Organisation Name</label><input {...f('organisationName')} /></div>
@@ -274,18 +274,18 @@ function ProviderSettingsTab() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={form.gstRegistered ?? false} onChange={e => setForm((p) => ({ ...p, gstRegistered: e.target.checked }))} className="w-4 h-4 accent-[#396200]" id="gst" />
-            <label htmlFor="gst" className="text-sm text-[#43493a]">GST Registered</label>
+            <input type="checkbox" checked={form.gstRegistered ?? false} onChange={e => setForm((p) => ({ ...p, gstRegistered: e.target.checked }))} className="w-4 h-4 accent-[var(--color-primary)]" id="gst" />
+            <label htmlFor="gst" className="text-sm text-[var(--color-muted-foreground)]">GST Registered</label>
           </div>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={form.isPaceProvider ?? false} onChange={e => setForm((p) => ({ ...p, isPaceProvider: e.target.checked }))} className="w-4 h-4 accent-[#396200]" id="pace" />
-            <label htmlFor="pace" className="text-sm text-[#43493a]">PACE Provider <span className="text-xs text-[#43493a]/60">(16-col BPR CSV)</span></label>
+            <input type="checkbox" checked={form.isPaceProvider ?? false} onChange={e => setForm((p) => ({ ...p, isPaceProvider: e.target.checked }))} className="w-4 h-4 accent-[var(--color-primary)]" id="pace" />
+            <label htmlFor="pace" className="text-sm text-[var(--color-muted-foreground)]">PACE Provider <span className="text-xs text-[var(--color-muted-foreground)]/60">(16-col BPR CSV)</span></label>
           </div>
         </div>
       </div>
       {showBankDetails && (
         <div>
-          <h2 className="font-semibold text-[#1b1c1a] mb-4">Bank Details</h2>
+          <h2 className="font-semibold text-[var(--color-foreground)] mb-4">Bank Details</h2>
           <div className="grid grid-cols-3 gap-4">
             <div><label className={labelClass}>Account Name</label><input {...f('bankAccountName')} /></div>
             <div><label className={labelClass}>BSB</label><input {...f('bsb')} /></div>
@@ -294,7 +294,7 @@ function ProviderSettingsTab() {
         </div>
       )}
       <div>
-        <h2 className="font-semibold text-[#1b1c1a] mb-2">Invoice Footer Notes</h2>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
         <textarea {...f('invoiceFooterNotes')} rows={3} className={inputClass + ' resize-none'} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
@@ -304,7 +304,7 @@ function ProviderSettingsTab() {
         </div>
       )}
       {canEditProviderSettings && (
-        <button onClick={handleSave} disabled={upsert.isPending} className="px-6 py-2.5 bg-[#396200] text-white rounded-full font-semibold text-sm hover:bg-[#294800] transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={upsert.isPending} className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:bg-[#294800] transition-all disabled:opacity-50">
           {upsert.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
         </button>
       )}
@@ -376,10 +376,10 @@ function SupportCatalogueTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold text-[#1b1c1a]">Support Catalogue</h2>
-          <p className="text-sm text-[#43493a]">NDIS price limits for Category 04 — Group Access.</p>
+          <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
+          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
         </div>
-        <button onClick={() => { setImporting(true); setPreviewStep('upload') }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all">
+        <button onClick={() => { setImporting(true); setPreviewStep('upload') }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
           Import Catalogue
         </button>
       </div>
@@ -419,15 +419,15 @@ function SupportCatalogueTab() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-[#1b1c1a]">Import NDIS Support Catalogue</h3>
-              <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null) }} className="text-[#43493a] hover:text-[#1b1c1a]">✕</button>
+              <h3 className="font-semibold text-[var(--color-foreground)]">Import NDIS Support Catalogue</h3>
+              <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null) }} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">✕</button>
             </div>
 
             {previewStep === 'upload' && (
               <div className="space-y-4">
-                <p className="text-sm text-[#43493a]">Upload the NDIA Support Catalogue .xlsx file to preview changes.</p>
-                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#c3c9b6] rounded-2xl p-8 cursor-pointer hover:border-[#396200] transition-colors">
-                  <span className="text-[#43493a] text-sm mb-2">{uploading ? 'Uploading...' : 'Drop .xlsx here or click to browse'}</span>
+                <p className="text-sm text-[var(--color-muted-foreground)]">Upload the NDIA Support Catalogue .xlsx file to preview changes.</p>
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#c3c9b6] rounded-2xl p-8 cursor-pointer hover:border-[var(--color-primary)] transition-colors">
+                  <span className="text-[var(--color-muted-foreground)] text-sm mb-2">{uploading ? 'Uploading...' : 'Drop .xlsx here or click to browse'}</span>
                   <input type="file" accept=".xlsx" onChange={handleUpload} className="hidden" disabled={uploading} />
                 </label>
               </div>
@@ -436,9 +436,9 @@ function SupportCatalogueTab() {
             {previewStep === 'preview' && preview && (
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-[#f5f3ef] rounded-xl p-3"><p className="text-xs text-[#43493a]">New items</p><p className="text-xl font-bold text-[#396200]">{preview.itemsToAdd}</p></div>
-                  <div className="bg-[#f5f3ef] rounded-xl p-3"><p className="text-xs text-[#43493a]">Updated</p><p className="text-xl font-bold text-amber-600">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
-                  <div className="bg-[#f5f3ef] rounded-xl p-3"><p className="text-xs text-[#43493a]">To deactivate</p><p className="text-xl font-bold text-red-500">{preview.itemsToDeactivate}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-amber-600">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">To deactivate</p><p className="text-xl font-bold text-red-500">{preview.itemsToDeactivate}</p></div>
                 </div>
                 {(preview.warnings ?? []).length > 0 && (
                   <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 space-y-1">
@@ -446,12 +446,12 @@ function SupportCatalogueTab() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
+                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setPreviewStep('upload')} className="px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[#43493a] hover:bg-[#f5f3ef]">Back</button>
-                  <button onClick={handleConfirm} disabled={confirming} className="px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] disabled:opacity-50">
+                  <button onClick={() => setPreviewStep('upload')} className="px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
+                  <button onClick={handleConfirm} disabled={confirming} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] disabled:opacity-50">
                     {confirming ? 'Importing...' : 'Confirm Import'}
                   </button>
                 </div>
@@ -478,7 +478,7 @@ function PublicHolidaysTab() {
   const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
 
-  const inputClass = 'px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all'
+  const inputClass = 'px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
 
   function handleAdd() {
     createHoliday.mutate(newForm, {
@@ -512,8 +512,8 @@ function PublicHolidaysTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-semibold text-[#1b1c1a]">Public Holidays</h2>
-          <p className="text-sm text-[#43493a]">Used to determine NDIS public holiday rates on claims.</p>
+          <h2 className="font-semibold text-[var(--color-foreground)]">Public Holidays</h2>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Used to determine NDIS public holiday rates on claims.</p>
         </div>
         <div className="flex items-center gap-2">
           <Dropdown
@@ -530,7 +530,7 @@ function PublicHolidaysTab() {
             items={states.map(s => ({ value: s, label: s }))}
             label="Select state"
           />
-          <button onClick={() => setAdding(true)} className="px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all">
+          <button onClick={() => setAdding(true)} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
             + Add Holiday
           </button>
         </div>
@@ -549,8 +549,8 @@ function PublicHolidaysTab() {
               label="Select state"
             />
             <div className="flex gap-2">
-              <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[#396200] text-white text-xs font-medium hover:bg-[#294800] disabled:opacity-50">Save</button>
-              <button onClick={() => setAdding(false)} className="px-3 py-1.5 rounded-full border border-[#c3c9b6] text-xs text-[#43493a] hover:bg-[#f5f3ef]">Cancel</button>
+              <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-medium hover:bg-[#294800] disabled:opacity-50">Save</button>
+              <button onClick={() => setAdding(false)} className="px-3 py-1.5 rounded-full border border-[#c3c9b6] text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Cancel</button>
             </div>
           </div>
         </div>
@@ -591,14 +591,14 @@ function PublicHolidaysTab() {
           <button
             onClick={handleSync}
             disabled={syncHolidays.isPending}
-            className="px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
           </button>
           <button
             type="button"
             onClick={() => setShowSyncAdvanced(v => !v)}
-            className="text-sm text-[#43493a] hover:text-[#1b1c1a] underline"
+            className="text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline"
           >
             {showSyncAdvanced ? 'Hide advanced' : 'Advanced'}
           </button>
@@ -606,21 +606,21 @@ function PublicHolidaysTab() {
 
         {showSyncAdvanced && (
           <div className="flex items-center gap-3 mt-3">
-            <label className="text-sm text-[#43493a]">From year</label>
+            <label className="text-sm text-[var(--color-muted-foreground)]">From year</label>
             <input
               type="number"
               value={syncFromYear ?? ''}
               onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear())}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
             />
-            <label className="text-sm text-[#43493a]">To year</label>
+            <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
             <input
               type="number"
               value={syncToYear ?? ''}
               onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear() + 1)}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
             />
           </div>
         )}

@@ -282,13 +282,13 @@ export function Dropdown({
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
             placeholder="Search..."
-            className="w-full px-3 py-1.5 text-sm bg-[var(--color-input)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#396200]/25"
+            className="w-full px-3 py-1.5 text-sm bg-[var(--color-input)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25"
             onClick={e => e.stopPropagation()}
           />
         </div>
       )}
       {visibleItems.length === 0 ? (
-        <p role="presentation" className="px-4 py-3 text-sm text-[#43493a] opacity-50">
+        <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] opacity-50">
           {searchable && searchQuery ? 'No results found' : 'No options available'}
         </p>
       ) : (
@@ -304,19 +304,19 @@ export function Dropdown({
               aria-disabled={item.disabled ? 'true' : undefined}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-[#1b1c1a] text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
                   ? 'opacity-40 cursor-not-allowed'
                   : focusedIndex === idx
-                  ? 'bg-[#f5f3ef]'
-                  : 'hover:bg-[#f5f3ef]'
+                  ? 'bg-[var(--color-surface-container-low)]'
+                  : 'hover:bg-[var(--color-surface-container-low)]'
               }`}
             >
               {item.icon && <span className="shrink-0">{item.icon}</span>}
               <div className="min-w-0">
                 <p className={item.description ? 'font-semibold' : ''}>{item.label}</p>
                 {item.description && (
-                  <p className="text-[11px] text-[#43493a]">{item.description}</p>
+                  <p className="text-[11px] text-[var(--color-muted-foreground)]">{item.description}</p>
                 )}
               </div>
             </div>
@@ -340,7 +340,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className={`text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[#396200]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
+          className={`text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
         >
           {selectedLabel ?? label ?? '—'}
         </button>
@@ -365,7 +365,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#396200]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}
@@ -389,7 +389,7 @@ export function Dropdown({
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
-        className="flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white rounded-full font-bold shadow-lg shadow-[#396200]/20 hover:opacity-90 disabled:opacity-50 transition-all"
+        className="flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white rounded-full font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all"
       >
         {icon}
         {label}

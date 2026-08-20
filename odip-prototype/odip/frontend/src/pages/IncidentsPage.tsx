@@ -75,7 +75,7 @@ export default function IncidentsPage() {
         title="Incident Reports"
         subtitle={`${incidents.length} incident${incidents.length !== 1 ? 's' : ''}`}
         action={!showArchived && canCreateIncidents && (
-          <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-blue-500/20">
+          <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Plus className="w-4 h-4" /> Report Incident
           </Link>
         )}

@@ -72,11 +72,11 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-[#1b1c1a]">NDIS Claims</h2>
+        <h2 className="font-semibold text-[var(--color-foreground)]">NDIS Claims</h2>
         {canWrite && (
           <button
             onClick={() => setShowGenerateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all"
           >
             + Generate Claim
           </button>
@@ -91,7 +91,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       )}
 
       {claims.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center text-[#43493a]">
+        <div className="bg-white rounded-2xl p-8 text-center text-[var(--color-muted-foreground)]">
           No claims yet. Generate a claim once the trip is complete.
         </div>
       ) : (
@@ -133,7 +133,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
               header: '',
               render: (c: TripClaimListDto) => (
                 <div className="flex items-center gap-3">
-                  <Link to={`/claims/${c.id}`} className="text-xs text-[#396200] hover:underline">View</Link>
+                  <Link to={`/claims/${c.id}`} className="text-xs text-[var(--color-primary)] hover:underline">View</Link>
                   {canWrite && c.status !== 'Submitted' && c.status !== 'Paid' && (
                     <button
                       onClick={() => handleDelete(c.id)}

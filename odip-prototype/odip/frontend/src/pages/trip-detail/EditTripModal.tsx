@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { X } from 'lucide-react'
 import { useUpdateTrip, useEventTemplates, useStaff } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -38,6 +38,62 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const { data: allStaff = [] } = useStaff()
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Element | null>(null)
+
+  // Escape to close + Tab focus trap
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key === 'Tab') {
+        const dialog = dialogRef.current
+        if (!dialog) return
+        const focusable = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        )
+        if (focusable.length === 0) {
+          e.preventDefault()
+          return
+        }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  // Lock background scroll while open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  // Move focus into the dialog on mount, return it to the trigger on unmount
+  useEffect(() => {
+    triggerRef.current = document.activeElement
+    const dialog = dialogRef.current
+    const firstFocusable = dialog?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    ;(firstFocusable ?? dialog)?.focus()
+    return () => {
+      if (triggerRef.current instanceof HTMLElement) triggerRef.current.focus()
+    }
+  }, [])
 
   useEffect(() => {
     if (!trip || initialized.current) return
@@ -91,15 +147,23 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]" onClick={e => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Modal header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[rgba(195,201,181,0.2)]">
           <div>
-            <h2 className="text-lg font-bold text-[#1b1c1a]">Edit Trip</h2>
-            {!tripEditForm && <p className="text-xs text-[#43493a] mt-0.5">Loading trip details…</p>}
+            <h2 id={titleId} className="text-lg font-bold text-[var(--color-foreground)]">Edit Trip</h2>
+            {!tripEditForm && <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">Loading trip details…</p>}
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-[#f5f3ef] transition-colors">
-            <X className="w-4 h-4 text-[#43493a]" />
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--color-surface-container-low)] transition-colors">
+            <X className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           </button>
         </div>
 
@@ -108,20 +172,20 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
           <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
             {/* Basic Info */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Basic Info</p>
-              <div className="grid grid-cols-2 gap-3">
+              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Trip Name *</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Name *</label>
                   <input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" placeholder="e.g. Beach Getaway 2026" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" placeholder="e.g. Beach Getaway 2026" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Trip Code</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Code</label>
                   <input value={tripEditForm.tripCode} onChange={e => setTripEditForm({ ...tripEditForm, tripCode: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" placeholder="e.g. BG-2026-01" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" placeholder="e.g. BG-2026-01" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Event Template</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Event Template</label>
                   <Dropdown
                     variant="form"
                     value={tripEditForm.eventTemplateId}
@@ -134,39 +198,39 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Destination</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Destination</label>
                   <input value={tripEditForm.destination} onChange={e => setTripEditForm({ ...tripEditForm, destination: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" placeholder="e.g. Gold Coast" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" placeholder="e.g. Gold Coast" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Region</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Region</label>
                   <input value={tripEditForm.region} onChange={e => setTripEditForm({ ...tripEditForm, region: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" placeholder="e.g. QLD" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" placeholder="e.g. QLD" />
                 </div>
               </div>
             </div>
 
             {/* Dates & Status */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Dates & Status</p>
-              <div className="grid grid-cols-2 gap-3">
+              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Start Date *</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
                   <input type="date" value={tripEditForm.startDate} onChange={e => setTripEditForm({ ...tripEditForm, startDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Duration (Days)</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
                   <input type="number" min={1} value={tripEditForm.durationDays} onChange={e => setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Booking Cutoff</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Booking Cutoff</label>
                   <input type="date" value={tripEditForm.bookingCutoffDate} onChange={e => setTripEditForm({ ...tripEditForm, bookingCutoffDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Status</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Status</label>
                   <Dropdown
                     variant="form"
                     value={tripEditForm.status}
@@ -184,7 +248,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Lead Coordinator</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Lead Coordinator</label>
                   <Dropdown
                     variant="form"
                     value={tripEditForm.leadCoordinatorId}
@@ -201,50 +265,50 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
             {/* Capacity */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Capacity & Requirements</p>
+              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Capacity & Requirements</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Min Participants</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Participants</label>
                   <input type="number" min={0} value={tripEditForm.minParticipants} onChange={e => setTripEditForm({ ...tripEditForm, minParticipants: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Max Participants</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Max Participants</label>
                   <input type="number" min={0} value={tripEditForm.maxParticipants} onChange={e => setTripEditForm({ ...tripEditForm, maxParticipants: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Wheelchair Capacity</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Wheelchair Capacity</label>
                   <input type="number" min={0} value={tripEditForm.requiredWheelchairCapacity} onChange={e => setTripEditForm({ ...tripEditForm, requiredWheelchairCapacity: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Required Beds</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Beds</label>
                   <input type="number" min={0} value={tripEditForm.requiredBeds} onChange={e => setTripEditForm({ ...tripEditForm, requiredBeds: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Required Bedrooms</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Bedrooms</label>
                   <input type="number" min={0} value={tripEditForm.requiredBedrooms} onChange={e => setTripEditForm({ ...tripEditForm, requiredBedrooms: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#43493a] mb-1">Min Staff Required</label>
+                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Staff Required</label>
                   <input type="number" min={0} value={tripEditForm.minStaffRequired} onChange={e => setTripEditForm({ ...tripEditForm, minStaffRequired: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" />
+                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" />
                 </div>
               </div>
             </div>
 
             {/* Notes */}
             <div className="space-y-2">
-              <p className="text-xs font-bold text-[#396200] uppercase tracking-wider">Notes</p>
+              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Notes</p>
               <textarea value={tripEditForm.notes} onChange={e => setTripEditForm({ ...tripEditForm, notes: e.target.value })}
-                rows={3} className="w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all" placeholder="Any additional notes..." />
+                rows={3} className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all" placeholder="Any additional notes..." />
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center py-12 text-[#43493a] text-sm">
+          <div className="flex-1 flex items-center justify-center py-12 text-[var(--color-muted-foreground)] text-sm">
             Loading trip details…
           </div>
         )}
@@ -252,13 +316,13 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
         {/* Modal footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
           <button onClick={onClose}
-            className="px-5 py-2.5 rounded-full text-sm font-medium text-[#43493a] hover:bg-[#f5f3ef] transition-colors">
+            className="px-5 py-2.5 rounded-full text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-colors">
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!tripEditForm || updateTrip.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white shadow-lg shadow-[#396200]/20 hover:opacity-90 disabled:opacity-50 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all"
           >
             {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
           </button>

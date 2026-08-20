@@ -98,7 +98,7 @@ export default function TasksPage() {
         title="Tasks"
         subtitle={`${tasks.length} task${tasks.length !== 1 ? 's' : ''}`}
         action={!showArchived && canWrite && (
-          <Link to="/tasks/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-blue-500/20">
+          <Link to="/tasks/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Plus className="w-4 h-4" /> New Task
           </Link>
         )}

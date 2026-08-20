@@ -13,8 +13,8 @@ const ACTIVE_STATUS_ITEMS = [
 ]
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
-  Active: 'bg-[#bbf37c] text-[#0f2000]',
-  Inactive: 'bg-[#ffdad6] text-[#93000a]',
+  Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  Inactive: 'bg-[var(--color-error-container)] text-[#93000a]',
 }
 
 export default function StaffPage() {
@@ -68,7 +68,7 @@ export default function StaffPage() {
         title="Staff"
         subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
         action={!showArchived && canWrite && (
-          <Link to="/staff/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-blue-500/20">
+          <Link to="/staff/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Plus className="w-4 h-4" /> New Staff
           </Link>
         )}

@@ -59,7 +59,7 @@ export default function ParticipantDetailPage() {
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
         </div>
         {canWrite && (
-          <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-blue-500/20">
+          <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Pencil className="w-4 h-4" /> Edit
           </Link>
         )}
@@ -79,7 +79,7 @@ export default function ParticipantDetailPage() {
       {tab === 'details' && (
         <div className="grid md:grid-cols-2 gap-6">
           <Card title="Personal Information">
-            <div className="grid grid-cols-2 gap-y-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">NDIS Number</span><span className="font-mono">{p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Date of Birth</span><span>{formatDateAu(p.dateOfBirth)}</span>
               <span className="text-[var(--color-muted-foreground)]">Funding Org</span><span>{p.fundingOrganisation || '—'}</span>

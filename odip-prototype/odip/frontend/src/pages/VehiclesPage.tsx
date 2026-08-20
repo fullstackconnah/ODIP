@@ -34,7 +34,7 @@ function StatCell({ icon: Icon, label, value, status }: {
   icon: React.ElementType; label: string; value: string; status?: 'overdue' | 'warning' | 'ok' | null
 }) {
   const valueColor = status === 'overdue' ? 'text-[var(--color-destructive)]'
-    : status === 'warning' ? 'text-[#f59e0b]'
+    : status === 'warning' ? 'text-[var(--color-warning)]'
     : 'text-[var(--color-foreground)]'
   return (
     <div className="flex items-center gap-3">
@@ -146,7 +146,7 @@ export default function VehiclesPage() {
             return (
               <div
                 key={v.id}
-                className="bg-[var(--color-card)] rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-[#1b1c1a]/5 transition-all duration-500"
+                className="bg-[var(--color-card)] rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-[var(--color-foreground)]/5 transition-all duration-500"
               >
                 <div className="p-6">
                   {/* Card header */}
@@ -171,7 +171,7 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Stats grid */}
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 mb-6">
                     <StatCell icon={Users} label="Seating" value={`${v.totalSeats} seats`} />
                     <StatCell
                       icon={Accessibility}

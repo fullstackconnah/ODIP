@@ -92,7 +92,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             <button
               onClick={handlePreview}
               disabled={previewClaim.isPending}
-              className="px-4 py-2 text-sm rounded-full bg-[#396200] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+              className="px-4 py-2 text-sm rounded-full bg-[var(--color-primary)] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
             >
               {previewClaim.isPending ? 'Loading...' : 'Preview Claim \u2192'}
             </button>
@@ -115,7 +115,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
               <button
                 onClick={handleGenerate}
                 disabled={generateClaim.isPending}
-                className="px-4 py-2 text-sm rounded-full bg-[#396200] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+                className="px-4 py-2 text-sm rounded-full bg-[var(--color-primary)] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
               >
                 {generateClaim.isPending ? 'Generating...' : 'Confirm & Generate'}
               </button>
@@ -181,7 +181,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             {/* Trip Info (read-only) */}
             <div className="mb-5">
               <h4 className="text-sm font-medium text-[var(--color-muted-foreground)] mb-3">Trip Info</h4>
-              <div className="bg-[var(--color-surface)] rounded-xl p-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-[var(--color-surface)] rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-[var(--color-muted-foreground)]">Staff Assigned</span>
                   <p className="font-medium">{trip.staffAssignedCount ?? '—'}</p>

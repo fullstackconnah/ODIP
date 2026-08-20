@@ -22,14 +22,14 @@ interface ItineraryTabProps {
 }
 
 const categoryConfig: Record<string, { icon: typeof Star; color: string; bg: string }> = {
-  Leisure: { icon: Star, color: '#396200', bg: '#bbf37c' },
+  Leisure: { icon: Star, color: 'var(--color-primary)', bg: 'var(--color-primary-fixed)' },
   Dining: { icon: Utensils, color: '#92400e', bg: '#fef3c7' },
-  Transport: { icon: Bus, color: '#515f74', bg: '#d5e3fc' },
+  Transport: { icon: Bus, color: 'var(--color-secondary)', bg: 'var(--color-secondary-container)' },
   Sightseeing: { icon: Camera, color: '#065f46', bg: '#d1fae5' },
-  Adventure: { icon: Compass, color: '#ba1a1a', bg: '#ffdad6' },
+  Adventure: { icon: Compass, color: 'var(--color-destructive)', bg: 'var(--color-error-container)' },
   Cultural: { icon: Palette, color: '#9a3412', bg: '#fed7aa' },
   Sport: { icon: Dumbbell, color: '#115e59', bg: '#ccfbf1' },
-  Other: { icon: Star, color: '#43493a', bg: '#e4e2de' },
+  Other: { icon: Star, color: 'var(--color-muted-foreground)', bg: 'var(--color-input)' },
 }
 
 function getCategoryStyle(category: string | null) {
@@ -59,11 +59,11 @@ function formatDateLong(date: string) {
 }
 
 const activityStatusStyle: Record<string, string> = {
-  Planned: 'bg-[#e4e2de] text-[#43493a]',
+  Planned: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   Booked: 'bg-[#fef3c7] text-[#92400e]',
-  Confirmed: 'bg-[#bbf37c] text-[#0f2000]',
-  Completed: 'bg-[#d5e3fc] text-[#0d1c2e]',
-  Cancelled: 'bg-[#ffdad6] text-[#93000a]',
+  Confirmed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  Completed: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
+  Cancelled: 'bg-[var(--color-error-container)] text-[#93000a]',
 }
 
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
@@ -71,8 +71,8 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[#43493a]">Loading itinerary...</div>
-  if (isError || !itinerary) return <div className="text-center py-12 text-[#43493a]">Unable to load itinerary. Make sure the trip has dates and a generated schedule.</div>
+  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading itinerary...</div>
+  if (isError || !itinerary) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Unable to load itinerary. Make sure the trip has dates and a generated schedule.</div>
 
   const handleExport = async (version: 'staff' | 'participant') => {
     setExporting(true)
@@ -91,7 +91,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
     <div className="space-y-6 animate-fade-in">
       {/* Export buttons */}
       {exportError && (
-        <div className="text-sm text-[#ba1a1a] bg-[#ffdad6]/60 rounded-2xl px-4 py-2">{exportError}</div>
+        <div className="text-sm text-[var(--color-destructive)] bg-[var(--color-error-container)]/60 rounded-2xl px-4 py-2">{exportError}</div>
       )}
       <div className="flex items-center justify-end">
         <Dropdown
@@ -101,31 +101,31 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
           loading={exporting}
           onSelect={val => handleExport(val as 'staff' | 'participant')}
           items={[
-            { value: 'participant', label: 'Participant Version', icon: <Users className="w-4 h-4 text-[#396200]" />, description: 'Without staff details' },
-            { value: 'staff', label: 'Staff Version', icon: <UserCog className="w-4 h-4 text-[#515f74]" />, description: 'Includes operational details' },
+            { value: 'participant', label: 'Participant Version', icon: <Users className="w-4 h-4 text-[var(--color-primary)]" />, description: 'Without staff details' },
+            { value: 'staff', label: 'Staff Version', icon: <UserCog className="w-4 h-4 text-[var(--color-secondary)]" />, description: 'Includes operational details' },
           ]}
         />
       </div>
 
       {/* Overview Hero Card */}
       <div className="bg-white rounded-2xl p-6 relative overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-[#396200]/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--color-primary)]/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="relative">
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wider text-[#396200] font-bold mb-1">Trip Overview</p>
-              <h2 className="text-2xl font-bold text-[#1b1c1a]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{itinerary.tripName}</h2>
-              <div className="flex items-center gap-2 mt-2 text-[#43493a]">
-                <MapPin className="w-4 h-4 text-[#396200]" />
+              <p className="text-xs uppercase tracking-wider text-[var(--color-primary)] font-bold mb-1">Trip Overview</p>
+              <h2 className="text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{itinerary.tripName}</h2>
+              <div className="flex items-center gap-2 mt-2 text-[var(--color-muted-foreground)]">
+                <MapPin className="w-4 h-4 text-[var(--color-primary)]" />
                 <span>{itinerary.destination || 'Destination TBD'}</span>
-                {itinerary.region && <span className="text-xs px-2 py-0.5 rounded-full bg-[#efeeea] text-[#43493a]">{itinerary.region}</span>}
+                {itinerary.region && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]">{itinerary.region}</span>}
               </div>
-              <p className="text-sm text-[#43493a] mt-1">
+              <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
                 {formatDateLong(itinerary.startDate)} — {formatDateLong(itinerary.endDate)}
               </p>
             </div>
             {itinerary.tripCode && (
-              <span className="font-mono text-sm bg-[#efeeea] text-[#43493a] px-3 py-1.5 rounded-lg">{itinerary.tripCode}</span>
+              <span className="font-mono text-sm bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)] px-3 py-1.5 rounded-lg">{itinerary.tripCode}</span>
             )}
           </div>
 
@@ -137,16 +137,16 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
               { icon: UserCog, label: 'Staff', value: itinerary.staffCount },
               { icon: DollarSign, label: 'Est. Cost', value: `$${Number(itinerary.totalEstimatedCost).toLocaleString('en-AU', { minimumFractionDigits: 2 })}` },
             ].map(s => (
-              <div key={s.label} className="bg-[#efeeea] rounded-2xl p-3 text-center">
-                <s.icon className="w-4 h-4 mx-auto text-[#396200] mb-1" />
-                <p className="text-lg font-bold text-[#1b1c1a]">{s.value}</p>
-                <p className="text-xs text-[#43493a]">{s.label}</p>
+              <div key={s.label} className="bg-[var(--color-surface-container)] rounded-2xl p-3 text-center">
+                <s.icon className="w-4 h-4 mx-auto text-[var(--color-primary)] mb-1" />
+                <p className="text-lg font-bold text-[var(--color-foreground)]">{s.value}</p>
+                <p className="text-xs text-[var(--color-muted-foreground)]">{s.label}</p>
               </div>
             ))}
           </div>
 
           {itinerary.notes && (
-            <p className="text-sm text-[#43493a] mt-4 pt-4">{itinerary.notes}</p>
+            <p className="text-sm text-[var(--color-muted-foreground)] mt-4 pt-4">{itinerary.notes}</p>
           )}
         </div>
       </div>
@@ -154,24 +154,24 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       {/* Admin details (from trip data) */}
       {trip && (
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-[#f5f3ef] rounded-2xl p-5 space-y-3">
-            <h3 className="font-semibold text-[#1b1c1a]">Trip Details</h3>
+          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5 space-y-3">
+            <h3 className="font-semibold text-[var(--color-foreground)]">Trip Details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-              <span className="text-[#43493a]">Event Template</span><span className="text-[#1b1c1a]">{trip.eventTemplateName || '—'}</span>
-              <span className="text-[#43493a]">Region</span><span className="text-[#1b1c1a]">{itinerary.region || '—'}</span>
-              <span className="text-[#43493a]">OOP Due Date</span><span className="text-[#1b1c1a]">{trip.oopDueDate ? formatDateAu(trip.oopDueDate) : '—'}</span>
-              <span className="text-[#43493a]">Booking Cutoff</span><span className="text-[#1b1c1a]">{trip.bookingCutoffDate ? formatDateAu(trip.bookingCutoffDate) : '—'}</span>
-              <span className="text-[#43493a]">Lead Coordinator</span><span className="text-[#1b1c1a]">{itinerary.leadCoordinatorName || '—'}</span>
-              <span className="text-[#43493a]">Min Participants</span><span className="text-[#1b1c1a]">{trip.minParticipants || '—'}</span>
-              <span className="text-[#43493a]">Min Staff</span><span className="text-[#1b1c1a]">{trip.minStaffRequired || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Event Template</span><span className="text-[var(--color-foreground)]">{trip.eventTemplateName || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Region</span><span className="text-[var(--color-foreground)]">{itinerary.region || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">OOP Due Date</span><span className="text-[var(--color-foreground)]">{trip.oopDueDate ? formatDateAu(trip.oopDueDate) : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Booking Cutoff</span><span className="text-[var(--color-foreground)]">{trip.bookingCutoffDate ? formatDateAu(trip.bookingCutoffDate) : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Lead Coordinator</span><span className="text-[var(--color-foreground)]">{itinerary.leadCoordinatorName || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Min Participants</span><span className="text-[var(--color-foreground)]">{trip.minParticipants || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Min Staff</span><span className="text-[var(--color-foreground)]">{trip.minStaffRequired || '—'}</span>
             </div>
           </div>
-          <div className="bg-[#f5f3ef] rounded-2xl p-5 space-y-3">
-            <h3 className="font-semibold text-[#1b1c1a]">Requirements</h3>
+          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5 space-y-3">
+            <h3 className="font-semibold text-[var(--color-foreground)]">Requirements</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-              <span className="text-[#43493a]">Wheelchair Capacity</span><span className="text-[#1b1c1a]">{trip.requiredWheelchairCapacity || '—'}</span>
-              <span className="text-[#43493a]">Required Beds</span><span className="text-[#1b1c1a]">{trip.requiredBeds || '—'}</span>
-              <span className="text-[#43493a]">Required Bedrooms</span><span className="text-[#1b1c1a]">{trip.requiredBedrooms || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Wheelchair Capacity</span><span className="text-[var(--color-foreground)]">{trip.requiredWheelchairCapacity || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Required Beds</span><span className="text-[var(--color-foreground)]">{trip.requiredBeds || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Required Bedrooms</span><span className="text-[var(--color-foreground)]">{trip.requiredBedrooms || '—'}</span>
             </div>
           </div>
         </div>
@@ -179,8 +179,8 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
 
       {/* Day-by-day timeline */}
       <div>
-        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-[#1b1c1a]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <Calendar className="w-5 h-5 text-[#396200]" />
+        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <Calendar className="w-5 h-5 text-[var(--color-primary)]" />
           Day-by-Day Schedule
         </h3>
 
@@ -198,39 +198,39 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
 
                 <div className="bg-white rounded-2xl overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
                   {/* Day header */}
-                  <div className="bg-gradient-to-r from-[#396200]/8 to-transparent px-5 py-4">
+                  <div className="bg-gradient-to-r from-[var(--color-primary)]/8 to-transparent px-5 py-4">
                     <div className="flex items-center gap-3">
                       <span className="md:hidden w-8 h-8 rounded-full bg-[#8e337b] flex items-center justify-center text-white font-bold text-xs">{day.dayNumber}</span>
                       <div>
-                        <h4 className="font-bold text-[#1b1c1a]">{day.dayTitle || `Day ${day.dayNumber}`}</h4>
-                        <p className="text-sm text-[#43493a]">{formatDayName(day.date)} · {formatDateAu(day.date)}</p>
+                        <h4 className="font-bold text-[var(--color-foreground)]">{day.dayTitle || `Day ${day.dayNumber}`}</h4>
+                        <p className="text-sm text-[var(--color-muted-foreground)]">{formatDayName(day.date)} · {formatDateAu(day.date)}</p>
                       </div>
                     </div>
-                    {day.dayNotes && <p className="text-sm text-[#43493a] mt-2 ml-11 md:ml-0">{day.dayNotes}</p>}
+                    {day.dayNotes && <p className="text-sm text-[var(--color-muted-foreground)] mt-2 ml-11 md:ml-0">{day.dayNotes}</p>}
                   </div>
 
                   <div className="p-5 space-y-3">
                     {/* Accommodation events */}
                     {day.accommodationEvents?.map((ae: any, i: number) => (
-                      <div key={`ae-${i}`} className="flex items-center gap-3 p-3 rounded-2xl bg-[#f5f3ef]">
-                        <Building2 className="w-5 h-5 text-[#396200] shrink-0" />
+                      <div key={`ae-${i}`} className="flex items-center gap-3 p-3 rounded-2xl bg-[var(--color-surface-container-low)]">
+                        <Building2 className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
                         <div>
-                          <p className="text-sm font-medium text-[#1b1c1a]">
-                            <span className="text-[#396200]">{ae.eventType}</span> — {ae.propertyName}
+                          <p className="text-sm font-medium text-[var(--color-foreground)]">
+                            <span className="text-[var(--color-primary)]">{ae.eventType}</span> — {ae.propertyName}
                           </p>
-                          {ae.address && <p className="text-xs text-[#43493a]">{ae.address}</p>}
-                          {ae.confirmationReference && <p className="text-xs text-[#43493a]">Ref: {ae.confirmationReference}</p>}
+                          {ae.address && <p className="text-xs text-[var(--color-muted-foreground)]">{ae.address}</p>}
+                          {ae.confirmationReference && <p className="text-xs text-[var(--color-muted-foreground)]">Ref: {ae.confirmationReference}</p>}
                         </div>
                       </div>
                     ))}
 
                     {/* Staff on duty */}
                     {day.staffOnDuty?.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs text-[#43493a] flex-wrap">
-                        <UserCog className="w-3.5 h-3.5 text-[#515f74]" />
-                        <span className="font-medium text-[#515f74]">Staff:</span>
+                      <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)] flex-wrap">
+                        <UserCog className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
+                        <span className="font-medium text-[var(--color-secondary)]">Staff:</span>
                         {day.staffOnDuty.map((name: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 rounded-full bg-[#efeeea] text-[#43493a]">
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]">
                             {name}
                           </span>
                         ))}
@@ -244,13 +244,13 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                           const cat = getCategoryStyle(activity.category)
                           const CatIcon = cat.icon
                           return (
-                            <div key={i} className="flex gap-3 p-4 rounded-2xl bg-[#f5f3ef] hover:bg-[#efeeea] transition-colors">
+                            <div key={i} className="flex gap-3 p-4 rounded-2xl bg-[var(--color-surface-container-low)] hover:bg-[var(--color-surface-container)] transition-colors">
                               <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: cat.bg }}>
                                 <CatIcon className="w-5 h-5" style={{ color: cat.color }} />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-sm text-[#1b1c1a]">{activity.title}</span>
+                                  <span className="font-bold text-sm text-[var(--color-foreground)]">{activity.title}</span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${activityStatusStyle[activity.status] || activityStatusStyle.Planned}`}>
                                     {activity.status}
                                   </span>
@@ -260,9 +260,9 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-[#43493a] mt-1 flex-wrap">
+                                <div className="flex items-center gap-3 text-xs text-[var(--color-muted-foreground)] mt-1 flex-wrap">
                                   {(activity.startTime || activity.endTime) && (
-                                    <span className="flex items-center gap-1 text-[#396200] font-bold w-12">
+                                    <span className="flex items-center gap-1 text-[var(--color-primary)] font-bold w-12">
                                       <Clock className="w-3 h-3" />
                                       {formatTime(activity.startTime)}{activity.endTime && ` – ${formatTime(activity.endTime)}`}
                                     </span>
@@ -279,19 +279,19 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                                   )}
                                 </div>
                                 {activity.providerName && (
-                                  <p className="text-xs text-[#43493a] mt-1">
+                                  <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
                                     Provider: {activity.providerName}
                                     {activity.providerPhone && ` · ${activity.providerPhone}`}
                                   </p>
                                 )}
                                 {activity.bookingReference && (
-                                  <p className="text-xs text-[#43493a]">Ref: {activity.bookingReference}</p>
+                                  <p className="text-xs text-[var(--color-muted-foreground)]">Ref: {activity.bookingReference}</p>
                                 )}
                                 {activity.accessibilityNotes && (
-                                  <p className="flex items-center gap-1 text-xs text-[#f59e0b] mt-1"><span className="material-symbols-outlined text-base leading-none">accessible</span> {activity.accessibilityNotes}</p>
+                                  <p className="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1"><span className="material-symbols-outlined text-base leading-none">accessible</span> {activity.accessibilityNotes}</p>
                                 )}
                                 {activity.notes && (
-                                  <p className="text-xs text-[#43493a] mt-1 italic">{activity.notes}</p>
+                                  <p className="text-xs text-[var(--color-muted-foreground)] mt-1 italic">{activity.notes}</p>
                                 )}
                               </div>
                             </div>
@@ -300,7 +300,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                       </div>
                     ) : (
                       !day.accommodationEvents?.length && (
-                        <p className="text-sm text-[#43493a] italic py-2">No activities scheduled</p>
+                        <p className="text-sm text-[var(--color-muted-foreground)] italic py-2">No activities scheduled</p>
                       )
                     )}
                   </div>
@@ -312,9 +312,9 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       </div>
 
       {itinerary.days.length === 0 && (
-        <div className="text-center py-12 text-[#43493a]">
-          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-40 text-[#396200]" />
-          <p className="font-medium text-[#1b1c1a]">No schedule has been generated yet.</p>
+        <div className="text-center py-12 text-[var(--color-muted-foreground)]">
+          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-40 text-[var(--color-primary)]" />
+          <p className="font-medium text-[var(--color-foreground)]">No schedule has been generated yet.</p>
           <p className="text-sm mt-1">Go to the Activities tab to generate the day-by-day schedule first.</p>
         </div>
       )}

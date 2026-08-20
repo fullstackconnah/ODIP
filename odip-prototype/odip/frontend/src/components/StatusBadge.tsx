@@ -8,26 +8,26 @@ export type StatusBadgeProps = {
 
 const STATUS_COLORS: Record<string, string> = {
   // Booking / General
-  confirmed: 'bg-[#bbf37c] text-[#0f2000]',
-  completed: 'bg-[#bbf37c] text-[#0f2000]',
-  available: 'bg-[#bbf37c] text-[#0f2000]',
-  active: 'bg-[#bbf37c] text-[#0f2000]',
-  draft: 'bg-[#e4e2de] text-[#43493a]',
-  proposed: 'bg-[#e4e2de] text-[#43493a]',
-  none: 'bg-[#e4e2de] text-[#43493a]',
-  cancelled: 'bg-[#ffdad6] text-[#93000a]',
-  unavailable: 'bg-[#ffdad6] text-[#93000a]',
-  nolongerattending: 'bg-[#ffdad6] text-[#93000a]',
-  expired: 'bg-[#ffdad6] text-[#93000a]',
-  inactive: 'bg-[#ffdad6] text-[#93000a]',
-  overdue: 'bg-[#ffdad6] text-[#93000a]',
-  conflict: 'bg-[#ffdad6] text-[#93000a]',
+  confirmed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  completed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  available: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  draft: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+  proposed: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+  none: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+  cancelled: 'bg-[var(--color-error-container)] text-[#93000a]',
+  unavailable: 'bg-[var(--color-error-container)] text-[#93000a]',
+  nolongerattending: 'bg-[var(--color-error-container)] text-[#93000a]',
+  expired: 'bg-[var(--color-error-container)] text-[#93000a]',
+  inactive: 'bg-[var(--color-error-container)] text-[#93000a]',
+  overdue: 'bg-[var(--color-error-container)] text-[#93000a]',
+  conflict: 'bg-[var(--color-error-container)] text-[#93000a]',
 
   // Severity
-  low: 'bg-[#d5e3fc] text-[#0d1c2e]',
+  low: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
   medium: 'bg-[#fef3c7] text-[#92400e]',
-  high: 'bg-[#ffdad6] text-[#93000a]',
-  critical: 'bg-[#ffdad6] text-[#93000a]',
+  high: 'bg-[var(--color-error-container)] text-[#93000a]',
+  critical: 'bg-[var(--color-error-container)] text-[#93000a]',
 
   // Claims
   submitted: 'bg-blue-100 text-blue-700',
@@ -36,11 +36,11 @@ const STATUS_COLORS: Record<string, string> = {
   partiallypaid: 'bg-amber-100 text-amber-700',
 
   // QSC
-  reportedwithin24h: 'bg-[#bbf37c] text-[#0f2000]',
+  reportedwithin24h: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   reportedlate: 'bg-[#fef3c7] text-[#92400e]',
-  required: 'bg-[#ffdad6] text-[#93000a]',
+  required: 'bg-[var(--color-error-container)] text-[#93000a]',
   pending: 'bg-[#fef3c7] text-[#92400e]',
-  notrequired: 'bg-[#e4e2de] text-[#43493a]',
+  notrequired: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
 
   // Plan types
   ndiamanaged: 'bg-blue-100 text-blue-700',
