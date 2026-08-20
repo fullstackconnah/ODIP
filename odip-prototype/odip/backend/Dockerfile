@@ -14,6 +14,12 @@ RUN dotnet restore
 
 # Copy everything and build
 COPY . .
+
+# Test gate: a failing test fails the image build, which stops the deploy
+# before any container is replaced. Runs here rather than as a separate CI
+# step so it reuses the restore layer above instead of re-fetching packages.
+RUN dotnet test Odip.Tests/Odip.Tests.csproj -c Release --no-restore
+
 RUN dotnet publish Odip.Api/Odip.Api.csproj -c Release -o /app/publish
 
 # Runtime image

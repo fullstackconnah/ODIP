@@ -257,11 +257,16 @@ public class ClaimGenerationService
                         }
                         else
                         {
-                            var daytimeEnd = departureTime.AddHours((double)activeHoursPerDay);
-                            if (daytimeEnd > eveningThreshold)
+                            // Use raw minute arithmetic rather than TimeOnly.AddHours: TimeOnly wraps
+                            // modulo 24h, so an overnight activity window (e.g. 18:00 + 8h) would
+                            // otherwise land back at 02:00 and compare as "before" the evening
+                            // threshold instead of past it.
+                            var daytimeEndMinutes = departureTime.ToTimeSpan().TotalMinutes + (double)activeHoursPerDay * 60;
+                            var eveningThresholdMinutes = eveningThreshold.ToTimeSpan().TotalMinutes;
+                            if (daytimeEndMinutes > eveningThresholdMinutes)
                             {
-                                // Hours from 20:00 to end are evening
-                                var minutesAfterThreshold = (daytimeEnd - eveningThreshold).TotalMinutes;
+                                // Minutes from 20:00 to end (possibly past midnight) are evening
+                                var minutesAfterThreshold = daytimeEndMinutes - eveningThresholdMinutes;
                                 firstDayEveningHours = Math.Round((decimal)minutesAfterThreshold / 60m, 2);
                             }
                         }
