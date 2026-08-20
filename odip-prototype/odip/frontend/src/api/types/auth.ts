@@ -7,3 +7,10 @@ export interface AuthResponseDto {
   tenantName: string | null
   tenantId: string | null
 }
+
+export interface DevUserDto {
+  username: string
+  email: string
+  role: string
+  tenantName: string
+}

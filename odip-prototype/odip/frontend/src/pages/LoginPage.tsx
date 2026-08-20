@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sendPasswordResetEmail } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
-import { useLogin } from '@/api/hooks'
+import { auth, devAuthEnabled } from '@/lib/firebase'
+import { useLogin, useDevLogin, useDevUsers } from '@/api/hooks'
+import type { AuthResponseDto, ApiResponse } from '@/api/types'
 import { Map, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
@@ -11,8 +12,30 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [resetSent, setResetSent] = useState(false)
+  const [devUsernameOverride, setDevUsernameOverride] = useState<string | null>(null)
   const navigate = useNavigate()
   const login = useLogin()
+  const devLogin = useDevLogin()
+  const devUsers = useDevUsers()
+
+  const devUserOptions = devUsers.data ?? []
+  const defaultDevUsername = devUserOptions.some(u => u.username === 'admin')
+    ? 'admin'
+    : (devUserOptions[0]?.username ?? 'admin')
+  const devUsername = devUsernameOverride ?? defaultDevUsername
+
+  const applyLoginSuccess = (res: ApiResponse<AuthResponseDto>) => {
+    if (res.success && res.data) {
+      localStorage.setItem('odip_token', res.data.token)
+      localStorage.setItem('odip_user', JSON.stringify(res.data))
+      if (res.data.tenantId) {
+        localStorage.setItem('odip_viewing_tenant', res.data.tenantId)
+      }
+      navigate('/')
+      return true
+    }
+    return false
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,14 +43,7 @@ export default function LoginPage() {
     setResetSent(false)
     try {
       const res = await login.mutateAsync({ email, password })
-      if (res.success && res.data) {
-        localStorage.setItem('odip_token', res.data.token)
-        localStorage.setItem('odip_user', JSON.stringify(res.data))
-        if (res.data.tenantId) {
-          localStorage.setItem('odip_viewing_tenant', res.data.tenantId)
-        }
-        navigate('/')
-      } else {
+      if (!applyLoginSuccess(res)) {
         setError(res.errors?.[0] || 'Login failed')
       }
     } catch {
@@ -40,12 +56,29 @@ export default function LoginPage() {
       setError('Enter your email address first, then click Forgot password')
       return
     }
+    if (!auth) {
+      setError('Password reset is unavailable in dev-auth mode.')
+      return
+    }
     try {
       await sendPasswordResetEmail(auth, email)
       setResetSent(true)
       setError('')
     } catch {
       setError('Could not send reset email. Check the address and try again.')
+    }
+  }
+
+  const handleDevLogin = async () => {
+    setError('')
+    setResetSent(false)
+    try {
+      const res = await devLogin.mutateAsync({ username: devUsername })
+      if (!applyLoginSuccess(res)) {
+        setError(res.errors?.[0] || 'Login failed')
+      }
+    } catch {
+      setError('Dev login failed — is DEV_AUTH_ENABLED set on the API?')
     }
   }
 
@@ -135,6 +168,61 @@ export default function LoginPage() {
             </p>
           </div>
         </form>
+
+        {devAuthEnabled && (
+          <div className="mt-6 bg-white rounded-2xl p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-px flex-1 bg-[#e5e2da]" />
+              <span className="text-xs text-[#43493a] uppercase tracking-wide">Developer sign-in</span>
+              <div className="h-px flex-1 bg-[#e5e2da]" />
+            </div>
+
+            <div className="space-y-4">
+              {devUsers.data && devUsers.data.length > 0 ? (
+                <div>
+                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[#43493a]">User</label>
+                  <select
+                    id="dev-login-user"
+                    value={devUsername}
+                    onChange={e => setDevUsernameOverride(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+                  >
+                    {devUsers.data.map(u => (
+                      <option key={u.username} value={u.username}>
+                        {u.username} — {u.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[#43493a]">Username</label>
+                  <input
+                    id="dev-login-user"
+                    type="text"
+                    value={devUsername}
+                    onChange={e => setDevUsernameOverride(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+                    placeholder="admin"
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleDevLogin}
+                disabled={devLogin.isPending}
+                className="w-full py-2.5 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[#396200]/20"
+              >
+                {devLogin.isPending ? 'Signing in...' : 'Sign in as selected user'}
+              </button>
+
+              <p className="text-xs text-center text-[#7a5c00] bg-[#fff3cd] rounded-2xl py-2 px-3">
+                Development mode — authentication bypassed.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

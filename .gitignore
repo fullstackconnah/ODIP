@@ -20,3 +20,8 @@ Thumbs.db
 odip-prototype/odip/local-test/api.pid.txt
 odip-prototype/odip/local-test/*_token.txt
 odip-prototype/odip/local-test/*.log.crash1
+
+# OMC agent tooling state — machine-local, never committed
+.omc/
+**/.omc/
+.claude/state/
