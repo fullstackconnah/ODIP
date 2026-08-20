@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +8,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -45,7 +47,7 @@ export default function AccommodationCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useAccommodationDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateAccommodation : createAccommodation
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<AccommodationFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<AccommodationFormData>({
     resolver: zodResolver(accommodationSchema),
     defaultValues: {
       isFullyModified: false,
@@ -96,20 +98,29 @@ export default function AccommodationCreatePage() {
     try {
       if (isEdit) {
         const res = await updateAccommodation.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
-        if (res.success) navigate(`/accommodation/${id}`)
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate(`/accommodation/${id}`)
+        }
       } else {
         const res = await createAccommodation.mutateAsync(payload)
-        if (res.success && res.data?.id) navigate(`/accommodation/${res.data.id}`)
+        if (res.success && res.data?.id) {
+          flushSync(() => reset(data))
+          navigate(`/accommodation/${res.data.id}`)
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -236,7 +247,7 @@ export default function AccommodationCreatePage() {
             Cancel
           </Link>
           <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-blue-500/20">
+            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Accommodation')}
           </button>
         </div>

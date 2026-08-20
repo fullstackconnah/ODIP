@@ -9,6 +9,7 @@ import {
 } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   StatusBadge, QualBadge, TripStatusBadge, AvailabilityEditor,
   StaffAssignModal, VehicleAssignModal,
@@ -40,6 +41,14 @@ export default function SchedulePage() {
   const staffAssign = useCreateStaffAssignment()
   const vehicleAssign = useCreateVehicleAssignment()
   const staffUnassign = useDeleteStaffAssignment()
+
+  const [unassigning, setUnassigning] = useState<{
+    assignmentId: string
+    staffName: string
+    tripName: string
+    tripStart?: string
+    tripEnd?: string
+  } | null>(null)
 
   const handleStaffAssign = (assignData: CreateStaffAssignmentDto) => {
     staffAssign.mutate(assignData, {
@@ -172,11 +181,11 @@ export default function SchedulePage() {
             <div className="bg-white p-3 rounded-[0.75rem]">
               <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Conflicts</p>
               <div className="flex justify-between items-center">
-                <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[#ba1a1a]' : 'text-[var(--color-foreground)]'}`}>
+                <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[var(--color-conflict)]' : 'text-[var(--color-foreground)]'}`}>
                   {String(conflictsCount).padStart(2, '0')}
                 </span>
                 {conflictsCount > 0
-                  ? <AlertTriangle className="w-4 h-4 text-[#ba1a1a]" />
+                  ? <AlertTriangle className="w-4 h-4 text-[var(--color-conflict)]" />
                   : <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
                 }
               </div>
@@ -258,8 +267,9 @@ export default function SchedulePage() {
                       style={{ borderBottom: '1px solid var(--color-surface-container)' }}
                     >
                       <td className="sticky left-0 z-10 bg-white px-4 py-2.5 min-w-[200px]">
-                        <div
-                          className="flex items-center gap-2 cursor-pointer"
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 cursor-pointer text-left"
                           onClick={() => toggleStaff(s.id)}
                         >
                           <div className="w-7 h-7 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center flex-shrink-0">
@@ -277,7 +287,7 @@ export default function SchedulePage() {
                               {s.role?.replace(/([A-Z])/g, ' $1').trim()}{s.region ? ` · ${s.region}` : ''}
                             </div>
                           </div>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-1 mt-1 pl-9">
                           <QualBadge active={s.isDriverEligible} icon={Car} title="Driver Eligible" />
                           <QualBadge active={s.isFirstAidQualified} icon={Shield} title="First Aid" />
@@ -298,8 +308,12 @@ export default function SchedulePage() {
                                 role={ts.assignmentRole ?? undefined}
                                 clickable={isAvailable && canWrite}
                                 onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'staff', resource: s, trip }) : undefined}
-                                onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => staffUnassign.mutate(ts.assignmentId!, {
-                                  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+                                onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => setUnassigning({
+                                  assignmentId: ts.assignmentId!,
+                                  staffName: s.fullName,
+                                  tripName: trip.tripName,
+                                  tripStart: trip.startDate,
+                                  tripEnd: trip.endDate,
                                 }) : undefined}
                               />
                               {prefEntry && (
@@ -323,7 +337,7 @@ export default function SchedulePage() {
                         className="bg-[var(--color-surface-container-low)]/40"
                       >
                         <td colSpan={tripCount + 1}>
-                          <AvailabilityEditor staffId={s.id} availability={s.availability} />
+                          <AvailabilityEditor staffId={s.id} staffName={s.fullName} availability={s.availability} />
                         </td>
                       </tr>
                     )}
@@ -413,6 +427,29 @@ export default function SchedulePage() {
           isLoading={vehicleAssign.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={unassigning !== null}
+        onCancel={() => setUnassigning(null)}
+        onConfirm={() => {
+          if (!unassigning) return
+          staffUnassign.mutate(unassigning.assignmentId, {
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+              setUnassigning(null)
+            },
+          })
+        }}
+        title="Unassign Staff"
+        message={
+          unassigning
+            ? `Unassign ${unassigning.staffName} from ${unassigning.tripName} (${formatDate(unassigning.tripStart ?? '')} — ${formatDate(unassigning.tripEnd ?? '')})? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Unassign"
+        variant="danger"
+        loading={staffUnassign.isPending}
+      />
     </div>
   )
 }

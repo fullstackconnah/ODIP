@@ -265,7 +265,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Destination + Region */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="defaultDestination" className={labelClass}>Default Destination</label>
               <input
@@ -287,7 +287,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Duration + Preferred Time */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="standardDurationDays" className={labelClass}>Duration (days)</label>
               <input

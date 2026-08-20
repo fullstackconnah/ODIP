@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
@@ -9,6 +10,7 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS } from '@/api/types/enums'
 import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const participantSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -86,7 +88,7 @@ export default function ParticipantCreatePage() {
   const activeStaff = staffList.filter(s => s.isActive)
   const mutation = isEdit ? updateParticipant : createParticipant
 
-  const { register, handleSubmit, reset, control, setValue, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, reset, control, setValue, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
     resolver: participantResolver,
     defaultValues: {
       planType: 'SelfManaged',
@@ -168,20 +170,31 @@ export default function ParticipantCreatePage() {
     try {
       if (isEdit) {
         const res = await updateParticipant.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
-        if (res.success) navigate(`/participants/${id}`)
+        if (res.success) {
+          // Clear isDirty synchronously (flushSync) before navigating so the
+          // unsaved-changes blocker doesn't fire for this intentional navigation.
+          flushSync(() => reset(data))
+          navigate(`/participants/${id}`)
+        }
       } else {
         const res = await createParticipant.mutateAsync(payload)
-        if (res.success && res.data?.id) navigate(`/participants/${res.data.id}`)
+        if (res.success && res.data?.id) {
+          flushSync(() => reset(data))
+          navigate(`/participants/${res.data.id}`)
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to={isEdit ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -468,7 +481,7 @@ export default function ParticipantCreatePage() {
             Cancel
           </Link>
           <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-blue-500/20">
+            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Participant')}
           </button>
         </div>

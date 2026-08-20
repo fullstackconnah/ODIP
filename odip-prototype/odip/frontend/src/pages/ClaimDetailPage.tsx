@@ -9,7 +9,7 @@ import { DataTable } from '@/components/DataTable'
 import { formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 
-const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[#f5f3ef] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all'
+const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
 
 
 function planTypeLabel(planType: string) {
@@ -46,8 +46,8 @@ export default function ClaimDetailPage() {
     setNotesInit(true)
   }
 
-  if (isLoading) return <div className="p-8 text-[#43493a]">Loading...</div>
-  if (!claim) return <div className="p-8 text-[#43493a]">Claim not found</div>
+  if (isLoading) return <div className="p-8 text-[var(--color-muted-foreground)]">Loading...</div>
+  if (!claim) return <div className="p-8 text-[var(--color-muted-foreground)]">Claim not found</div>
 
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)
 
@@ -71,12 +71,12 @@ export default function ClaimDetailPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-[#43493a]">
-        <Link to="/trips" className="hover:text-[#396200]">Trips</Link>
+      <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/trips" className="hover:text-[var(--color-primary)]">Trips</Link>
         <span>/</span>
         {claim.tripInstanceId && (
           <>
-            <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[#396200]">{claim.tripName || 'Trip'}</Link>
+            <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[var(--color-primary)]">{claim.tripName || 'Trip'}</Link>
             <span>/</span>
           </>
         )}
@@ -86,13 +86,13 @@ export default function ClaimDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-[#1b1c1a]">Claim {claim.claimReference}</h1>
+          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">Claim {claim.claimReference}</h1>
           <StatusBadge status={claim.status} />
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[#43493a] hover:bg-[#f5f3ef] transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
           >
             <Download className="w-4 h-4" />
             BPR CSV
@@ -101,7 +101,7 @@ export default function ClaimDetailPage() {
             <button
               onClick={() => handleStatusChange('Submitted')}
               disabled={updateClaim.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
               Mark as Submitted
@@ -112,7 +112,7 @@ export default function ClaimDetailPage() {
               <button
                 onClick={() => handleStatusChange('Paid')}
                 disabled={updateClaim.isPending}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
               >
                 <DollarSign className="w-4 h-4" />
                 Mark as Paid
@@ -139,15 +139,15 @@ export default function ClaimDetailPage() {
           { label: 'Submitted', value: claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—' },
         ].map(card => (
           <div key={card.label} className="bg-white rounded-2xl p-4">
-            <p className="text-xs text-[#43493a] font-medium mb-1">{card.label}</p>
-            <p className="text-lg font-semibold text-[#1b1c1a]">{card.value}</p>
+            <p className="text-xs text-[var(--color-muted-foreground)] font-medium mb-1">{card.label}</p>
+            <p className="text-lg font-semibold text-[var(--color-foreground)]">{card.value}</p>
           </div>
         ))}
       </div>
 
       {/* Notes */}
       <div className="bg-white rounded-2xl p-4 space-y-2">
-        <label className="block text-xs font-medium text-[#43493a]">Notes</label>
+        <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">Notes</label>
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
@@ -159,7 +159,7 @@ export default function ClaimDetailPage() {
           <button
             onClick={handleSaveNotes}
             disabled={updateClaim.isPending}
-            className="px-4 py-1.5 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+            className="px-4 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
           >
             {saved ? 'Saved!' : 'Save Notes'}
           </button>
@@ -168,9 +168,9 @@ export default function ClaimDetailPage() {
 
       {/* Line items */}
       <div className="bg-white rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 bg-[#f5f3ef] flex items-center justify-between">
-          <h2 className="font-semibold text-sm text-[#43493a]">Line Items</h2>
-          <span className="text-xs text-[#43493a]">{(claim.lineItems ?? []).length} items</span>
+        <div className="px-4 py-3 bg-[var(--color-surface-container-low)] flex items-center justify-between">
+          <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Line Items</h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">{(claim.lineItems ?? []).length} items</span>
         </div>
         <DataTable
           data={claim.lineItems ?? []}
@@ -183,8 +183,8 @@ export default function ClaimDetailPage() {
               sortable: true,
               render: (item: ClaimLineItemDto) => (
                 <div>
-                  <p className="font-medium text-[#1b1c1a]">{item.participantName}</p>
-                  <p className="text-xs text-[#43493a] font-mono">{item.ndisNumber}</p>
+                  <p className="font-medium text-[var(--color-foreground)]">{item.participantName}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] font-mono">{item.ndisNumber}</p>
                   <StatusBadge status={item.planType} label={planTypeLabel(item.planType)} />
                 </div>
               ),
@@ -193,14 +193,14 @@ export default function ClaimDetailPage() {
               key: 'supportItemCode',
               header: 'Support Item',
               sortable: true,
-              className: 'font-mono text-xs text-[#43493a]',
+              className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
             },
             {
               key: 'dayType',
               header: 'Day Type',
               sortable: true,
               render: (item: ClaimLineItemDto) => (
-                <span className="text-[#43493a]">{item.dayType}</span>
+                <span className="text-[var(--color-muted-foreground)]">{item.dayType}</span>
               ),
             },
             {
@@ -208,7 +208,7 @@ export default function ClaimDetailPage() {
               header: 'Dates',
               sortable: true,
               render: (item: ClaimLineItemDto) => (
-                <span className="text-xs text-[#43493a] whitespace-nowrap">
+                <span className="text-xs text-[var(--color-muted-foreground)] whitespace-nowrap">
                   {item.supportsDeliveredFrom} – {item.supportsDeliveredTo}
                 </span>
               ),
@@ -218,7 +218,7 @@ export default function ClaimDetailPage() {
               header: 'Hours',
               align: 'right' as const,
               render: (item: ClaimLineItemDto) => (
-                <span className="text-[#43493a]">{item.hours}h</span>
+                <span className="text-[var(--color-muted-foreground)]">{item.hours}h</span>
               ),
             },
             {
@@ -255,7 +255,7 @@ export default function ClaimDetailPage() {
                       <button
                         onClick={() => handleRevertToConfirmed(item as ClaimLineItemDto)}
                         disabled={updateLineItem.isPending}
-                        className="text-xs text-[#43493a] hover:text-[#396200] hover:underline disabled:opacity-50"
+                        className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
                       >
                         Mark Confirmed
                       </button>
@@ -263,7 +263,7 @@ export default function ClaimDetailPage() {
                   ) : (
                     <button
                       onClick={() => setNoShowTarget(item as ClaimLineItemDto)}
-                      className="text-xs text-[#43493a] hover:text-amber-600 hover:underline"
+                      className="text-xs text-[var(--color-muted-foreground)] hover:text-amber-600 hover:underline"
                     >
                       No Show
                     </button>
@@ -271,7 +271,7 @@ export default function ClaimDetailPage() {
                   {(item.planType === 'PlanManaged' || item.planType === 'SelfManaged') && (
                     <button
                       onClick={() => downloadFile(`/claims/${id}/invoices/${item.participantBookingId}`, `invoice-${item.participantName.replace(/\s+/g, '-')}.pdf`)}
-                      className="flex items-center gap-1 text-xs text-[#396200] hover:underline"
+                      className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
                     >
                       <Download className="w-3 h-3" />
                       Invoice

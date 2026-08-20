@@ -49,7 +49,7 @@ function formatRelative(iso: string): { relative: string; absolute: string } {
  */
 function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
   return (
-    <div className="flex items-start gap-2 text-xs text-[#43493a]">
+    <div className="flex items-start gap-2 text-xs text-[var(--color-muted-foreground)]">
       <span className="font-medium min-w-[140px] shrink-0 text-[#6b7280]">
         {field}
       </span>
@@ -74,14 +74,14 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
   return (
     <div className="flex gap-3 py-4 border-b border-[#e8e8e3] last:border-0">
       {/* Timeline bullet */}
-      <div className="w-2 h-2 rounded-full bg-[#396200] mt-[7px] shrink-0" />
+      <div className="w-2 h-2 rounded-full bg-[var(--color-primary)] mt-[7px] shrink-0" />
       
       <div className="flex-1 min-w-0">
         {/* Header: action badge, user, timestamp */}
         <div className="flex items-center gap-2 flex-wrap mb-1.5">
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-              ACTION_STYLES[entry.action] ?? 'bg-[#efeeea] text-[#43493a]'
+              ACTION_STYLES[entry.action] ?? 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]'
             }`}
           >
             {entry.action}
@@ -130,7 +130,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="h-16 bg-[#efeeea] rounded-lg animate-pulse"
+            className="h-16 bg-[var(--color-surface-container)] rounded-lg animate-pulse"
           />
         ))}
       </div>

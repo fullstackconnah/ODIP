@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -9,6 +10,7 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const incidentSchema = z.object({
   tripInstanceId: z.string().min(1, 'Trip is required'),
@@ -55,7 +57,7 @@ export default function IncidentCreatePage() {
   const { data: participants = [] } = useParticipants()
   const { data: existingIncident } = useIncident(id)
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<IncidentFormData>({
+  const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<IncidentFormData>({
     resolver: zodResolver(incidentSchema),
     defaultValues: {
       severity: 'Medium',
@@ -144,18 +146,27 @@ export default function IncidentCreatePage() {
           supportCoordinatorNotifiedAt: data.supportCoordinatorNotifiedAt || undefined,
         }
         const res = await updateIncident.mutateAsync({ id, data: updateData })
-        if (res.success) navigate('/incidents')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/incidents')
+        }
       } else {
         const res = await createIncident.mutateAsync(base)
-        if (res.success) navigate('/incidents')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/incidents')
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to="/incidents" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -364,7 +375,7 @@ export default function IncidentCreatePage() {
             Cancel
           </Link>
           <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-blue-500/20">
+            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Submitting...') : (isEdit ? 'Save Changes' : 'Submit Incident Report')}
           </button>
         </div>

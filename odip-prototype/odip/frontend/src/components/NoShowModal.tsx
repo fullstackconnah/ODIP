@@ -43,7 +43,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
       title={
         <div>
           <span>Record No Show</span>
-          <p className="text-sm text-[#43493a] mt-0.5 font-normal">
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5 font-normal">
             {lineItem.participantName}
             <span className="font-mono ml-2 text-xs">{lineItem.ndisNumber}</span>
           </p>
@@ -54,14 +54,14 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
         <>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-full text-sm text-[#43493a] hover:bg-[#f5f3ef] transition-all"
+            className="px-4 py-2 rounded-full text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={updateLineItem.isPending}
-            className="px-4 py-2 rounded-full bg-[#396200] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
           >
             {updateLineItem.isPending ? 'Saving…' : 'Confirm'}
           </button>
@@ -69,7 +69,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
       }
     >
       <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-[#43493a]">
+        <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
           Reason <span className="text-red-500">*</span>
         </label>
         <Dropdown

@@ -5,6 +5,8 @@ import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
+import { EmptyState } from '@/components/EmptyState'
+import { UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
 type QualStatus = 'expired' | 'expiring' | 'no-date' | 'ok'
@@ -181,6 +183,28 @@ export default function QualificationsPage() {
     )
   }
 
+  if (allStaff.length === 0) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-bold">Staff Qualification Expiry</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
+            Warning window: {warningDays} days —{' '}
+            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
+              change in Settings
+            </Link>
+          </p>
+        </div>
+        <EmptyState
+          icon={UserCog}
+          title="No staff members yet"
+          description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
+          action={canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -215,9 +239,10 @@ export default function QualificationsPage() {
           {filteredGroups.map(group => (
             <div key={group.staffId} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] overflow-hidden">
               {/* Accordion header */}
-              <div
+              <button
+                type="button"
                 onClick={() => toggleGroup(group.staffId)}
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-[var(--color-accent)]/50 transition-colors"
+                className="flex w-full items-center justify-between p-4 cursor-pointer hover:bg-[var(--color-accent)]/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[var(--color-muted-foreground)] text-lg">
@@ -226,7 +251,7 @@ export default function QualificationsPage() {
                   <span className="font-medium">{group.staffName}</span>
                 </div>
                 <StatusBadge status="Cancelled" label={`${group.issueCount} issue${group.issueCount !== 1 ? 's' : ''}`} />
-              </div>
+              </button>
 
               {/* Accordion body */}
               {expandedIds.has(group.staffId) && (
@@ -239,7 +264,7 @@ export default function QualificationsPage() {
                     compact
                     className="overflow-x-auto"
                     rowClassName={(q) =>
-                      q.status === 'expired' ? 'bg-[#ffdad6]/10' :
+                      q.status === 'expired' ? 'bg-[var(--color-error-container)]/10' :
                       q.status === 'expiring' ? 'bg-[#fef3c7]/10' : ''
                     }
                     columns={[
@@ -261,7 +286,7 @@ export default function QualificationsPage() {
                                 onChange={e => onChange(e.target.value)}
                                 className="border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                               />
-                              {saveError && <p className="text-xs text-[#ba1a1a]">{saveError}</p>}
+                              {saveError && <p className="text-xs text-[var(--color-destructive)]">{saveError}</p>}
                             </div>
                           ),
                         },

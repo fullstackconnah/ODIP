@@ -25,14 +25,14 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
       {/* Driver summary header */}
       <div className="flex items-center justify-between gap-4">
         {needed === 0 ? (
-          <span className="text-sm text-[#43493a] italic">No vehicles assigned yet</span>
+          <span className="text-sm text-[var(--color-muted-foreground)] italic">No vehicles assigned yet</span>
         ) : assigned === 0 ? (
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#ffdad6]/60 text-[#ba1a1a]">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--color-error-container)]/60 text-[var(--color-destructive)]">
               <XCircle className="w-4 h-4" />
               <span>0 / {needed}</span>
             </div>
-            <span className="text-xs text-[#43493a]">No drivers assigned to this trip yet</span>
+            <span className="text-xs text-[var(--color-muted-foreground)]">No drivers assigned to this trip yet</span>
           </div>
         ) : assigned < needed ? (
           <div className="flex items-center gap-3">
@@ -40,17 +40,17 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
               <AlertTriangle className="w-4 h-4" />
               <span>{assigned} / {needed} · need {shortfall} more</span>
             </div>
-            <span className="text-xs text-[#43493a]">
+            <span className="text-xs text-[var(--color-muted-foreground)]">
               {tripDrivers.map((s: StaffAssignmentDto) => s.staffName).join(', ')}
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#bbf37c]/30 text-[#396200]">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--color-primary-fixed)]/30 text-[var(--color-success)]">
               <Car className="w-4 h-4" />
               <span>{assigned} / {needed}</span>
             </div>
-            <span className="text-xs text-[#43493a]">
+            <span className="text-xs text-[var(--color-muted-foreground)]">
               {tripDrivers.map((s: StaffAssignmentDto) => s.staffName).join(', ')}
             </span>
           </div>
@@ -58,7 +58,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
         {canWrite && (
           <button
             onClick={() => setShowAddVehicle(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#396200] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
           >
             <Plus className="w-4 h-4" /> Add Vehicle
           </button>
@@ -72,14 +72,14 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="font-semibold">{v.vehicleName}</h4>
-                <p className="text-sm text-[#43493a]">{v.registration || 'No rego'}</p>
+                <p className="text-sm text-[var(--color-muted-foreground)]">{v.registration || 'No rego'}</p>
               </div>
               <div className="flex gap-2">
                 <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(v.status)}`}>{v.status}</span>
                 {v.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1"><span className="material-symbols-outlined text-xs leading-none">warning</span> Conflict</span>}
               </div>
             </div>
-            <div className="mt-3 text-sm text-[#43493a]">
+            <div className="mt-3 text-sm text-[var(--color-muted-foreground)]">
               <p className="flex items-center gap-1">{v.registration || 'N/A'} · {v.seatRequirement ?? '?'} seats{v.wheelchairPositionRequirement ? <> · <span className="material-symbols-outlined text-sm leading-none">accessible</span> {v.wheelchairPositionRequirement}</> : ''}</p>
             </div>
           </div>

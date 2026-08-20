@@ -83,21 +83,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fbf9f5] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#396200] to-[#4d7c0f] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#396200]/20">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[var(--color-primary)]/20">
             <Map className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#1b1c1a]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</h1>
-          <p className="text-[#43493a] mt-2">NDIS Trip Management Platform</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</h1>
+          <p className="text-[var(--color-muted-foreground)] mt-2">NDIS Trip Management Platform</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
-          <h2 className="text-xl font-semibold mb-6 text-[#1b1c1a]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
+          <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
           {error && (
-            <div className="mb-4 p-3 rounded-2xl bg-[#ffdad6] text-[#93000a] text-sm">
+            <div className="mb-4 p-3 rounded-2xl bg-[var(--color-error-container)] text-[#93000a] text-sm">
               {error}
             </div>
           )}
@@ -110,13 +110,13 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5 text-[#43493a]">Email</label>
+              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]">Email</label>
               <input
                 id="login-email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+                className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
                 placeholder="Enter your email"
                 required
                 autoFocus
@@ -124,21 +124,21 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-[#43493a]">Password</label>
+              <label className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]">Password</label>
               <div className="relative">
                 <input
                   id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 pr-12 transition-all"
+                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 pr-12 transition-all"
                   placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#43493a] hover:text-[#1b1c1a] transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -149,7 +149,7 @@ export default function LoginPage() {
               id="login-submit"
               type="submit"
               disabled={login.isPending}
-              className="w-full py-2.5 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[#396200]/20"
+              className="w-full py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
             >
               {login.isPending ? 'Signing in...' : 'Sign In'}
             </button>
@@ -159,11 +159,11 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleForgotPassword}
-              className="text-xs text-[#396200] hover:underline"
+              className="text-xs text-[var(--color-primary)] hover:underline"
             >
               Forgot password?
             </button>
-            <p className="text-xs text-[#43493a]">
+            <p className="text-xs text-[var(--color-muted-foreground)]">
               Contact your administrator for access.
             </p>
           </div>
@@ -173,19 +173,19 @@ export default function LoginPage() {
           <div className="mt-6 bg-white rounded-2xl p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-px flex-1 bg-[#e5e2da]" />
-              <span className="text-xs text-[#43493a] uppercase tracking-wide">Developer sign-in</span>
+              <span className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wide">Developer sign-in</span>
               <div className="h-px flex-1 bg-[#e5e2da]" />
             </div>
 
             <div className="space-y-4">
               {devUsers.data && devUsers.data.length > 0 ? (
                 <div>
-                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[#43493a]">User</label>
+                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]">User</label>
                   <select
                     id="dev-login-user"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
                   >
                     {devUsers.data.map(u => (
                       <option key={u.username} value={u.username}>
@@ -196,13 +196,13 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <div>
-                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[#43493a]">Username</label>
+                  <label htmlFor="dev-login-user" className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]">Username</label>
                   <input
                     id="dev-login-user"
                     type="text"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[#f5f3ef] text-[#1b1c1a] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#396200]/30 transition-all"
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
                     placeholder="admin"
                   />
                 </div>
@@ -212,7 +212,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleDevLogin}
                 disabled={devLogin.isPending}
-                className="w-full py-2.5 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[#396200]/20"
+                className="w-full py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
               >
                 {devLogin.isPending ? 'Signing in...' : 'Sign in as selected user'}
               </button>

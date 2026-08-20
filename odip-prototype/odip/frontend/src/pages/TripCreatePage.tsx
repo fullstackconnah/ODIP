@@ -1,4 +1,5 @@
 import { useNavigate, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +8,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const tripSchema = z.object({
   tripName: z.string().min(1, 'Trip name is required'),
@@ -36,7 +38,7 @@ export default function TripCreatePage() {
   const { data: staffList = [] } = useStaff()
   const { data: templates = [] } = useEventTemplates()
 
-  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm<TripFormData>({
+  const { register, handleSubmit, setValue, control, reset, formState: { errors, isDirty } } = useForm<TripFormData>({
     resolver: zodResolver(tripSchema),
     defaultValues: { durationDays: 1, status: 'Draft' },
   })
@@ -64,6 +66,7 @@ export default function TripCreatePage() {
     try {
       const res = await createTrip.mutateAsync(payload)
       if (res.success && res.data?.id) {
+        flushSync(() => reset(data))
         navigate(`/trips/${res.data.id}`)
       }
     } catch {
@@ -71,8 +74,11 @@ export default function TripCreatePage() {
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to="/trips" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
@@ -224,7 +230,7 @@ export default function TripCreatePage() {
             Cancel
           </Link>
           <button type="submit" disabled={createTrip.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-blue-500/20">
+            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
             {createTrip.isPending ? 'Creating...' : 'Create Trip'}
           </button>
         </div>

@@ -16,39 +16,39 @@ function dueAgo(dueDate: string): string {
 }
 
 const priorityStyle: Record<string, { badge: string; card: string }> = {
-  High:   { badge: 'text-[#ba1a1a] bg-[#ffdad6]/30 uppercase tracking-widest', card: 'bg-[#ffdad6]/10 border border-[#ba1a1a]/10' },
-  Medium: { badge: 'text-[#43493a] bg-[var(--color-surface-container)] uppercase tracking-widest', card: 'bg-[var(--color-surface-container-low)] border border-[rgba(195,201,181,0.3)]' },
-  Low:    { badge: 'text-[#515f74] bg-[var(--color-surface-container-low)] uppercase tracking-widest', card: 'bg-[var(--color-surface-container-low)] border border-[rgba(195,201,181,0.3)]' },
+  High:   { badge: 'text-[var(--color-destructive)] bg-[var(--color-error-container)]/30 uppercase tracking-widest', card: 'bg-[var(--color-error-container)]/10 border border-[var(--color-destructive)]/10' },
+  Medium: { badge: 'text-[var(--color-muted-foreground)] bg-[var(--color-surface-container)] uppercase tracking-widest', card: 'bg-[var(--color-surface-container-low)] border border-[rgba(195,201,181,0.3)]' },
+  Low:    { badge: 'text-[var(--color-info)] bg-[var(--color-surface-container-low)] uppercase tracking-widest', card: 'bg-[var(--color-surface-container-low)] border border-[rgba(195,201,181,0.3)]' },
 }
 
 const tripCardGradient: Record<string, string> = {
-  Draft:           'from-[#efeeea] to-[#e4e2de]',
-  Planning:        'from-[#d5e3fc] to-[#b9c7df]',
-  OpenForBookings: 'from-[#396200] to-[#4d7c0f]',
+  Draft:           'from-[var(--color-surface-container)] to-[var(--color-input)]',
+  Planning:        'from-[var(--color-secondary-container)] to-[#b9c7df]',
+  OpenForBookings: 'from-[var(--color-primary)] to-[var(--color-primary-container)]',
   WaitlistOnly:    'from-amber-500 to-amber-700',
-  Confirmed:       'from-[#396200] to-[#4d7c0f]',
+  Confirmed:       'from-[var(--color-primary)] to-[var(--color-primary-container)]',
   InProgress:      'from-[#8e337b] to-[#ab4c95]',
-  Completed:       'from-[#efeeea] to-[#e4e2de]',
+  Completed:       'from-[var(--color-surface-container)] to-[var(--color-input)]',
 }
 
 const tripCardIconColor: Record<string, string> = {
-  Draft:           'text-[#43493a]/50',
-  Planning:        'text-[#515f74]',
+  Draft:           'text-[var(--color-muted-foreground)]/50',
+  Planning:        'text-[var(--color-info)]',
   OpenForBookings: 'text-white',
   WaitlistOnly:    'text-white',
   Confirmed:       'text-white',
   InProgress:      'text-white',
-  Completed:       'text-[#43493a]/50',
+  Completed:       'text-[var(--color-muted-foreground)]/50',
 }
 
 const statusBadge: Record<string, string> = {
-  Draft:           'bg-[var(--color-surface-container)] text-[#43493a]',
+  Draft:           'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
   Planning:        'bg-[var(--color-secondary-container)]/60 text-[var(--color-secondary)]',
-  OpenForBookings: 'bg-[#bbf37c] text-[#0f2000]',
+  OpenForBookings: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   WaitlistOnly:    'bg-amber-100 text-amber-700',
-  Confirmed:       'bg-[#bbf37c] text-[#0f2000]',
+  Confirmed:       'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   InProgress:      'bg-[#ffd7ef]/60 text-[#8e337b]',
-  Completed:       'bg-[var(--color-surface-container)] text-[#43493a]',
+  Completed:       'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
 }
 
 export default function DashboardPage() {
@@ -95,19 +95,19 @@ export default function DashboardPage() {
   }, 0)
 
   const smallStats = [
-    d.overdueTaskCount > 0 && { label: 'Overdue', value: d.overdueTaskCount, color: 'text-[#ba1a1a]', bg: 'bg-[#ffdad6]/20' },
-    d.tripsMissingAccommodation > 0 && { label: 'Missing Accomm.', value: d.tripsMissingAccommodation, color: 'text-[#1b1c1a]', bg: 'bg-[var(--color-surface-container)]' },
-    d.tripsMissingVehicles > 0 && { label: 'Missing Vehicles', value: d.tripsMissingVehicles, color: 'text-[#1b1c1a]', bg: 'bg-[var(--color-surface-container)]' },
-    d.tripsMissingStaff > 0 && { label: 'Missing Staff', value: d.tripsMissingStaff, color: 'text-[#1b1c1a]', bg: 'bg-[var(--color-surface-container)]' },
+    d.overdueTaskCount > 0 && { label: 'Overdue', value: d.overdueTaskCount, color: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/20' },
+    d.tripsMissingAccommodation > 0 && { label: 'Missing Accomm.', value: d.tripsMissingAccommodation, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
+    d.tripsMissingVehicles > 0 && { label: 'Missing Vehicles', value: d.tripsMissingVehicles, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
+    d.tripsMissingStaff > 0 && { label: 'Missing Staff', value: d.tripsMissingStaff, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
     d.openIncidentCount > 0 && { label: 'Open Incidents', value: d.openIncidentCount, color: 'text-amber-700', bg: 'bg-amber-50' },
-    d.qscOverdueCount > 0 && { label: 'QSC Overdue', value: d.qscOverdueCount, color: 'text-[#ba1a1a]', bg: 'bg-[#ffdad6]/20' },
+    d.qscOverdueCount > 0 && { label: 'QSC Overdue', value: d.qscOverdueCount, color: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/20' },
   ].filter(Boolean) as Array<{ label: string; value: number; color: string; bg: string }>
 
   return (
     <div className="space-y-6 md:space-y-10">
       {/* ── Page Header ── */}
       <div>
-        <h1 className="font-display font-extrabold text-2xl md:text-4xl text-[#1b1c1a] tracking-tight mb-1 md:mb-2">
+        <h1 className="font-display font-extrabold text-2xl md:text-4xl text-[var(--color-foreground)] tracking-tight mb-1 md:mb-2">
           Management Dashboard
         </h1>
         <p className="text-sm md:text-base text-[var(--color-muted-foreground)] font-medium">
@@ -130,7 +130,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Outstanding Tasks - accent */}
-        <div className="col-span-2 lg:col-span-3 bg-[#ffd7ef]/20 p-4 md:p-6 rounded-2xl md:rounded-[2rem] border-l-4 border-[#8e337b]">
+        <div className="col-span-2 lg:col-span-3 bg-[#ffd7ef]/20 p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-[#8e337b]/20">
           <p className="text-xs md:text-sm text-[#8e337b] mb-1 font-medium">Outstanding Tasks</p>
           <p className="text-2xl md:text-3xl font-display font-bold text-[#8e337b]">{d.outstandingTaskCount}</p>
         </div>
@@ -140,14 +140,14 @@ export default function DashboardPage() {
           to="/qualifications"
           className={`col-span-2 lg:col-span-2 p-6 rounded-[2rem] flex flex-col justify-between hover:opacity-90 transition-opacity ${
             qualIssueCount > 0
-              ? 'bg-[#ffdad6]/30 border border-[#ba1a1a]/20'
+              ? 'bg-[var(--color-error-container)]/30 border border-[var(--color-destructive)]/20'
               : 'bg-[var(--color-surface-container-low)]'
           }`}
         >
-          <p className={`text-sm mb-1 font-medium ${qualIssueCount > 0 ? 'text-[#ba1a1a]' : 'text-[var(--color-muted-foreground)]'}`}>
+          <p className={`text-sm mb-1 font-medium ${qualIssueCount > 0 ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>
             Qualification Issues
           </p>
-          <p className={`text-3xl font-display font-bold ${qualIssueCount > 0 ? 'text-[#ba1a1a]' : 'text-[var(--color-primary)]'}`}>
+          <p className={`text-3xl font-display font-bold ${qualIssueCount > 0 ? 'text-[var(--color-destructive)]' : 'text-[var(--color-primary)]'}`}>
             {qualIssueCount > 0 ? qualIssueCount : <span className="material-symbols-outlined text-3xl leading-none">check_circle</span>}
           </p>
           {qualIssueCount === 0 && (
@@ -170,7 +170,7 @@ export default function DashboardPage() {
         {/* Upcoming Trips — takes 2 columns */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl md:text-2xl font-display font-bold text-[#1b1c1a]">Upcoming Trips</h3>
+            <h3 className="text-xl md:text-2xl font-display font-bold text-[var(--color-foreground)]">Upcoming Trips</h3>
             <Link to="/trips" className="text-[var(--color-primary)] font-bold text-sm hover:underline">
               View All
             </Link>
@@ -184,7 +184,7 @@ export default function DashboardPage() {
               </div>
             ) : d.upcomingTrips.slice(0, 5).map((t: any) => {
               const grad = tripCardGradient[t.status] || tripCardGradient.Draft
-              const iconColor = tripCardIconColor[t.status] || 'text-[#43493a]/50'
+              const iconColor = tripCardIconColor[t.status] || 'text-[var(--color-muted-foreground)]/50'
               const badge = statusBadge[t.status] || statusBadge.Draft
               return (
                 <Link key={t.id} to={`/trips/${t.id}`}
@@ -199,7 +199,7 @@ export default function DashboardPage() {
                   {/* Details */}
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1 md:mb-2 gap-2 md:gap-3">
-                      <h4 className="text-sm md:text-base font-bold text-[#1b1c1a] truncate">{t.tripName}</h4>
+                      <h4 className="text-sm md:text-base font-bold text-[var(--color-foreground)] truncate">{t.tripName}</h4>
                       <span className={`text-[10px] font-bold px-2 md:px-3 py-0.5 md:py-1 rounded-full flex-shrink-0 ${badge}`}>
                         {t.status.replace(/([A-Z])/g, ' $1').trim()}
                       </span>
@@ -235,7 +235,7 @@ export default function DashboardPage() {
         {/* Overdue Tasks — 1 column */}
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl md:text-2xl font-display font-bold text-[#1b1c1a]">Overdue Tasks</h3>
+            <h3 className="text-xl md:text-2xl font-display font-bold text-[var(--color-foreground)]">Overdue Tasks</h3>
             <Link to="/tasks" className="text-[var(--color-primary)] font-bold text-sm hover:underline">
               View All
             </Link>
@@ -260,10 +260,10 @@ export default function DashboardPage() {
                       Due {dueAgo(t.dueDate)}
                     </span>
                   </div>
-                  <h5 className="font-bold text-[#1b1c1a] mb-1 text-sm">{t.title}</h5>
+                  <h5 className="font-bold text-[var(--color-foreground)] mb-1 text-sm">{t.title}</h5>
                   <p className="text-xs text-[var(--color-muted-foreground)] mb-4">{t.tripName}</p>
                   <div className="flex items-center justify-between">
-                    <div className="w-7 h-7 rounded-full bg-[#bbf37c] border-2 border-white flex items-center justify-center text-[9px] font-bold text-[#0f2000]">
+                    <div className="w-7 h-7 rounded-full bg-[var(--color-primary-fixed)] border-2 border-white flex items-center justify-center text-[9px] font-bold text-[var(--color-on-primary-fixed)]">
                       {initials}
                     </div>
                     <Link to="/tasks" className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 hover:underline">
