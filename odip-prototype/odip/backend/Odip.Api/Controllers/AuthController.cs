@@ -208,6 +208,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("dev-users")]
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     public async Task<ActionResult<ApiResponse<IEnumerable<object>>>> DevUsers(CancellationToken ct)
     {
         if (!IsDevAuthEnabled())
@@ -220,7 +221,6 @@ public class AuthController : ControllerBase
             .Select(u => new
             {
                 u.Username,
-                u.Email,
                 Role = u.Role.ToString(),
                 TenantName = u.Tenant != null ? u.Tenant.Name : null
             })
