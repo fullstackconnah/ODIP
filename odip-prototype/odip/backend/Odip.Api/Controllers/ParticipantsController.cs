@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -33,7 +34,7 @@ public class ParticipantsController : ControllerBase
             query = query.Where(p => (p.FirstName + " " + p.LastName).Contains(search) || (p.PreferredName != null && p.PreferredName.Contains(search)));
         if (!string.IsNullOrWhiteSpace(region)) query = query.Where(p => p.Region == region);
         if (isActive.HasValue) query = query.Where(p => p.IsActive == isActive.Value);
-        if (wheelchairRequired.HasValue) query = query.Where(p => p.WheelchairRequired == wheelchairRequired.Value);
+        if (wheelchairRequired.HasValue) query = query.Where(p => p.MobilityAidWheelchair == wheelchairRequired.Value);
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
 
         var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
@@ -44,7 +45,7 @@ public class ParticipantsController : ControllerBase
                 FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
                 MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber.Substring(p.NdisNumber.Length - 1) : "•••" : null,
                 PlanType = p.PlanType, Region = p.Region, IsRepeatClient = p.IsRepeatClient,
-                IsActive = p.IsActive, WheelchairRequired = p.WheelchairRequired,
+                IsActive = p.IsActive, MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
                 IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio
             });
 
@@ -68,8 +69,13 @@ public class ParticipantsController : ControllerBase
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, PlanType = p.PlanType, Region = p.Region,
             FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
-            WheelchairRequired = p.WheelchairRequired, IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
-            RequiresOvernightSupport = p.RequiresOvernightSupport, HasRestrictivePracticeFlag = p.HasRestrictivePracticeFlag,
+            MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
+            IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
+            MobilitySupportOptions = p.MobilitySupportOptions,
+            OvernightSupport = p.OvernightSupport, OvernightRatio = p.OvernightRatio,
+            RequiresHiLoBed = p.RequiresHiLoBed, RequiresHoist = p.RequiresHoist, RequiresShowerChair = p.RequiresShowerChair,
+            RequiresCommode = p.RequiresCommode, RequiresStandingMachine = p.RequiresStandingMachine,
+            HasRestrictivePracticeFlag = p.HasRestrictivePracticeFlag,
             MobilityNotes = p.MobilityNotes, EquipmentRequirements = p.EquipmentRequirements,
             TransportRequirements = p.TransportRequirements, MedicalSummary = p.MedicalSummary,
             BehaviourRiskSummary = p.BehaviourRiskSummary, Notes = p.Notes,
@@ -86,13 +92,23 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Create([FromBody] CreateParticipantDto dto, CancellationToken ct)
     {
+        var invalidOptions = dto.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
+        if (invalidOptions.Count > 0)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
+                $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
+
         var participant = new Participant
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, PreferredName = dto.PreferredName,
             DateOfBirth = dto.DateOfBirth, NdisNumber = dto.NdisNumber, PlanType = dto.PlanType, Region = dto.Region,
             FundingOrganisation = dto.FundingOrganisation, IsRepeatClient = dto.IsRepeatClient,
-            WheelchairRequired = dto.WheelchairRequired, IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
-            RequiresOvernightSupport = dto.RequiresOvernightSupport, HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag,
+            MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
+            MobilitySupportOptions = dto.MobilitySupportOptions,
+            IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
+            OvernightSupport = dto.OvernightSupport, OvernightRatio = dto.OvernightRatio,
+            RequiresHiLoBed = dto.RequiresHiLoBed, RequiresHoist = dto.RequiresHoist, RequiresShowerChair = dto.RequiresShowerChair,
+            RequiresCommode = dto.RequiresCommode, RequiresStandingMachine = dto.RequiresStandingMachine,
+            HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag,
             SupportRatio = dto.SupportRatio, MobilityNotes = dto.MobilityNotes,
             EquipmentRequirements = dto.EquipmentRequirements, TransportRequirements = dto.TransportRequirements,
             MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
@@ -109,14 +125,24 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Update(Guid id, [FromBody] UpdateParticipantDto dto, CancellationToken ct)
     {
+        var invalidOptions = dto.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
+        if (invalidOptions.Count > 0)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
+                $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
         p.DateOfBirth = dto.DateOfBirth; p.NdisNumber = dto.NdisNumber; p.PlanType = dto.PlanType;
         p.Region = dto.Region; p.FundingOrganisation = dto.FundingOrganisation; p.IsRepeatClient = dto.IsRepeatClient;
-        p.IsActive = dto.IsActive; p.WheelchairRequired = dto.WheelchairRequired; p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
-        p.RequiresOvernightSupport = dto.RequiresOvernightSupport; p.HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag;
+        p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
+        p.MobilitySupportOptions = dto.MobilitySupportOptions;
+        p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
+        p.OvernightSupport = dto.OvernightSupport; p.OvernightRatio = dto.OvernightRatio;
+        p.RequiresHiLoBed = dto.RequiresHiLoBed; p.RequiresHoist = dto.RequiresHoist; p.RequiresShowerChair = dto.RequiresShowerChair;
+        p.RequiresCommode = dto.RequiresCommode; p.RequiresStandingMachine = dto.RequiresStandingMachine;
+        p.HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag;
         p.SupportRatio = dto.SupportRatio; p.MobilityNotes = dto.MobilityNotes;
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;

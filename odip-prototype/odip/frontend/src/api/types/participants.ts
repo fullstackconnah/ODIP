@@ -1,4 +1,37 @@
-import type { PlanType, SupportRatio } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType } from './enums'
+
+export const MOBILITY_SUPPORT_OPTIONS = [
+  'Wheelchair in vehicle',
+  'Full vehicle',
+  'Transfers',
+  'Ceiling hoist',
+  'Manual hoist',
+  'Sit-to-stand',
+  'Slide board',
+  'Walking aid',
+  'Swivel board',
+  'Standing frame',
+] as const
+export type MobilitySupportOption = typeof MOBILITY_SUPPORT_OPTIONS[number]
+
+export const OVERNIGHT_SUPPORT_LABELS: Record<OvernightSupportType, string> = {
+  None: 'None',
+  ActiveNight: 'Active Night',
+  PassiveNight: 'Passive Night',
+  Sleepover: 'Overnight Sleepover',
+  SleepoverSupport: 'Sleepover Support',
+}
+
+export const OVERNIGHT_RATIO_LABELS: Record<SupportRatio, string> = {
+  OneToOne: '1:1',
+  OneToTwo: '1:2',
+  TwoToOne: '2:1',
+  SharedSupport: 'Shared Support',
+  Other: 'Other',
+  OneToThree: '1:3',
+  OneToFour: '1:4',
+  OneToFive: '1:5',
+}
 
 export interface ParticipantListDto {
   id: string
@@ -11,10 +44,18 @@ export interface ParticipantListDto {
   region: string | null
   isRepeatClient: boolean
   isActive: boolean
-  wheelchairRequired: boolean
+  mobilityAidWheelchair: boolean
+  mobilityAidWalker: boolean
+  mobilitySupportOptions: string[]
   isHighSupport: boolean
   isIntensiveSupport: boolean
-  requiresOvernightSupport?: boolean
+  overnightSupport: OvernightSupportType
+  overnightRatio: SupportRatio
+  requiresHiLoBed: boolean
+  requiresHoist: boolean
+  requiresShowerChair: boolean
+  requiresCommode: boolean
+  requiresStandingMachine: boolean
   hasRestrictivePracticeFlag?: boolean
   supportRatio: SupportRatio
 }
@@ -23,7 +64,6 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   dateOfBirth: string | null
   ndisNumber: string | null
   fundingOrganisation: string | null
-  requiresOvernightSupport: boolean
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
   equipmentRequirements: string | null
@@ -47,10 +87,18 @@ export interface CreateParticipantDto {
   region?: string
   fundingOrganisation?: string
   isRepeatClient: boolean
-  wheelchairRequired: boolean
+  mobilityAidWheelchair: boolean
+  mobilityAidWalker: boolean
+  mobilitySupportOptions: string[]
   isHighSupport: boolean
   isIntensiveSupport: boolean
-  requiresOvernightSupport: boolean
+  overnightSupport: OvernightSupportType
+  overnightRatio: SupportRatio
+  requiresHiLoBed: boolean
+  requiresHoist: boolean
+  requiresShowerChair: boolean
+  requiresCommode: boolean
+  requiresStandingMachine: boolean
   hasRestrictivePracticeFlag: boolean
   supportRatio: SupportRatio
   mobilityNotes?: string

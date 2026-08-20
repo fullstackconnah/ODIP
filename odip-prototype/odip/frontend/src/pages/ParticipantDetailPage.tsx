@@ -9,6 +9,7 @@ import { ArrowLeft, Users, Shield, ClipboardList, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
+import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
 
 export default function ParticipantDetailPage() {
   const { canWrite } = usePermissions()
@@ -22,6 +23,19 @@ export default function ParticipantDetailPage() {
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!p) return <div className="text-center py-12">Participant not found</div>
+
+  const mobilityAidBadges = [
+    p.mobilityAidWheelchair && 'Wheelchair',
+    p.mobilityAidWalker && 'Walker',
+  ].filter((v): v is string => !!v)
+
+  const equipmentBadges = [
+    p.requiresHiLoBed && 'Hi-Lo Bed',
+    p.requiresHoist && 'Hoist',
+    p.requiresShowerChair && 'Shower Chair',
+    p.requiresCommode && 'Commode',
+    p.requiresStandingMachine && 'Standing Machine',
+  ].filter((v): v is string => !!v)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -67,9 +81,21 @@ export default function ParticipantDetailPage() {
           </Card>
           <Card title="Support Needs">
             <div className="grid grid-cols-2 gap-y-3 text-sm">
-              <span className="text-[var(--color-muted-foreground)]">Wheelchair</span><span>{p.wheelchairRequired ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
+              <span className="flex flex-wrap gap-1">
+                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <StatusBadge key={b} status={b} />) : '—'}
+              </span>
+              <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
+              <span className="flex flex-wrap gap-1">
+                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <StatusBadge key={o} status={o} />) : '—'}
+              </span>
               <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Overnight Support</span><span>{p.requiresOvernightSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
+              <span>{p.overnightSupport && p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Equipment</span>
+              <span className="flex flex-wrap gap-1">
+                {equipmentBadges.length ? equipmentBadges.map(b => <StatusBadge key={b} status={b} />) : '—'}
+              </span>
               <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
             </div>
           </Card>

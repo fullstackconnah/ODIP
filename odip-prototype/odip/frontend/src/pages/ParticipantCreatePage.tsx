@@ -1,12 +1,14 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { useForm, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
+import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { useEffect } from 'react'
-import { FormField } from '@/components/FormField'
+import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS } from '@/api/types/enums'
+import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
 
 const participantSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -18,10 +20,18 @@ const participantSchema = z.object({
   region: z.string().optional(),
   fundingOrganisation: z.string().optional(),
   isRepeatClient: z.boolean().optional(),
-  wheelchairRequired: z.boolean().optional(),
+  mobilityAidWheelchair: z.boolean().optional(),
+  mobilityAidWalker: z.boolean().optional(),
+  mobilitySupportOptions: z.array(z.string()).optional(),
   isHighSupport: z.boolean().optional(),
   isIntensiveSupport: z.boolean().optional(),
-  requiresOvernightSupport: z.boolean().optional(),
+  overnightSupport: z.string().min(1),
+  overnightRatio: z.string().min(1),
+  requiresHiLoBed: z.boolean().optional(),
+  requiresHoist: z.boolean().optional(),
+  requiresShowerChair: z.boolean().optional(),
+  requiresCommode: z.boolean().optional(),
+  requiresStandingMachine: z.boolean().optional(),
   hasRestrictivePracticeFlag: z.boolean().optional(),
   supportRatio: z.string().min(1),
   mobilityNotes: z.string().optional(),
@@ -61,20 +71,42 @@ export default function ParticipantCreatePage() {
   const activeStaff = staffList.filter(s => s.isActive)
   const mutation = isEdit ? updateParticipant : createParticipant
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, reset, control, setValue, formState: { errors } } = useForm<ParticipantFormData>({
     resolver: participantResolver,
     defaultValues: {
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
       isRepeatClient: false,
-      wheelchairRequired: false,
+      mobilityAidWheelchair: false,
+      mobilityAidWalker: false,
+      mobilitySupportOptions: [],
       isHighSupport: false,
       isIntensiveSupport: false,
-      requiresOvernightSupport: false,
+      overnightSupport: 'None',
+      overnightRatio: 'OneToOne',
+      requiresHiLoBed: false,
+      requiresHoist: false,
+      requiresShowerChair: false,
+      requiresCommode: false,
+      requiresStandingMachine: false,
       hasRestrictivePracticeFlag: false,
       preferredStaffId: null,
     },
   })
+
+  const overnightSupportValue = useWatch({ control, name: 'overnightSupport' })
+  const hasHiLoBed = useWatch({ control, name: 'requiresHiLoBed' })
+  const hasHoist = useWatch({ control, name: 'requiresHoist' })
+  const hasShowerChair = useWatch({ control, name: 'requiresShowerChair' })
+  const hasCommode = useWatch({ control, name: 'requiresCommode' })
+  const hasStandingMachine = useWatch({ control, name: 'requiresStandingMachine' })
+  const hasAnyEquipment = !!(hasHiLoBed || hasHoist || hasShowerChair || hasCommode || hasStandingMachine)
+
+  useEffect(() => {
+    if (overnightSupportValue === 'None') {
+      setValue('overnightRatio', 'OneToOne')
+    }
+  }, [overnightSupportValue, setValue])
 
   useEffect(() => {
     if (existing) {
@@ -88,10 +120,18 @@ export default function ParticipantCreatePage() {
         region: existing.region ?? '',
         fundingOrganisation: existing.fundingOrganisation ?? '',
         isRepeatClient: existing.isRepeatClient ?? false,
-        wheelchairRequired: existing.wheelchairRequired ?? false,
+        mobilityAidWheelchair: existing.mobilityAidWheelchair ?? false,
+        mobilityAidWalker: existing.mobilityAidWalker ?? false,
+        mobilitySupportOptions: existing.mobilitySupportOptions ?? [],
         isHighSupport: existing.isHighSupport ?? false,
         isIntensiveSupport: existing.isIntensiveSupport ?? false,
-        requiresOvernightSupport: existing.requiresOvernightSupport ?? false,
+        overnightSupport: existing.overnightSupport ?? 'None',
+        overnightRatio: existing.overnightRatio ?? 'OneToOne',
+        requiresHiLoBed: existing.requiresHiLoBed ?? false,
+        requiresHoist: existing.requiresHoist ?? false,
+        requiresShowerChair: existing.requiresShowerChair ?? false,
+        requiresCommode: existing.requiresCommode ?? false,
+        requiresStandingMachine: existing.requiresStandingMachine ?? false,
         hasRestrictivePracticeFlag: existing.hasRestrictivePracticeFlag ?? false,
         supportRatio: existing.supportRatio ?? 'SharedSupport',
         mobilityNotes: existing.mobilityNotes ?? '',
@@ -201,20 +241,12 @@ export default function ParticipantCreatePage() {
 
         {/* Support Needs */}
         <Card title="Support Needs" className="space-y-4">
-          <FormField label="Wheelchair Required" layout="checkbox">
-            <input type="checkbox" {...register('wheelchairRequired')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-
           <FormField label="High Support" layout="checkbox">
             <input type="checkbox" {...register('isHighSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
           <FormField label="Intensive Support (NDIS billing)" layout="checkbox">
             <input type="checkbox" {...register('isIntensiveSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-
-          <FormField label="Requires Overnight Support" layout="checkbox">
-            <input type="checkbox" {...register('requiresOvernightSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1">
@@ -255,14 +287,115 @@ export default function ParticipantCreatePage() {
           </FormField>
         </Card>
 
+        {/* Mobility Aids & Support */}
+        <Card title="Mobility Aids & Support" className="space-y-4">
+          <div>
+            <p className={labelClass}>Mobility Aids</p>
+            <div>
+              <FormField label="Wheelchair" layout="checkbox">
+                <input type="checkbox" {...register('mobilityAidWheelchair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+              </FormField>
+              <FormField label="Walker" layout="checkbox">
+                <input type="checkbox" {...register('mobilityAidWalker')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+              </FormField>
+            </div>
+          </div>
+
+          <div>
+            <p className={labelClass}>Mobility Support</p>
+            <Controller
+              control={control}
+              name="mobilitySupportOptions"
+              render={({ field }) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                  {MOBILITY_SUPPORT_OPTIONS.map((option) => {
+                    const selected = field.value ?? []
+                    const checked = selected.includes(option)
+                    return (
+                      <label key={option} className="flex items-center gap-3 py-1">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.checked
+                                ? [...selected, option]
+                                : selected.filter((v) => v !== option)
+                            )
+                          }}
+                          className="w-4 h-4 rounded border-[var(--color-border)]"
+                        />
+                        <span className="text-sm text-[var(--color-foreground)]">{option}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            />
+          </div>
+        </Card>
+
+        {/* Overnight Support */}
+        <Card title="Overnight Support" className="space-y-4">
+          <FormField label="Overnight Support">
+            <select {...register('overnightSupport')}>
+              {OVERNIGHT_SUPPORT_TYPES.map((type) => (
+                <option key={type} value={type}>{OVERNIGHT_SUPPORT_LABELS[type]}</option>
+              ))}
+            </select>
+          </FormField>
+
+          {overnightSupportValue !== 'None' && (
+            <FormField label="Overnight Ratio">
+              <select {...register('overnightRatio')}>
+                {SUPPORT_RATIOS.map((ratio) => (
+                  <option key={ratio} value={ratio}>{OVERNIGHT_RATIO_LABELS[ratio]}</option>
+                ))}
+              </select>
+            </FormField>
+          )}
+        </Card>
+
+        {/* Equipment */}
+        <Card title="Equipment" className="space-y-4">
+          <FormField label="Hi-Lo Bed" layout="checkbox">
+            <input type="checkbox" {...register('requiresHiLoBed')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+
+          <FormField label="Hoist" layout="checkbox">
+            <input type="checkbox" {...register('requiresHoist')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+
+          <FormField label="Shower Chair" layout="checkbox">
+            <input type="checkbox" {...register('requiresShowerChair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+
+          <FormField label="Commode" layout="checkbox">
+            <input type="checkbox" {...register('requiresCommode')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+
+          <FormField label="Standing Machine" layout="checkbox">
+            <input type="checkbox" {...register('requiresStandingMachine')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+        </Card>
+
         {/* Notes & Requirements */}
         <Card title="Notes & Requirements" className="space-y-4">
           <FormField label="Mobility Notes">
             <textarea {...register('mobilityNotes')} rows={2} placeholder="Any mobility considerations..." />
           </FormField>
 
-          <FormField label="Equipment Requirements">
-            <textarea {...register('equipmentRequirements')} rows={2} placeholder="Required equipment..." />
+          <FormField
+            label="Equipment Requirements"
+            hint={!hasAnyEquipment ? 'Select at least one equipment option above to enable notes.' : undefined}
+          >
+            <textarea
+              {...register('equipmentRequirements')}
+              rows={2}
+              placeholder="Required equipment..."
+              disabled={!hasAnyEquipment}
+              title={!hasAnyEquipment ? 'Select at least one equipment option above to enable notes.' : undefined}
+            />
           </FormField>
 
           <FormField label="Transport Requirements">

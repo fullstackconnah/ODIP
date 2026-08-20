@@ -19,7 +19,8 @@ public record ParticipantListDto
     public string? Region { get; init; }
     public bool IsRepeatClient { get; init; }
     public bool IsActive { get; init; }
-    public bool WheelchairRequired { get; init; }
+    public bool MobilityAidWheelchair { get; init; }
+    public bool MobilityAidWalker { get; init; }
     public bool IsHighSupport { get; init; }
     public bool IsIntensiveSupport { get; init; }
     public SupportRatio SupportRatio { get; init; }
@@ -30,7 +31,14 @@ public record ParticipantDetailDto : ParticipantListDto
     public DateOnly? DateOfBirth { get; init; }
     public string? NdisNumber { get; init; }
     public string? FundingOrganisation { get; init; }
-    public bool RequiresOvernightSupport { get; init; }
+    public List<string> MobilitySupportOptions { get; init; } = new();
+    public OvernightSupportType OvernightSupport { get; init; }
+    public SupportRatio OvernightRatio { get; init; }
+    public bool RequiresHiLoBed { get; init; }
+    public bool RequiresHoist { get; init; }
+    public bool RequiresShowerChair { get; init; }
+    public bool RequiresCommode { get; init; }
+    public bool RequiresStandingMachine { get; init; }
     public bool HasRestrictivePracticeFlag { get; init; }
     public string? MobilityNotes { get; init; }
     public string? EquipmentRequirements { get; init; }
@@ -61,10 +69,18 @@ public record CreateParticipantDto
     [StringLength(200)]
     public string? FundingOrganisation { get; init; }
     public bool IsRepeatClient { get; init; }
-    public bool WheelchairRequired { get; init; }
+    public bool MobilityAidWheelchair { get; init; }
+    public bool MobilityAidWalker { get; init; }
+    public List<string> MobilitySupportOptions { get; init; } = new();
     public bool IsHighSupport { get; init; }
     public bool IsIntensiveSupport { get; init; }
-    public bool RequiresOvernightSupport { get; init; }
+    public OvernightSupportType OvernightSupport { get; init; }
+    public SupportRatio OvernightRatio { get; init; } = SupportRatio.OneToOne;
+    public bool RequiresHiLoBed { get; init; }
+    public bool RequiresHoist { get; init; }
+    public bool RequiresShowerChair { get; init; }
+    public bool RequiresCommode { get; init; }
+    public bool RequiresStandingMachine { get; init; }
     public bool HasRestrictivePracticeFlag { get; init; }
     public SupportRatio SupportRatio { get; init; }
     [StringLength(2000)]

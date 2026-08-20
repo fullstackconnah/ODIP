@@ -84,9 +84,9 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
     if (!selectedParticipantId) return
     const p = participants.find((p: ParticipantListDto) => p.id === selectedParticipantId)
     if (p) {
-      setWheelchairRequired(p.wheelchairRequired ?? false)
+      setWheelchairRequired(p.mobilityAidWheelchair ?? false)
       setHighSupportRequired(p.isHighSupport ?? false)
-      setNightSupportRequired(p.requiresOvernightSupport ?? false)
+      setNightSupportRequired(p.overnightSupport != null && p.overnightSupport !== 'None')
       setHasRestrictivePracticeFlag(p.hasRestrictivePracticeFlag ?? false)
       setSupportRatioOverride(p.supportRatio ?? '')
     }
