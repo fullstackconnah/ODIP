@@ -85,8 +85,9 @@ export default function IncidentsPage() {
         {!showArchived && (
           <>
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
+              <Filter aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                aria-label="Filter by status"
                 className="pl-10 pr-8 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
                 <option value="">All Statuses</option>
                 <option value="Draft">Draft</option>
@@ -99,6 +100,7 @@ export default function IncidentsPage() {
             </div>
             <div className="relative">
               <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}
+                aria-label="Filter by severity"
                 className="px-4 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
                 <option value="">All Severities</option>
                 <option value="Low">Low</option>

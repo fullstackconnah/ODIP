@@ -226,10 +226,11 @@ export default function AppLayout() {
                 </span>
               )}
               <div className="hidden md:flex items-center bg-[#f5f3ef] rounded-full px-4 py-2 gap-3 min-w-[280px]">
-                <span className="material-symbols-outlined text-[#43493a]" style={{ fontSize: '18px' }}>search</span>
+                <span className="material-symbols-outlined text-[#43493a]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
                 <input
                   className="bg-transparent border-none outline-none text-sm w-full placeholder:text-[#43493a]/60 text-[#1b1c1a]"
                   placeholder="Search trips, participants..."
+                  aria-label="Search trips and participants"
                   type="text"
                 />
               </div>

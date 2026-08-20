@@ -186,15 +186,17 @@ export default function TripsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 md:gap-3">
         <div className="relative flex-1 min-w-0 md:min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
+          <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'completed' ? 'Search completed trips...' : 'Search trips...'}
+            aria-label={tab === 'completed' ? 'Search completed trips' : 'Search trips'}
             className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
         </div>
         {statusOptions.length > 0 && (
           <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
+            <Filter aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
               className="pl-10 pr-8 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
               <option value="">All Statuses</option>
               {statusOptions.map(o => (

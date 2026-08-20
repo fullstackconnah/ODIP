@@ -107,8 +107,9 @@ export default function TasksPage() {
         {toggleButtons}
         {!showArchived && (
           <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
+            <Filter aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
               className="pl-10 pr-8 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
               <option value="">All Statuses</option>
               <option value="NotStarted">Not Started</option>
