@@ -25,3 +25,6 @@ odip-prototype/odip/local-test/*.log.crash1
 .omc/
 **/.omc/
 .claude/state/
+
+# Playwright verification screenshots
+.playwright/

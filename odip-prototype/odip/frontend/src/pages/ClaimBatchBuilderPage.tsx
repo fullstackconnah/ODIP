@@ -24,6 +24,13 @@ import {
 
 const STREAM_OPTIONS = INCOME_STREAMS.map(value => ({ value, label: INCOME_STREAM_LABELS[value] }))
 
+// Stable, module-level empty-array fallback for `useBillableEvents`'s `data` while it's
+// undefined (pre-fetch / loading). A `= []` default in the destructure below would allocate a
+// NEW array literal on every render, and the render-time state sync a few lines down keys off
+// `events`'s referential identity — a fresh literal every render never settles, causing
+// "Too many re-renders".
+const NO_EVENTS: BillableEventDto[] = []
+
 const selectClass =
   'px-3 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-50 disabled:cursor-not-allowed transition-all'
@@ -104,7 +111,8 @@ export default function ClaimBatchBuilderPage() {
     return params
   }, [participantId, stream, fromDate, toDate])
 
-  const { data: events = [], isLoading, isFetching, isError } = useBillableEvents(queryParams)
+  const { data, isLoading, isFetching, isError } = useBillableEvents(queryParams)
+  const events = data ?? NO_EVENTS
   const { data: participants = [] } = useParticipants()
 
   // ── Selection — survives filter changes ─────────────────────────────────
