@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, ChevronDown, ChevronRight, Pencil, Trash2, ExternalLink, X } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { useGenerateSchedule, useDeleteScheduledActivity } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import AddActivityModal from '@/components/AddActivityModal'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { TripDayDto, ScheduledActivityDto } from '@/api/types/activities'
 
@@ -166,36 +167,29 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
         />
       )}
 
-      {deletingActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeletingActivity(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">Delete Activity</h3>
-              <button onClick={() => setDeletingActivity(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              Are you sure you want to delete <span className="font-medium text-[var(--color-foreground)]">{deletingActivity.title}</span>? This cannot be undone.
+      <ConfirmDialog
+        open={deletingActivity !== null}
+        onCancel={() => setDeletingActivity(null)}
+        onConfirm={() => {
+          if (!deletingActivity) return
+          deleteScheduledActivity.mutate(deletingActivity.id, { onSuccess: () => setDeletingActivity(null) })
+        }}
+        title="Delete Activity"
+        message={
+          <>
+            <p>
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-[var(--color-foreground)]">{deletingActivity?.title}</span>? This cannot be undone.
             </p>
             {deleteScheduledActivity.isError && (
-              <p className="text-sm text-[var(--color-destructive)] mt-3">Something went wrong. Please try again.</p>
+              <p className="text-[var(--color-destructive)]">Something went wrong. Please try again.</p>
             )}
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setDeletingActivity(null)}
-                className="px-4 py-2 text-sm rounded-2xl bg-[var(--color-surface-container-low)] hover:bg-[var(--color-surface-container)]">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteScheduledActivity.mutate(deletingActivity.id, { onSuccess: () => setDeletingActivity(null) })}
-                disabled={deleteScheduledActivity.isPending}
-                className="px-4 py-2 text-sm rounded-full bg-[var(--color-destructive)] text-white hover:opacity-90 disabled:opacity-50">
-                {deleteScheduledActivity.isPending ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteScheduledActivity.isPending}
+      />
     </div>
   )
 }

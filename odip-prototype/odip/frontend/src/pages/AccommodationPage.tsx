@@ -1,9 +1,11 @@
 import { useAccommodation, useDeleteAccommodation, useUpdateAccommodation } from '@/api/hooks'
+import type { AccommodationListDto } from '@/api/types'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, ArchiveRestore } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -15,25 +17,22 @@ export default function AccommodationPage() {
   const { data: properties = [], isLoading } = useAccommodation(params)
   const deleteAccommodation = useDeleteAccommodation()
   const updateAccommodation = useUpdateAccommodation()
+  const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: AccommodationListDto } | null>(null)
 
-  const handleRestore = (e: React.MouseEvent, a: any) => {
+  const handleRestore = (e: React.MouseEvent, a: AccommodationListDto) => {
     e.preventDefault()
     e.stopPropagation()
-    if (window.confirm(`Restore "${a.propertyName}"?`)) {
-      updateAccommodation.mutate({ id: a.id, data: { ...a, isActive: true } })
-    }
+    setConfirmState({ type: 'restore', item: a })
   }
 
   const filtered = search
-    ? properties.filter((a: any) => a.propertyName.toLowerCase().includes(search.toLowerCase()) || a.location?.toLowerCase().includes(search.toLowerCase()))
+    ? properties.filter((a: AccommodationListDto) => a.propertyName.toLowerCase().includes(search.toLowerCase()) || a.location?.toLowerCase().includes(search.toLowerCase()))
     : properties
 
-  const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
+  const handleDelete = (e: React.MouseEvent, a: AccommodationListDto) => {
     e.preventDefault()
     e.stopPropagation()
-    if (window.confirm(`Archive "${name}"? This can be undone from the Archived view.`)) {
-      deleteAccommodation.mutate(id)
-    }
+    setConfirmState({ type: 'archive', item: a })
   }
 
   return (
@@ -76,7 +75,7 @@ export default function AccommodationPage() {
                       <ArchiveRestore className="w-4 h-4" />
                     </button>
                   ) : (
-                    <button onClick={(e) => handleDelete(e, a.id, a.propertyName)}
+                    <button onClick={(e) => handleDelete(e, a)}
                       className="p-1.5 rounded hover:bg-red-500/20 text-[var(--color-muted-foreground)] hover:text-red-400 transition-colors" title="Archive">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -100,6 +99,44 @@ export default function AccommodationPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState !== null}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={() => {
+          if (!confirmState) return
+          if (confirmState.type === 'restore') {
+            const item = confirmState.item
+            updateAccommodation.mutate({ id: item.id, data: {
+              propertyName: item.propertyName,
+              location: item.location ?? undefined,
+              region: item.region ?? undefined,
+              address: item.address ?? undefined,
+              suburb: item.suburb ?? undefined,
+              state: item.state ?? undefined,
+              postcode: item.postcode ?? undefined,
+              isFullyModified: item.isFullyModified,
+              isSemiModified: item.isSemiModified,
+              isWheelchairAccessible: item.isWheelchairAccessible,
+              bedroomCount: item.bedroomCount ?? undefined,
+              bedCount: item.bedCount ?? undefined,
+              maxCapacity: item.maxCapacity ?? undefined,
+              isActive: true,
+            } }, { onSuccess: () => setConfirmState(null) })
+          } else {
+            deleteAccommodation.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
+          }
+        }}
+        title={confirmState?.type === 'restore' ? 'Restore Property' : 'Archive Property'}
+        message={
+          confirmState?.type === 'restore'
+            ? `Restore "${confirmState.item.propertyName}"?`
+            : `Archive "${confirmState?.item?.propertyName}"? This can be undone from the Archived view.`
+        }
+        confirmLabel={confirmState?.type === 'restore' ? 'Restore' : 'Archive'}
+        variant={confirmState?.type === 'restore' ? 'default' : 'danger'}
+        loading={updateAccommodation.isPending || deleteAccommodation.isPending}
+      />
     </div>
   )
 }

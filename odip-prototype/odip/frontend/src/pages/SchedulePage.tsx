@@ -9,6 +9,7 @@ import {
 } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   StatusBadge, QualBadge, TripStatusBadge, AvailabilityEditor,
   StaffAssignModal, VehicleAssignModal,
@@ -40,6 +41,14 @@ export default function SchedulePage() {
   const staffAssign = useCreateStaffAssignment()
   const vehicleAssign = useCreateVehicleAssignment()
   const staffUnassign = useDeleteStaffAssignment()
+
+  const [unassigning, setUnassigning] = useState<{
+    assignmentId: string
+    staffName: string
+    tripName: string
+    tripStart?: string
+    tripEnd?: string
+  } | null>(null)
 
   const handleStaffAssign = (assignData: CreateStaffAssignmentDto) => {
     staffAssign.mutate(assignData, {
@@ -299,8 +308,12 @@ export default function SchedulePage() {
                                 role={ts.assignmentRole ?? undefined}
                                 clickable={isAvailable && canWrite}
                                 onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'staff', resource: s, trip }) : undefined}
-                                onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => staffUnassign.mutate(ts.assignmentId!, {
-                                  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+                                onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => setUnassigning({
+                                  assignmentId: ts.assignmentId!,
+                                  staffName: s.fullName,
+                                  tripName: trip.tripName,
+                                  tripStart: trip.startDate,
+                                  tripEnd: trip.endDate,
                                 }) : undefined}
                               />
                               {prefEntry && (
@@ -324,7 +337,7 @@ export default function SchedulePage() {
                         className="bg-[var(--color-surface-container-low)]/40"
                       >
                         <td colSpan={tripCount + 1}>
-                          <AvailabilityEditor staffId={s.id} availability={s.availability} />
+                          <AvailabilityEditor staffId={s.id} staffName={s.fullName} availability={s.availability} />
                         </td>
                       </tr>
                     )}
@@ -414,6 +427,29 @@ export default function SchedulePage() {
           isLoading={vehicleAssign.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={unassigning !== null}
+        onCancel={() => setUnassigning(null)}
+        onConfirm={() => {
+          if (!unassigning) return
+          staffUnassign.mutate(unassigning.assignmentId, {
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+              setUnassigning(null)
+            },
+          })
+        }}
+        title="Unassign Staff"
+        message={
+          unassigning
+            ? `Unassign ${unassigning.staffName} from ${unassigning.tripName} (${formatDate(unassigning.tripStart ?? '')} — ${formatDate(unassigning.tripEnd ?? '')})? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Unassign"
+        variant="danger"
+        loading={staffUnassign.isPending}
+      />
     </div>
   )
 }

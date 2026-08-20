@@ -5,6 +5,8 @@ import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
+import { EmptyState } from '@/components/EmptyState'
+import { UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
 type QualStatus = 'expired' | 'expiring' | 'no-date' | 'ok'
@@ -177,6 +179,28 @@ export default function QualificationsPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  if (allStaff.length === 0) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-bold">Staff Qualification Expiry</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
+            Warning window: {warningDays} days —{' '}
+            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
+              change in Settings
+            </Link>
+          </p>
+        </div>
+        <EmptyState
+          icon={UserCog}
+          title="No staff members yet"
+          description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
+          action={canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
+        />
       </div>
     )
   }

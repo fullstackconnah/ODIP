@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +8,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const vehicleSchema = z.object({
   vehicleName: z.string().min(1, 'Vehicle name is required'),
@@ -33,7 +35,7 @@ export default function VehicleCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useVehicleDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateVehicle : createVehicle
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<VehicleFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<VehicleFormData>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
       vehicleType: 'Van',
@@ -71,20 +73,29 @@ export default function VehicleCreatePage() {
     try {
       if (isEdit) {
         const res = await updateVehicle.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
-        if (res.success) navigate('/vehicles')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/vehicles')
+        }
       } else {
         const res = await createVehicle.mutateAsync(payload)
-        if (res.success) navigate('/vehicles')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/vehicles')
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to="/vehicles" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />

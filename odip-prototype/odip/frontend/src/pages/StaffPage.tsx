@@ -2,9 +2,10 @@ import { useStaff, useDeleteStaff, useUpdateStaff } from '@/api/hooks'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
+import { EmptyState } from '@/components/EmptyState'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
 const ACTIVE_STATUS_ITEMS = [
@@ -76,14 +77,23 @@ export default function StaffPage() {
         {toggleButtons}
       </PageHeader>
 
-      <DataTable
-        data={staff}
-        columns={staffColumns}
-        keyField="id"
-        sortable
-        loading={isLoading}
-        emptyMessage="No staff found"
-      />
+      {!isLoading && staff.length === 0 ? (
+        <EmptyState
+          icon={UserCog}
+          title="No staff members yet"
+          description="Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them."
+          action={!showArchived && canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
+        />
+      ) : (
+        <DataTable
+          data={staff}
+          columns={staffColumns}
+          keyField="id"
+          sortable
+          loading={isLoading}
+          emptyMessage="No staff found"
+        />
+      )}
       {confirmDialog}
     </div>
   )

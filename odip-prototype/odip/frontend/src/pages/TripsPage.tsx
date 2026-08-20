@@ -2,8 +2,9 @@ import { useTrips, useUpdateTrip, usePatchTrip, useTrip, useStaff, useEventTempl
 import type { TripStatus, TripListDto, TripDetailDto, StaffListDto, EventTemplateDto, UpdateTripDto } from '@/api/types'
 import { formatDateAu, getStatusColor } from '@/lib/utils'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, CheckCircle2, Pencil, X } from 'lucide-react'
+import { Plus, Search, Filter, CheckCircle2, Pencil, X, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
+import { EmptyState } from '@/components/EmptyState'
 import { useState, useEffect, useRef } from 'react'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
@@ -208,16 +209,36 @@ export default function TripsPage() {
       {isLoading ? (
         <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading trips...</div>
       ) : trips.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-[var(--color-muted-foreground)]">
-            {tab === 'completed' ? 'No completed trips yet' : 'No trips found'}
-          </p>
-          {tab === 'completed' && (
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-              Trips will appear here once they are marked as completed
-            </p>
-          )}
-        </div>
+        tab === 'completed' ? (
+          search ? (
+            <EmptyState
+              icon={MapPin}
+              title="No completed trips match your search"
+              description="Try a different search term, or clear your search to see all completed trips."
+              action={{ label: 'Clear search', onClick: () => setSearch('') }}
+            />
+          ) : (
+            <EmptyState
+              icon={MapPin}
+              title="No completed trips yet"
+              description="Trips will appear here once they are marked as completed."
+            />
+          )
+        ) : search || statusFilter ? (
+          <EmptyState
+            icon={MapPin}
+            title="No trips match your filters"
+            description="Try a different search term or status, or clear your filters to see all trips."
+            action={{ label: 'Clear filters', onClick: () => { setSearch(''); setStatusFilter('') } }}
+          />
+        ) : (
+          <EmptyState
+            icon={MapPin}
+            title="No trips yet"
+            description="Trips are the group outings you plan for participants — set dates, capacity, and requirements, then book people onto them."
+            action={canWrite ? { label: 'Create trip', to: '/trips/new' } : undefined}
+          />
+        )
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {trips.map((t: TripListDto) => (

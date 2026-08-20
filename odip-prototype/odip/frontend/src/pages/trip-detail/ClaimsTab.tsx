@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useDeleteClaim, useUpdateClaim } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import GenerateClaimModal from '@/components/GenerateClaimModal'
 import type { TripClaimStatus } from '@/api/types/enums'
 import type { TripClaimListDto } from '@/api/types/claims'
@@ -31,6 +32,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   const [error, setError] = useState<string | null>(null)
   const [selectedClaimIds, setSelectedClaimIds] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [deletingClaim, setDeletingClaim] = useState<TripClaimListDto | null>(null)
 
   async function bulkUpdateClaimStatus(ids: string[], status: string) {
     setBulkLoading(true)
@@ -59,12 +61,18 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
     }
   }
 
-  function handleDelete(claimId: string) {
-    if (!confirm('Delete this claim? This cannot be undone.')) return
-    deleteClaim.mutate(claimId, {
+  function handleDelete(claim: TripClaimListDto) {
+    setDeletingClaim(claim)
+  }
+
+  function confirmDeleteClaim() {
+    if (!deletingClaim) return
+    deleteClaim.mutate(deletingClaim.id, {
+      onSuccess: () => setDeletingClaim(null),
       onError: (err: unknown) => {
         const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } } }
         setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to delete claim.')
+        setDeletingClaim(null)
       },
     })
   }
@@ -136,7 +144,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                   <Link to={`/claims/${c.id}`} className="text-xs text-[var(--color-primary)] hover:underline">View</Link>
                   {canWrite && c.status !== 'Submitted' && c.status !== 'Paid' && (
                     <button
-                      onClick={() => handleDelete(c.id)}
+                      onClick={() => handleDelete(c)}
                       className="text-xs text-red-500 hover:underline"
                     >Delete</button>
                   )}
@@ -155,6 +163,21 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
           onSuccess={() => setShowGenerateModal(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={deletingClaim !== null}
+        onCancel={() => setDeletingClaim(null)}
+        onConfirm={confirmDeleteClaim}
+        title="Delete Claim"
+        message={
+          deletingClaim
+            ? `Delete claim ${deletingClaim.claimReference}? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteClaim.isPending}
+      />
     </div>
   )
 }

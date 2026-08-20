@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Route, Navigate, Outlet, RouterProvider, createBrowserRouter, createRoutesFromElements } from 'react-router-dom'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePermissions, type PageKey } from './lib/permissions'
@@ -46,47 +46,54 @@ function PrivateRoute({ children, page, requiresWrite }: { children: React.React
   return <>{children}</>
 }
 
+// A data router is required for react-router 7's useBlocker (used by
+// useUnsavedChangesWarning) to work — it throws under the plain declarative
+// <BrowserRouter>/<Routes> setup. createRoutesFromElements lets us build the
+// route tree with the same JSX shape as before, just handed to
+// createBrowserRouter instead of rendered directly.
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}><Outlet /></Suspense>}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary>}>
+        <Route path="/" element={<PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>} />
+        <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />
+        <Route path="/trips/new" element={<PrivateRoute page="trips" requiresWrite><TripCreatePage /></PrivateRoute>} />
+        <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
+        <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
+        <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
+        <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
+        <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
+        <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
+        <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
+        <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
+        <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />
+        <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles" element={<PrivateRoute page="vehicles"><VehiclesPage /></PrivateRoute>} />
+        <Route path="/vehicles/new" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
+        <Route path="/staff/new" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />
+        <Route path="/staff/:id/edit" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />
+        <Route path="/tasks" element={<PrivateRoute page="tasks"><TasksPage /></PrivateRoute>} />
+        <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
+        <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
+        <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
+        <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
+        <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
+        <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
+      </Route>
+    </Route>
+  )
+)
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route element={<ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary>}>
-            <Route path="/" element={<PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>} />
-            <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />
-            <Route path="/trips/new" element={<PrivateRoute page="trips" requiresWrite><TripCreatePage /></PrivateRoute>} />
-            <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
-            <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
-            <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
-            <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
-            <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
-            <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
-            <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
-            <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
-            <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />
-            <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
-            <Route path="/vehicles" element={<PrivateRoute page="vehicles"><VehiclesPage /></PrivateRoute>} />
-            <Route path="/vehicles/new" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
-            <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
-            <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
-            <Route path="/staff/new" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />
-            <Route path="/staff/:id/edit" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />
-            <Route path="/tasks" element={<PrivateRoute page="tasks"><TasksPage /></PrivateRoute>} />
-            <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
-            <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
-            <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
-            <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
-            <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
-            <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
-            <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
-            <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
-            <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
-          </Route>
-        </Routes>
-        </Suspense>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   )
 }

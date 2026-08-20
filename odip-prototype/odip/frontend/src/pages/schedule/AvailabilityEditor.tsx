@@ -3,7 +3,8 @@ import { Plus, Trash2 } from 'lucide-react'
 import {
   useCreateStaffAvailability, useUpdateStaffAvailability, useDeleteStaffAvailability,
 } from '../../api/hooks'
-import { toDateInput, toStartDt, toEndDt } from './helpers'
+import { toDateInput, toStartDt, toEndDt, formatDate } from './helpers'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { StaffAvailabilityDto } from '@/api/types'
 
 const availTypeColors: Record<string, string> = {
@@ -17,16 +18,18 @@ const availTypeColors: Record<string, string> = {
 
 interface AvailabilityEditorProps {
   staffId: string
+  staffName: string
   availability: StaffAvailabilityDto[]
 }
 
-export default function AvailabilityEditor({ staffId, availability }: AvailabilityEditorProps) {
+export default function AvailabilityEditor({ staffId, staffName, availability }: AvailabilityEditorProps) {
   const createAvail = useCreateStaffAvailability()
   const updateAvail = useUpdateStaffAvailability()
   const deleteAvail = useDeleteStaffAvailability()
 
   const [edits, setEdits] = useState<Record<string, { startDate: string; endDate: string; notes: string }>>({})
   const [adding, setAdding] = useState<{ startDate: string; endDate: string; notes: string } | null>(null)
+  const [deletingAvail, setDeletingAvail] = useState<StaffAvailabilityDto | null>(null)
 
   function getEdit(a: StaffAvailabilityDto) {
     return edits[a.id] ?? {
@@ -75,9 +78,18 @@ export default function AvailabilityEditor({ staffId, availability }: Availabili
     })
   }
 
-  function handleDelete(id: string) {
+  function handleDelete(a: StaffAvailabilityDto) {
+    setDeletingAvail(a)
+  }
+
+  function confirmDelete() {
+    if (!deletingAvail) return
+    const id = deletingAvail.id
     deleteAvail.mutate(id, {
-      onSuccess: () => setEdits(prev => { const next = { ...prev }; delete next[id]; return next }),
+      onSuccess: () => {
+        setEdits(prev => { const next = { ...prev }; delete next[id]; return next })
+        setDeletingAvail(null)
+      },
     })
   }
 
@@ -135,7 +147,7 @@ export default function AvailabilityEditor({ staffId, availability }: Availabili
                 </button>
               )}
               <button
-                onClick={() => handleDelete(a.id)}
+                onClick={() => handleDelete(a)}
                 disabled={deleteAvail.isPending}
                 title="Delete"
                 className="p-1 rounded-full hover:bg-[#ffdad6]/60 text-[var(--color-muted-foreground)] hover:text-[#ba1a1a] transition-colors disabled:opacity-50"
@@ -187,6 +199,21 @@ export default function AvailabilityEditor({ staffId, availability }: Availabili
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deletingAvail !== null}
+        onCancel={() => setDeletingAvail(null)}
+        onConfirm={confirmDelete}
+        title="Delete Availability Record"
+        message={
+          deletingAvail
+            ? `Delete the ${deletingAvail.availabilityType} record for ${staffName} (${formatDate(toDateInput(deletingAvail.startDateTime))} – ${formatDate(toDateInput(deletingAvail.endDateTime))})? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteAvail.isPending}
+      />
     </div>
   )
 }

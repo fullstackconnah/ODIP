@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
+import { EmptyState } from '@/components/EmptyState'
 import { getStatusColor } from '@/lib/utils'
+import { CalendarCheck } from 'lucide-react'
 import type { BookingStatus } from '@/api/types/enums'
 
 export default function BookingsPage() {
@@ -21,7 +23,14 @@ export default function BookingsPage() {
         subtitle={`${bookings.length} booking${bookings.length !== 1 ? 's' : ''}`}
       />
 
-      {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : (
+      {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : bookings.length === 0 ? (
+        <EmptyState
+          icon={CalendarCheck}
+          title="No bookings yet"
+          description="Bookings link a participant to a trip. They're created from a trip's participant list, so head to Trips to book someone onto one."
+          action={{ label: 'View trips', to: '/trips' }}
+        />
+      ) : (
         <DataTable
           data={bookings}
           keyField="id"

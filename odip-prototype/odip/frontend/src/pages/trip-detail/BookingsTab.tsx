@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { getStatusColor } from '@/lib/utils'
 import type { BookingStatus, InsuranceStatus, PaymentStatus, SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2 } from 'lucide-react'
@@ -737,55 +738,55 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       )}
 
       {/* Delete/Cancel Booking Confirmation */}
-      {deletingBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeletingBooking(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">Remove Participant</h3>
-              <button onClick={() => setDeletingBooking(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              What would you like to do with <span className="font-medium text-[var(--color-foreground)]">{deletingBooking.participantName}</span>'s booking?
+      <ConfirmDialog
+        open={deletingBooking !== null}
+        onCancel={() => setDeletingBooking(null)}
+        title="Remove Participant"
+        message={
+          <>
+            <p>
+              What would you like to do with <span className="font-medium text-[var(--color-foreground)]">{deletingBooking?.participantName}</span>'s booking?
             </p>
             {(deleteBooking.isError || cancelBooking.isError) && (
-              <p className="text-sm text-[var(--color-destructive)] mt-3">Something went wrong. Please try again.</p>
+              <p className="text-[var(--color-destructive)]">Something went wrong. Please try again.</p>
             )}
-            <div className="flex flex-col gap-2 mt-4">
-              <button
-                onClick={() => {
-                  const data: import('@/api/types/bookings').UpdateBookingDto = {
-                    tripInstanceId: deletingBooking.tripInstanceId,
-                    participantId: deletingBooking.participantId,
-                    bookingStatus: 'Cancelled',
-                    nightSupportRequired: deletingBooking.nightSupportRequired,
-                    wheelchairRequired: deletingBooking.wheelchairRequired,
-                    highSupportRequired: deletingBooking.highSupportRequired,
-                    hasRestrictivePracticeFlag: deletingBooking.hasRestrictivePracticeFlag,
-                    supportRatioOverride: deletingBooking.supportRatioOverride ?? undefined,
-                    paymentStatus: deletingBooking.paymentStatus,
-                    actionRequired: deletingBooking.actionRequired,
-                    insuranceStatus: deletingBooking.insuranceStatus,
-                  }
-                  cancelBooking.mutate({ id: deletingBooking.id, data }, { onSuccess: () => setDeletingBooking(null) })
-                }}
-                disabled={cancelBooking.isPending || deleteBooking.isPending}
-                className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
-                <span className="font-semibold">Cancel booking</span>
-                <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
-              </button>
-              <button
-                onClick={() => deleteBooking.mutate(deletingBooking.id, { onSuccess: () => setDeletingBooking(null) })}
-                disabled={deleteBooking.isPending || cancelBooking.isPending}
-                className="w-full px-4 py-2 rounded-2xl bg-[var(--color-error-container)]/60 text-sm font-medium hover:bg-[var(--color-error-container)] transition-colors disabled:opacity-50 text-left">
-                <span className="font-semibold">Delete permanently</span>
-                <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Remove completely from the trip — cannot be undone</span>
-              </button>
-            </div>
+          </>
+        }
+        footer={
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => {
+                if (!deletingBooking) return
+                const data: import('@/api/types/bookings').UpdateBookingDto = {
+                  tripInstanceId: deletingBooking.tripInstanceId,
+                  participantId: deletingBooking.participantId,
+                  bookingStatus: 'Cancelled',
+                  nightSupportRequired: deletingBooking.nightSupportRequired,
+                  wheelchairRequired: deletingBooking.wheelchairRequired,
+                  highSupportRequired: deletingBooking.highSupportRequired,
+                  hasRestrictivePracticeFlag: deletingBooking.hasRestrictivePracticeFlag,
+                  supportRatioOverride: deletingBooking.supportRatioOverride ?? undefined,
+                  paymentStatus: deletingBooking.paymentStatus,
+                  actionRequired: deletingBooking.actionRequired,
+                  insuranceStatus: deletingBooking.insuranceStatus,
+                }
+                cancelBooking.mutate({ id: deletingBooking.id, data }, { onSuccess: () => setDeletingBooking(null) })
+              }}
+              disabled={cancelBooking.isPending || deleteBooking.isPending}
+              className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              <span className="font-semibold">Cancel booking</span>
+              <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
+            </button>
+            <button
+              onClick={() => deletingBooking && deleteBooking.mutate(deletingBooking.id, { onSuccess: () => setDeletingBooking(null) })}
+              disabled={deleteBooking.isPending || cancelBooking.isPending}
+              className="w-full px-4 py-2 rounded-2xl bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
+              <span className="font-semibold">Delete permanently</span>
+              <span className="block text-xs mt-0.5 opacity-80">Remove completely from the trip — cannot be undone</span>
+            </button>
           </div>
-        </div>
-      )}
+        }
+      />
     </div>
   )
 }

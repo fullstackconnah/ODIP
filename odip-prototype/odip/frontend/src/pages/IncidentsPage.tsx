@@ -2,10 +2,11 @@ import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncide
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { EmptyState } from '@/components/EmptyState'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
 function formatQscLabel(status: string): string {
@@ -121,14 +122,32 @@ export default function IncidentsPage() {
         </div>
       )}
 
-      <DataTable
-        data={incidents}
-        columns={incidentColumns}
-        keyField="id"
-        sortable
-        loading={isLoading}
-        emptyMessage="No incidents found"
-      />
+      {!isLoading && incidents.length === 0 ? (
+        !showArchived && (statusFilter || severityFilter) ? (
+          <EmptyState
+            icon={ShieldAlert}
+            title="No incidents match your filters"
+            description="Try a different status or severity filter, or clear them to see all incident reports."
+            action={{ label: 'Clear filters', onClick: () => { setStatusFilter(''); setSeverityFilter('') } }}
+          />
+        ) : (
+          <EmptyState
+            icon={ShieldAlert}
+            title="No incidents reported"
+            description="Incident reports log injuries, behaviours of concern, and other events that happen on a trip, including any NDIS Quality and Safeguards Commission reporting. Report one to get started."
+            action={!showArchived && canCreateIncidents ? { label: 'Report incident', to: '/incidents/new' } : undefined}
+          />
+        )
+      ) : (
+        <DataTable
+          data={incidents}
+          columns={incidentColumns}
+          keyField="id"
+          sortable
+          loading={isLoading}
+          emptyMessage="No incidents found"
+        />
+      )}
       {confirmDialog}
     </div>
   )

@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -8,6 +9,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const taskSchema = z.object({
   tripInstanceId: z.string().min(1, 'Trip is required'),
@@ -36,7 +38,7 @@ export default function TaskCreatePage() {
   // For edit mode, we load the task from the tasks list since there's no single-task endpoint
   // We'll pass task data via navigation state instead
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<TaskFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: {
       priority: 'Medium',
@@ -83,18 +85,27 @@ export default function TaskCreatePage() {
     try {
       if (isEdit) {
         const res = await updateTask.mutateAsync({ id, data: payload })
-        if (res.success) navigate('/tasks')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/tasks')
+        }
       } else {
         const res = await createTask.mutateAsync(payload)
-        if (res.success) navigate('/tasks')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/tasks')
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to="/tasks" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />

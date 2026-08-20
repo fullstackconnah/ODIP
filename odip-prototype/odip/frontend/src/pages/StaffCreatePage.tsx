@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,6 +8,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const staffSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -38,7 +40,7 @@ export default function StaffCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<StaffFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
     resolver: zodResolver(staffSchema),
     defaultValues: {
       role: 'SupportWorker',
@@ -81,20 +83,29 @@ export default function StaffCreatePage() {
     try {
       if (isEdit) {
         const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
-        if (res.success) navigate('/staff')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/staff')
+        }
       } else {
         const res = await createStaff.mutateAsync(payload)
-        if (res.success) navigate('/staff')
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate('/staff')
+        }
       }
     } catch {
       // error handled by mutation state
     }
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to="/staff" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />

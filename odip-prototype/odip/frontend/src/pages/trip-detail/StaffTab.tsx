@@ -8,6 +8,7 @@ import {
   useAvailableStaff,
 } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { formatDateAu } from '@/lib/utils'
 import type { SleepoverType, AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -419,53 +420,53 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       )}
 
       {/* Delete/Cancel Staff Assignment Confirmation */}
-      {deletingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeletingStaff(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">Remove Staff</h3>
-              <button onClick={() => setDeletingStaff(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              What would you like to do with <span className="font-medium text-[var(--color-foreground)]">{deletingStaff.staffName}</span>'s assignment?
+      <ConfirmDialog
+        open={deletingStaff !== null}
+        onCancel={() => setDeletingStaff(null)}
+        title="Remove Staff"
+        message={
+          <>
+            <p>
+              What would you like to do with <span className="font-medium text-[var(--color-foreground)]">{deletingStaff?.staffName}</span>'s assignment?
             </p>
             {(updateStaffAssignment.isError || deleteStaffAssignment.isError) && (
-              <p className="text-sm text-[var(--color-destructive)] mt-3">Something went wrong. Please try again.</p>
+              <p className="text-[var(--color-destructive)]">Something went wrong. Please try again.</p>
             )}
-            <div className="flex flex-col gap-2 mt-4">
-              <button
-                onClick={() => {
-                  const data: UpdateStaffAssignmentDto = {
-                    tripInstanceId: deletingStaff.tripInstanceId,
-                    staffId: deletingStaff.staffId,
-                    assignmentRole: deletingStaff.assignmentRole ?? undefined,
-                    assignmentStart: deletingStaff.assignmentStart,
-                    assignmentEnd: deletingStaff.assignmentEnd,
-                    isDriver: deletingStaff.isDriver,
-                    sleepoverType: deletingStaff.sleepoverType,
-                    shiftNotes: deletingStaff.shiftNotes ?? undefined,
-                    status: 'Cancelled',
-                  }
-                  updateStaffAssignment.mutate({ id: deletingStaff.id, data }, { onSuccess: () => setDeletingStaff(null) })
-                }}
-                disabled={updateStaffAssignment.isPending || deleteStaffAssignment.isPending}
-                className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
-                <span className="font-semibold">Cancel assignment</span>
-                <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
-              </button>
-              <button
-                onClick={() => deleteStaffAssignment.mutate(deletingStaff.id, { onSuccess: () => setDeletingStaff(null) })}
-                disabled={deleteStaffAssignment.isPending || updateStaffAssignment.isPending}
-                className="w-full px-4 py-2 rounded-2xl bg-[var(--color-error-container)]/60 text-sm font-medium hover:bg-[var(--color-error-container)] transition-colors disabled:opacity-50 text-left">
-                <span className="font-semibold">Delete permanently</span>
-                <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Remove completely from the trip — cannot be undone</span>
-              </button>
-            </div>
+          </>
+        }
+        footer={
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => {
+                if (!deletingStaff) return
+                const data: UpdateStaffAssignmentDto = {
+                  tripInstanceId: deletingStaff.tripInstanceId,
+                  staffId: deletingStaff.staffId,
+                  assignmentRole: deletingStaff.assignmentRole ?? undefined,
+                  assignmentStart: deletingStaff.assignmentStart,
+                  assignmentEnd: deletingStaff.assignmentEnd,
+                  isDriver: deletingStaff.isDriver,
+                  sleepoverType: deletingStaff.sleepoverType,
+                  shiftNotes: deletingStaff.shiftNotes ?? undefined,
+                  status: 'Cancelled',
+                }
+                updateStaffAssignment.mutate({ id: deletingStaff.id, data }, { onSuccess: () => setDeletingStaff(null) })
+              }}
+              disabled={updateStaffAssignment.isPending || deleteStaffAssignment.isPending}
+              className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              <span className="font-semibold">Cancel assignment</span>
+              <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
+            </button>
+            <button
+              onClick={() => deletingStaff && deleteStaffAssignment.mutate(deletingStaff.id, { onSuccess: () => setDeletingStaff(null) })}
+              disabled={deleteStaffAssignment.isPending || updateStaffAssignment.isPending}
+              className="w-full px-4 py-2 rounded-2xl bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
+              <span className="font-semibold">Delete permanently</span>
+              <span className="block text-xs mt-0.5 opacity-80">Remove completely from the trip — cannot be undone</span>
+            </button>
           </div>
-        </div>
-      )}
+        }
+      />
     </div>
   )
 }

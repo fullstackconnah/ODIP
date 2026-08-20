@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, ArchiveRestore, Car, Bus, Truck, Users, Wrench, C
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -56,26 +57,16 @@ export default function VehiclesPage() {
   const { data: vehicles = [], isLoading } = useVehicles(params)
   const deleteVehicle = useDeleteVehicle()
   const updateVehicle = useUpdateVehicle()
+  const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: VehicleListDto } | null>(null)
 
   const handleRestore = (e: React.MouseEvent, v: VehicleListDto) => {
     e.stopPropagation()
-    if (window.confirm(`Restore "${v.vehicleName}"?`)) {
-      const { id: _id, ...rest } = v
-      updateVehicle.mutate({ id: v.id, data: {
-        ...rest,
-        isActive: true,
-        registration: rest.registration ?? undefined,
-        serviceDueDate: rest.serviceDueDate ?? undefined,
-        registrationDueDate: rest.registrationDueDate ?? undefined,
-      } })
-    }
+    setConfirmState({ type: 'restore', item: v })
   }
 
-  const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
+  const handleDelete = (e: React.MouseEvent, v: VehicleListDto) => {
     e.stopPropagation()
-    if (window.confirm(`Archive "${name}"? This can be undone from the Archived view.`)) {
-      deleteVehicle.mutate(id)
-    }
+    setConfirmState({ type: 'archive', item: v })
   }
 
   const totalSeats = vehicles.reduce((sum: number, v: VehicleListDto) => sum + (v.totalSeats || 0), 0)
@@ -224,7 +215,7 @@ export default function VehiclesPage() {
                         </button>
                       ) : (
                         <button
-                          onClick={e => handleDelete(e, v.id, v.vehicleName)}
+                          onClick={e => handleDelete(e, v)}
                           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-[var(--color-surface-container-high)] text-[var(--color-muted-foreground)] text-sm font-bold hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)] transition-all"
                         >
                           <Trash2 className="w-4 h-4" /> Archive
@@ -256,6 +247,35 @@ export default function VehiclesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState !== null}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={() => {
+          if (!confirmState) return
+          if (confirmState.type === 'restore') {
+            const { id: _id, ...rest } = confirmState.item
+            updateVehicle.mutate({ id: confirmState.item.id, data: {
+              ...rest,
+              isActive: true,
+              registration: rest.registration ?? undefined,
+              serviceDueDate: rest.serviceDueDate ?? undefined,
+              registrationDueDate: rest.registrationDueDate ?? undefined,
+            } }, { onSuccess: () => setConfirmState(null) })
+          } else {
+            deleteVehicle.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
+          }
+        }}
+        title={confirmState?.type === 'restore' ? 'Restore Vehicle' : 'Archive Vehicle'}
+        message={
+          confirmState?.type === 'restore'
+            ? `Restore "${confirmState.item.vehicleName}"?`
+            : `Archive "${confirmState?.item?.vehicleName}"? This can be undone from the Archived view.`
+        }
+        confirmLabel={confirmState?.type === 'restore' ? 'Restore' : 'Archive'}
+        variant={confirmState?.type === 'restore' ? 'default' : 'danger'}
+        loading={updateVehicle.isPending || deleteVehicle.isPending}
+      />
     </div>
   )
 }

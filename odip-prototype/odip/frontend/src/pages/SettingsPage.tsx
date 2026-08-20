@@ -7,6 +7,8 @@ import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { formatDateAu } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
@@ -472,6 +474,7 @@ function PublicHolidaysTab() {
   const deleteHoliday = useDeletePublicHoliday()
   const syncHolidays = useSyncHolidays()
   const [adding, setAdding] = useState(false)
+  const [deletingHoliday, setDeletingHoliday] = useState<PublicHolidayDto | null>(null)
   const [newForm, setNewForm] = useState({ date: '', name: '', state: 'VIC' })
   const [showSyncAdvanced, setShowSyncAdvanced] = useState(false)
   const [syncFromYear, setSyncFromYear] = useState<number | undefined>(undefined)
@@ -576,7 +579,7 @@ function PublicHolidaysTab() {
             key: 'actions',
             header: '',
             render: (h: PublicHolidayDto) => (
-              <button onClick={() => deleteHoliday.mutate(h.id)} className="text-xs text-red-500 hover:text-red-700 hover:underline">
+              <button onClick={() => setDeletingHoliday(h)} className="text-xs text-red-500 hover:text-red-700 hover:underline">
                 Delete
               </button>
             ),
@@ -637,6 +640,24 @@ function PublicHolidaysTab() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deletingHoliday !== null}
+        onCancel={() => setDeletingHoliday(null)}
+        onConfirm={() => {
+          if (!deletingHoliday) return
+          deleteHoliday.mutate(deletingHoliday.id, { onSuccess: () => setDeletingHoliday(null) })
+        }}
+        title="Delete Public Holiday"
+        message={
+          deletingHoliday
+            ? `Delete the public holiday "${deletingHoliday.name}" on ${formatDateAu(deletingHoliday.date)} (${deletingHoliday.state || 'All states'})? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteHoliday.isPending}
+      />
     </div>
   )
 }

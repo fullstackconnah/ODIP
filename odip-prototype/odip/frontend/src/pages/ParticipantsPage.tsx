@@ -4,9 +4,10 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
+import { EmptyState } from '@/components/EmptyState'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -87,15 +88,33 @@ export default function ParticipantsPage() {
         <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." />
       </PageHeader>
 
-      <DataTable
-        data={participants}
-        columns={participantColumns}
-        keyField="id"
-        sortable
-        onRowClick={(p: any) => navigate(`/participants/${p.id}`)}
-        loading={isLoading}
-        emptyMessage="No participants found"
-      />
+      {!isLoading && participants.length === 0 ? (
+        search ? (
+          <EmptyState
+            icon={Users}
+            title="No participants match your filters"
+            description="Try a different search term, or clear your search to see all participants."
+            action={{ label: 'Clear search', onClick: () => setSearch('') }}
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="No participants yet"
+            description="Participants are the NDIS clients you plan trips and supports for. Add one to start booking them onto trips."
+            action={!showArchived && canWrite ? { label: 'Add participant', to: '/participants/new' } : undefined}
+          />
+        )
+      ) : (
+        <DataTable
+          data={participants}
+          columns={participantColumns}
+          keyField="id"
+          sortable
+          onRowClick={(p: any) => navigate(`/participants/${p.id}`)}
+          loading={isLoading}
+          emptyMessage="No participants found"
+        />
+      )}
       {confirmDialog}
     </div>
   )

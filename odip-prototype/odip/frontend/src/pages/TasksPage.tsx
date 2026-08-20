@@ -3,11 +3,12 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
+import { EmptyState } from '@/components/EmptyState'
 import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, CheckCircle, Plus } from 'lucide-react'
+import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
 const TASK_STATUS_ITEMS = [
@@ -120,14 +121,32 @@ export default function TasksPage() {
         )}
       </PageHeader>
 
-      <DataTable
-        data={tasks}
-        columns={taskColumns}
-        keyField="id"
-        sortable
-        loading={isLoading}
-        emptyMessage="No tasks found"
-      />
+      {!isLoading && tasks.length === 0 ? (
+        !showArchived && statusFilter ? (
+          <EmptyState
+            icon={ListChecks}
+            title="No tasks match your filters"
+            description="Try a different status filter, or clear it to see all tasks."
+            action={{ label: 'Clear filters', onClick: () => setStatusFilter('') }}
+          />
+        ) : (
+          <EmptyState
+            icon={ListChecks}
+            title="No tasks yet"
+            description="Tasks track the to-dos for a trip — accommodation confirmations, vehicle requests, medication checks and more. Add one to start tracking work."
+            action={!showArchived && canWrite ? { label: 'Add task', to: '/tasks/new' } : undefined}
+          />
+        )
+      ) : (
+        <DataTable
+          data={tasks}
+          columns={taskColumns}
+          keyField="id"
+          sortable
+          loading={isLoading}
+          emptyMessage="No tasks found"
+        />
+      )}
       {confirmDialog}
     </div>
   )
