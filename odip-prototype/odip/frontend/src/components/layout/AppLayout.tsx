@@ -1,31 +1,75 @@
-import { NavLink, Outlet, Link } from 'react-router-dom'
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus
+  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { usePermissions, type PageKey } from '@/lib/permissions'
 
-const navItems: { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey }[] = [
+type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey }
+type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeaf[] }
+type NavEntry = NavLeaf | NavParent
+
+const navItems: NavEntry[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard' },
-  { to: '/trips', icon: Map, label: 'Trips', msIcon: 'map', page: 'trips' },
-  { to: '/schedule', icon: CalendarRange, label: 'Schedule', msIcon: 'calendar_month', page: 'schedule' },
+  {
+    label: 'Trips',
+    icon: Map,
+    msIcon: 'map',
+    children: [
+      { to: '/trips', icon: Map, label: 'All Trips', msIcon: 'map', page: 'trips' },
+      { to: '/schedule', icon: CalendarRange, label: 'Schedule', msIcon: 'calendar_month', page: 'schedule' },
+      { to: '/bookings', icon: ClipboardList, label: 'Bookings', msIcon: 'description', page: 'bookings' },
+      { to: '/accommodation', icon: Building2, label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
+      { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
+    ],
+  },
   { to: '/participants', icon: Users, label: 'Participants', msIcon: 'group', page: 'participants' },
-  { to: '/accommodation', icon: Building2, label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
-  { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
   { to: '/staff', icon: UserCog, label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
   { to: '/tasks', icon: ListChecks, label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidents', msIcon: 'emergency', page: 'incidents' },
-  { to: '/bookings', icon: ClipboardList, label: 'Bookings', msIcon: 'description', page: 'bookings' },
   { to: '/qualifications', icon: Settings, label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
   { to: '/settings', icon: Settings, label: 'Settings', msIcon: 'settings', page: 'settings' },
 ]
 
+/** Mirrors NavLink's default (non-`end`) active matching: exact path or a path segment prefix. */
+function isRouteActive(to: string, pathname: string): boolean {
+  return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
+}
+
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
   const permissions = usePermissions()
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>()
+    navItems.forEach(item => {
+      if ('children' in item && item.children.some(child => isRouteActive(child.to, location.pathname))) {
+        initial.add(item.label)
+      }
+    })
+    return initial
+  })
+
+  useEffect(() => {
+    navItems.forEach(item => {
+      if ('children' in item && item.children.some(child => isRouteActive(child.to, location.pathname))) {
+        setOpenGroups(prev => (prev.has(item.label) ? prev : new Set(prev).add(item.label)))
+      }
+    })
+  }, [location.pathname])
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
+
   const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isSuperAdmin = permissions.isSuperAdmin || !!localStorage.getItem('odip_superadmin_user')
   const viewingUserId = localStorage.getItem('odip_viewing_user')
@@ -67,21 +111,77 @@ export default function AppLayout() {
 
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto">
-          {navItems.filter(item => permissions.canAccessPage(item.page)).map(({ to, label, msIcon }) => (
-            <NavLink key={to} to={to} end={to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
-                  isActive
-                    ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
-                    : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
-                }`
-              }
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{msIcon}</span>
-              {label}
-            </NavLink>
-          ))}
+          {navItems.map(item => {
+            if ('children' in item) {
+              const visibleChildren = item.children.filter(child => permissions.canAccessPage(child.page))
+              if (visibleChildren.length === 0) return null
+
+              const isOpen = openGroups.has(item.label)
+              const isGroupActive = visibleChildren.some(child => isRouteActive(child.to, location.pathname))
+              const groupId = `nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`
+
+              return (
+                <div key={item.label}>
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={groupId}
+                    onClick={() => toggleGroup(item.label)}
+                    className={`flex items-center w-full gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
+                      isGroupActive
+                        ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
+                        : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{item.msIcon}</span>
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={`w-4 h-4 shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div id={groupId} className="space-y-0.5">
+                      {visibleChildren.map(({ to, label, msIcon }) => (
+                        <NavLink key={to} to={to} end={to === '/'}
+                          className={({ isActive }) =>
+                            `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
+                              isActive
+                                ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
+                                : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                            }`
+                          }
+                          onClick={() => setSidebarOpen(false)}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{msIcon}</span>
+                          {label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            if (!permissions.canAccessPage(item.page)) return null
+            const { to, label, msIcon } = item
+
+            return (
+              <NavLink key={to} to={to} end={to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
+                    isActive
+                      ? 'bg-[#bbf37c] text-[#0f2000] font-bold'
+                      : 'text-[#515f74] font-medium hover:bg-[#e3e0d8]'
+                  }`
+                }
+                onClick={() => setSidebarOpen(false)}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{msIcon}</span>
+                {label}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* New Trip CTA */}

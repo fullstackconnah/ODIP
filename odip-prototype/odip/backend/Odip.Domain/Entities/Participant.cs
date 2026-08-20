@@ -24,10 +24,30 @@ public class Participant : ITenantEntity
     public string? FundingOrganisation { get; set; }
     public bool IsRepeatClient { get; set; }
     public bool IsActive { get; set; } = true;
-    public bool WheelchairRequired { get; set; }
     public bool IsHighSupport { get; set; }
     public bool IsIntensiveSupport { get; set; }
-    public bool RequiresOvernightSupport { get; set; }
+
+    // Mobility aids (multi-select — a participant may use several)
+    public bool MobilityAidWheelchair { get; set; }
+    public bool MobilityAidWalker { get; set; }
+
+    /// <summary>
+    /// Transfer/mobility support methods. Values come from the Master Data Dictionary
+    /// mobility picklist (SeedData/DataDictionarySeed.json) — the spreadsheet is the
+    /// source of truth for the allowed set.
+    /// </summary>
+    public List<string> MobilitySupportOptions { get; set; } = new();
+
+    public OvernightSupportType OvernightSupport { get; set; }
+    public SupportRatio OvernightRatio { get; set; } = SupportRatio.OneToOne;
+
+    // Equipment required (notes live in the existing EquipmentRequirements field)
+    public bool RequiresHiLoBed { get; set; }
+    public bool RequiresHoist { get; set; }
+    public bool RequiresShowerChair { get; set; }
+    public bool RequiresCommode { get; set; }
+    public bool RequiresStandingMachine { get; set; }
+
     public bool HasRestrictivePracticeFlag { get; set; }
     public SupportRatio SupportRatio { get; set; }
     public string? MobilityNotes { get; set; }

@@ -64,6 +64,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.NdisNumber).HasMaxLength(20);
             entity.Property(e => e.Region).HasMaxLength(100);
             entity.Property(e => e.FundingOrganisation).HasMaxLength(200);
+            entity.Property(e => e.MobilitySupportOptions).HasColumnType("text[]");
             entity.Ignore(e => e.FullName);
 
             entity.HasIndex(e => e.IsActive);
