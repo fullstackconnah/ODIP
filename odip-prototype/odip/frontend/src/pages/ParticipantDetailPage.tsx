@@ -11,6 +11,14 @@ import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
 
+function Tag({ label }: { label: string }) {
+  return (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+      {label}
+    </span>
+  )
+}
+
 export default function ParticipantDetailPage() {
   const { canWrite } = usePermissions()
   const { id } = useParams()
@@ -80,21 +88,21 @@ export default function ParticipantDetailPage() {
             </div>
           </Card>
           <Card title="Support Needs">
-            <div className="grid grid-cols-2 gap-y-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
               <span className="flex flex-wrap gap-1">
-                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <StatusBadge key={b} status={b} />) : '—'}
+                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <Tag key={b} label={b} />) : '—'}
               </span>
               <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
               <span className="flex flex-wrap gap-1">
-                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <StatusBadge key={o} status={o} />) : '—'}
+                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <Tag key={o} label={o} />) : '—'}
               </span>
               <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
               <span>{p.overnightSupport && p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
               <span className="text-[var(--color-muted-foreground)]">Equipment</span>
               <span className="flex flex-wrap gap-1">
-                {equipmentBadges.length ? equipmentBadges.map(b => <StatusBadge key={b} status={b} />) : '—'}
+                {equipmentBadges.length ? equipmentBadges.map(b => <Tag key={b} label={b} />) : '—'}
               </span>
               <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
             </div>
