@@ -1,24 +1,40 @@
 #!/bin/bash
-# Answers: does an external client through nginx get a STABLE rate-limit partition key?
+# Proves /auth/exchange is rate limited for real external clients, AND that touching a
+# dev-auth endpoint first cannot disable that limit.
 #
-# Run this from a machine that is NOT the docker host — the whole point is to see what
-# the server resolves for traffic that crosses Docker's published-port NAT. Running it
-# on the host itself reproduces the scenario that already passes and proves nothing.
+# Run from a machine that is NOT the docker host. Running it on the host exercises a
+# fresh loopback IP that never touches the dev endpoints — the case that always passed.
 BASE="${1:-http://192.168.4.70:8475}"
 
-echo "=== partition key, 4 consecutive requests from this machine ==="
-for i in 1 2 3 4; do
-  curl -s "$BASE/api/v1/auth/dev-whoami" \
-    | sed -E 's/.*"remoteIpAddress":"([^"]*)".*"xForwardedFor":"([^"]*)".*"partitionKeyWouldBe":"([^"]*)".*/remote=\1  xff=\2  key=\3/'
-done
+burst() {  # burst <n> -> prints status codes
+  local c=""
+  for i in $(seq 1 "$1"); do
+    c="$c $(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST \
+      -H 'Content-Type: application/json' -d '{"idToken":"probe-not-a-real-token"}' \
+      "$BASE/api/v1/auth/exchange")"
+  done
+  echo "$c"
+}
 
+echo "=== what the limiter actually partitions on (not the controller's view) ==="
+curl -s -m 10 "$BASE/api/v1/auth/dev-whoami"; echo; echo
+
+# The regression that motivated this script: dev-login used to claim the partition as a
+# no-op limiter, leaving /auth/exchange unlimited for this client. Touch it FIRST on
+# purpose — if the bug is back, the burst below will never reach 429.
+echo "=== touching dev-auth endpoints first (the poisoning case) ==="
+for i in 1 2 3; do
+  curl -s -m 10 -o /dev/null -w 'dev-users=%{http_code} ' "$BASE/api/v1/auth/dev-users"
+done; echo; echo
+
+echo "=== /auth/exchange x8 (expect: 401 x5 then 429) ==="
+codes=$(burst 8)
+echo "codes:$codes"
 echo
-echo "=== does /auth/exchange actually 429 from here? (6 calls) ==="
-# 401 401 401 401 401 429  => limiter works for external clients
-# 401 x6                   => external clients are NOT protected
-for i in $(seq 1 6); do
-  printf '%s ' "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-    -H 'Content-Type: application/json' -d '{"idToken":"probe-not-a-real-token"}' \
-    "$BASE/api/v1/auth/exchange")"
-done
-echo
+case "$codes" in
+  *429*) echo "RESULT: PASS — external clients ARE rate limited, and the dev-auth"
+         echo "        exemption no longer leaks into the limited partition." ;;
+  *)     echo "RESULT: FAIL — 8 failed logins from one client, no 429."
+         echo "        /auth/exchange has no brute-force protection for real users."
+         exit 1 ;;
+esac
