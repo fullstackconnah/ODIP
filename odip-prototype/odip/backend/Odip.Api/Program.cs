@@ -1,8 +1,10 @@
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Odip.Domain.Interfaces;
@@ -166,6 +168,29 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.I
 builder.Services.AddScoped<Odip.Application.Interfaces.IPublicHolidaySyncService, Odip.Infrastructure.Services.PublicHolidaySyncService>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.HolidaySyncBackgroundService>();
 
+// ── Forwarded Headers ────────────────────────────────────────
+// The app sits behind nginx (see nginx/default.conf), which proxies /api/ to this
+// container and sets X-Real-IP / X-Forwarded-For. Without this, every request's
+// Connection.RemoteIpAddress is the nginx container's address, so the rate limiter
+// below (partitioned by IP) collapses into a single global bucket shared by every
+// client — five failed logins from any one person locks out the whole platform.
+//
+// We deliberately do NOT clear KnownProxies/KnownNetworks (the common "just make it
+// work" fix): an empty trust list makes ForwardedHeadersMiddleware accept
+// X-Forwarded-For from ANY upstream, so a direct client could set that header itself
+// and spoof an arbitrary IP to dodge the rate limiter entirely. Instead we trust only
+// the Docker default bridge network range (172.16.0.0/12, which covers the
+// 172.17.0.0/16-172.31.0.0/16 subnets Docker Compose assigns bridge networks from) —
+// i.e. only a proxy hop originating from inside our own Docker network is trusted to
+// set these headers; anything else is treated as an untrusted end client.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+});
+
 // ── Rate Limiting ────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
@@ -173,19 +198,38 @@ builder.Services.AddRateLimiter(options =>
 
     // Strict rate limit for login endpoint to prevent brute force
     options.AddPolicy("login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    {
+        // The dev-login / dev-users endpoints are only reachable at all when
+        // DEV_AUTH_ENABLED=true (AuthController.IsDevAuthEnabled() 404s them
+        // otherwise) — that flag is already an explicit, operator-controlled opt-in
+        // that "do not expose this instance to the internet" applies to. Once an
+        // operator has made that choice, the 5-per-5-minutes login limiter only adds
+        // friction to local/dev testing without buying any extra security, so we
+        // exempt exactly those two paths from it, gated on the SAME env var the
+        // controller checks (no second flag to drift out of sync). The real
+        // credential-exchange endpoint (/api/v1/auth/exchange) is deliberately
+        // excluded from this exemption and keeps the fixed-window limiter
+        // unconditionally — even with dev auth on — since it is the endpoint an
+        // attacker would actually target.
+        if (IsDevAuthEnabled() && IsDevAuthRateLimitExemptPath(context.Request.Path))
+        {
+            return RateLimitPartition.GetNoLimiter(RateLimitPartitionKey(context));
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: RateLimitPartitionKey(context),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(5),
                 QueueLimit = 0
-            }));
+            });
+    });
 
     // General API rate limit
     options.AddPolicy("api", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            partitionKey: RateLimitPartitionKey(context),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 100,
@@ -193,6 +237,35 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 });
+
+// Partition key for the rate limiter. Resolved AFTER UseForwardedHeaders() has run, so
+// under normal (proxied) operation this is the real client IP. If the IP genuinely
+// cannot be resolved, fall back to the per-request TraceIdentifier rather than a
+// constant literal like "unknown" — a constant string would still bucket every such
+// request into one shared partition, defeating the per-client isolation this fix is
+// for.
+static string RateLimitPartitionKey(HttpContext context) =>
+    context.Connection.RemoteIpAddress?.ToString() ?? context.TraceIdentifier;
+
+// Mirrors AuthController.IsDevAuthEnabled() exactly — same env var, same comparison —
+// so the rate-limit exemption can never drift out of sync with whether the dev
+// endpoints are actually reachable.
+static bool IsDevAuthEnabled() =>
+    string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
+// Exact (not substring/prefix) match against the two dev-auth paths, case-insensitive,
+// tolerant of a trailing slash. Exact-equality is deliberate: a Contains/StartsWith
+// check could be tricked by a path like "/api/v1/auth/dev-login-evil" or
+// "/api/v1/auth/dev-loginX/exchange" into exempting something it shouldn't.
+// AuthController routes these at [Route("api/v1/auth")] + [HttpPost("dev-login")] /
+// [HttpGet("dev-users")], and nginx proxies /api/ straight through with no path
+// rewriting (see nginx/default.conf), so this is exactly the path ASP.NET Core sees.
+static bool IsDevAuthRateLimitExemptPath(PathString path)
+{
+    var value = path.Value?.TrimEnd('/');
+    return string.Equals(value, "/api/v1/auth/dev-login", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "/api/v1/auth/dev-users", StringComparison.OrdinalIgnoreCase);
+}
 
 // ── Swagger ──────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -320,6 +393,12 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
 }
 
 // ── Middleware pipeline ──────────────────────────────────────
+// UseForwardedHeaders() MUST be the very first middleware — everything after this
+// point (security headers, exception handling, the rate limiter, CORS, auth,
+// ReadOnlyMiddleware, controllers/logging) may read Connection.RemoteIpAddress or
+// Request.Scheme, and needs the real client values, not the nginx hop's.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
