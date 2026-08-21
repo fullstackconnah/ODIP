@@ -13,6 +13,7 @@ export type PageKey =
   | 'bookings'
   | 'qualifications'
   | 'claims'
+  | 'billing'
   | 'settings';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [

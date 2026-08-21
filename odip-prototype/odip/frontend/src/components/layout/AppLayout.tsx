@@ -1,7 +1,7 @@
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown
+  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -26,6 +26,7 @@ const navItems: NavEntry[] = [
       { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
     ],
   },
+  { to: '/billing', icon: Receipt, label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
   { to: '/participants', icon: Users, label: 'Participants', msIcon: 'group', page: 'participants' },
   { to: '/staff', icon: UserCog, label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
   { to: '/tasks', icon: ListChecks, label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
@@ -225,10 +226,11 @@ export default function AppLayout() {
                 </span>
               )}
               <div className="hidden md:flex items-center bg-[#f5f3ef] rounded-full px-4 py-2 gap-3 min-w-[280px]">
-                <span className="material-symbols-outlined text-[#43493a]" style={{ fontSize: '18px' }}>search</span>
+                <span className="material-symbols-outlined text-[#43493a]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
                 <input
                   className="bg-transparent border-none outline-none text-sm w-full placeholder:text-[#43493a]/60 text-[#1b1c1a]"
                   placeholder="Search trips, participants..."
+                  aria-label="Search trips and participants"
                   type="text"
                 />
               </div>

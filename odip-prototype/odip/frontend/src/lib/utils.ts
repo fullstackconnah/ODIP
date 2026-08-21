@@ -20,8 +20,8 @@ export function getStatusColor(status: string): string {
   const s = status.toLowerCase()
   if (['confirmed', 'completed', 'available'].includes(s)) return 'bg-[#bbf37c] text-[#0f2000]'
   if (['draft', 'proposed'].includes(s)) return 'bg-[#e4e2de] text-[#43493a]'
-  if (['cancelled', 'unavailable', 'nolongerattending', 'expired'].includes(s)) return 'bg-[#ffdad6] text-[#93000a]'
-  if (['overdue', 'conflict'].includes(s)) return 'bg-[#ffdad6] text-[#93000a]'
+  if (['cancelled', 'unavailable', 'nolongerattending', 'expired'].includes(s)) return 'bg-[#ffdad6] text-[var(--color-on-error-container)]'
+  if (['overdue', 'conflict'].includes(s)) return 'bg-[#ffdad6] text-[var(--color-on-error-container)]'
   if (['none'].includes(s)) return 'bg-[#e4e2de] text-[#43493a]'
   return 'bg-[#fef3c7] text-[#92400e]'
 }

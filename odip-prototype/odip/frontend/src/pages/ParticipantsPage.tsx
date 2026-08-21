@@ -18,7 +18,7 @@ const ACTIVE_STATUS_ITEMS = [
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  Inactive: 'bg-[var(--color-error-container)] text-[#93000a]',
+  Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 export default function ParticipantsPage() {

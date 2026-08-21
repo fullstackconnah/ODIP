@@ -97,7 +97,7 @@ export default function LoginPage() {
           <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
           {error && (
-            <div className="mb-4 p-3 rounded-2xl bg-[var(--color-error-container)] text-[#93000a] text-sm">
+            <div className="mb-4 p-3 rounded-2xl bg-[var(--color-error-container)] text-[var(--color-on-error-container)] text-sm">
               {error}
             </div>
           )}

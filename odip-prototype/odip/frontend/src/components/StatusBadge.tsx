@@ -15,19 +15,19 @@ const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   proposed: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   none: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
-  cancelled: 'bg-[var(--color-error-container)] text-[#93000a]',
-  unavailable: 'bg-[var(--color-error-container)] text-[#93000a]',
-  nolongerattending: 'bg-[var(--color-error-container)] text-[#93000a]',
-  expired: 'bg-[var(--color-error-container)] text-[#93000a]',
-  inactive: 'bg-[var(--color-error-container)] text-[#93000a]',
-  overdue: 'bg-[var(--color-error-container)] text-[#93000a]',
-  conflict: 'bg-[var(--color-error-container)] text-[#93000a]',
+  cancelled: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  unavailable: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  nolongerattending: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  expired: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  overdue: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  conflict: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 
   // Severity
   low: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
   medium: 'bg-[#fef3c7] text-[#92400e]',
-  high: 'bg-[var(--color-error-container)] text-[#93000a]',
-  critical: 'bg-[var(--color-error-container)] text-[#93000a]',
+  high: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  critical: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 
   // Claims
   submitted: 'bg-blue-100 text-blue-700',
@@ -38,7 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
   // QSC
   reportedwithin24h: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   reportedlate: 'bg-[#fef3c7] text-[#92400e]',
-  required: 'bg-[var(--color-error-container)] text-[#93000a]',
+  required: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   pending: 'bg-[#fef3c7] text-[#92400e]',
   notrequired: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
 
