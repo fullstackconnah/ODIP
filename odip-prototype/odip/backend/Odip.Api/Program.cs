@@ -199,13 +199,13 @@ builder.Services.AddRateLimiter(options =>
     // Strict rate limit for login endpoint to prevent brute force
     options.AddPolicy("login", context =>
     {
-        // The dev-login / dev-users endpoints are only reachable at all when
+        // The dev-login / dev-users / dev-whoami endpoints are only reachable at all when
         // DEV_AUTH_ENABLED=true (AuthController.IsDevAuthEnabled() 404s them
         // otherwise) — that flag is already an explicit, operator-controlled opt-in
         // that "do not expose this instance to the internet" applies to. Once an
         // operator has made that choice, the 5-per-5-minutes login limiter only adds
         // friction to local/dev testing without buying any extra security, so we
-        // exempt exactly those two paths from it, gated on the SAME env var the
+        // exempt exactly those paths from it, gated on the SAME env var the
         // controller checks (no second flag to drift out of sync). The real
         // credential-exchange endpoint (/api/v1/auth/exchange) is deliberately
         // excluded from this exemption and keeps the fixed-window limiter
@@ -253,18 +253,20 @@ static string RateLimitPartitionKey(HttpContext context) =>
 static bool IsDevAuthEnabled() =>
     string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
-// Exact (not substring/prefix) match against the two dev-auth paths, case-insensitive,
+// Exact (not substring/prefix) match against the dev-auth paths, case-insensitive,
 // tolerant of a trailing slash. Exact-equality is deliberate: a Contains/StartsWith
 // check could be tricked by a path like "/api/v1/auth/dev-login-evil" or
 // "/api/v1/auth/dev-loginX/exchange" into exempting something it shouldn't.
 // AuthController routes these at [Route("api/v1/auth")] + [HttpPost("dev-login")] /
-// [HttpGet("dev-users")], and nginx proxies /api/ straight through with no path
-// rewriting (see nginx/default.conf), so this is exactly the path ASP.NET Core sees.
+// [HttpGet("dev-users")] / [HttpGet("dev-whoami")], and nginx proxies /api/ straight
+// through with no path rewriting (see nginx/default.conf), so this is exactly the
+// path ASP.NET Core sees.
 static bool IsDevAuthRateLimitExemptPath(PathString path)
 {
     var value = path.Value?.TrimEnd('/');
     return string.Equals(value, "/api/v1/auth/dev-login", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(value, "/api/v1/auth/dev-users", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(value, "/api/v1/auth/dev-users", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "/api/v1/auth/dev-whoami", StringComparison.OrdinalIgnoreCase);
 }
 
 // ── Swagger ──────────────────────────────────────────────────

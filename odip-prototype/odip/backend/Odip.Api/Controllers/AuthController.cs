@@ -229,6 +229,38 @@ public class AuthController : ControllerBase
         return Ok(ApiResponse<IEnumerable<object>>.Ok(users));
     }
 
+    /// <summary>
+    /// Diagnostic-only endpoint for investigating rate-limit partitioning behind nginx /
+    /// Docker's published-port NAT. Returns exactly what the server resolves for this request
+    /// — the post-forwarded-header client IP/port, the raw forwarded headers as received, and
+    /// the exact partition key the "login" rate limiter would use — so a partition-key mismatch
+    /// for real external clients can be diagnosed instead of guessed at. Only reachable when
+    /// DEV_AUTH_ENABLED is "true" — otherwise this route behaves as if it does not exist.
+    /// </summary>
+    [HttpGet("dev-whoami")]
+    [AllowAnonymous]
+    [EnableRateLimiting("login")]
+    public IActionResult DevWhoAmi()
+    {
+        if (!IsDevAuthEnabled())
+            return NotFound();
+
+        var connection = HttpContext.Connection;
+
+        return Ok(ApiResponse<object>.Ok(new
+        {
+            remoteIpAddress = connection.RemoteIpAddress?.ToString(),
+            remotePort = connection.RemotePort,
+            xForwardedFor = Request.Headers["X-Forwarded-For"].ToString(),
+            xRealIp = Request.Headers["X-Real-IP"].ToString(),
+            // Mirrors Program.cs's RateLimitPartitionKey(HttpContext) exactly — same
+            // post-forwarded-header RemoteIpAddress, same TraceIdentifier fallback — so this
+            // can never silently drift from what the "login" limiter actually partitions on.
+            // If RateLimitPartitionKey's logic changes, this must change with it.
+            partitionKeyWouldBe = connection.RemoteIpAddress?.ToString() ?? HttpContext.TraceIdentifier
+        }));
+    }
+
     private static bool IsDevAuthEnabled()
         => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
