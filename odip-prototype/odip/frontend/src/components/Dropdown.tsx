@@ -12,7 +12,8 @@ export type DropdownItem = {
 }
 
 type DropdownProps = {
-  variant: 'pill' | 'form' | 'menu'
+  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the pill CTA. */
+  variant: 'pill' | 'form' | 'menu' | 'icon'
   items: DropdownItem[]
 
   // Value control — pill and form variants
@@ -148,7 +149,7 @@ export function Dropdown({
 
   const handleSelect = (item: DropdownItem) => {
     if (item.disabled) return
-    if (variant === 'menu') {
+    if (variant === 'menu' || variant === 'icon') {
       onSelect?.(item.value)
     } else {
       onChange?.(item.value)
@@ -264,7 +265,7 @@ export function Dropdown({
       />
     )
 
-  const panelWidthClass = variant === 'pill' ? 'min-w-[10rem]' : variant === 'menu' ? 'w-56' : ''
+  const panelWidthClass = variant === 'pill' ? 'min-w-[10rem]' : variant === 'menu' || variant === 'icon' ? 'w-56' : ''
 
   const panel = open && createPortal(
     <div
@@ -371,6 +372,29 @@ export function Dropdown({
             {selectedLabel ?? label ?? 'Select…'}
           </span>
           {chevron}
+        </button>
+        {panel}
+      </div>
+    )
+  }
+
+  // ── icon variant ──────────────────────────────────────────────────────────
+  if (variant === 'icon') {
+    return (
+      <div className="relative inline-flex" ref={containerRef}>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={label ?? 'More actions'}
+          aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
+          disabled={disabled || loading}
+          onClick={() => setOpen(v => !v)}
+          onKeyDown={handleKeyDown}
+          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+        >
+          {icon}
         </button>
         {panel}
       </div>

@@ -129,3 +129,19 @@ export type ClaimStatus = typeof CLAIM_STATUSES[number]
 // ── Overnight Support Type ──────────────────────────────
 export const OVERNIGHT_SUPPORT_TYPES = ['None', 'ActiveNight', 'PassiveNight', 'Sleepover', 'SleepoverSupport'] as const
 export type OvernightSupportType = typeof OVERNIGHT_SUPPORT_TYPES[number]
+
+// ── Shift Status ─────────────────────────────────────────
+export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled'] as const
+export type ShiftStatus = typeof SHIFT_STATUSES[number]
+
+// ── Compatibility Level ──────────────────────────────────
+export const COMPATIBILITY_LEVELS = ['Preferred', 'Allowed', 'Excluded'] as const
+export type CompatibilityLevel = typeof COMPATIBILITY_LEVELS[number]
+
+// ── Roster Finding Severity ──────────────────────────────
+export const ROSTER_FINDING_SEVERITIES = ['Warning', 'Blocking'] as const
+export type RosterFindingSeverity = typeof ROSTER_FINDING_SEVERITIES[number]
+
+// ── Roster Staff Compliance ──────────────────────────────
+export const ROSTER_COMPLIANCE_LEVELS = ['Ok', 'Warning', 'Blocked'] as const
+export type RosterComplianceLevel = typeof ROSTER_COMPLIANCE_LEVELS[number]

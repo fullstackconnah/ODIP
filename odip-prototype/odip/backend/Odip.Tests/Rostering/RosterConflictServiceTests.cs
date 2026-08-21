@@ -1,0 +1,514 @@
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
+using Odip.Domain.Rostering.Services;
+using Xunit;
+
+namespace Odip.Tests.Rostering;
+
+public class RosterConflictServiceTests
+{
+    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly DateOnly ServiceDate = new(2026, 8, 24); // Monday
+
+    // ── Helpers ──────────────────────────────────────────────
+
+    private static Staff CompliantStaff() => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        FirstName = "Ben",
+        LastName = "Turner",
+        WorkerScreeningNumber = "WSC-123",
+        WorkerScreeningExpiryDate = new DateOnly(2027, 1, 1),
+        IsFirstAidQualified = true,
+        FirstAidExpiryDate = new DateOnly(2027, 1, 1),
+        IsDriverEligible = true,
+        DriverLicenceExpiryDate = new DateOnly(2027, 1, 1),
+        IsManualHandlingCompetent = true,
+        ManualHandlingExpiryDate = new DateOnly(2027, 1, 1),
+        IsMedicationCompetent = true,
+        MedicationCompetencyExpiryDate = new DateOnly(2027, 1, 1),
+        IsOvernightEligible = true,
+    };
+
+    private static Participant CompliantParticipant() => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        FirstName = "Amy",
+        LastName = "Ng",
+    };
+
+    private static Shift CandidateShift(
+        Staff staff,
+        Participant participant,
+        DateOnly? serviceDate = null,
+        TimeOnly? start = null,
+        TimeOnly? end = null,
+        bool endsNextDay = false,
+        SupportRatio ratio = SupportRatio.OneToOne,
+        SleepoverType nightType = SleepoverType.None) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        ParticipantId = participant.Id,
+        Participant = participant,
+        StaffId = staff.Id,
+        Staff = staff,
+        ServiceDate = serviceDate ?? ServiceDate,
+        StartTime = start ?? new TimeOnly(9, 0),
+        EndTime = end ?? new TimeOnly(17, 0),
+        EndsNextDay = endsNextDay,
+        Ratio = ratio,
+        NightType = nightType,
+    };
+
+    private static RosterCheckContext CompliantContext(
+        Staff staff,
+        Participant participant,
+        IReadOnlyList<Shift>? staffShiftsInWeek = null,
+        IReadOnlyList<Shift>? participantShiftsOnDate = null,
+        IReadOnlyList<StaffAssignment>? tripAssignments = null,
+        IReadOnlyList<StaffAvailability>? availability = null,
+        CompatibilityLevel compatibility = CompatibilityLevel.Allowed,
+        decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold) => new(
+        Staff: staff,
+        Participant: participant,
+        StaffShiftsInWeek: staffShiftsInWeek ?? Array.Empty<Shift>(),
+        ParticipantShiftsOnDate: participantShiftsOnDate ?? Array.Empty<Shift>(),
+        TripAssignments: tripAssignments ?? Array.Empty<StaffAssignment>(),
+        Availability: availability ?? Array.Empty<StaffAvailability>(),
+        Compatibility: compatibility,
+        WeeklyHoursThreshold: weeklyHoursThreshold);
+
+    private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
+        findings.Any(f => f.Code == code);
+
+    // ── WSC_EXPIRED ──────────────────────────────────────────
+
+    [Fact]
+    public void Missing_worker_screening_produces_a_blocking_finding()
+    {
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = null;
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscExpired);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+        Assert.Contains("Ben Turner", finding.Message);
+    }
+
+    [Fact]
+    public void Worker_screening_expiring_after_the_service_date_produces_no_finding()
+    {
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = ServiceDate.AddDays(1);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.WscExpired));
+    }
+
+    [Fact]
+    public void Worker_screening_expired_before_the_service_date_produces_a_blocking_finding()
+    {
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscExpired);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+        Assert.Equal("Ben Turner's worker screening expired 12 Feb 2026 — cannot roster.", finding.Message);
+    }
+
+    // ── DOUBLE_BOOKED_SHIFT ──────────────────────────────────
+
+    [Fact]
+    public void Overlapping_shift_for_the_same_staff_member_fires_double_booked_shift()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var other = CandidateShift(staff, participant, start: new TimeOnly(16, 0), end: new TimeOnly(20, 0));
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInWeek: new[] { other }));
+
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
+    }
+
+    [Fact]
+    public void Non_overlapping_shift_for_the_same_staff_member_does_not_fire_double_booked_shift()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(12, 0));
+        var other = CandidateShift(staff, participant, start: new TimeOnly(13, 0), end: new TimeOnly(17, 0));
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInWeek: new[] { other }));
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedShift));
+    }
+
+    [Fact]
+    public void An_overnight_shift_crossing_midnight_correctly_overlaps_the_following_mornings_shift()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+
+        // Existing shift: Monday 22:00 -> Tuesday 06:00.
+        var overnight = CandidateShift(
+            staff, participant,
+            serviceDate: new DateOnly(2026, 8, 24),
+            start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), endsNextDay: true);
+
+        // Candidate: Tuesday 05:00 -> 09:00 - overlaps the tail of the overnight shift.
+        var candidate = CandidateShift(
+            staff, participant,
+            serviceDate: new DateOnly(2026, 8, 25),
+            start: new TimeOnly(5, 0), end: new TimeOnly(9, 0));
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInWeek: new[] { overnight }));
+
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
+    }
+
+    // ── DOUBLE_BOOKED_TRIP ───────────────────────────────────
+
+    [Fact]
+    public void Trip_assignment_covering_the_service_date_fires_double_booked_trip()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+        var assignment = new StaffAssignment
+        {
+            Id = Guid.NewGuid(),
+            StaffId = staff.Id,
+            Staff = staff,
+            AssignmentStart = ServiceDate.AddDays(-1),
+            AssignmentEnd = ServiceDate.AddDays(1),
+        };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { assignment }));
+
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    [Fact]
+    public void Trip_assignment_not_covering_the_service_date_does_not_fire_double_booked_trip()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+        var assignment = new StaffAssignment
+        {
+            Id = Guid.NewGuid(),
+            StaffId = staff.Id,
+            Staff = staff,
+            AssignmentStart = ServiceDate.AddDays(5),
+            AssignmentEnd = ServiceDate.AddDays(7),
+        };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { assignment }));
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    // ── STAFF_UNAVAILABLE ────────────────────────────────────
+
+    [Fact]
+    public void Unavailable_record_overlapping_the_shift_window_fires_staff_unavailable()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var availability = new StaffAvailability
+        {
+            Id = Guid.NewGuid(),
+            StaffId = staff.Id,
+            Staff = staff,
+            AvailabilityType = AvailabilityType.Unavailable,
+            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
+            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+        };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { availability }));
+
+        Assert.True(HasCode(findings, RosterConflictService.StaffUnavailable));
+    }
+
+    [Fact]
+    public void Available_record_does_not_fire_staff_unavailable()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var availability = new StaffAvailability
+        {
+            Id = Guid.NewGuid(),
+            StaffId = staff.Id,
+            Staff = staff,
+            AvailabilityType = AvailabilityType.Available,
+            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
+            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+        };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { availability }));
+
+        Assert.False(HasCode(findings, RosterConflictService.StaffUnavailable));
+    }
+
+    // ── COMPATIBILITY_EXCLUDED ───────────────────────────────
+
+    [Fact]
+    public void Excluded_compatibility_fires_compatibility_excluded()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, compatibility: CompatibilityLevel.Excluded));
+
+        Assert.True(HasCode(findings, RosterConflictService.CompatibilityExcluded));
+    }
+
+    [Fact]
+    public void Allowed_compatibility_does_not_fire_compatibility_excluded()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, compatibility: CompatibilityLevel.Allowed));
+
+        Assert.False(HasCode(findings, RosterConflictService.CompatibilityExcluded));
+    }
+
+    // ── CREDENTIAL_EXPIRED ───────────────────────────────────
+
+    [Fact]
+    public void Expired_first_aid_certificate_fires_credential_expired()
+    {
+        var staff = CompliantStaff();
+        staff.FirstAidExpiryDate = ServiceDate.AddDays(-1);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.True(HasCode(findings, RosterConflictService.CredentialExpired));
+    }
+
+    [Fact]
+    public void Current_first_aid_certificate_does_not_fire_credential_expired()
+    {
+        var staff = CompliantStaff();
+        staff.FirstAidExpiryDate = ServiceDate.AddDays(1);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.CredentialExpired));
+    }
+
+    // ── COMPETENCY_MISSING ───────────────────────────────────
+
+    [Fact]
+    public void High_support_participant_with_a_non_first_aid_staff_member_fires_competency_missing()
+    {
+        var staff = CompliantStaff();
+        staff.IsFirstAidQualified = false;
+        var participant = CompliantParticipant();
+        participant.IsHighSupport = true;
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.True(HasCode(findings, RosterConflictService.CompetencyMissing));
+    }
+
+    [Fact]
+    public void High_support_participant_with_a_first_aid_qualified_staff_member_does_not_fire_competency_missing()
+    {
+        var staff = CompliantStaff();
+        staff.IsFirstAidQualified = true;
+        var participant = CompliantParticipant();
+        participant.IsHighSupport = true;
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.CompetencyMissing));
+    }
+
+    // ── RATIO_SHORTFALL ──────────────────────────────────────
+
+    [Fact]
+    public void Two_to_one_ratio_with_no_sibling_shift_fires_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.True(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    [Fact]
+    public void Two_to_one_ratio_covered_by_a_second_worker_does_not_fire_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var second = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+        var sibling = CandidateShift(second, participant, ratio: SupportRatio.TwoToOne);
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, participantShiftsOnDate: new[] { sibling }));
+
+        Assert.False(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    [Fact]
+    public void Two_to_one_ratio_with_the_same_worker_twice_still_fires_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+        var sibling = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, participantShiftsOnDate: new[] { sibling }));
+
+        Assert.True(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    [Fact]
+    public void Two_to_one_ratio_with_a_non_overlapping_sibling_still_fires_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var second = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+        var evening = CandidateShift(second, participant, ratio: SupportRatio.TwoToOne,
+            start: new TimeOnly(18, 0), end: new TimeOnly(22, 0));
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, participantShiftsOnDate: new[] { evening }));
+
+        Assert.True(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    [Fact]
+    public void Two_to_one_ratio_with_an_unfilled_sibling_still_fires_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+        var unfilled = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+        unfilled.StaffId = null;
+        unfilled.Staff = null;
+
+        var findings = new RosterConflictService().Check(
+            candidate, CompliantContext(staff, participant, participantShiftsOnDate: new[] { unfilled }));
+
+        Assert.True(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    [Fact]
+    public void One_to_one_ratio_does_not_fire_ratio_shortfall()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.OneToOne);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.RatioShortfall));
+    }
+
+    // ── OVER_HOURS ───────────────────────────────────────────
+
+    [Fact]
+    public void Weekly_total_over_the_threshold_fires_over_hours()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0)); // 8h
+        var otherShift = CandidateShift(
+            staff, participant,
+            serviceDate: ServiceDate.AddDays(1),
+            start: new TimeOnly(9, 0), end: new TimeOnly(19, 0)); // 10h
+
+        var findings = new RosterConflictService().Check(
+            candidate,
+            CompliantContext(staff, participant, staffShiftsInWeek: new[] { otherShift }, weeklyHoursThreshold: 15m));
+
+        Assert.True(HasCode(findings, RosterConflictService.OverHours));
+    }
+
+    [Fact]
+    public void Weekly_total_under_the_threshold_does_not_fire_over_hours()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0)); // 8h
+
+        var findings = new RosterConflictService().Check(
+            candidate,
+            CompliantContext(staff, participant, weeklyHoursThreshold: 15m));
+
+        Assert.False(HasCode(findings, RosterConflictService.OverHours));
+    }
+
+    [Fact]
+    public void Over_hours_counts_the_candidates_own_hours_in_the_weekly_total()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        // Other shifts alone total 30h - under a 35h threshold. Adding the 9h candidate must push it over.
+        var otherShifts = new[]
+        {
+            CandidateShift(staff, participant, serviceDate: ServiceDate.AddDays(1), start: new TimeOnly(0, 0), end: new TimeOnly(15, 0)), // 15h
+            CandidateShift(staff, participant, serviceDate: ServiceDate.AddDays(2), start: new TimeOnly(0, 0), end: new TimeOnly(15, 0)), // 15h
+        };
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(18, 0)); // 9h
+
+        var withoutCandidateTotal = otherShifts.Sum(s => s.DurationHours);
+        Assert.Equal(30m, withoutCandidateTotal);
+
+        var findings = new RosterConflictService().Check(
+            candidate,
+            CompliantContext(staff, participant, staffShiftsInWeek: otherShifts, weeklyHoursThreshold: 35m));
+
+        // 30h from other shifts alone would not breach 35h - only counting the candidate's 9h does (39h).
+        Assert.True(HasCode(findings, RosterConflictService.OverHours));
+    }
+
+    // ── Fully compliant ──────────────────────────────────────
+
+    [Fact]
+    public void Fully_compliant_staff_and_participant_pairing_returns_no_findings()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.Empty(findings);
+    }
+}

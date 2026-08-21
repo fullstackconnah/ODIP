@@ -18,6 +18,15 @@ public class ApiResponse<T>
 
     public static ApiResponse<T> Fail(List<string> errors) =>
         new() { Success = false, Errors = errors };
+
+    /// <summary>
+    /// A failure that still carries a payload in <see cref="Data"/> — e.g. a rejected roster
+    /// write returning its findings. Callers that read a successful response's data off the
+    /// same <c>data</c> field (rather than a separate errors/findings field) need this on the
+    /// 422/400 path too, so the envelope shape never changes between success and failure.
+    /// </summary>
+    public static ApiResponse<T> Fail(T data, List<string> errors, string? message = null) =>
+        new() { Success = false, Data = data, Errors = errors, Message = message };
 }
 
 /// <summary>

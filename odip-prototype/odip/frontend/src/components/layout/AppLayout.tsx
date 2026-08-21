@@ -1,7 +1,8 @@
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt
+  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
+  CalendarClock
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -24,6 +25,16 @@ const navItems: NavEntry[] = [
       { to: '/bookings', icon: ClipboardList, label: 'Bookings', msIcon: 'description', page: 'bookings' },
       { to: '/accommodation', icon: Building2, label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
       { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
+    ],
+  },
+  {
+    label: 'Rostering',
+    icon: CalendarClock,
+    msIcon: 'calendar_view_week',
+    children: [
+      { to: '/rostering', icon: CalendarClock, label: 'Board', msIcon: 'calendar_view_week', page: 'rostering' },
+      { to: '/rostering/patterns', icon: CalendarClock, label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
+      { to: '/rostering/compatibility', icon: CalendarClock, label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
     ],
   },
   { to: '/billing', icon: Receipt, label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
