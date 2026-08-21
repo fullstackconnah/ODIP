@@ -77,8 +77,15 @@ export default function LoginPage() {
       if (!applyLoginSuccess(res)) {
         setError(res.errors?.[0] || 'Login failed')
       }
-    } catch {
-      setError('Dev login failed — is DEV_AUTH_ENABLED set on the API?')
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 429) {
+        setError('Too many sign-in attempts. Wait a few minutes and try again.')
+      } else if (status === 404) {
+        setError('Dev login failed — is DEV_AUTH_ENABLED set on the API?')
+      } else {
+        setError('Dev login failed. Please try again.')
+      }
     }
   }
 
@@ -205,6 +212,13 @@ export default function LoginPage() {
                     className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
                     placeholder="admin"
                   />
+                  {devUsers.isError ? (
+                    <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
+                      {(devUsers.error as { response?: { status?: number } })?.response?.status === 429
+                        ? "Couldn't load the user list — too many attempts, rate-limited. Type a username manually."
+                        : "Couldn't load the user list, so type a username manually."}
+                    </p>
+                  ) : null}
                 </div>
               )}
 
