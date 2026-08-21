@@ -213,11 +213,18 @@ builder.Services.AddRateLimiter(options =>
         // attacker would actually target.
         if (IsDevAuthEnabled() && IsDevAuthRateLimitExemptPath(context.Request.Path))
         {
-            return RateLimitPartition.GetNoLimiter(RateLimitPartitionKey(context));
+            // MUST NOT share a partition key with the limited branch below. A
+            // PartitionedRateLimiter caches one limiter instance per key, so if the
+            // exempt branch created the partition for an IP first, every later request
+            // from that IP reused the no-op limiter — including /auth/exchange. Hitting
+            // dev-login once disabled brute-force protection entirely for that client.
+            // The "exempt:" prefix keeps the two branches in separate partitions.
+            return RateLimitPartition.GetNoLimiter(
+                RecordLimiterPartitionKey(context, "exempt:" + RateLimitPartitionKey(context)));
         }
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: RateLimitPartitionKey(context),
+            partitionKey: RecordLimiterPartitionKey(context, "login:" + RateLimitPartitionKey(context)),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
@@ -229,7 +236,7 @@ builder.Services.AddRateLimiter(options =>
     // General API rate limit
     options.AddPolicy("api", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: RateLimitPartitionKey(context),
+            partitionKey: "api:" + RateLimitPartitionKey(context),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 100,
@@ -246,6 +253,18 @@ builder.Services.AddRateLimiter(options =>
 // for.
 static string RateLimitPartitionKey(HttpContext context) =>
     context.Connection.RemoteIpAddress?.ToString() ?? context.TraceIdentifier;
+
+// Stashes the key the limiter ACTUALLY partitioned on so /auth/dev-whoami can report
+// it. Reading Connection.RemoteIpAddress from a controller is not the same measurement:
+// the controller runs later in the pipeline, so the two can disagree, and when they do,
+// a diagnostic that reports the controller's view describes something other than the
+// limiter's behaviour. This records the real value at the real moment.
+const string LimiterPartitionKeyItem = "__odip.limiterPartitionKey";
+static string RecordLimiterPartitionKey(HttpContext context, string key)
+{
+    context.Items[LimiterPartitionKeyItem] = key;
+    return key;
+}
 
 // Mirrors AuthController.IsDevAuthEnabled() exactly — same env var, same comparison —
 // so the rate-limit exemption can never drift out of sync with whether the dev

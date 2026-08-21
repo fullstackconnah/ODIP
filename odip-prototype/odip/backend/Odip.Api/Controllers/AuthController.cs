@@ -253,11 +253,19 @@ public class AuthController : ControllerBase
             remotePort = connection.RemotePort,
             xForwardedFor = Request.Headers["X-Forwarded-For"].ToString(),
             xRealIp = Request.Headers["X-Real-IP"].ToString(),
-            // Mirrors Program.cs's RateLimitPartitionKey(HttpContext) exactly — same
-            // post-forwarded-header RemoteIpAddress, same TraceIdentifier fallback — so this
-            // can never silently drift from what the "login" limiter actually partitions on.
-            // If RateLimitPartitionKey's logic changes, this must change with it.
-            partitionKeyWouldBe = connection.RemoteIpAddress?.ToString() ?? HttpContext.TraceIdentifier
+
+            // The key the "login" limiter ACTUALLY partitioned on, recorded by the policy
+            // delegate itself (Program.cs RecordLimiterPartitionKey) rather than
+            // re-derived here. An earlier version of this endpoint recomputed the key from
+            // Connection.RemoteIpAddress at controller time and reported a value the
+            // limiter never used, which turned a real partitioning bug into a mystery.
+            // Null means the limiter did not run for this request at all — itself the
+            // answer to "why is this endpoint not being limited?".
+            limiterPartitionKey = HttpContext.Items.TryGetValue("__odip.limiterPartitionKey", out var k) ? k : null,
+            // Controller-time view, kept only so the two can be compared. If these
+            // disagree, trust limiterPartitionKey.
+            controllerTimeIp = connection.RemoteIpAddress?.ToString()
+
         }));
     }
 
