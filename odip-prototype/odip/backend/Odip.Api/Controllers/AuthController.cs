@@ -1,3 +1,4 @@
+using System.Globalization;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Odip.Application.Common;
+using Odip.Application.Interfaces;
 using Odip.Application.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,12 +22,18 @@ public class AuthController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
+    private readonly ILoginAttemptTracker _loginAttempts;
 
-    public AuthController(OdipDbContext db, IConfiguration config, ILogger<AuthController> logger)
+    public AuthController(
+        OdipDbContext db,
+        IConfiguration config,
+        ILogger<AuthController> logger,
+        ILoginAttemptTracker loginAttempts)
     {
         _db = db;
         _config = config;
         _logger = logger;
+        _loginAttempts = loginAttempts;
     }
 
     /// <summary>
@@ -36,6 +44,30 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Exchange(
         [FromBody] ExchangeTokenDto dto, CancellationToken ct)
     {
+        // Every rejection below funnels through Rejected() so the failure is always
+        // counted. A path that returns Unauthorized directly would be a free retry and
+        // would make the lockout bypassable by aiming at that specific case.
+        var attemptKey = LoginAttemptKey();
+
+        if (_loginAttempts.IsLockedOut(attemptKey, out var retryAfter))
+        {
+            _logger.LogWarning("Exchange locked out after repeated failures: {Key}", attemptKey);
+            Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds))
+                .ToString(CultureInfo.InvariantCulture);
+            return StatusCode(
+                StatusCodes.Status429TooManyRequests,
+                ApiResponse<AuthResponseDto>.Fail("Too many failed sign-in attempts. Try again shortly."));
+        }
+
+        ActionResult<ApiResponse<AuthResponseDto>> Rejected(string logMessage, params object?[] logArgs)
+        {
+            _loginAttempts.RecordFailure(attemptKey);
+            _logger.LogWarning(logMessage, logArgs);
+            // The message is deliberately identical for every cause. Distinguishing
+            // "unknown domain" from "user not found" would confirm which addresses exist.
+            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+        }
+
         // 1. Verify Firebase ID token
         FirebaseToken decodedToken;
         try
@@ -44,8 +76,7 @@ public class AuthController : ControllerBase
         }
         catch (FirebaseAuthException ex)
         {
-            _logger.LogWarning("Firebase token verification failed: {Message}", ex.Message);
-            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+            return Rejected("Firebase token verification failed: {Message}", ex.Message);
         }
 
         var email = decodedToken.Claims.TryGetValue("email", out var emailClaim)
@@ -53,7 +84,7 @@ public class AuthController : ControllerBase
             : null;
 
         if (string.IsNullOrEmpty(email))
-            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+            return Rejected("Exchange failed — token carried no email claim");
 
         var domain = email.Split('@').Last().ToLower();
 
@@ -67,8 +98,7 @@ public class AuthController : ControllerBase
 
             if (superAdmin is null)
             {
-                _logger.LogWarning("SuperAdmin exchange — email not in DB: {Email}", email);
-                return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+                return Rejected("SuperAdmin exchange — email not in DB: {Email}", email);
             }
 
             superAdmin.LastLoginAt = DateTime.UtcNow;
@@ -76,6 +106,7 @@ public class AuthController : ControllerBase
 
             var superAdminToken = GenerateSuperAdminJwtToken(superAdmin);
             SetJwtCookie(superAdminToken);
+            _loginAttempts.RecordSuccess(attemptKey);
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
@@ -95,8 +126,7 @@ public class AuthController : ControllerBase
 
         if (tenant is null)
         {
-            _logger.LogWarning("Exchange failed — unknown email domain: {Domain}", domain);
-            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+            return Rejected("Exchange failed — unknown email domain: {Domain}", domain);
         }
 
         var user = await _db.Users
@@ -105,8 +135,7 @@ public class AuthController : ControllerBase
 
         if (user is null)
         {
-            _logger.LogWarning("Exchange failed — user not found in tenant: {Email}", email);
-            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+            return Rejected("Exchange failed — user not found in tenant: {Email}", email);
         }
 
         user.LastLoginAt = DateTime.UtcNow;
@@ -114,6 +143,7 @@ public class AuthController : ControllerBase
 
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
+        _loginAttempts.RecordSuccess(attemptKey);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
@@ -188,6 +218,9 @@ public class AuthController : ControllerBase
 
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
+        // Deliberately does NOT clear the /auth/exchange failure count. Dev login is a
+        // bypass by design; letting it reset the lockout would hand an attacker a way to
+        // clear their own on any instance running with DEV_AUTH_ENABLED.
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
@@ -268,6 +301,13 @@ public class AuthController : ControllerBase
 
         }));
     }
+
+    // Same notion of "a client" the rate limiter uses (Program.cs RateLimitPartitionKey):
+    // post-forwarded-header remote IP, falling back to the per-request TraceIdentifier so
+    // an unresolvable address can never bucket every caller together. Behind shared egress
+    // this is one key for several people, which is exactly why only FAILURES are counted.
+    private string LoginAttemptKey() =>
+        HttpContext.Connection.RemoteIpAddress?.ToString() ?? HttpContext.TraceIdentifier;
 
     private static bool IsDevAuthEnabled()
         => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);

@@ -166,6 +166,9 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>(
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Application.Interfaces.IPublicHolidaySyncService, Odip.Infrastructure.Services.PublicHolidaySyncService>();
+// Singleton: the failure counts are in-process state and must outlive a request. See
+// LoginAttemptTracker's note about scaling out — a second replica gets its own counts.
+builder.Services.AddSingleton<Odip.Application.Interfaces.ILoginAttemptTracker, Odip.Infrastructure.Services.LoginAttemptTracker>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.HolidaySyncBackgroundService>();
 
 // ── Forwarded Headers ────────────────────────────────────────
@@ -223,12 +226,23 @@ builder.Services.AddRateLimiter(options =>
                 RecordLimiterPartitionKey(context, "exempt:" + RateLimitPartitionKey(context)));
         }
 
-        return RateLimitPartition.GetFixedWindowLimiter(
+        // Deliberately generous, and no longer the brute-force defence. This is a flood
+        // guard only; repeated FAILED sign-ins are handled by ILoginAttemptTracker, which
+        // can tell a failure from a success where this middleware cannot — it runs before
+        // the endpoint and spends a permit either way.
+        //
+        // The old 5-per-5-minutes budget was the brute-force defence, and it counted
+        // successful logins too. Behind shared egress (several devices leaving one NAT
+        // address) that locked real users out during ordinary use: five sign-ins from the
+        // office and the sixth person cannot log in for five minutes. Sliding segments
+        // also mean recovery is gradual instead of everything unblocking at once.
+        return RateLimitPartition.GetSlidingWindowLimiter(
             partitionKey: RecordLimiterPartitionKey(context, "login:" + RateLimitPartitionKey(context)),
-            factory: _ => new FixedWindowRateLimiterOptions
+            factory: _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 5,
+                PermitLimit = 60,
                 Window = TimeSpan.FromMinutes(5),
+                SegmentsPerWindow = 5,
                 QueueLimit = 0
             });
     });

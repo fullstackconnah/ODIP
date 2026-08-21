@@ -27,14 +27,16 @@ for i in 1 2 3; do
   curl -s -m 10 -o /dev/null -w 'dev-users=%{http_code} ' "$BASE/api/v1/auth/dev-users"
 done; echo; echo
 
-echo "=== /auth/exchange x8 (expect: 401 x5 then 429) ==="
-codes=$(burst 8)
+# 14 > the 10-failure lockout threshold, and well under the 60-per-5-min flood window,
+# so a 429 here can only have come from the failure tracker.
+echo "=== /auth/exchange x14 (expect: 401 x10 then 429) ==="
+codes=$(burst 14)
 echo "codes:$codes"
 echo
 case "$codes" in
-  *429*) echo "RESULT: PASS — external clients ARE rate limited, and the dev-auth"
+  *429*) echo "RESULT: PASS — repeated FAILED sign-ins lock out, and the dev-auth"
          echo "        exemption no longer leaks into the limited partition." ;;
-  *)     echo "RESULT: FAIL — 8 failed logins from one client, no 429."
+  *)     echo "RESULT: FAIL — 14 failed logins from one client, no 429."
          echo "        /auth/exchange has no brute-force protection for real users."
          exit 1 ;;
 esac
