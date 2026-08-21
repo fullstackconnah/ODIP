@@ -6,7 +6,12 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
 
-const BASE = 'http://localhost:5173'
+// Defaults to the local dev server, but ALWAYS run this against the deployed URL too:
+//   node <script> http://192.168.4.70:8475
+// Localhost proves the code works; only the deployed URL proves the Docker build and
+// its build args are correct. A VITE_DEV_AUTH build arg missing from the Dockerfile
+// passed every localhost run for nine PRs while production was broken.
+const BASE = process.argv[2] || process.env.ODIP_BASE_URL || 'http://localhost:5173'
 const OUT = 'F:/Projects/personal/ODIP/.playwright'
 const STATE = `${process.cwd()}/state.json`
 fs.mkdirSync(OUT, { recursive: true })
@@ -19,7 +24,7 @@ function check(pr, name, pass, detail = '') {
 }
 
 const browser = await chromium.launch()
-const ctx = fs.existsSync(STATE)
+const ctx = fs.existsSync(STATE) && BASE.includes('localhost')
   ? await browser.newContext({ storageState: STATE, viewport: { width: 1440, height: 900 } })
   : await browser.newContext({ viewport: { width: 1440, height: 900 } })
 const page = await ctx.newPage()
