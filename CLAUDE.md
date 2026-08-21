@@ -58,8 +58,7 @@ supporting tooling all live nested two levels down, inside `odip-prototype/odip/
     ├── mock-api/server.js         # Node mock API for offline frontend preview
     ├── local-test/                # fake Firebase SA + JWT minting; run-api.ps1 starts the API on :5100
     ├── docs/superpowers/          # legacy TripCore plan/spec archive — historical only, ignore
-    ├── .github/workflows/deploy.yml  # CI: builds ghcr.io images + Portainer webhook redeploy
-    ├── nginx/, docker-compose.yml, start-preview.ps1, .env.example
+    ├── nginx/, start-preview.ps1, .env.example
 ```
 
 This directory is NOT a git repository.
@@ -84,8 +83,13 @@ npm run lint
 
 - Combined preview: `odip-prototype/odip/start-preview.ps1` (mock API + Vite; expects Node at
   `~\tools\node`).
-- Docker: `docker-compose.yml` — Postgres 16-alpine + prebuilt ghcr.io images; tuned for one
-  specific deployment host, not generic local dev.
+- Docker: the deployed stack is `deploy/compose.yaml` (repo root), built from source on the
+  homelab by `.github/workflows/deploy.yml` — a self-hosted runner that rsyncs the tree,
+  runs `docker compose build` as the test gate, then `up -d` with a health check and
+  automatic rollback. Nothing is pulled from ghcr.io. The inherited TripCore
+  `odip-prototype/odip/docker-compose.yml` was deleted: rsync copied it into the stack
+  root next to `compose.yaml`, and Compose picking the wrong one would have silently
+  deployed stale prebuilt images.
 
 ## Architecture
 
