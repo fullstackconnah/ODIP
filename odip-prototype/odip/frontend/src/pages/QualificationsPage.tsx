@@ -35,6 +35,9 @@ const QUALS = [
   { label: 'Driver Licence', flag: 'isDriverEligible', field: 'driverLicenceExpiryDate' },
   { label: 'Manual Handling', flag: 'isManualHandlingCompetent', field: 'manualHandlingExpiryDate' },
   { label: 'Medication Competency', flag: 'isMedicationCompetent', field: 'medicationCompetencyExpiryDate' },
+  // Worker screening has no boolean qualification flag — presence is determined by the
+  // expiry date itself being set, so this row is only included when a date exists.
+  { label: 'Worker Screening', flag: null, field: 'workerScreeningExpiryDate' },
 ] as const
 
 function buildGroups(staff: any[], warningDays: number): StaffGroup[] {
@@ -47,8 +50,12 @@ function buildGroups(staff: any[], warningDays: number): StaffGroup[] {
     let issueCount = 0
 
     for (const q of QUALS) {
-      if (!s[q.flag]) continue
+      const hasFlag = q.flag !== null
+      if (hasFlag && !s[q.flag as string]) continue
       const expiryDate = s[q.field] as string | null
+      // No flag means there's no way to know the credential "applies" other than a date
+      // having been entered — so skip rather than surfacing a false "no-date" issue.
+      if (!hasFlag && !expiryDate) continue
       let status: QualStatus
       let daysUntilExpiry: number | null = null
 
@@ -159,6 +166,8 @@ export default function QualificationsPage() {
       driverLicenceExpiryDate: s.driverLicenceExpiryDate ?? undefined,
       manualHandlingExpiryDate: s.manualHandlingExpiryDate ?? undefined,
       medicationCompetencyExpiryDate: s.medicationCompetencyExpiryDate ?? undefined,
+      workerScreeningNumber: s.workerScreeningNumber ?? undefined,
+      workerScreeningExpiryDate: s.workerScreeningExpiryDate ?? undefined,
       [row.fieldKey]: editValue || undefined,
     }
 

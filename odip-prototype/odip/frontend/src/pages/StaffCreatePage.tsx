@@ -26,6 +26,8 @@ const staffSchema = z.object({
   driverLicenceExpiryDate: z.string().optional(),
   manualHandlingExpiryDate: z.string().optional(),
   medicationCompetencyExpiryDate: z.string().optional(),
+  workerScreeningNumber: z.string().optional(),
+  workerScreeningExpiryDate: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -70,6 +72,8 @@ export default function StaffCreatePage() {
         driverLicenceExpiryDate: existing.driverLicenceExpiryDate ?? '',
         manualHandlingExpiryDate: existing.manualHandlingExpiryDate ?? '',
         medicationCompetencyExpiryDate: existing.medicationCompetencyExpiryDate ?? '',
+        workerScreeningNumber: existing.workerScreeningNumber ?? '',
+        workerScreeningExpiryDate: existing.workerScreeningExpiryDate ?? '',
         notes: existing.notes ?? '',
       })
     }
@@ -210,6 +214,15 @@ export default function StaffCreatePage() {
             <FormField label="Overnight Eligible" layout="checkbox">
               <input type="checkbox" {...register('isOvernightEligible')} className="w-4 h-4 rounded border-[var(--color-border)]" />
             </FormField>
+
+            <div className="space-y-1">
+              <FormField label="Worker screening number">
+                <input {...register('workerScreeningNumber')} placeholder="e.g. WWC1234567" />
+              </FormField>
+              <FormField label="Worker screening expiry">
+                <input type="date" {...register('workerScreeningExpiryDate')} />
+              </FormField>
+            </div>
           </div>
         </Card>
 

@@ -85,6 +85,9 @@ export default function DashboardPage() {
       { flag: s.isDriverEligible, expiry: s.driverLicenceExpiryDate },
       { flag: s.isManualHandlingCompetent, expiry: s.manualHandlingExpiryDate },
       { flag: s.isMedicationCompetent, expiry: s.medicationCompetencyExpiryDate },
+      // Worker screening has no boolean qualification flag — it only "applies" (and can be
+      // an issue) once an expiry date has actually been entered.
+      { flag: !!s.workerScreeningExpiryDate, expiry: s.workerScreeningExpiryDate },
     ]
     return count + checks.filter(({ flag, expiry }) => {
       if (!flag) return false
