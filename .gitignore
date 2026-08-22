@@ -33,3 +33,4 @@ odip-prototype/odip/local-test/*.log.crash1
 /odip-api.log
 /odip-frontend.log
 /board-*.json
+/staff-response.json
