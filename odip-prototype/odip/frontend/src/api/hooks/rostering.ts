@@ -20,10 +20,10 @@ import type {
 // ROSTER BOARD
 // ══════════════════════════════════════════════════════════════
 
-export function useRosterBoard(weekStart: string | undefined) {
+export function useRosterBoard(weekStart: string | undefined, groupBy: 'participant' | 'staff' = 'participant') {
   return useQuery({
-    queryKey: ['roster-board', weekStart],
-    queryFn: () => apiGet<RosterBoardDto>('/rostering/board', { weekStart }),
+    queryKey: ['roster-board', weekStart, groupBy],
+    queryFn: () => apiGet<RosterBoardDto>('/rostering/board', { weekStart, groupBy }),
     enabled: !!weekStart,
   })
 }

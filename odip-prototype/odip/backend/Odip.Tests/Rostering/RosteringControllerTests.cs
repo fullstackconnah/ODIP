@@ -237,8 +237,10 @@ public class RosteringControllerTests
     // ── Board ────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetBoard_SeparatesUnfilledShiftsFromStaffRows()
+    public async Task GetBoard_StaffMode_SeparatesUnfilledShiftsFromStaffRows()
     {
+        // Regression guard: staff mode (pass 1's shape) must keep working exactly as before,
+        // now behind an explicit groupBy=staff rather than being the default.
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
         var filledParticipant = SeedParticipant(db, "Amy", "Ng");
@@ -261,20 +263,169 @@ public class RosteringControllerTests
 
         var controller = new RosteringController(db);
 
-        var result = await controller.GetBoard(ServiceDate, CancellationToken.None);
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
         Assert.True(body.Success);
         var board = body.Data!;
 
-        var unfilledDto = Assert.Single(board.Unfilled);
+        Assert.Equal(RosterBoardGroupBy.Staff, board.GroupBy);
+        Assert.Null(board.ParticipantRows);
+
+        var unfilledDto = Assert.Single(board.Unfilled!);
         Assert.Equal(unfilledShift.Id, unfilledDto.Id);
 
-        var staffRow = Assert.Single(board.Rows, r => r.StaffId == staff.Id);
+        var staffRow = Assert.Single(board.StaffRows!, r => r.StaffId == staff.Id);
         var rowShift = Assert.Single(staffRow.Shifts);
         Assert.Equal(filledShift.Id, rowShift.Id);
         Assert.DoesNotContain(staffRow.Shifts, s => s.Id == unfilledShift.Id);
+    }
+
+    [Fact]
+    public async Task GetBoard_DefaultsToParticipantMode()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new RosteringController(db);
+
+        // groupBy omitted entirely — the spec's default is participant, not staff.
+        var result = await controller.GetBoard(ServiceDate, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var board = body.Data!;
+
+        Assert.Equal(RosterBoardGroupBy.Participant, board.GroupBy);
+        Assert.NotNull(board.ParticipantRows);
+        Assert.Null(board.StaffRows);
+        Assert.Null(board.Unfilled);
+    }
+
+    [Fact]
+    public async Task GetBoard_ParticipantMode_ActiveParticipantWithNoShifts_StillGetsARow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Amy", "Ng");
+        var controller = new RosteringController(db);
+
+        var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var board = body.Data!;
+
+        var row = Assert.Single(board.ParticipantRows!, r => r.ParticipantId == participant.Id);
+        Assert.Empty(row.Shifts);
+        Assert.Equal(0m, row.ScheduledHours);
+        Assert.Equal(7, row.DaysWithoutCover);
+    }
+
+    [Fact]
+    public async Task GetBoard_ParticipantMode_UnfilledShiftAppearsOnParticipantRow_NoSeparateUnfilledLane()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Cam", "Diaz");
+        var unfilledShift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(15, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(unfilledShift);
+        db.SaveChanges();
+
+        var controller = new RosteringController(db);
+        var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var board = body.Data!;
+
+        Assert.Null(board.Unfilled); // no separate unfilled lane in participant mode
+
+        var row = Assert.Single(board.ParticipantRows!, r => r.ParticipantId == participant.Id);
+        var rowShift = Assert.Single(row.Shifts);
+        Assert.Equal(unfilledShift.Id, rowShift.Id);
+        Assert.Null(rowShift.StaffId);
+    }
+
+    [Fact]
+    public async Task GetBoard_ParticipantMode_DaysWithoutCover_CountsDaysWithNoShiftOrTrip()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Amy", "Ng");
+
+        // ServiceDate (2026-08-24) is the week's Monday; shift the Monday shift's staff off
+        // so this test only exercises coverage, not conflict findings.
+        db.Shifts.AddRange(
+            new Shift
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, Status = ShiftStatus.Draft
+            },
+            new Shift
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate.AddDays(1),
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, Status = ShiftStatus.Draft
+            });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db);
+        var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var row = Assert.Single(board.ParticipantRows!, r => r.ParticipantId == participant.Id);
+
+        // 2 of the 7 days (Mon, Tue) are covered by a shift -> 5 days without cover.
+        Assert.Equal(5, row.DaysWithoutCover);
+    }
+
+    [Fact]
+    public async Task GetBoard_ParticipantMode_TripCoversTheWeek_ProducesTripBarAndReducesDaysWithoutCover()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Amy", "Ng");
+
+        // Wed-Fri of the ServiceDate week (Mon 2026-08-24): 3 days, no shifts at all.
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Beach Trip", StartDate = ServiceDate.AddDays(2), DurationDays = 3
+        };
+        db.TripInstances.Add(trip);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = ServiceDate
+        });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db);
+        var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var row = Assert.Single(board.ParticipantRows!, r => r.ParticipantId == participant.Id);
+
+        var tripBar = Assert.Single(row.TripBars);
+        Assert.Equal(trip.Id, tripBar.TripInstanceId);
+        Assert.Empty(row.Shifts);
+
+        // 3 trip days out of 7 are covered -> only the remaining 4 count as without cover.
+        Assert.Equal(4, row.DaysWithoutCover);
+    }
+
+    [Fact]
+    public async Task GetBoard_UnrecognisedGroupBy_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new RosteringController(db);
+
+        var result = await controller.GetBoard(ServiceDate, "bogus", CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(badRequest.Value);
+        Assert.False(body.Success);
     }
 
     // ── 422 envelope actually serialises the way the frontend expects ─────

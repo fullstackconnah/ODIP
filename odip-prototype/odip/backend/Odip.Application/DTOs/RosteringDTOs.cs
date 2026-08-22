@@ -78,6 +78,28 @@ public record RosterStaffRowDto
     public List<LeaveBarDto> Leave { get; init; } = new();
 }
 
+/// <summary>
+/// One participant's week on the board (M4 pass 2). Every ACTIVE participant gets a row,
+/// whether or not they have shifts — an empty row is a visible coverage gap. Unfilled shifts
+/// belong here too (see <see cref="Shift.StaffId"/>) — there is no separate unfilled lane in
+/// participant mode, that stays a staff-view concept.
+/// </summary>
+public record RosterParticipantRowDto
+{
+    public Guid ParticipantId { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public SupportRatio SupportRatio { get; init; }
+    public OvernightSupportType OvernightSupport { get; init; }
+    public bool HasRestrictivePractice { get; init; }
+    /// <summary>Includes unfilled shifts (StaffId null).</summary>
+    public List<ShiftDto> Shifts { get; init; } = new();
+    /// <summary>From ParticipantBooking joined to TripInstance, for trips overlapping the week.</summary>
+    public List<TripBarDto> TripBars { get; init; } = new();
+    public decimal ScheduledHours { get; init; }
+    /// <summary>Days in the week with neither a shift nor a trip covering them.</summary>
+    public int DaysWithoutCover { get; init; }
+}
+
 public record RosterExceptionDto
 {
     public Guid? ShiftId { get; init; }
@@ -86,12 +108,28 @@ public record RosterExceptionDto
     public RosterFindingDto Finding { get; init; } = null!;
 }
 
+/// <summary>Which axis <see cref="RosterBoardDto"/> is grouped by. Drives which of the two row shapes is populated.</summary>
+public enum RosterBoardGroupBy
+{
+    Participant = 0,
+    Staff = 1
+}
+
+/// <summary>
+/// The week roster board, discriminated on <see cref="GroupBy"/>: participant mode populates
+/// <see cref="ParticipantRows"/> only; staff mode populates <see cref="StaffRows"/> and
+/// <see cref="Unfilled"/> only. The unused side is left null so it serialises out entirely
+/// (Program.cs's JsonIgnoreCondition.WhenWritingNull) rather than as an empty array — a
+/// consumer should never see both sides populated at once.
+/// </summary>
 public record RosterBoardDto
 {
     public DateOnly WeekStart { get; init; }
     public List<DateOnly> Days { get; init; } = new();
-    public List<RosterStaffRowDto> Rows { get; init; } = new();
-    public List<ShiftDto> Unfilled { get; init; } = new();
+    public RosterBoardGroupBy GroupBy { get; init; }
+    public List<RosterParticipantRowDto>? ParticipantRows { get; init; }
+    public List<RosterStaffRowDto>? StaffRows { get; init; }
+    public List<ShiftDto>? Unfilled { get; init; }
     public List<RosterExceptionDto> Exceptions { get; init; } = new();
 }
 

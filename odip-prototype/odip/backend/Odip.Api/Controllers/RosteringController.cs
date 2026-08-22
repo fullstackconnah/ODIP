@@ -45,16 +45,25 @@ public class RosteringController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The whole week in one payload: one row per active staff member (shifts, trip bars,
-    /// leave bars, rostered/target hours, compliance), the unfilled-shift lane, and every
-    /// finding across the week flattened into <see cref="RosterBoardDto.Exceptions"/>.
+    /// The whole week in one payload, discriminated on <paramref name="groupBy"/>
+    /// (case-insensitive, defaults to <c>participant</c>; an unrecognised value 400s):
+    /// participant mode returns one row per ACTIVE participant (shifts including unfilled
+    /// ones, trip bars, scheduled hours, days without cover); staff mode returns the pass-1
+    /// shape — one row per active staff member plus the unfilled-shift lane. Every finding
+    /// across the week flattens into <see cref="RosterBoardDto.Exceptions"/> either way.
     /// Defaults to the current week when <paramref name="weekStart"/> is omitted; any date
     /// supplied is normalised to that week's Monday.
     /// </summary>
     [HttpGet("board")]
     public async Task<ActionResult<ApiResponse<RosterBoardDto>>> GetBoard(
-        [FromQuery] DateOnly? weekStart, CancellationToken ct)
+        [FromQuery] DateOnly? weekStart, [FromQuery] string? groupBy, CancellationToken ct)
     {
+        if (!TryParseGroupBy(groupBy, out var groupByValue))
+        {
+            return BadRequest(ApiResponse<RosterBoardDto>.Fail(
+                $"Unrecognised groupBy value '{groupBy}'. Expected 'participant' or 'staff'."));
+        }
+
         var start = WeekStart(weekStart ?? DateOnly.FromDateTime(DateTime.UtcNow));
         var end = start.AddDays(6);
         var days = Enumerable.Range(0, 7).Select(i => start.AddDays(i)).ToList();
@@ -84,13 +93,29 @@ public class RosteringController : ControllerBase
             .Where(a => staffIds.Contains(a.StaffId) && a.StartDateTime < endDt && a.EndDateTime > startDt)
             .ToListAsync(ct);
 
-        var participantIds = weekShifts.Select(s => s.ParticipantId).Distinct().ToList();
-        var participantById = await _db.Participants
-            .Where(p => participantIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, ct);
+        // ── Every ACTIVE participant, not just ones with shifts this week — an empty week
+        // is itself the coverage gap the participant-mode board exists to surface. Shifts
+        // referencing a participant outside that active set (edge case) still need a name
+        // for their ShiftDto/exception, so top up with whichever ids weekShifts references
+        // that the active set didn't already cover — still just two queries total. ──
+        var activeParticipants = await _db.Participants
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
+            .ToListAsync(ct);
+        var participantById = activeParticipants.ToDictionary(p => p.Id);
+        var shiftParticipantIds = weekShifts.Select(s => s.ParticipantId).Distinct().ToList();
+        var missingParticipantIds = shiftParticipantIds.Where(id => !participantById.ContainsKey(id)).ToList();
+        if (missingParticipantIds.Count > 0)
+        {
+            var extraParticipants = await _db.Participants
+                .Where(p => missingParticipantIds.Contains(p.Id))
+                .ToListAsync(ct);
+            foreach (var extra in extraParticipants) participantById[extra.Id] = extra;
+        }
+        var allParticipantIds = participantById.Keys.ToList();
 
         var compatByPair = await _db.StaffParticipantCompatibilities
-            .Where(c => staffIds.Contains(c.StaffId) && participantIds.Contains(c.ParticipantId))
+            .Where(c => staffIds.Contains(c.StaffId) && allParticipantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.StaffId, c.ParticipantId), c => c.Level, ct);
 
         List<RosterFinding> FindingsFor(Shift shift)
@@ -129,64 +154,121 @@ public class RosteringController : ControllerBase
             };
         }
 
+        // ── Findings are computed once per shift regardless of groupBy — "exceptions" is
+        // the same flattened list either way, and both row-building branches below reuse
+        // the same dictionary rather than re-running RosterConflictService.Check. ──
+        var findingsByShiftId = weekShifts.ToDictionary(s => s.Id, FindingsFor);
+
         var exceptions = new List<RosterExceptionDto>();
-        var rows = new List<RosterStaffRowDto>();
-
-        foreach (var staff in activeStaff)
+        foreach (var shift in weekShifts)
         {
-            var staffShifts = weekShifts.Where(s => s.StaffId == staff.Id).ToList();
-            var shiftDtos = new List<ShiftDto>();
-            foreach (var shift in staffShifts)
+            participantById.TryGetValue(shift.ParticipantId, out var p);
+            foreach (var finding in findingsByShiftId[shift.Id])
             {
-                var findings = FindingsFor(shift);
-                shiftDtos.Add(ToShiftDto(shift, findings));
-
-                participantById.TryGetValue(shift.ParticipantId, out var p);
-                foreach (var finding in findings)
+                exceptions.Add(new RosterExceptionDto
                 {
-                    exceptions.Add(new RosterExceptionDto
-                    {
-                        ShiftId = shift.Id, ParticipantName = p?.FullName ?? string.Empty,
-                        ServiceDate = shift.ServiceDate, Finding = ToFindingDto(finding)
-                    });
-                }
+                    ShiftId = shift.Id, ParticipantName = p?.FullName ?? string.Empty,
+                    ServiceDate = shift.ServiceDate, Finding = ToFindingDto(finding)
+                });
             }
-
-            var (complianceLevel, complianceNotes) = ComputeCompliance(staff, start);
-            var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
-
-            var myTripBars = weekTripAssignments.Where(a => a.StaffId == staff.Id).Select(a => new TripBarDto
-            {
-                TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
-                StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver
-            }).ToList();
-
-            var myLeave = weekAvailability
-                .Where(a => a.StaffId == staff.Id && LeaveTypes.Contains(a.AvailabilityType))
-                .Select(a => new LeaveBarDto
-                {
-                    StartDate = DateOnly.FromDateTime(a.StartDateTime), EndDate = DateOnly.FromDateTime(a.EndDateTime),
-                    AvailabilityType = a.AvailabilityType, Notes = a.Notes
-                }).ToList();
-
-            rows.Add(new RosterStaffRowDto
-            {
-                StaffId = staff.Id, FullName = staff.FullName, Role = staff.Role,
-                Compliance = complianceLevel, ComplianceNotes = complianceNotes,
-                RosteredHours = rosteredHours, TargetHours = RosterConflictService.DefaultWeeklyHoursThreshold,
-                Shifts = shiftDtos, TripBars = myTripBars, Leave = myLeave
-            });
         }
 
-        var unfilled = weekShifts
-            .Where(s => s.StaffId is null)
-            .Select(s => ToShiftDto(s, new List<RosterFinding>()))
-            .ToList();
+        RosterBoardDto board;
 
-        var board = new RosterBoardDto
+        if (groupByValue == RosterBoardGroupBy.Participant)
         {
-            WeekStart = start, Days = days, Rows = rows, Unfilled = unfilled, Exceptions = exceptions
-        };
+            // Trips overlapping the week, for every participant with a row — an away-on-trip
+            // week must read as covered, not as a gap. StartDate is filtered in SQL; EndDate
+            // is a computed property (TripInstance.StartDate + DurationDays - 1) that EF
+            // can't translate, so the EndDate half of the overlap test runs in memory on the
+            // already-materialised list.
+            var weekBookings = await _db.ParticipantBookings
+                .Include(b => b.TripInstance)
+                .Where(b => allParticipantIds.Contains(b.ParticipantId)
+                            && b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending
+                            && b.TripInstance.StartDate <= end)
+                .ToListAsync(ct);
+            var weekTripBars = weekBookings.Where(b => b.TripInstance.EndDate >= start).ToList();
+
+            TripBarDto ToParticipantTripBar(ParticipantBooking b) => new()
+            {
+                TripInstanceId = b.TripInstanceId, TripCode = b.TripInstance.TripCode, TripName = b.TripInstance.TripName,
+                StartDate = b.TripInstance.StartDate, EndDate = b.TripInstance.EndDate, IsDriver = false
+            };
+
+            var participantRows = new List<RosterParticipantRowDto>();
+            foreach (var participant in activeParticipants)
+            {
+                var participantShifts = weekShifts.Where(s => s.ParticipantId == participant.Id).ToList();
+                var shiftDtos = participantShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
+                var myTripBars = weekBookings.Where(b => b.ParticipantId == participant.Id).Select(ToParticipantTripBar).ToList();
+                var scheduledHours = participantShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
+                var daysWithoutCover = days.Count(d =>
+                    !participantShifts.Any(s => s.ServiceDate == d) &&
+                    !myTripBars.Any(tb => tb.StartDate <= d && d <= tb.EndDate));
+
+                participantRows.Add(new RosterParticipantRowDto
+                {
+                    ParticipantId = participant.Id, FullName = participant.FullName,
+                    SupportRatio = participant.SupportRatio, OvernightSupport = participant.OvernightSupport,
+                    HasRestrictivePractice = participant.HasRestrictivePracticeFlag,
+                    Shifts = shiftDtos, TripBars = myTripBars,
+                    ScheduledHours = scheduledHours, DaysWithoutCover = daysWithoutCover
+                });
+            }
+
+            board = new RosterBoardDto
+            {
+                WeekStart = start, Days = days, GroupBy = RosterBoardGroupBy.Participant,
+                ParticipantRows = participantRows, Exceptions = exceptions
+            };
+        }
+        else
+        {
+            var rows = new List<RosterStaffRowDto>();
+
+            foreach (var staff in activeStaff)
+            {
+                var staffShifts = weekShifts.Where(s => s.StaffId == staff.Id).ToList();
+                var shiftDtos = staffShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
+
+                var (complianceLevel, complianceNotes) = ComputeCompliance(staff, start);
+                var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
+
+                var myTripBars = weekTripAssignments.Where(a => a.StaffId == staff.Id).Select(a => new TripBarDto
+                {
+                    TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
+                    StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver
+                }).ToList();
+
+                var myLeave = weekAvailability
+                    .Where(a => a.StaffId == staff.Id && LeaveTypes.Contains(a.AvailabilityType))
+                    .Select(a => new LeaveBarDto
+                    {
+                        StartDate = DateOnly.FromDateTime(a.StartDateTime), EndDate = DateOnly.FromDateTime(a.EndDateTime),
+                        AvailabilityType = a.AvailabilityType, Notes = a.Notes
+                    }).ToList();
+
+                rows.Add(new RosterStaffRowDto
+                {
+                    StaffId = staff.Id, FullName = staff.FullName, Role = staff.Role,
+                    Compliance = complianceLevel, ComplianceNotes = complianceNotes,
+                    RosteredHours = rosteredHours, TargetHours = RosterConflictService.DefaultWeeklyHoursThreshold,
+                    Shifts = shiftDtos, TripBars = myTripBars, Leave = myLeave
+                });
+            }
+
+            var unfilled = weekShifts
+                .Where(s => s.StaffId is null)
+                .Select(s => ToShiftDto(s, findingsByShiftId[s.Id]))
+                .ToList();
+
+            board = new RosterBoardDto
+            {
+                WeekStart = start, Days = days, GroupBy = RosterBoardGroupBy.Staff,
+                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions
+            };
+        }
 
         return Ok(ApiResponse<RosterBoardDto>.Ok(board));
     }
@@ -500,6 +582,35 @@ public class RosteringController : ControllerBase
 
     /// <summary>Monday of the week containing <paramref name="date"/>.</summary>
     private static DateOnly WeekStart(DateOnly date) => date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+
+    /// <summary>
+    /// Parses the board's <c>groupBy</c> query param case-insensitively. Missing/empty
+    /// defaults to <see cref="RosterBoardGroupBy.Participant"/>; anything other than
+    /// "participant" or "staff" fails so the caller can 400 rather than silently defaulting.
+    /// </summary>
+    private static bool TryParseGroupBy(string? raw, out RosterBoardGroupBy result)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            result = RosterBoardGroupBy.Participant;
+            return true;
+        }
+
+        if (string.Equals(raw, "participant", StringComparison.OrdinalIgnoreCase))
+        {
+            result = RosterBoardGroupBy.Participant;
+            return true;
+        }
+
+        if (string.Equals(raw, "staff", StringComparison.OrdinalIgnoreCase))
+        {
+            result = RosterBoardGroupBy.Staff;
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
 
     private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message };
 

@@ -2,12 +2,15 @@ import { ChevronLeft, ChevronRight, AlertTriangle, Plus } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formatWeekRange } from '../lib/roster'
+import type { BoardViewMode } from '../lib/useBoardViewMode'
 
 export type WeekToolbarProps = {
   days: string[]
   onPrevWeek: () => void
   onThisWeek: () => void
   onNextWeek: () => void
+  groupBy: BoardViewMode
+  onGroupByChange: (mode: BoardViewMode) => void
   participantOptions: { value: string; label: string }[]
   participantFilter: string
   onParticipantFilterChange: (value: string) => void
@@ -27,6 +30,8 @@ export function WeekToolbar({
   onPrevWeek,
   onThisWeek,
   onNextWeek,
+  groupBy,
+  onGroupByChange,
   participantOptions,
   participantFilter,
   onParticipantFilterChange,
@@ -72,6 +77,11 @@ export function WeekToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          options={[{ key: 'participant', label: 'By participant' }, { key: 'staff', label: 'By staff' }]}
+          value={groupBy}
+          onChange={key => onGroupByChange(key as BoardViewMode)}
+        />
         <div className="w-40">
           <Dropdown
             variant="form"
@@ -82,20 +92,24 @@ export function WeekToolbar({
             items={[{ value: '', label: 'All participants' }, ...participantOptions]}
           />
         </div>
-        <div className="w-36">
-          <Dropdown
-            variant="form"
-            value={regionFilter}
-            onChange={onRegionFilterChange}
-            label="All regions"
-            items={[{ value: '', label: 'All regions' }, ...regionOptions]}
+        {groupBy === 'staff' && (
+          <div className="w-36">
+            <Dropdown
+              variant="form"
+              value={regionFilter}
+              onChange={onRegionFilterChange}
+              label="All regions"
+              items={[{ value: '', label: 'All regions' }, ...regionOptions]}
+            />
+          </div>
+        )}
+        {groupBy === 'staff' && (
+          <ToggleGroup
+            options={[{ key: 'unfilled', label: 'Unfilled only' }]}
+            value={unfilledOnly ? 'unfilled' : ''}
+            onChange={() => onUnfilledOnlyChange(!unfilledOnly)}
           />
-        </div>
-        <ToggleGroup
-          options={[{ key: 'unfilled', label: 'Unfilled only' }]}
-          value={unfilledOnly ? 'unfilled' : ''}
-          onChange={() => onUnfilledOnlyChange(!unfilledOnly)}
-        />
+        )}
         <button
           type="button"
           onClick={onOpenExceptions}

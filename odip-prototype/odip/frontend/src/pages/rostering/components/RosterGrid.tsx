@@ -1,22 +1,33 @@
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
-import { formatDayHeader, isToday } from '../lib/roster'
+import { ParticipantRow } from './ParticipantRow'
+import { formatDayHeader, isToday, ROSTER_GRID_TEMPLATE_COLUMNS, rosterDayColumnsTemplate } from '../lib/roster'
 
 export type RosterGridProps = {
   board: RosterBoardDto
   canWrite: boolean
   unfilledOnly: boolean
+  /** True when the whole (unfiltered) week has zero shifts — suppresses the per-row coverage badge, since every row being uncovered on an empty week is tautological noise the hint above the grid already covers. */
+  weekHasNoShifts: boolean
   onOpenShift: (shift: ShiftDto) => void
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
   onDeleteShift: (shift: ShiftDto) => void
+  onAddParticipantShift: (participantId: string, participantName: string, day: string) => void
+  onAddStaffShift: (staffId: string, day: string) => void
 }
 
-const GRID_TEMPLATE = { gridTemplateColumns: '220px repeat(7, minmax(150px, 1fr))' }
+const GRID_TEMPLATE = { gridTemplateColumns: ROSTER_GRID_TEMPLATE_COLUMNS }
 
-export function RosterGrid({ board, canWrite, unfilledOnly, onOpenShift, onAssignTo, onUnassign, onDeleteShift }: RosterGridProps) {
-  const { days, rows, unfilled } = board
+/**
+ * Always renders the full grid, participant × day or staff × day — a week with no shifts still
+ * shows every row with empty cells, since the empty grid is itself the add-a-shift affordance.
+ * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
+ * dismissible hint the caller renders above this component.
+ */
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onDeleteShift, onAddParticipantShift, onAddStaffShift }: RosterGridProps) {
+  const { days } = board
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
@@ -36,27 +47,47 @@ export function RosterGrid({ board, canWrite, unfilledOnly, onOpenShift, onAssig
           )
         })}
 
-        <UnfilledLane
-          days={days}
-          shifts={unfilled}
-          canWrite={canWrite}
-          onOpen={onOpenShift}
-          onAssignTo={onAssignTo}
-          onDelete={onDeleteShift}
-        />
+        {board.groupBy === 'Participant' ? (
+          board.participantRows.map(row => (
+            <ParticipantRow
+              key={row.participantId}
+              row={row}
+              days={days}
+              canWrite={canWrite}
+              onOpen={onOpenShift}
+              onAssignTo={onAssignTo}
+              onUnassign={onUnassign}
+              onDelete={onDeleteShift}
+              onAddShift={onAddParticipantShift}
+              hideCoverageBadge={weekHasNoShifts}
+            />
+          ))
+        ) : (
+          <>
+            <UnfilledLane
+              days={days}
+              shifts={board.unfilled}
+              canWrite={canWrite}
+              onOpen={onOpenShift}
+              onAssignTo={onAssignTo}
+              onDelete={onDeleteShift}
+            />
 
-        {!unfilledOnly && rows.map(row => (
-          <StaffRow
-            key={row.staffId}
-            row={row}
-            days={days}
-            canWrite={canWrite}
-            onOpen={onOpenShift}
-            onAssignTo={onAssignTo}
-            onUnassign={onUnassign}
-            onDelete={onDeleteShift}
-          />
-        ))}
+            {!unfilledOnly && board.staffRows.map(row => (
+              <StaffRow
+                key={row.staffId}
+                row={row}
+                days={days}
+                canWrite={canWrite}
+                onOpen={onOpenShift}
+                onAssignTo={onAssignTo}
+                onUnassign={onUnassign}
+                onDelete={onDeleteShift}
+                onAddShift={onAddStaffShift}
+              />
+            ))}
+          </>
+        )}
       </div>
     </div>
   )
@@ -84,7 +115,7 @@ export function RosterGridSkeleton({ days }: { days: string[] }) {
               <div className="h-3 w-16 animate-pulse rounded-sm bg-muted" />
               <div className="h-1 w-full animate-pulse rounded-sm bg-muted" />
             </div>
-            <div className="col-span-7 grid gap-1 border-b border-border p-1" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
+            <div className="col-span-7 grid gap-1 border-b border-border p-1" style={{ gridTemplateColumns: rosterDayColumnsTemplate(7) }}>
               {days.map(day => (
                 <div key={day} className="min-h-[2.25rem] rounded-sm p-0.5">
                   {rowIdx % 3 === 0 && <div className="h-6 w-full animate-pulse rounded-sm bg-muted" />}

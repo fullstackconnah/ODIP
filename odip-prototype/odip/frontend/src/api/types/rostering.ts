@@ -59,6 +59,18 @@ export interface RosterStaffRowDto {
   leave: LeaveBarDto[]
 }
 
+export interface RosterParticipantRowDto {
+  participantId: string
+  fullName: string
+  supportRatio: SupportRatio
+  overnightSupport: SleepoverType
+  hasRestrictivePractice: boolean
+  shifts: ShiftDto[]          // includes unfilled ones (staffId null)
+  tripBars: TripBarDto[]
+  scheduledHours: number
+  daysWithoutCover: number    // days in the week with no shift and no trip
+}
+
 export interface RosterExceptionDto {
   shiftId: string | null
   participantName: string
@@ -66,13 +78,28 @@ export interface RosterExceptionDto {
   finding: RosterFindingDto
 }
 
-export interface RosterBoardDto {
-  weekStart: string
-  days: string[]
-  rows: RosterStaffRowDto[]
-  unfilled: ShiftDto[]
-  exceptions: RosterExceptionDto[]
-}
+/**
+ * Discriminated on `groupBy`. Participant view is the default — every active participant gets a
+ * row whether or not they have shifts, and an unfilled shift lives inline on its participant's
+ * row rather than in a separate lane. Staff view keeps the pass-1 shape: staff rows plus the
+ * dedicated Unfilled lane, which is where over-allocation/double-booking findings are visible.
+ */
+export type RosterBoardDto =
+  | {
+      groupBy: 'Participant'
+      weekStart: string
+      days: string[]
+      participantRows: RosterParticipantRowDto[]
+      exceptions: RosterExceptionDto[]
+    }
+  | {
+      groupBy: 'Staff'
+      weekStart: string
+      days: string[]
+      staffRows: RosterStaffRowDto[]
+      unfilled: ShiftDto[]
+      exceptions: RosterExceptionDto[]
+    }
 
 // ── Write bodies ──────────────────────────────────────────
 export interface CreateShiftDto {
