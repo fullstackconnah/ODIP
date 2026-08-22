@@ -1,9 +1,9 @@
 import { useDroppable } from '@dnd-kit/core'
 import type { RosterStaffRowDto, ShiftDto } from '@/api/types'
-import { ShiftChip } from './ShiftChip'
+import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
 import { LeaveBar } from './LeaveBar'
-import { barOverlapsWeek, formatHoursMeter, isToday } from '../lib/roster'
+import { barOverlapsWeek, formatDayAccessibleName, formatHoursMeter, rosterDayColumnsTemplate } from '../lib/roster'
 
 export type StaffRowProps = {
   row: RosterStaffRowDto
@@ -13,9 +13,10 @@ export type StaffRowProps = {
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
+  onAddShift: (staffId: string, day: string) => void
 }
 
-export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete }: StaffRowProps) {
+export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift }: StaffRowProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `staff:${row.staffId}`, disabled: !canWrite })
 
   const overTarget = row.rosteredHours > row.targetHours
@@ -79,24 +80,22 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
       <div
         ref={setNodeRef}
         className={`grid gap-1 border-b border-border p-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
-        style={{ gridColumn: '2 / -1', gridTemplateColumns: `repeat(${days.length}, minmax(150px, 1fr))`, gridAutoFlow: 'row dense' }}
+        style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length), gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (
-          <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[2.25rem] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>
-            {row.shifts
-              .filter(s => s.serviceDate === day)
-              .map(shift => (
-                <ShiftChip
-                  key={shift.id}
-                  shift={shift}
-                  canWrite={canWrite}
-                  onOpen={onOpen}
-                  onAssignTo={onAssignTo}
-                  onUnassign={onUnassign}
-                  onDelete={onDelete}
-                />
-              ))}
-          </div>
+          <RosterDayCell
+            key={day}
+            day={day}
+            dayIndex={i}
+            shifts={row.shifts.filter(s => s.serviceDate === day)}
+            canWrite={canWrite}
+            addLabel={`Add a shift for ${row.fullName} on ${formatDayAccessibleName(day)}`}
+            onAdd={() => onAddShift(row.staffId, day)}
+            onOpen={onOpen}
+            onAssignTo={onAssignTo}
+            onUnassign={onUnassign}
+            onDelete={onDelete}
+          />
         ))}
 
         {visibleTripBars.map(trip => (

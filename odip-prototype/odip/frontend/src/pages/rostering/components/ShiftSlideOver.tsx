@@ -13,7 +13,14 @@ import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
 
 export type ShiftSlideOverTarget =
-  | { mode: 'create'; participantId?: string; staffId?: string | null; serviceDate?: string }
+  | {
+      mode: 'create'
+      participantId?: string
+      staffId?: string | null
+      serviceDate?: string
+      /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). */
+      focusField?: 'participant' | 'staff'
+    }
   | { mode: 'edit'; shift: ShiftDto }
 
 export type ShiftSlideOverProps = {
@@ -22,6 +29,8 @@ export type ShiftSlideOverProps = {
   canWrite: boolean
   participantOptions: { value: string; label: string }[]
   staffOptions: { value: string; label: string }[]
+  /** Which board grouping opened this panel — only changes the "leave unassigned" hint copy, since an unfilled shift has no separate lane to point to in participant view. */
+  groupBy?: 'participant' | 'staff'
 }
 
 /** Normalises a Shift/TimeOnly string ("HH:mm:ss" or "HH:mm") to the "HH:mm" a <input type="time"> needs. */
@@ -29,11 +38,22 @@ function toTimeInputValue(time: string | undefined): string {
   return (time ?? '09:00').slice(0, 5)
 }
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant' }: ShiftSlideOverProps) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const open = target !== null
   useSlideOverA11y(open, onClose, panelRef)
+
+  // Overrides the a11y hook's default "focus the first focusable element" behaviour when the
+  // caller wants focus on a specific field instead — e.g. clicking an empty participant-row cell
+  // prefills the participant and date, so focus should land on Staff (the thing left to pick),
+  // not back on the already-correct Participant dropdown. Declared after useSlideOverA11y so it
+  // runs after that hook's own focus effect within the same commit and wins.
+  useEffect(() => {
+    if (!open || target?.mode !== 'create' || !target.focusField) return
+    const el = panelRef.current?.querySelector<HTMLElement>(`[data-shift-field="${target.focusField}"] button, [data-shift-field="${target.focusField}"] input`)
+    el?.focus()
+  }, [open, target])
 
   const isEdit = target?.mode === 'edit'
   const existing = target?.mode === 'edit' ? target.shift : undefined
@@ -152,29 +172,36 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <FormField label="Participant" required>
-            <Dropdown
-              variant="form"
-              value={participantId}
-              onChange={setParticipantId}
-              disabled={!canWrite || isEdit}
-              searchable
-              label="Select a participant"
-              items={participantOptions}
-            />
-          </FormField>
+          <div data-shift-field="participant">
+            <FormField label="Participant" required>
+              <Dropdown
+                variant="form"
+                value={participantId}
+                onChange={setParticipantId}
+                disabled={!canWrite || isEdit}
+                searchable
+                label="Select a participant"
+                items={participantOptions}
+              />
+            </FormField>
+          </div>
 
-          <FormField label="Staff" hint="Leave unassigned to add this shift to the Unfilled lane.">
-            <Dropdown
-              variant="form"
-              value={staffId ?? ''}
-              onChange={v => setStaffId(v || null)}
-              disabled={!canWrite}
-              searchable
-              label="Unassigned"
-              items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
-            />
-          </FormField>
+          <div data-shift-field="staff">
+            <FormField
+              label="Staff"
+              hint={groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
+            >
+              <Dropdown
+                variant="form"
+                value={staffId ?? ''}
+                onChange={v => setStaffId(v || null)}
+                disabled={!canWrite}
+                searchable
+                label="Unassigned"
+                items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
+              />
+            </FormField>
+          </div>
 
           <FormField label="Service date" required>
             <input type="date" value={serviceDate} disabled={!canWrite} onChange={e => setServiceDate(e.target.value)} />

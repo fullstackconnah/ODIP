@@ -1,5 +1,29 @@
 import { addDays, addWeeks, format, parseISO, startOfWeek } from 'date-fns'
 
+/**
+ * Sticky first-column width. Sized so the longest name in the fixture ("Marcus Papadopoulos",
+ * ~152px of text at the header's 14px/600 font) clears its 32px of horizontal padding with a
+ * few px to spare — that name truncating was a deliberate pass-1 fix (see StaffRow), so this
+ * floor exists specifically to not regress it.
+ */
+export const ROSTER_STICKY_COL_WIDTH = 195
+
+/**
+ * Day-column floor. Sized (with ROSTER_STICKY_COL_WIDTH) so all 7 day columns fit within the
+ * board's available width at 1440px with the sidebar expanded (measured ~1088px) without
+ * requiring horizontal scroll to reach Sunday — the whole point of a week-at-a-glance board.
+ * Columns still grow past this via the `1fr` in minmax() on wider viewports.
+ */
+export const ROSTER_DAY_COL_MIN_WIDTH = 127
+
+/** Grid-template-columns for the board's header row: the sticky column plus 7 day columns. */
+export const ROSTER_GRID_TEMPLATE_COLUMNS = `${ROSTER_STICKY_COL_WIDTH}px repeat(7, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))`
+
+/** Grid-template-columns for a row's day-cell strip (no sticky column — that's a separate grid item spanning column 1). */
+export function rosterDayColumnsTemplate(dayCount: number): string {
+  return `repeat(${dayCount}, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))`
+}
+
 /** Monday-start ISO week key, e.g. "2026-08-17". */
 export function weekStartOf(date: Date): string {
   return format(startOfWeek(date, { weekStartsOn: 1 }), 'yyyy-MM-dd')
@@ -30,6 +54,11 @@ export function formatDayHeader(iso: string): { weekday: string; day: string } {
   return { weekday: format(d, 'EEE'), day: format(d, 'd') }
 }
 
+/** Full weekday + date, for accessible names (e.g. "Wednesday 19 August") — screen-reader users don't get the two-letter/number split the visual header uses. */
+export function formatDayAccessibleName(iso: string): string {
+  return format(parseISO(iso), 'EEEE d MMMM')
+}
+
 export function isToday(iso: string): boolean {
   return iso === format(new Date(), 'yyyy-MM-dd')
 }
@@ -44,6 +73,17 @@ export function formatShiftTime(time: string): string {
 
 export function formatShiftRange(startTime: string, endTime: string, endsNextDay: boolean): string {
   return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}${endsNextDay ? ' +1' : ''}`
+}
+
+/**
+ * Just the "start–end" range, without the endsNextDay suffix — for callers that render the
+ * next-day indicator as its own styled element (ShiftChip's compact superscript) instead of
+ * concatenating " +1" into the string. Time is a chip's highest-priority content and must never
+ * clip, so on a narrow day column even a ~10px suffix matters; formatShiftRange (with the
+ * suffix inline) stays as-is for callers like PatternsPage that just need plain text.
+ */
+export function formatShiftTimeRange(startTime: string, endTime: string): string {
+  return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}`
 }
 
 /**

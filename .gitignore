@@ -32,4 +32,4 @@ odip-prototype/odip/local-test/*.log.crash1
 # Agent/dev scratch artifacts at repo root
 /odip-api.log
 /odip-frontend.log
-/board-response.json
+/board-*.json
