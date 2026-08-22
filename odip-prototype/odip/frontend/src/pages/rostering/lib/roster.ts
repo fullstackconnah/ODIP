@@ -83,3 +83,51 @@ export const RATIO_LABELS: Record<string, string> = {
   OneToFour: '1:4',
   OneToFive: '1:5',
 }
+
+/** .NET `DayOfWeek` numbering (Sunday = 0), matched so pattern day sorting/expansion agrees with the backend. */
+export const DAY_OF_WEEK_INDEX: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
+}
+
+export function formatEffectiveRange(from: string, to: string | null): string {
+  const start = format(parseISO(from), 'd MMM yyyy')
+  return to ? `${start} – ${format(parseISO(to), 'd MMM yyyy')}` : `${start} – ongoing`
+}
+
+/**
+ * Preview-only estimate of a generate run's size — NOT the source of truth. The authoritative
+ * implementation is `ShiftPatternExpander.Occurrences`
+ * (`Odip.Domain/Rostering/Services/ShiftPatternExpander.cs`); this is a client-side port of the
+ * same rule (intersection of [from,to] with [effectiveFrom,effectiveTo], inclusive of
+ * effectiveTo, then a weekly stride from the first matching day-of-week) and must be kept in
+ * step with it by hand. There's no dry-run endpoint for patterns, only for individual shifts, so
+ * this is what drives the Patterns page's pre-submit preview. The server remains authoritative
+ * for the real result — it also skips dates that already carry a shift from this pattern, which
+ * this function has no way to know about, so callers must present the count as an upper bound.
+ */
+export function countPatternOccurrences(
+  pattern: { dayOfWeek: string; effectiveFrom: string; effectiveTo: string | null; isActive: boolean },
+  from: string,
+  to: string,
+): number {
+  if (!pattern.isActive) return 0
+  const fromDate = parseISO(from)
+  const toDate = parseISO(to)
+  if (fromDate > toDate) return 0
+
+  const effectiveFrom = parseISO(pattern.effectiveFrom)
+  const effectiveTo = pattern.effectiveTo ? parseISO(pattern.effectiveTo) : null
+  const rangeStart = fromDate > effectiveFrom ? fromDate : effectiveFrom
+  const rangeEnd = effectiveTo && effectiveTo < toDate ? effectiveTo : toDate
+  if (rangeStart > rangeEnd) return 0
+
+  const targetDow = DAY_OF_WEEK_INDEX[pattern.dayOfWeek] ?? 0
+  const offset = (targetDow - rangeStart.getDay() + 7) % 7
+  let current = addDays(rangeStart, offset)
+  let count = 0
+  while (current <= rangeEnd) {
+    count++
+    current = addDays(current, 7)
+  }
+  return count
+}

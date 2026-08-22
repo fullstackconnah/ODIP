@@ -32,8 +32,10 @@ public sealed record RosterCheckContext(
 
 /// <summary>
 /// Pure domain rule engine for rostering a candidate <see cref="Shift"/>. Every finding is
-/// Warning except <see cref="WscExpired"/>, the one regulatory hard stop — an expired (or
-/// missing) NDIS worker screening. Everything else is a Warning the coordinator may override by
+/// Warning except <see cref="WscExpired"/>, the one regulatory hard stop — a worker screening
+/// verified to have lapsed against the shift's <see cref="Shift.ServiceDate"/>. A screening that
+/// simply hasn't been recorded yet (<see cref="WscMissing"/>) is a records gap, not a verdict on
+/// the worker, and is only a Warning like everything else the coordinator may override by
 /// supplying a reason. Takes data in, returns findings; no EF, no I/O, no system clock reads
 /// (the candidate's own <see cref="Shift.ServiceDate"/> stands in for "today" throughout).
 /// </summary>
@@ -43,6 +45,7 @@ public sealed class RosterConflictService
     public const decimal DefaultWeeklyHoursThreshold = 38m;
 
     public const string WscExpired = "WSC_EXPIRED";
+    public const string WscMissing = "WSC_MISSING";
     public const string DoubleBookedShift = "DOUBLE_BOOKED_SHIFT";
     public const string DoubleBookedTrip = "DOUBLE_BOOKED_TRIP";
     public const string StaffUnavailable = "STAFF_UNAVAILABLE";
@@ -77,13 +80,21 @@ public sealed class RosterConflictService
         return findings;
     }
 
+    /// <summary>
+    /// Two distinct facts get two distinct findings. A null
+    /// <see cref="Staff.WorkerScreeningExpiryDate"/> means nobody has entered the number yet —
+    /// a data gap, not a verdict on the worker — and fires <see cref="WscMissing"/> (Warning).
+    /// An expiry date earlier than the candidate's <see cref="Shift.ServiceDate"/> means the
+    /// worker is verifiably unscreened — a regulatory prohibition — and fires
+    /// <see cref="WscExpired"/> (Blocking), the only Blocking finding this engine produces.
+    /// </summary>
     private static void CheckWorkerScreening(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var expiry = ctx.Staff.WorkerScreeningExpiryDate;
         if (expiry is null)
         {
-            findings.Add(new RosterFinding(WscExpired, RosterFindingSeverity.Blocking,
-                $"{ctx.Staff.FullName} has no worker screening on file — cannot roster."));
+            findings.Add(new RosterFinding(WscMissing, RosterFindingSeverity.Warning,
+                $"{ctx.Staff.FullName} has no worker screening recorded — confirm it before the shift."));
             return;
         }
 

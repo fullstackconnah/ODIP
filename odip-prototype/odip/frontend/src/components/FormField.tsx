@@ -23,10 +23,27 @@ type EnhancedChildProps = {
   'aria-describedby'?: string
 }
 
+// Custom form controls (e.g. Dropdown's 'form' variant) don't get the inputClass/className
+// treatment native inputs get — only labelling + validation-state wiring. Props are declared
+// loosely here because this clones onto whatever component the caller passed in, which may or
+// may not read any of them (e.g. react-hook-form's <Controller> ignores unknown props entirely,
+// harmlessly, since it doesn't forward them to its render prop).
+type LabelledFieldProps = {
+  id?: string
+  'aria-labelledby'?: string
+  'aria-required'?: 'true'
+  'aria-invalid'?: 'true'
+  'aria-describedby'?: string
+}
+
 export function FormField({ label, required, error, hint, layout = 'default', className, children }: FormFieldProps) {
   const generatedId = useId()
   const existingId = isValidElement(children) ? (children.props as { id?: string }).id : undefined
   const fieldId = existingId ?? generatedId
+  // Native inputs get native label association via htmlFor/id. Custom components (Dropdown's
+  // trigger button, etc.) additionally get aria-labelledby pointed at this id, since a plain
+  // htmlFor->id association is not reliably announced for non-native/ARIA-widget triggers.
+  const labelId = `${fieldId}-label`
 
   // Checkbox/radio inputs bring their own w-4 h-4 sizing; inputClass's w-full would blow
   // that up to the width of the field, ballooning the clickable/visual hit area.
@@ -58,13 +75,26 @@ export function FormField({ label, required, error, hint, layout = 'default', cl
   const showError = !!error
   const describedBy = [showHint && hintId, showError && errorId].filter(Boolean).join(' ') || undefined
 
-  const enhanced = isValidElement(children)
+  const isNativeInput = isValidElement(children)
     && typeof children.type === 'string'
     && NATIVE_INPUTS.includes(children.type)
-    && !isCheckboxOrRadio
+
+  const enhanced = isNativeInput && !isCheckboxOrRadio
     ? cloneElement(children as ReactElement<EnhancedChildProps>, {
         className: `${inputClass} ${(children.props as { className?: string }).className ?? ''}`,
         ...(existingId ? {} : { id: fieldId }),
+        ...(required ? { 'aria-required': 'true' } : {}),
+        ...(error ? { 'aria-invalid': 'true' } : {}),
+        ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+      })
+    : isValidElement(children) && !isNativeInput
+    // Custom component child (e.g. Dropdown's 'form' variant, or a react-hook-form
+    // <Controller> wrapping one) — pass labelling through. Components that don't read
+    // these props (like Controller, which doesn't forward unknown props to its render
+    // fn) simply ignore them; no crash, no console warning either way.
+    ? cloneElement(children as ReactElement<LabelledFieldProps>, {
+        ...(existingId ? {} : { id: fieldId }),
+        'aria-labelledby': labelId,
         ...(required ? { 'aria-required': 'true' } : {}),
         ...(error ? { 'aria-invalid': 'true' } : {}),
         ...(describedBy ? { 'aria-describedby': describedBy } : {}),
@@ -73,7 +103,7 @@ export function FormField({ label, required, error, hint, layout = 'default', cl
 
   return (
     <div className={className}>
-      <label className={labelClass} htmlFor={fieldId}>
+      <label id={labelId} className={labelClass} htmlFor={fieldId}>
         {label}{required && ' *'}
       </label>
       {enhanced}

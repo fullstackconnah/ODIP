@@ -56,13 +56,17 @@ public class RosteringControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static Staff SeedStaff(OdipDbContext db, bool workerScreeningValid = true, string firstName = "Ben", string lastName = "Turner")
+    // expiredScreeningDate distinguishes the two non-valid cases WSC_EXPIRED/WSC_MISSING test for:
+    // null (the default when workerScreeningValid is false) means no screening recorded at all
+    // (WSC_MISSING, Warning); a date before ServiceDate means a genuinely lapsed screening
+    // (WSC_EXPIRED, Blocking) — callers that need the Blocking finding must pass one explicitly.
+    private static Staff SeedStaff(OdipDbContext db, bool workerScreeningValid = true, DateOnly? expiredScreeningDate = null, string firstName = "Ben", string lastName = "Turner")
     {
         var staff = new Staff
         {
             Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true,
             WorkerScreeningNumber = workerScreeningValid ? "WSC-1" : null,
-            WorkerScreeningExpiryDate = workerScreeningValid ? new DateOnly(2030, 1, 1) : (DateOnly?)null
+            WorkerScreeningExpiryDate = workerScreeningValid ? new DateOnly(2030, 1, 1) : expiredScreeningDate
         };
         db.Staff.Add(staff);
         db.SaveChanges();
@@ -91,7 +95,7 @@ public class RosteringControllerTests
     public async Task CreateShift_BlockingFinding_RejectedEvenWithOverrideReason()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var staff = SeedStaff(db, workerScreeningValid: false); // no worker screening on file -> WSC_EXPIRED, Blocking
+        var staff = SeedStaff(db, workerScreeningValid: false, expiredScreeningDate: new DateOnly(2020, 1, 1)); // genuinely expired -> WSC_EXPIRED, Blocking
         var participant = SeedParticipant(db);
         var controller = new RosteringController(db);
 
@@ -279,7 +283,7 @@ public class RosteringControllerTests
     public async Task CreateShift_BlockingFinding_SerialisedEnvelope_HasSuccessMessageAndFindingsArray()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var staff = SeedStaff(db, workerScreeningValid: false); // no worker screening on file -> WSC_EXPIRED, Blocking
+        var staff = SeedStaff(db, workerScreeningValid: false, expiredScreeningDate: new DateOnly(2020, 1, 1)); // genuinely expired -> WSC_EXPIRED, Blocking
         var participant = SeedParticipant(db);
         var controller = new RosteringController(db);
 

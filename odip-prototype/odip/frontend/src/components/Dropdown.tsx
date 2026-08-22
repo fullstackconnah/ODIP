@@ -34,6 +34,15 @@ type DropdownProps = {
   // Panel alignment — default varies by variant: pill='right', form='left', menu='right'
   align?: 'left' | 'right'
   searchable?: boolean
+
+  // Labelling — lets a wrapping component (e.g. FormField) associate an external <label>
+  // with the trigger button, since the button itself carries no visible label text.
+  // Not applied to the 'icon' variant, which labels itself via `label`/aria-label instead.
+  id?: string
+  'aria-labelledby'?: string
+  'aria-required'?: 'true'
+  'aria-invalid'?: 'true'
+  'aria-describedby'?: string
 }
 
 export function Dropdown({
@@ -50,6 +59,11 @@ export function Dropdown({
   loading = false,
   align,
   searchable = false,
+  id,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-required': ariaRequired,
+  'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy,
 }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
@@ -335,8 +349,13 @@ export function Dropdown({
         <button
           ref={triggerRef}
           type="button"
+          id={id}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-labelledby={ariaLabelledBy}
+          aria-required={ariaRequired}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
@@ -360,8 +379,13 @@ export function Dropdown({
         <button
           ref={triggerRef}
           type="button"
+          id={id}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-labelledby={ariaLabelledBy}
+          aria-required={ariaRequired}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
@@ -407,8 +431,13 @@ export function Dropdown({
       <button
         ref={triggerRef}
         type="button"
+        id={id}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-labelledby={ariaLabelledBy}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
         aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}

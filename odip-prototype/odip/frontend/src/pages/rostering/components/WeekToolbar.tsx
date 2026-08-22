@@ -48,7 +48,7 @@ export function WeekToolbar({
             type="button"
             onClick={onPrevWeek}
             aria-label="Previous week"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-md p-3.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -63,7 +63,7 @@ export function WeekToolbar({
             type="button"
             onClick={onNextWeek}
             aria-label="Next week"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-md p-3.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronRight className="h-4 w-4" />
           </button>

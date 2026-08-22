@@ -15,12 +15,23 @@ claiming, the staff mobile view, full merger of `StaffAssignment` into `Shift`.
    and vice versa. Trip work renders on the board as read-only spanning bars.
 2. **One blocking rule.** Expired NDIS worker screening is the only hard stop — it is a
    regulatory prohibition, not a preference. Everything else is a warning the coordinator
-   may override by supplying a reason, which is stored on the shift and surfaces in audit.
+   may override by supplying a reason, which is stored on the shift's `OverrideReason` field.
+   `Shift` (along with `ShiftPattern` and `StaffParticipantCompatibility`) is registered in
+   `AuditedEntities`, so every create/update/delete — including each edit to `OverrideReason`
+   — writes an `AuditLog` row via `AuditInterceptor` whose `Changes` JSON carries the old and
+   new value of every changed field, not just the fact that a change occurred; the override
+   reason text itself is recoverable from the audit trail.
    Overlapping shifts are deliberately a warning: short overlaps are real handovers.
 3. **Weekly recurrence only.** `ShiftPattern` is day-of-week + time + effective range. No
    RRULE, no monthly/nth-weekday. Generation is idempotent.
 4. **Three-state compatibility.** Preferred / Allowed / Excluded. Not a score. Absence of a
    row means Allowed.
+5. **A records gap is not a prohibition.** A worker screening that has never been entered
+   (`WorkerScreeningExpiryDate` is null) is a data gap, not proof the worker is unscreened —
+   it fires `WSC_MISSING` as a Warning, not `WSC_EXPIRED`. Blocking on missing data would make
+   every staff member unrosterable on a fresh deployment until the whole roster's screening
+   history is backfilled; only a screening verified to have lapsed against the shift's
+   `ServiceDate` is treated as the regulatory hard stop.
 
 ## Domain — `Odip.Domain/Rostering/`
 
@@ -88,7 +99,8 @@ Finding codes, all Warning except where marked:
 
 | Code | Severity | Fires when |
 |---|---|---|
-| `WSC_EXPIRED` | **Blocking** | WorkerScreeningExpiryDate is null or earlier than ServiceDate |
+| `WSC_EXPIRED` | **Blocking** | WorkerScreeningExpiryDate is earlier than ServiceDate |
+| `WSC_MISSING` | Warning | WorkerScreeningExpiryDate is null — no screening recorded yet |
 | `DOUBLE_BOOKED_SHIFT` | Warning | another shift for that staff overlaps in time |
 | `DOUBLE_BOOKED_TRIP` | Warning | a StaffAssignment covers ServiceDate |
 | `STAFF_UNAVAILABLE` | Warning | an Availability record marks the window unavailable |

@@ -85,10 +85,10 @@ public class RosterConflictServiceTests
     private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
         findings.Any(f => f.Code == code);
 
-    // ── WSC_EXPIRED ──────────────────────────────────────────
+    // ── WSC_EXPIRED / WSC_MISSING ─────────────────────────────
 
     [Fact]
-    public void Missing_worker_screening_produces_a_blocking_finding()
+    public void Missing_worker_screening_produces_a_warning_finding_not_blocking()
     {
         var staff = CompliantStaff();
         staff.WorkerScreeningExpiryDate = null;
@@ -97,9 +97,10 @@ public class RosterConflictServiceTests
 
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
 
-        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscExpired);
-        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscMissing);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
         Assert.Contains("Ben Turner", finding.Message);
+        Assert.DoesNotContain(findings, f => f.Severity == RosterFindingSeverity.Blocking);
     }
 
     [Fact]
@@ -128,6 +129,88 @@ public class RosterConflictServiceTests
         var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscExpired);
         Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
         Assert.Equal("Ben Turner's worker screening expired 12 Feb 2026 — cannot roster.", finding.Message);
+    }
+
+    [Fact]
+    public void Missing_and_expired_worker_screening_produce_mutually_exclusive_codes()
+    {
+        var participant = CompliantParticipant();
+
+        var missingStaff = CompliantStaff();
+        missingStaff.WorkerScreeningExpiryDate = null;
+        var missingCandidate = CandidateShift(missingStaff, participant);
+        var missingFindings = new RosterConflictService().Check(missingCandidate, CompliantContext(missingStaff, participant));
+
+        Assert.True(HasCode(missingFindings, RosterConflictService.WscMissing));
+        Assert.False(HasCode(missingFindings, RosterConflictService.WscExpired));
+
+        var expiredStaff = CompliantStaff();
+        expiredStaff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12); // before ServiceDate
+        var expiredCandidate = CandidateShift(expiredStaff, participant);
+        var expiredFindings = new RosterConflictService().Check(expiredCandidate, CompliantContext(expiredStaff, participant));
+
+        Assert.True(HasCode(expiredFindings, RosterConflictService.WscExpired));
+        Assert.False(HasCode(expiredFindings, RosterConflictService.WscMissing));
+    }
+
+    [Fact]
+    public void Worker_screening_expired_is_the_only_blocking_finding_the_engine_can_ever_emit()
+    {
+        // Trigger every other rule at once: missing WSC would only add a Warning, so use a
+        // staff/participant/context combination that also fires WSC_EXPIRED plus every
+        // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED is
+        // ever Blocking - this guards the invariant against future drift.
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12); // expired -> WSC_EXPIRED
+        staff.DriverLicenceExpiryDate = ServiceDate.AddDays(-1); // -> CREDENTIAL_EXPIRED (IsFirstAidQualified below already forces COMPETENCY_MISSING, so an expired first aid date wouldn't fire this rule)
+        staff.IsFirstAidQualified = false; // -> COMPETENCY_MISSING (high support)
+        staff.IsOvernightEligible = false; // -> COMPETENCY_MISSING (overnight)
+        staff.IsManualHandlingCompetent = false; // -> COMPETENCY_MISSING (hoist)
+
+        var participant = CompliantParticipant();
+        participant.IsHighSupport = true;
+        participant.RequiresHoist = true;
+
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne, nightType: SleepoverType.ActiveNight);
+
+        var otherShift = CandidateShift(staff, participant, serviceDate: ServiceDate.AddDays(1),
+            start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var overlapping = CandidateShift(staff, participant, start: new TimeOnly(16, 0), end: new TimeOnly(20, 0));
+        var assignment = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), StaffId = staff.Id, Staff = staff,
+            AssignmentStart = ServiceDate.AddDays(-1), AssignmentEnd = ServiceDate.AddDays(1),
+        };
+        var availability = new StaffAvailability
+        {
+            Id = Guid.NewGuid(), StaffId = staff.Id, Staff = staff,
+            AvailabilityType = AvailabilityType.Unavailable,
+            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
+            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+        };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(
+            staff, participant,
+            staffShiftsInWeek: new[] { otherShift, overlapping },
+            tripAssignments: new[] { assignment },
+            availability: new[] { availability },
+            compatibility: CompatibilityLevel.Excluded,
+            weeklyHoursThreshold: 1m));
+
+        // Sanity check: every other rule really did fire, so this test is exercising what it claims to.
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+        Assert.True(HasCode(findings, RosterConflictService.StaffUnavailable));
+        Assert.True(HasCode(findings, RosterConflictService.CompatibilityExcluded));
+        Assert.True(HasCode(findings, RosterConflictService.CredentialExpired));
+        Assert.True(HasCode(findings, RosterConflictService.CompetencyMissing));
+        Assert.True(HasCode(findings, RosterConflictService.RatioShortfall));
+        Assert.True(HasCode(findings, RosterConflictService.OverHours));
+        Assert.True(HasCode(findings, RosterConflictService.WscExpired));
+
+        var blocking = findings.Where(f => f.Severity == RosterFindingSeverity.Blocking).ToList();
+        var blockingFinding = Assert.Single(blocking);
+        Assert.Equal(RosterConflictService.WscExpired, blockingFinding.Code);
     }
 
     // ── DOUBLE_BOOKED_SHIFT ──────────────────────────────────

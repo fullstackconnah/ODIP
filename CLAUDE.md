@@ -61,7 +61,8 @@ supporting tooling all live nested two levels down, inside `odip-prototype/odip/
     ├── nginx/, start-preview.ps1, .env.example
 ```
 
-This directory is NOT a git repository.
+The repository root is `F:\Projects\personal\ODIP` (the level above `odip-prototype/`),
+not this directory — run `git` commands from there.
 
 ## Commands
 

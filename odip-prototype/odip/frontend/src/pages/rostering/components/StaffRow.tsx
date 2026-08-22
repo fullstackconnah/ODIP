@@ -27,22 +27,41 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
   return (
     <>
       <div className="sticky left-0 z-10 flex flex-col gap-1.5 border-b border-r border-border bg-card px-4 py-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-display text-sm font-semibold text-foreground" title={row.fullName}>
-              {row.fullName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">{row.role}</p>
-          </div>
+        <div className="min-w-0">
+          <p className="truncate font-display text-sm font-semibold text-foreground" title={row.fullName}>
+            {row.fullName}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{row.role}</p>
+        </div>
+
+        {/* Reserved compliance-note line, always rendered (empty for 'Ok' rows) so every row
+            takes the same height whether or not it carries a note — this used to sit beside the
+            name in a `justify-between` row and steal its width, which is why names like "Isabella
+            Ferraro" or "Marcus Papadopoulos" were truncating to unreadable stubs. The name above
+            now has the column's full width to itself; the note moved here as its own line and
+            keeps the same truncate + focus-popout disclosure as before. */}
+        <div className="flex h-4 min-w-0 items-center gap-1">
           {row.compliance === 'Warning' && (
-            <span className="flex shrink-0 items-center gap-1 pt-0.5" title={row.complianceNotes[0]}>
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]" aria-hidden="true" />
-              <span className="max-w-[7rem] truncate text-[11px] text-muted-foreground">{row.complianceNotes[0]}</span>
+            <span className="relative flex min-w-0 items-center gap-1">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-warning)]" aria-hidden="true" />
+              <button
+                type="button"
+                aria-label={row.complianceNotes[0]}
+                className="min-w-0 max-w-full truncate rounded-sm text-left text-[11px] text-muted-foreground focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:text-foreground focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {row.complianceNotes[0]}
+              </button>
             </span>
           )}
           {row.compliance === 'Blocked' && (
-            <span className="max-w-[7rem] shrink-0 truncate pt-0.5 text-[11px] font-medium text-destructive" title={row.complianceNotes[0]}>
-              {row.complianceNotes[0] ?? 'Blocked'}
+            <span className="relative flex min-w-0 items-center">
+              <button
+                type="button"
+                aria-label={row.complianceNotes[0] ?? 'Blocked'}
+                className="min-w-0 max-w-full truncate rounded-sm text-left text-[11px] font-medium text-destructive focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {row.complianceNotes[0] ?? 'Blocked'}
+              </button>
             </span>
           )}
         </div>
@@ -60,7 +79,7 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
       <div
         ref={setNodeRef}
         className={`grid gap-1 border-b border-border p-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
-        style={{ gridTemplateColumns: `repeat(${days.length}, minmax(150px, 1fr))`, gridAutoFlow: 'row dense' }}
+        style={{ gridColumn: '2 / -1', gridTemplateColumns: `repeat(${days.length}, minmax(150px, 1fr))`, gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (
           <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[2.25rem] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>

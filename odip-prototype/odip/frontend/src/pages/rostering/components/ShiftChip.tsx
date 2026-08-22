@@ -1,8 +1,22 @@
 import { useDraggable } from '@dnd-kit/core'
-import { MoreVertical } from 'lucide-react'
-import type { ShiftDto } from '@/api/types'
+import { AlertOctagon, AlertTriangle, GripVertical, MoreVertical, ShieldCheck } from 'lucide-react'
+import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { formatShiftRange, RATIO_LABELS } from '../lib/roster'
+
+/**
+ * Accessible name for the severity marker — states the severity(s) present and their counts, so
+ * a screen-reader user gets the same information the icon/colour distinction conveys visually.
+ * Mirrors the Blocking-vs-Warning language used in FindingsList and ExceptionsDrawer.
+ */
+function findingsSeverityLabel(findings: RosterFindingDto[]): string {
+  const blockingCount = findings.filter(f => f.severity === 'Blocking').length
+  const warningCount = findings.filter(f => f.severity === 'Warning').length
+  const parts: string[] = []
+  if (blockingCount > 0) parts.push(`${blockingCount} blocking ${blockingCount === 1 ? 'issue' : 'issues'}`)
+  if (warningCount > 0) parts.push(`${warningCount} ${warningCount === 1 ? 'warning' : 'warnings'}`)
+  return parts.join(', ')
+}
 
 export type ShiftChipProps = {
   shift: ShiftDto
@@ -28,6 +42,7 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
   })
 
   const hasFindings = shift.findings.length > 0
+  const hasBlocking = shift.findings.some(f => f.severity === 'Blocking')
   const showRatio = shift.ratio !== 'OneToOne'
   const subjectLabel = shift.participantName
 
@@ -49,23 +64,55 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
     <div
       ref={setNodeRef}
       style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
-      className={`group relative flex items-center gap-1.5 rounded-sm border bg-surface-container-low px-2 py-1.5 text-xs transition-opacity duration-150 ${
+      className={`group relative flex items-stretch gap-0.5 rounded-sm border bg-surface-container-low text-xs transition-opacity duration-150 ${
         dashed ? 'border-dashed border-border' : 'border-border'
       } ${isDragging ? 'opacity-50' : ''}`}
     >
+      {/* Drag activation lives on its own handle, separate from the open button below. Both used
+          to share one element with dnd-kit's listeners spread onto the same button that opens the
+          shift — since the KeyboardSensor's default activator keys are Space/Enter, that silently
+          turned "open this shift" into "start a keyboard drag" for anyone tabbing to the chip.
+          Splitting them keeps keyboard drag working (from the handle) without hijacking Enter on
+          the primary control. */}
+      {canWrite && (
+        <button
+          type="button"
+          className="flex shrink-0 cursor-grab touch-none items-center rounded-sm px-1 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+          aria-label={`Drag to move ${subjectLabel}'s shift`}
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+
+      {/* The full visible card padding lives on this button (not the outer wrapper) so the
+          tappable area matches what's visually presented — previously the padding sat on the
+          non-interactive wrapper div, leaving a hit target of only ~96×16px against a visibly
+          larger card. */}
       <button
         type="button"
         onClick={() => onOpen(shift)}
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        {...(canWrite ? listeners : {})}
-        {...(canWrite ? attributes : {})}
+        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm px-2 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {hasFindings && (
           <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-warning)]"
-            aria-hidden="true"
-            title={`${shift.findings.length} finding${shift.findings.length === 1 ? '' : 's'}`}
-          />
+            className="shrink-0"
+            role="img"
+            aria-label={findingsSeverityLabel(shift.findings)}
+            title={findingsSeverityLabel(shift.findings)}
+          >
+            {hasBlocking ? (
+              <AlertOctagon className="h-3 w-3 text-destructive" aria-hidden="true" />
+            ) : (
+              // Amber-700, not the --color-warning token: the token (#f59e0b) measures 1.94:1
+              // against this chip's surface-container-low background, failing WCAG 1.4.11's 3:1
+              // minimum for a graphical object conveying meaning. This value clears it at 4.53:1
+              // while still reading as amber. Scoped to this marker only — --color-warning itself
+              // is used elsewhere (progress meter, badges) and isn't part of this fix.
+              <AlertTriangle className="h-3 w-3 text-[#b45309]" aria-hidden="true" />
+            )}
+          </span>
         )}
         <span className="shrink-0 font-medium tabular-nums text-foreground">
           {formatShiftRange(shift.startTime, shift.endTime, shift.endsNextDay)}
@@ -78,16 +125,28 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
             {RATIO_LABELS[shift.ratio] ?? shift.ratio}
           </span>
         )}
+        {shift.overrideReason && (
+          <span
+            className="shrink-0 text-muted-foreground"
+            role="img"
+            aria-label={`Assigned with an override: ${shift.overrideReason}`}
+            title={`Assigned with an override: ${shift.overrideReason}`}
+          >
+            <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+          </span>
+        )}
       </button>
 
       {canWrite && (
-        <Dropdown
-          variant="icon"
-          icon={<MoreVertical className="h-3.5 w-3.5" />}
-          label={`Actions for ${subjectLabel}'s shift`}
-          items={menuItems}
-          onSelect={handleMenuSelect}
-        />
+        <span className="flex shrink-0 items-center pr-1">
+          <Dropdown
+            variant="icon"
+            icon={<MoreVertical className="h-3.5 w-3.5" />}
+            label={`Actions for ${subjectLabel}'s shift`}
+            items={menuItems}
+            onSelect={handleMenuSelect}
+          />
+        </span>
       )}
     </div>
   )

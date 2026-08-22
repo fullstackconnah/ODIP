@@ -657,15 +657,21 @@ public class RosteringController : ControllerBase
     /// <summary>Staff-level compliance for the board row, evaluated once at the week's Monday — independent of any specific shift's findings.</summary>
     private static (RosterComplianceLevel Level, List<string> Notes) ComputeCompliance(Staff staff, DateOnly weekStart)
     {
-        if (staff.WorkerScreeningExpiryDate is null || staff.WorkerScreeningExpiryDate.Value < weekStart)
+        // Blocked only for a screening that has genuinely lapsed — a verified regulatory
+        // prohibition. A screening that simply hasn't been recorded yet is a records gap, not
+        // a verdict on the worker, and only downgrades to Warning below (mirrors WSC_EXPIRED
+        // vs WSC_MISSING in RosterConflictService).
+        if (staff.WorkerScreeningExpiryDate is { } expiry && expiry < weekStart)
         {
-            var message = staff.WorkerScreeningExpiryDate is null
-                ? $"{staff.FullName} has no worker screening on file."
-                : $"{staff.FullName}'s worker screening expired {staff.WorkerScreeningExpiryDate.Value:d MMM yyyy}.";
-            return (RosterComplianceLevel.Blocked, new List<string> { message });
+            return (RosterComplianceLevel.Blocked, new List<string>
+            {
+                $"{staff.FullName}'s worker screening expired {expiry:d MMM yyyy}."
+            });
         }
 
         var notes = new List<string>();
+        if (staff.WorkerScreeningExpiryDate is null)
+            notes.Add($"{staff.FullName} has no worker screening recorded — confirm it before the shift.");
         if (staff.IsFirstAidQualified && staff.FirstAidExpiryDate is { } firstAid && firstAid < weekStart)
             notes.Add($"{staff.FullName}'s first aid certificate expired {firstAid:d MMM yyyy}.");
         if (staff.IsDriverEligible && staff.DriverLicenceExpiryDate is { } licence && licence < weekStart)

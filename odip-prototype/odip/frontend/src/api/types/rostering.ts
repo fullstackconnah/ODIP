@@ -147,6 +147,12 @@ export interface CreateShiftPatternDto {
 
 export type UpdateShiftPatternDto = CreateShiftPatternDto
 
+/** Response of `POST /patterns/{id}/generate` — counts, not the generated shifts themselves. */
+export interface GeneratePatternResultDto {
+  created: number
+  skipped: number
+}
+
 // ── Staff / Participant compatibility ────────────────────
 export interface CompatibilityRowDto {
   staffId: string

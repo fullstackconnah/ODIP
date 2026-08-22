@@ -11,6 +11,7 @@ import type {
   ShiftPatternDto,
   CreateShiftPatternDto,
   UpdateShiftPatternDto,
+  GeneratePatternResultDto,
   CompatibilityRowDto,
   UpsertCompatibilityDto,
 } from '../types'
@@ -129,7 +130,7 @@ export function useGeneratePattern() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, from, to }: { id: string; from: string; to: string }) =>
-      apiPost<ShiftDto[]>(`/rostering/patterns/${id}/generate?${new URLSearchParams({ from, to })}`),
+      apiPost<GeneratePatternResultDto>(`/rostering/patterns/${id}/generate?${new URLSearchParams({ from, to })}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: ['roster-patterns'] })

@@ -178,7 +178,7 @@ export default function RosterBoardPage() {
       )}
 
       <ShiftSlideOver
-        key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? slideOverTarget.shift.id : 'new') : 'closed'}
+        key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
         target={slideOverTarget}
         onClose={() => setSlideOverTarget(null)}
         canWrite={canWrite}

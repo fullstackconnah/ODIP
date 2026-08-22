@@ -28,3 +28,8 @@ odip-prototype/odip/local-test/*.log.crash1
 
 # Playwright verification screenshots
 .playwright/
+
+# Agent/dev scratch artifacts at repo root
+/odip-api.log
+/odip-frontend.log
+/board-response.json
