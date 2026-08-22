@@ -6,6 +6,7 @@ using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Data;
 
@@ -65,6 +66,11 @@ public class OdipDbContext : DbContext
     public DbSet<FieldDefinition> FieldDefinitions => Set<FieldDefinition>();
     public DbSet<FieldValue> FieldValues => Set<FieldValue>();
     public DbSet<FormTemplate> FormTemplates => Set<FormTemplate>();
+
+    // Rostering (M4)
+    public DbSet<Shift> Shifts => Set<Shift>();
+    public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
+    public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -283,6 +289,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(200);
             entity.Property(e => e.Mobile).HasMaxLength(20);
             entity.Property(e => e.Region).HasMaxLength(100);
+            entity.Property(e => e.WorkerScreeningNumber).HasMaxLength(50);
             entity.Ignore(e => e.FullName);
 
             entity.HasIndex(e => e.IsActive);
@@ -833,6 +840,79 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.Name);
         });
 
+        // ── Shift ────────────────────────────────────────────────
+        modelBuilder.Entity<Shift>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.OverrideReason).HasMaxLength(2000);
+            entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            // Computed from StartTime/EndTime/EndsNextDay — never persisted.
+            entity.Ignore(e => e.DurationHours);
+
+            // Restrict: a rostered participant or staff member must not be silently
+            // cascade-deleted out from under their shifts (same idiom as FundingSource →
+            // Participant and StaffAssignment → Staff above).
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Staff)
+                .WithMany()
+                .HasForeignKey(e => e.StaffId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Board queries filter by day/week; the roster-check helper filters by staff+week.
+            entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
+            entity.HasIndex(e => new { e.TenantId, e.StaffId, e.ServiceDate });
+            // Pattern generation idempotency check: "does this pattern already have a shift on this date".
+            entity.HasIndex(e => new { e.ShiftPatternId, e.ServiceDate });
+        });
+
+        // ── ShiftPattern ─────────────────────────────────────────
+        modelBuilder.Entity<ShiftPattern>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Optional pre-fill; unlike Shift.StaffId this is just a default, so losing the
+            // staff member should fall back to unfilled generation rather than block deletion.
+            entity.HasOne(e => e.DefaultStaff)
+                .WithMany()
+                .HasForeignKey(e => e.DefaultStaffId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+            entity.HasIndex(e => e.IsActive);
+        });
+
+        // ── StaffParticipantCompatibility ────────────────────────
+        modelBuilder.Entity<StaffParticipantCompatibility>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+
+            // Cascade: a compatibility cell has no meaning once either side of the pair is
+            // gone — unlike Shift/ShiftPattern this isn't roster history, just a preference.
+            entity.HasOne(e => e.Staff)
+                .WithMany()
+                .HasForeignKey(e => e.StaffId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.StaffId, e.ParticipantId }).IsUnique();
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -919,6 +999,22 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<FormTemplate>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<FormTemplate>()
+            .HasIndex(e => e.TenantId);
+
+        // ── Rostering tenant query filters ────────────────────────────────────────
+        modelBuilder.Entity<Shift>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<Shift>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftPattern>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftPattern>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<StaffParticipantCompatibility>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasIndex(e => e.TenantId);
     }
 

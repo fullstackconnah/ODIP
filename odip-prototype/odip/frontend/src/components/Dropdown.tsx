@@ -12,7 +12,8 @@ export type DropdownItem = {
 }
 
 type DropdownProps = {
-  variant: 'pill' | 'form' | 'menu'
+  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the pill CTA. */
+  variant: 'pill' | 'form' | 'menu' | 'icon'
   items: DropdownItem[]
 
   // Value control — pill and form variants
@@ -33,6 +34,15 @@ type DropdownProps = {
   // Panel alignment — default varies by variant: pill='right', form='left', menu='right'
   align?: 'left' | 'right'
   searchable?: boolean
+
+  // Labelling — lets a wrapping component (e.g. FormField) associate an external <label>
+  // with the trigger button, since the button itself carries no visible label text.
+  // Not applied to the 'icon' variant, which labels itself via `label`/aria-label instead.
+  id?: string
+  'aria-labelledby'?: string
+  'aria-required'?: 'true'
+  'aria-invalid'?: 'true'
+  'aria-describedby'?: string
 }
 
 export function Dropdown({
@@ -49,6 +59,11 @@ export function Dropdown({
   loading = false,
   align,
   searchable = false,
+  id,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-required': ariaRequired,
+  'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy,
 }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
@@ -148,7 +163,7 @@ export function Dropdown({
 
   const handleSelect = (item: DropdownItem) => {
     if (item.disabled) return
-    if (variant === 'menu') {
+    if (variant === 'menu' || variant === 'icon') {
       onSelect?.(item.value)
     } else {
       onChange?.(item.value)
@@ -264,7 +279,7 @@ export function Dropdown({
       />
     )
 
-  const panelWidthClass = variant === 'pill' ? 'min-w-[10rem]' : variant === 'menu' ? 'w-56' : ''
+  const panelWidthClass = variant === 'pill' ? 'min-w-[10rem]' : variant === 'menu' || variant === 'icon' ? 'w-56' : ''
 
   const panel = open && createPortal(
     <div
@@ -334,8 +349,13 @@ export function Dropdown({
         <button
           ref={triggerRef}
           type="button"
+          id={id}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-labelledby={ariaLabelledBy}
+          aria-required={ariaRequired}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
@@ -359,8 +379,13 @@ export function Dropdown({
         <button
           ref={triggerRef}
           type="button"
+          id={id}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-labelledby={ariaLabelledBy}
+          aria-required={ariaRequired}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
@@ -377,14 +402,42 @@ export function Dropdown({
     )
   }
 
+  // ── icon variant ──────────────────────────────────────────────────────────
+  if (variant === 'icon') {
+    return (
+      <div className="relative inline-flex" ref={containerRef}>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={label ?? 'More actions'}
+          aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
+          disabled={disabled || loading}
+          onClick={() => setOpen(v => !v)}
+          onKeyDown={handleKeyDown}
+          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+        >
+          {icon}
+        </button>
+        {panel}
+      </div>
+    )
+  }
+
   // ── menu variant ──────────────────────────────────────────────────────────
   return (
     <div className="relative" ref={containerRef}>
       <button
         ref={triggerRef}
         type="button"
+        id={id}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-labelledby={ariaLabelledBy}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
         aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}

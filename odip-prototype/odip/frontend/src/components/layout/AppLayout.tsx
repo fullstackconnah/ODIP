@@ -1,7 +1,8 @@
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt
+  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
+  CalendarClock
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -26,6 +27,16 @@ const navItems: NavEntry[] = [
       { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
     ],
   },
+  {
+    label: 'Rostering',
+    icon: CalendarClock,
+    msIcon: 'calendar_view_week',
+    children: [
+      { to: '/rostering', icon: CalendarClock, label: 'Board', msIcon: 'calendar_view_week', page: 'rostering' },
+      { to: '/rostering/patterns', icon: CalendarClock, label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
+      { to: '/rostering/compatibility', icon: CalendarClock, label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
+    ],
+  },
   { to: '/billing', icon: Receipt, label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
   { to: '/participants', icon: Users, label: 'Participants', msIcon: 'group', page: 'participants' },
   { to: '/staff', icon: UserCog, label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
@@ -38,6 +49,21 @@ const navItems: NavEntry[] = [
 /** Mirrors NavLink's default (non-`end`) active matching: exact path or a path segment prefix. */
 function isRouteActive(to: string, pathname: string): boolean {
   return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
+}
+
+const allNavLeaves: NavLeaf[] = navItems.flatMap(item => ('children' in item ? item.children : [item]))
+
+/**
+ * Whether a leaf's NavLink should require an exact path match (React Router's `end`) rather
+ * than the default prefix match. A leaf needs `end` only when another nav entry's path is
+ * nested more specifically under it (e.g. /rostering has sibling entries /rostering/patterns
+ * and /rostering/compatibility) — otherwise it would stay "active" on every child route
+ * alongside that more specific entry's own leaf. A leaf with no such nested sibling (e.g.
+ * /trips, whose detail route /trips/:id isn't itself a nav entry) keeps the normal prefix
+ * match so it stays active on its own detail/child routes.
+ */
+function isExactMatchOnly(to: string): boolean {
+  return to === '/' || allNavLeaves.some(leaf => leaf.to !== to && leaf.to.startsWith(`${to}/`))
 }
 
 export default function AppLayout() {
@@ -150,7 +176,7 @@ export default function AppLayout() {
                   >
                     <div className="min-h-0 space-y-0.5">
                       {visibleChildren.map(({ to, label, msIcon }) => (
-                        <NavLink key={to} to={to} end={to === '/'}
+                        <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                           tabIndex={isOpen ? undefined : -1}
                           className={({ isActive }) =>
                             `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
@@ -175,7 +201,7 @@ export default function AppLayout() {
             const { to, label, msIcon } = item
 
             return (
-              <NavLink key={to} to={to} end={to === '/'}
+              <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                 className={({ isActive }) =>
                   `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
                     isActive
@@ -212,7 +238,7 @@ export default function AppLayout() {
       </aside>
 
       {/* Main area */}
-      <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 lg:ml-72 flex flex-col min-h-screen">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[#fbf9f5]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
           <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
@@ -273,7 +299,16 @@ export default function AppLayout() {
         )}
 
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
+        {/*
+          Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that
+          shorthand sets padding-bottom too, so an unprefixed pb-24 (clearing the fixed
+          mobile bottom nav below lg) got silently overridden by md:p-6's padding-bottom
+          for the 768-1024px range, trapping the last roster row behind the nav with no way
+          to scroll it clear. Directional px and pt utilities leave pb-24 and lg:pb-8 as the
+          only thing ever setting padding-bottom, so it can't be clobbered by a later
+          breakpoint's shorthand again.
+        */}
+        <main className="flex-1 px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8 pb-24 lg:pb-8">
           <Outlet />
         </main>
       </div>

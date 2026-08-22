@@ -27,6 +27,8 @@ public class Staff : ITenantEntity
     public DateOnly? DriverLicenceExpiryDate { get; set; }
     public DateOnly? ManualHandlingExpiryDate { get; set; }
     public DateOnly? MedicationCompetencyExpiryDate { get; set; }
+    public string? WorkerScreeningNumber { get; set; }
+    public DateOnly? WorkerScreeningExpiryDate { get; set; }
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
     public bool HasExpiredQualifications

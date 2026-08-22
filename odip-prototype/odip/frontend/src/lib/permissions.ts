@@ -14,6 +14,7 @@ export type PageKey =
   | 'qualifications'
   | 'claims'
   | 'billing'
+  | 'rostering'
   | 'settings';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [

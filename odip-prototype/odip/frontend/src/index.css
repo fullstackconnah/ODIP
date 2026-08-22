@@ -156,3 +156,21 @@
   50% { opacity: 0.5; }
 }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/*
+ * Reduced motion — applied product-wide rather than per-component. Neutralises animation and
+ * transition *duration/delay* so state changes (colour, opacity, width, transform) still happen
+ * and are still perceivable, they just resolve instantly instead of animating. This deliberately
+ * does not use `display: none` or `visibility: hidden`, and does not disable transitions outright
+ * (e.g. via `transition: none`) — an instant transition still fires its end state, which focus-
+ * reveal patterns (opacity-0 -> opacity-100 on focus/hover) depend on to stay functional.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
