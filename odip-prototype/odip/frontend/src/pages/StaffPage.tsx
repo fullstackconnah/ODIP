@@ -3,10 +3,17 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
+import { StatusBadge } from '@/components/StatusBadge'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus, UserCog } from 'lucide-react'
+import { Plus, UserCog, Check } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+
+function isExpired(date: string): boolean {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return new Date(date + 'T00:00:00').getTime() < today.getTime()
+}
 
 const ACTIVE_STATUS_ITEMS = [
   { value: 'Active', label: 'Active' },
@@ -42,6 +49,17 @@ export default function StaffPage() {
     { key: 'isMedicationCompetent', header: 'Meds', type: 'boolean', align: 'center' },
     { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center' },
     { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center' },
+    {
+      key: 'workerScreening',
+      header: 'Worker Screening',
+      align: 'center',
+      render: (s) => {
+        if (!s.workerScreeningExpiryDate) return null
+        return isExpired(s.workerScreeningExpiryDate)
+          ? <StatusBadge status="expired" label="Expired" />
+          : <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto" />
+      },
+    },
     {
       key: 'status',
       header: 'Status',

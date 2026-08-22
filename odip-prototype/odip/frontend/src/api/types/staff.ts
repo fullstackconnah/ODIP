@@ -19,6 +19,8 @@ export interface StaffListDto {
   driverLicenceExpiryDate: string | null
   manualHandlingExpiryDate: string | null
   medicationCompetencyExpiryDate: string | null
+  workerScreeningNumber: string | null
+  workerScreeningExpiryDate: string | null
   hasExpiredQualifications: boolean
   notes: string | null
 }
@@ -43,6 +45,8 @@ export interface CreateStaffDto {
   driverLicenceExpiryDate?: string
   manualHandlingExpiryDate?: string
   medicationCompetencyExpiryDate?: string
+  workerScreeningNumber?: string
+  workerScreeningExpiryDate?: string
 }
 
 export type UpdateStaffDto = CreateStaffDto

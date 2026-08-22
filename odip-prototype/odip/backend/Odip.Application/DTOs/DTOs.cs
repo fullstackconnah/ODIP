@@ -574,6 +574,8 @@ public record StaffListDto
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public string? WorkerScreeningNumber { get; init; }
+    public DateOnly? WorkerScreeningExpiryDate { get; init; }
     public bool HasExpiredQualifications { get; init; }
     public string? Notes { get; init; }
 }
@@ -604,6 +606,8 @@ public record CreateStaffDto
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public string? WorkerScreeningNumber { get; init; }
+    public DateOnly? WorkerScreeningExpiryDate { get; init; }
 }
 
 public record UpdateStaffDto : CreateStaffDto { }

@@ -248,6 +248,8 @@ public class StaffController : ControllerBase
                 DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
                 ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
                 MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
+                WorkerScreeningNumber = s.WorkerScreeningNumber,
+                WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
                 Notes = s.Notes,
                 HasExpiredQualifications =
                     (s.IsFirstAidQualified && s.FirstAidExpiryDate != null && s.FirstAidExpiryDate < today)
@@ -276,6 +278,8 @@ public class StaffController : ControllerBase
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
+            WorkerScreeningNumber = s.WorkerScreeningNumber,
+            WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             HasExpiredQualifications = s.HasExpiredQualifications
         }));
     }
@@ -294,7 +298,9 @@ public class StaffController : ControllerBase
             FirstAidExpiryDate = dto.FirstAidExpiryDate,
             DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate,
-            MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate
+            MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate,
+            WorkerScreeningNumber = dto.WorkerScreeningNumber,
+            WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate
         };
         _db.Staff.Add(s);
         await _db.SaveChangesAsync(ct);
@@ -310,6 +316,8 @@ public class StaffController : ControllerBase
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
+            WorkerScreeningNumber = s.WorkerScreeningNumber,
+            WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             HasExpiredQualifications = s.HasExpiredQualifications
         }));
     }
@@ -331,6 +339,8 @@ public class StaffController : ControllerBase
         s.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
         s.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
         s.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
+        s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
+        s.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
         s.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
@@ -346,6 +356,8 @@ public class StaffController : ControllerBase
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
+            WorkerScreeningNumber = s.WorkerScreeningNumber,
+            WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             HasExpiredQualifications = s.HasExpiredQualifications
         }));
     }
