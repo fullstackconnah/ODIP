@@ -868,6 +868,197 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Seeds sample medication charts + a day of administration history for a handful of
+    /// existing demo participants — deliberately covers PRN dosing limits, a chemical-restraint
+    /// medication (BSP + authorisation in place), a high-risk/high-intensity injectable, and one
+    /// overdue review to exercise the ReviewOverdue compliance flag. Idempotent: bails out if
+    /// any ParticipantMedication already exists, and again per-participant if the demo
+    /// participants this seed targets haven't been created yet (e.g. a fresh DB where
+    /// SeedAsync hasn't run first).
+    /// </summary>
+    public static async Task SeedMedicationsAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.ParticipantMedications.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+
+        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
+        if (existingParticipants.Count == 0)
+            return;
+
+        var today = DateTime.UtcNow.Date;
+
+        var levetiracetamId = Guid.Parse("70000000-0000-0000-0000-000000000001");
+        var paracetamolId = Guid.Parse("70000000-0000-0000-0000-000000000002");
+        var risperidoneId = Guid.Parse("70000000-0000-0000-0000-000000000003");
+        var sertralineId = Guid.Parse("70000000-0000-0000-0000-000000000004");
+        var insulinId = Guid.Parse("70000000-0000-0000-0000-000000000005");
+
+        var medications = new List<ParticipantMedication>();
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            // Sophie Brown already carries "Epilepsy medication — Keppra 500mg BD" in her
+            // SupportProfile free text (Keppra is the brand name for levetiracetam) — this is
+            // the structured record backing that note.
+            medications.Add(new ParticipantMedication
+            {
+                Id = levetiracetamId, TenantId = demoTenantId, ParticipantId = sophieId,
+                Name = "Levetiracetam", Strength = "500mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (500mg)", Directions = "Take with food, morning and evening.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00,20:00",
+                Purpose = "Seizure prophylaxis — acquired brain injury with breakthrough seizures.",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Coorparoo Chemist Warehouse", IsDoseAidPacked = true,
+                StartDate = today.AddMonths(-8), NextReviewDue = today.AddMonths(4),
+                ConsentObtained = true, ConsentGivenBy = "Margaret Johnson (mother)", ConsentDate = today.AddMonths(-8),
+                StorageRequirements = "Store below 25°C, away from light.", Status = MedicationStatus.Active,
+            });
+
+            medications.Add(new ParticipantMedication
+            {
+                Id = paracetamolId, TenantId = demoTenantId, ParticipantId = sophieId,
+                Name = "Paracetamol", Strength = "500mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "2 tablets (1000mg)", Directions = "May repeat every 4-6 hours as required.",
+                Type = MedicationType.Prn, PrnIndication = "Mild-moderate pain or fever",
+                PrnMaxDosesPer24h = 4, PrnMinIntervalMinutes = 240,
+                Purpose = "Analgesia / antipyretic.",
+                DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.Assist,
+                PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Coorparoo Chemist Warehouse",
+                StartDate = today.AddMonths(-8),
+                // Deliberately in the past — demonstrates the ReviewOverdue compliance flag.
+                NextReviewDue = today.AddDays(-14),
+                ConsentObtained = true, ConsentGivenBy = "Margaret Johnson (mother)", ConsentDate = today.AddMonths(-8),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            medications.Add(new ParticipantMedication
+            {
+                Id = risperidoneId, TenantId = demoTenantId, ParticipantId = charlotteId,
+                Name = "Risperidone", Strength = "0.5mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (0.5mg)", Directions = "Dissolve under tongue if severely distressed.",
+                Type = MedicationType.Prn, PrnIndication = "Acute behavioural escalation posing risk to self or others",
+                PrnMaxDosesPer24h = 2, PrnMinIntervalMinutes = 360,
+                Purpose = "Used primarily to manage episodes of severe behavioural escalation.",
+                IsPsychotropic = true, IsChemicalRestraint = true, BspInPlace = true,
+                RestrictivePracticeAuthorisationRef = "QLD-RP-2026-00417",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr. Farid Haidari", PharmacyName = "Toowong Community Pharmacy",
+                StartDate = today.AddMonths(-5), NextReviewDue = today.AddMonths(1),
+                ConsentObtained = true, ConsentGivenBy = "David Brown (father/guardian)", ConsentDate = today.AddMonths(-5),
+                StorageRequirements = "Store in locked medication cabinet.", Status = MedicationStatus.Active,
+            });
+
+            medications.Add(new ParticipantMedication
+            {
+                Id = sertralineId, TenantId = demoTenantId, ParticipantId = charlotteId,
+                Name = "Sertraline", Strength = "50mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (50mg)", Directions = "Take each morning with breakfast.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Ongoing management of generalised anxiety disorder.",
+                IsPsychotropic = true, DrugSchedule = DrugSchedule.Schedule4,
+                SupportLevel = MedicationSupportLevel.PromptOnly, PrescriberName = "Dr. Farid Haidari",
+                PharmacyName = "Toowong Community Pharmacy", StartDate = today.AddMonths(-10),
+                NextReviewDue = today.AddMonths(2), ConsentObtained = true,
+                ConsentGivenBy = "David Brown (father/guardian)", ConsentDate = today.AddMonths(-10),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(harrisonId))
+        {
+            medications.Add(new ParticipantMedication
+            {
+                Id = insulinId, TenantId = demoTenantId, ParticipantId = harrisonId,
+                Name = "Insulin Glargine", Strength = "100units/mL", Form = MedicationForm.Injection, Route = MedicationRoute.Subcutaneous,
+                DoseDescription = "18 units subcutaneously", Directions = "Rotate injection site — abdomen or thigh.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Type 1 diabetes mellitus — basal insulin.",
+                IsHighRisk = true, IsHighIntensitySupport = true,
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr. Priya Chandran", PharmacyName = "Chermside Pharmacy",
+                StartDate = today.AddYears(-2), NextReviewDue = today.AddMonths(3),
+                ConsentObtained = true, ConsentGivenBy = "Harrison Lee (self)", ConsentDate = today.AddYears(-2),
+                StorageRequirements = "Refrigerate 2-8°C; in-use pen may be kept below 25°C for up to 28 days.",
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (medications.Count == 0)
+            return;
+
+        context.ParticipantMedications.AddRange(medications);
+        await context.SaveChangesAsync(ct);
+
+        // ── Sample administration history (yesterday) — mix of Administered and one Refused ──
+        var yesterday = today.AddDays(-1);
+        var administrations = new List<MedicationAdministration>();
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000001"), TenantId = demoTenantId,
+                ParticipantMedicationId = levetiracetamId, ParticipantId = sophieId,
+                ScheduledAt = yesterday.AddHours(8), AdministeredAt = yesterday.AddHours(8).AddMinutes(5),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (500mg)",
+                RecordedByName = "James O'Brien",
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000002"), TenantId = demoTenantId,
+                ParticipantMedicationId = levetiracetamId, ParticipantId = sophieId,
+                ScheduledAt = yesterday.AddHours(20), Status = MedicationAdministrationStatus.Refused,
+                RecordedByName = "James O'Brien",
+                Reason = "Participant declined the evening dose; settled after 20 minutes. GP notified next business day.",
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000003"), TenantId = demoTenantId,
+                ParticipantMedicationId = sertralineId, ParticipantId = charlotteId,
+                ScheduledAt = yesterday.AddHours(8), AdministeredAt = yesterday.AddHours(8).AddMinutes(10),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (50mg)",
+                RecordedByName = "Emily Nguyen",
+            });
+        }
+
+        if (existingParticipants.Contains(harrisonId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), TenantId = demoTenantId,
+                ParticipantMedicationId = insulinId, ParticipantId = harrisonId,
+                ScheduledAt = yesterday.AddHours(8), AdministeredAt = yesterday.AddHours(8).AddMinutes(2),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "18 units",
+                RecordedByName = "Daniel Williams", WitnessName = "Rachel Thompson",
+            });
+        }
+
+        if (administrations.Count > 0)
+        {
+            context.MedicationAdministrations.AddRange(administrations);
+            await context.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>
     /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
     /// doesn't already have one. Runs on every startup — idempotent per tenant via a
     /// single existence check (not per-field), so a restart never duplicates the
@@ -935,6 +1126,8 @@ public static class DbSeeder
     public static async Task ReseedAsync(OdipDbContext context, CancellationToken ct = default)
     {
         // Delete in reverse FK dependency order
+        context.MedicationAdministrations.RemoveRange(context.MedicationAdministrations);
+        context.ParticipantMedications.RemoveRange(context.ParticipantMedications);
         context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
         context.TripDays.RemoveRange(context.TripDays);
         context.BookingTasks.RemoveRange(context.BookingTasks);
@@ -957,6 +1150,7 @@ public static class DbSeeder
 
         await context.SaveChangesAsync(ct);
         await SeedAsync(context, ct);
+        await SeedMedicationsAsync(context, ct);
     }
 
 }

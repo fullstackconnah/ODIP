@@ -15,7 +15,8 @@ export type PageKey =
   | 'claims'
   | 'billing'
   | 'rostering'
-  | 'settings';
+  | 'settings'
+  | 'medications';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
@@ -24,6 +25,7 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
   'participants',
   'tasks',
   'incidents',
+  'medications',
 ];
 
 function getCurrentUser(): Record<string, unknown> {
@@ -70,6 +72,18 @@ export function usePermissions() {
      * ReadOnly: true — button visible, backend blocks the save.
      */
     canCreateIncidents: true,
+
+    /**
+     * Medication CRUD (create/edit medications, amend administrations) is limited to
+     * clinical/coordination roles — Admin, Coordinator, SuperAdmin.
+     */
+    canManageMedications: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
+     * Recording a dose administration on the MAR is broader than full medication
+     * management — support workers giving doses on shift need this too.
+     */
+    canRecordAdministrations: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
      * Coordinator sees Provider Settings tab but cannot save changes.

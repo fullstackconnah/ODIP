@@ -340,3 +340,75 @@ public enum AuditAction
     Updated,
     Deleted
 }
+
+// ══════════════════════════════════════════════════════════════
+// MEDICATION MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+
+public enum MedicationForm
+{
+    Tablet,
+    Capsule,
+    Liquid,
+    Injection,
+    Patch,
+    Cream,
+    Inhaler,
+    Drops,
+    Suppository,
+    Enteral,
+    Other
+}
+
+public enum MedicationRoute
+{
+    Oral,
+    Subcutaneous,
+    Intramuscular,
+    Topical,
+    Inhaled,
+    Enteral,
+    Rectal,
+    Sublingual,
+    Ocular,
+    Nasal,
+    Other
+}
+
+public enum MedicationType
+{
+    Regular,
+    Prn
+}
+
+public enum DrugSchedule
+{
+    Unscheduled,
+    Schedule2,
+    Schedule3,
+    Schedule4,
+    Schedule8
+}
+
+public enum MedicationSupportLevel
+{
+    SelfAdministered,
+    PromptOnly,
+    Assist,
+    Administer
+}
+
+public enum MedicationStatus
+{
+    Active,
+    OnHold,
+    Ceased
+}
+
+public enum MedicationAdministrationStatus
+{
+    Administered,
+    Refused,
+    Withheld,
+    Missed
+}

@@ -145,3 +145,31 @@ export type RosterFindingSeverity = typeof ROSTER_FINDING_SEVERITIES[number]
 // ── Roster Staff Compliance ──────────────────────────────
 export const ROSTER_COMPLIANCE_LEVELS = ['Ok', 'Warning', 'Blocked'] as const
 export type RosterComplianceLevel = typeof ROSTER_COMPLIANCE_LEVELS[number]
+
+// ── Medication Form ─────────────────────────────────────
+export const MEDICATION_FORMS = ['Tablet', 'Capsule', 'Liquid', 'Injection', 'Patch', 'Cream', 'Inhaler', 'Drops', 'Suppository', 'Enteral', 'Other'] as const
+export type MedicationForm = typeof MEDICATION_FORMS[number]
+
+// ── Medication Route ─────────────────────────────────────
+export const MEDICATION_ROUTES = ['Oral', 'Subcutaneous', 'Intramuscular', 'Topical', 'Inhaled', 'Enteral', 'Rectal', 'Sublingual', 'Ocular', 'Nasal', 'Other'] as const
+export type MedicationRoute = typeof MEDICATION_ROUTES[number]
+
+// ── Medication Type ──────────────────────────────────────
+export const MEDICATION_TYPES = ['Regular', 'Prn'] as const
+export type MedicationType = typeof MEDICATION_TYPES[number]
+
+// ── Drug Schedule ─────────────────────────────────────────
+export const DRUG_SCHEDULES = ['Unscheduled', 'Schedule2', 'Schedule3', 'Schedule4', 'Schedule8'] as const
+export type DrugSchedule = typeof DRUG_SCHEDULES[number]
+
+// ── Medication Support Level ─────────────────────────────
+export const MEDICATION_SUPPORT_LEVELS = ['SelfAdministered', 'PromptOnly', 'Assist', 'Administer'] as const
+export type MedicationSupportLevel = typeof MEDICATION_SUPPORT_LEVELS[number]
+
+// ── Medication Status ────────────────────────────────────
+export const MEDICATION_STATUSES = ['Active', 'OnHold', 'Ceased'] as const
+export type MedicationStatus = typeof MEDICATION_STATUSES[number]
+
+// ── Medication Administration Status ─────────────────────
+export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed'] as const
+export type MedicationAdministrationStatus = typeof MEDICATION_ADMINISTRATION_STATUSES[number]

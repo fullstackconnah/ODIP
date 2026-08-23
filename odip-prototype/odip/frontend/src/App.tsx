@@ -36,6 +36,8 @@ const ClaimBatchBuilderPage = React.lazy(() => import('@/pages/ClaimBatchBuilder
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
+const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
+const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -97,6 +99,9 @@ const router = createBrowserRouter(
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />
         <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
+        <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
+        <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
+        <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
       </Route>
     </Route>
   )

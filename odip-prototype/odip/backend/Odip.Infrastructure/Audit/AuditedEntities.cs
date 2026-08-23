@@ -34,6 +34,12 @@ public static class AuditedEntities
         // flag, when, and why it was later changed is exactly the kind of thing an audit
         // needs to answer, so all three CompatibilityLevel transitions are audited.
         typeof(StaffParticipantCompatibility),
+
+        // Medication management: prescribing details (dose, PRN limits, chemical-restraint
+        // flags, consent) and every administration record are exactly the kind of change
+        // history NDIS medication management practice standards expect to be recoverable.
+        typeof(ParticipantMedication),
+        typeof(MedicationAdministration),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

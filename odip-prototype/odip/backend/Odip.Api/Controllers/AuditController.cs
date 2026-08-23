@@ -49,6 +49,8 @@ public class AuditController : ControllerBase
             ["Staff"] = "Staff",
             ["StaffAssignment"] = "StaffAssignment",
             ["VehicleAssignment"] = "VehicleAssignment",
+            ["ParticipantMedication"] = "ParticipantMedication",
+            ["MedicationAdministration"] = "MedicationAdministration",
         };
 
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
