@@ -12,7 +12,7 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        var hasParticipants = await context.Participants.IgnoreQueryFilters().AnyAsync(ct);
+        var hasExistingSeedData = await HasExistingSeedDataAsync(context, ct);
 
         // ── Tenant ───────────────────────────────────────────────
         // Always ensure the Odip tenant exists (runs unconditionally on every startup)
@@ -256,8 +256,15 @@ public static class DbSeeder
             await context.SaveChangesAsync(ct);
         }
 
-        if (hasParticipants)
+        if (hasExistingSeedData)
+        {
+            Console.WriteLine("[Seed] Skipping demo data seed: existing rows found in one or more " +
+                "seeded tables (Staff/Participants/Vehicles/TripInstances/etc.). This batch is seeded " +
+                "atomically with fixed cross-referencing GUIDs, so a partial/inconsistent DB state " +
+                "(e.g. some tables cleared independently of others) is treated as \"already seeded\" " +
+                "and skipped rather than risking duplicate-key/tracking conflicts on AddRange.");
             return;
+        }
 
         // ── Staff (10) ───────────────────────────────────────────
         var staff = new List<Staff>
@@ -713,6 +720,39 @@ public static class DbSeeder
         context.BookingTasks.AddRange(tasks);
 
         await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Checks whether ANY of the tables that <see cref="SeedAsync"/> populates via
+    /// AddRange-with-fixed-GUIDs already contain rows. SeedAsync seeds one atomic,
+    /// cross-referencing batch (Participants reference Staff, TripInstances reference
+    /// Vehicles/Staff, etc.), so it must be all-or-nothing: if any table in the batch
+    /// already has data — e.g. because Participants alone were cleared out via manual
+    /// DB cleanup while Staff/Vehicles/etc. were left in place — re-running the seed
+    /// would call AddRange with the same hardcoded IDs as existing rows and crash with
+    /// an EF Core "already being tracked" / duplicate-key error. Treating any non-empty
+    /// table as "already seeded" keeps this safe.
+    /// Uses IgnoreQueryFilters() throughout so the tenant query filter can't cause a
+    /// false negative (mirrors the pattern already used elsewhere in this file).
+    /// </summary>
+    private static async Task<bool> HasExistingSeedDataAsync(OdipDbContext context, CancellationToken ct)
+    {
+        return await context.Staff.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.EventTemplates.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.Participants.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.Contacts.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.AccommodationProperties.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.Vehicles.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.TripInstances.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.ParticipantBookings.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.AccommodationReservations.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.VehicleAssignments.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.StaffAssignments.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.StaffAvailabilities.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.Activities.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.TripDays.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.ScheduledActivities.IgnoreQueryFilters().AnyAsync(ct)
+            || await context.BookingTasks.IgnoreQueryFilters().AnyAsync(ct);
     }
 
     public static async Task SeedNdisDataAsync(OdipDbContext context, CancellationToken ct = default)

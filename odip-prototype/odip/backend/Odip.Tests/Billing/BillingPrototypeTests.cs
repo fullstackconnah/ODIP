@@ -478,14 +478,14 @@ public class BillingPrototypeTests
     // ── Dictionary ───────────────────────────────────────────
 
     [Fact]
-    public void LoadFromJson_RealSeedFile_Loads280FieldsAcross24Domains()
+    public void LoadFromJson_RealSeedFile_Loads285FieldsAcross24Domains()
     {
         var json = File.ReadAllText(ResolveSeedJsonPath());
         var defs = DataDictionarySeeder.LoadFromJson(json, Guid.NewGuid());
 
         var (fieldCount, domainCount) = DataDictionarySeeder.Stats(defs);
 
-        Assert.Equal(280, fieldCount);
+        Assert.Equal(285, fieldCount);
         Assert.Equal(24, domainCount);
     }
 
