@@ -16,6 +16,7 @@ export function ToggleGroup({ options, value, onChange, className }: ToggleGroup
       {options.map(opt => (
         <button
           key={opt.key}
+          type="button"
           onClick={() => onChange(opt.key)}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             value === opt.key

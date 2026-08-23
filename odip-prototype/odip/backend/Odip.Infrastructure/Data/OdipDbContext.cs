@@ -29,6 +29,8 @@ public class OdipDbContext : DbContext
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ParticipantContact> ParticipantContacts => Set<ParticipantContact>();
     public DbSet<SupportProfile> SupportProfiles => Set<SupportProfile>();
+    public DbSet<ParticipantMedication> ParticipantMedications => Set<ParticipantMedication>();
+    public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
     public DbSet<ParticipantBooking> ParticipantBookings => Set<ParticipantBooking>();
@@ -913,6 +915,69 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.StaffId, e.ParticipantId }).IsUnique();
         });
 
+        // ── ParticipantMedication ────────────────────────────────
+        modelBuilder.Entity<ParticipantMedication>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Strength).HasMaxLength(100);
+            entity.Property(e => e.DoseDescription).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Directions).HasMaxLength(1000);
+            entity.Property(e => e.TimesOfDay).HasMaxLength(200);
+            entity.Property(e => e.PrnIndication).HasMaxLength(500);
+            entity.Property(e => e.Purpose).HasMaxLength(500);
+            entity.Property(e => e.RestrictivePracticeAuthorisationRef).HasMaxLength(200);
+            entity.Property(e => e.PrescriberName).HasMaxLength(200);
+            entity.Property(e => e.PharmacyName).HasMaxLength(200);
+            entity.Property(e => e.ConsentGivenBy).HasMaxLength(200);
+            entity.Property(e => e.StorageRequirements).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            // Restrict: a participant with prescribed medication history must not be
+            // silently cascade-deleted out from under that record (same idiom as
+            // FundingSource/Shift → Participant above).
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => e.Status);
+        });
+
+        // ── MedicationAdministration ─────────────────────────────
+        modelBuilder.Entity<MedicationAdministration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DoseGiven).HasMaxLength(200);
+            entity.Property(e => e.RecordedByName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.WitnessName).HasMaxLength(200);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.PrnReason).HasMaxLength(500);
+            entity.Property(e => e.PrnOutcome).HasMaxLength(1000);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            // Restrict: the MAR is a compliance record — its parent medication/participant
+            // must not silently cascade it away.
+            entity.HasOne(e => e.ParticipantMedication)
+                .WithMany(m => m.Administrations)
+                .HasForeignKey(e => e.ParticipantMedicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.TripInstance)
+                .WithMany()
+                .HasForeignKey(e => e.TripInstanceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -1015,6 +1080,17 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<StaffParticipantCompatibility>()
+            .HasIndex(e => e.TenantId);
+
+        // ── Medication Management tenant query filters ────────────────────────────
+        modelBuilder.Entity<ParticipantMedication>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantMedication>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<MedicationAdministration>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<MedicationAdministration>()
             .HasIndex(e => e.TenantId);
     }
 
