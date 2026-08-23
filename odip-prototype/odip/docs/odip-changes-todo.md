@@ -18,6 +18,31 @@ Ticked items are shipped and verified against the deployed stack at
   - [x] Hi-Lo bed, hoist, shower chair, commode, standing machine
   - [x] Have the equipment notes field disabled until an equipment checkbox is enabled. A tooltip should tell the user that if they want to add a note they need to select an equipment option first
 
+## New Feature Adjustments
+- [ ] Participant Schedule for Routines and Specifics required for shifts
+- [ ] Update restrictive practice to include type. Research into restrictive practice and how it applies to things like medications. We should have a separate input to adjust, edit and update different restrictive practice types.
+- [ ] Update the add participant form to be a tabbed wizard with fields that should be filled out as intake forms.
+- [ ] Advanced notes field - each participant should have a detailed notes where we can add a title for the note and a description for it. This is for detailed information and specific information required for participants if they require a specific thing when on shift, i.e such as a specific haircut
+- [ ] Participant view of all information required. All the medications, participant schedules and rostering for the participant should be viewed in a full board outlining the entire day for a participant
+- [ ] Update medications
+  - [ ] Include how medication is packaged, i.e webster/blister pack, doesette, this should be pulled from the Prescriber and Supply section to the top
+  - [ ] If oral, is it a tablet, powder, liquid etc
+  - [ ] Medication may have schedules that aren't daily. Might need each other day etc
+  - [ ] **NOT YET — do not implement:** Add the ability to pull medications from a medication library - So we can search and import basic information about medication from client to client
+  - [ ] Include witness when recording when the administering of the medication, the staff member then listed as the witness should receive a notification to approve the witness in their portal.
+- [ ] Evaluate Participant Table
+  - [ ] List where they fit in the business, i.e STA, BSP, In home support, trip, HIDPA, Community access/Daily living, community nursing
+  - [ ] Evaluate layout and what information is been shown in that table
+  - [ ] Add in a medication button dependant on the service provided to them
+  - [ ] Make it more obvious that we can click on the row to view full client information
+  - [ ] The staff member assigned to the participant should see the medications for that specific participant
+  - [ ] Reports for all medication administered able to be selected by participant and ordered by when the medication was given
+- [ ] Update Staff preferences in participants so that they link between the compatibility table
+- [ ] Add participant risk notifications and alerts
+- [ ] Staff member portal
+  - [ ] Should see all the information required for their shift, the requirements required for their participant and any details required for them
+- [ ] Evaluate how each of these features should integrate and talk to each other
+
 ## Backlog
 
 ### Microsoft 365 SSO
