@@ -1,7 +1,7 @@
 {
   "source": "ODIP Master Data Dictionary.xlsx",
   "generated": "2026-08-02",
-  "fieldCount": 280,
+  "fieldCount": 285,
   "fields": [
     {
       "fieldId": "ORG-001",
@@ -1368,7 +1368,7 @@
       "domain": "Mobility & Personal Care",
       "comments": null,
       "dataType": "Single-select",
-      "allowedValues": "Active / Sleepover",
+      "allowedValues": "None / Active Night / Passive Night / Sleepover / Sleepover Support",
       "notes": null,
       "appearsIn": [
         "Traveller Profile",
@@ -1384,6 +1384,71 @@
       "allowedValues": "I / S / A / F",
       "notes": null,
       "appearsIn": [
+        "Traveller Profile"
+      ]
+    },
+    {
+      "fieldId": "MOB-013",
+      "name": "Hi-Lo Bed Required",
+      "domain": "Mobility & Personal Care",
+      "comments": null,
+      "dataType": "Boolean",
+      "allowedValues": "Yes/No",
+      "notes": null,
+      "appearsIn": [
+        "Participant Profile",
+        "Traveller Profile"
+      ]
+    },
+    {
+      "fieldId": "MOB-014",
+      "name": "Hoist Required",
+      "domain": "Mobility & Personal Care",
+      "comments": null,
+      "dataType": "Boolean",
+      "allowedValues": "Yes/No",
+      "notes": null,
+      "appearsIn": [
+        "Participant Profile",
+        "Traveller Profile"
+      ]
+    },
+    {
+      "fieldId": "MOB-015",
+      "name": "Shower Chair Required",
+      "domain": "Mobility & Personal Care",
+      "comments": null,
+      "dataType": "Boolean",
+      "allowedValues": "Yes/No",
+      "notes": null,
+      "appearsIn": [
+        "Participant Profile",
+        "Traveller Profile"
+      ]
+    },
+    {
+      "fieldId": "MOB-016",
+      "name": "Commode Required",
+      "domain": "Mobility & Personal Care",
+      "comments": null,
+      "dataType": "Boolean",
+      "allowedValues": "Yes/No",
+      "notes": null,
+      "appearsIn": [
+        "Participant Profile",
+        "Traveller Profile"
+      ]
+    },
+    {
+      "fieldId": "MOB-017",
+      "name": "Standing Machine Required",
+      "domain": "Mobility & Personal Care",
+      "comments": null,
+      "dataType": "Boolean",
+      "allowedValues": "Yes/No",
+      "notes": null,
+      "appearsIn": [
+        "Participant Profile",
         "Traveller Profile"
       ]
     },
