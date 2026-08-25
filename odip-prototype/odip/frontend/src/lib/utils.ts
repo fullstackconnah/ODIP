@@ -10,6 +10,18 @@ export function maskNdisNumber(ndis: string | null | undefined): string {
   return '••••••••' + ndis.slice(-1)
 }
 
+/**
+ * Parses an API-supplied ISO timestamp. The backend serializes some DateTime values
+ * (e.g. DateTime.UtcNow) without a timezone suffix even though they are UTC — `new Date(iso)`
+ * would then parse them as local time, throwing off elapsed-time math. If the string has no
+ * trailing `Z` or `+HH:MM`/`-HH:MM` offset, treat it as UTC by appending `Z`; otherwise parse
+ * as-is (it already carries explicit timezone info, e.g. from a DateTimeOffset).
+ */
+export function parseApiDate(iso: string): Date {
+  const hasTimezone = /(Z|[+-]\d{2}:\d{2})$/.test(iso)
+  return new Date(hasTimezone ? iso : `${iso}Z`)
+}
+
 export function formatDateAu(date: string | null | undefined): string {
   if (!date) return '—'
   const d = new Date(date)

@@ -147,8 +147,12 @@ export const ROSTER_COMPLIANCE_LEVELS = ['Ok', 'Warning', 'Blocked'] as const
 export type RosterComplianceLevel = typeof ROSTER_COMPLIANCE_LEVELS[number]
 
 // ── Medication Form ─────────────────────────────────────
-export const MEDICATION_FORMS = ['Tablet', 'Capsule', 'Liquid', 'Injection', 'Patch', 'Cream', 'Inhaler', 'Drops', 'Suppository', 'Enteral', 'Other'] as const
+export const MEDICATION_FORMS = ['Tablet', 'Capsule', 'Liquid', 'Injection', 'Patch', 'Cream', 'Inhaler', 'Drops', 'Suppository', 'Enteral', 'Other', 'Powder'] as const
 export type MedicationForm = typeof MEDICATION_FORMS[number]
+
+// ── Packaging Type ───────────────────────────────────────
+export const PACKAGING_TYPES = ['WebsterPack', 'DosetteBox', 'OriginalPackaging', 'Sachet', 'Other'] as const
+export type PackagingType = typeof PACKAGING_TYPES[number]
 
 // ── Medication Route ─────────────────────────────────────
 export const MEDICATION_ROUTES = ['Oral', 'Subcutaneous', 'Intramuscular', 'Topical', 'Inhaled', 'Enteral', 'Rectal', 'Sublingual', 'Ocular', 'Nasal', 'Other'] as const

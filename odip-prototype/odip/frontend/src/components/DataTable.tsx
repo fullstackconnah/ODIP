@@ -280,7 +280,7 @@ export function DataTable<T>({
             return (
               <tr
                 key={rowKey}
-                className={`hover:bg-[var(--color-accent)]/50 transition-colors ${isClickable ? 'cursor-pointer' : ''} ${extraClass}`}
+                className={`hover:bg-[var(--color-accent)]/50 transition-colors ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
                 onClick={isClickable ? () => onRowClick(row) : undefined}
                 onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
                 tabIndex={isClickable ? 0 : undefined}

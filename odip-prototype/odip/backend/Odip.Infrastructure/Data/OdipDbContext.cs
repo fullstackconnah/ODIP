@@ -31,6 +31,7 @@ public class OdipDbContext : DbContext
     public DbSet<SupportProfile> SupportProfiles => Set<SupportProfile>();
     public DbSet<ParticipantMedication> ParticipantMedications => Set<ParticipantMedication>();
     public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
+    public DbSet<ParticipantNote> ParticipantNotes => Set<ParticipantNote>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
     public DbSet<ParticipantBooking> ParticipantBookings => Set<ParticipantBooking>();
@@ -978,6 +979,24 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
         });
 
+        // ── ParticipantNote ───────────────────────────────────────
+        modelBuilder.Entity<ParticipantNote>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(4000).IsRequired();
+            entity.Property(e => e.CreatedByName).HasMaxLength(200).IsRequired();
+
+            // Restrict: same idiom as ParticipantMedication → Participant — a participant
+            // with note history must not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -1091,6 +1110,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<MedicationAdministration>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<MedicationAdministration>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantNote>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantNote>()
             .HasIndex(e => e.TenantId);
     }
 

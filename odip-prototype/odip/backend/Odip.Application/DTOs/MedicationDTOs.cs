@@ -25,6 +25,7 @@ public record MedicationListDto
     public bool IsChemicalRestraint { get; init; }
     public DrugSchedule DrugSchedule { get; init; }
     public MedicationSupportLevel SupportLevel { get; init; }
+    public PackagingType Packaging { get; init; }
     public DateTime StartDate { get; init; }
     public DateTime? EndDate { get; init; }
     public DateTime? NextReviewDue { get; init; }
@@ -43,7 +44,6 @@ public record MedicationDetailDto : MedicationListDto
     public bool IsHighIntensitySupport { get; init; }
     public string? PrescriberName { get; init; }
     public string? PharmacyName { get; init; }
-    public bool IsDoseAidPacked { get; init; }
     public bool ConsentObtained { get; init; }
     public string? ConsentGivenBy { get; init; }
     public DateTime? ConsentDate { get; init; }
@@ -99,7 +99,7 @@ public record CreateMedicationDto
 
     [StringLength(200)]
     public string? PharmacyName { get; init; }
-    public bool IsDoseAidPacked { get; init; }
+    public PackagingType Packaging { get; init; } = PackagingType.OriginalPackaging;
 
     public DateTime StartDate { get; init; }
     public DateTime? EndDate { get; init; }
@@ -212,6 +212,7 @@ public record MarEntryDto
     public string DoseDescription { get; init; } = string.Empty;
     public MedicationForm Form { get; init; }
     public MedicationRoute Route { get; init; }
+    public PackagingType Packaging { get; init; }
 
     /// <summary>"08:00" — the time-of-day slot this entry expands.</summary>
     public string ScheduledTime { get; init; } = string.Empty;

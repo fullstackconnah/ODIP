@@ -919,7 +919,7 @@ public static class DbSeeder
                 Type = MedicationType.Regular, TimesOfDay = "08:00,20:00",
                 Purpose = "Seizure prophylaxis — acquired brain injury with breakthrough seizures.",
                 DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
-                PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Coorparoo Chemist Warehouse", IsDoseAidPacked = true,
+                PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Coorparoo Chemist Warehouse", Packaging = PackagingType.WebsterPack,
                 StartDate = today.AddMonths(-8), NextReviewDue = today.AddMonths(4),
                 ConsentObtained = true, ConsentGivenBy = "Margaret Johnson (mother)", ConsentDate = today.AddMonths(-8),
                 StorageRequirements = "Store below 25°C, away from light.", Status = MedicationStatus.Active,
@@ -935,6 +935,7 @@ public static class DbSeeder
                 Purpose = "Analgesia / antipyretic.",
                 DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.Assist,
                 PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Coorparoo Chemist Warehouse",
+                Packaging = PackagingType.Sachet,
                 StartDate = today.AddMonths(-8),
                 // Deliberately in the past — demonstrates the ReviewOverdue compliance flag.
                 NextReviewDue = today.AddDays(-14),
@@ -1059,6 +1060,83 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Seeds a handful of sample participant notes — a mix of pinned, plain, and archived —
+    /// for the same demo participants <see cref="SeedMedicationsAsync"/> targets. Idempotent:
+    /// bails out if any ParticipantNote already exists, and again per-participant if the demo
+    /// participants haven't been created yet.
+    /// </summary>
+    public static async Task SeedParticipantNotesAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.ParticipantNotes.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+
+        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
+        if (existingParticipants.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var notes = new List<ParticipantNote>();
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, ParticipantId = sophieId,
+                Title = "Haircut preference", Description = "Sophie prefers a short bob, above the shoulders, cut by Marie at Coorparoo Hair Studio — she becomes distressed with unfamiliar hairdressers. Book a quiet mid-morning slot where possible.",
+                IsPinned = true, IsArchived = false, CreatedByName = "James O'Brien",
+                CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddMonths(-6),
+            });
+
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, ParticipantId = sophieId,
+                Title = "Old transport note — superseded", Description = "Previously required the accessible van for all outings; this has since been reassessed and no longer applies. Kept for historical reference only.",
+                IsPinned = false, IsArchived = true, CreatedByName = "Emily Nguyen",
+                CreatedAt = now.AddMonths(-9), UpdatedAt = now.AddMonths(-3),
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                Title = "Preferred de-escalation approach", Description = "When Charlotte becomes agitated, offer a quiet space and her noise-cancelling headphones before any verbal redirection — verbal prompts too early tend to escalate rather than help.",
+                IsPinned = false, IsArchived = false, CreatedByName = "Daniel Williams",
+                CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(harrisonId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, ParticipantId = harrisonId,
+                Title = "Dietary note", Description = "Harrison manages his own insulin dosing around meals — support staff should confirm carb counts with him before he eats but not dose on his behalf unless asked.",
+                IsPinned = false, IsArchived = false, CreatedByName = "Rachel Thompson",
+                CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (notes.Count == 0)
+            return;
+
+        context.ParticipantNotes.AddRange(notes);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
     /// doesn't already have one. Runs on every startup — idempotent per tenant via a
     /// single existence check (not per-field), so a restart never duplicates the
@@ -1128,6 +1206,7 @@ public static class DbSeeder
         // Delete in reverse FK dependency order
         context.MedicationAdministrations.RemoveRange(context.MedicationAdministrations);
         context.ParticipantMedications.RemoveRange(context.ParticipantMedications);
+        context.ParticipantNotes.RemoveRange(context.ParticipantNotes);
         context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
         context.TripDays.RemoveRange(context.TripDays);
         context.BookingTasks.RemoveRange(context.BookingTasks);
@@ -1151,6 +1230,7 @@ public static class DbSeeder
         await context.SaveChangesAsync(ct);
         await SeedAsync(context, ct);
         await SeedMedicationsAsync(context, ct);
+        await SeedParticipantNotesAsync(context, ct);
     }
 
 }

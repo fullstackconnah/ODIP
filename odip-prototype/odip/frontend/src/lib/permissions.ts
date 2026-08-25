@@ -86,6 +86,12 @@ export function usePermissions() {
     canRecordAdministrations: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
+     * Participant notes are shift-facing (care preferences, routines) — any role that
+     * works a shift can write one. Only ReadOnly is excluded.
+     */
+    canWriteNotes: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
+
+    /**
      * Coordinator sees Provider Settings tab but cannot save changes.
      * False for Coordinator and SupportWorker.
      */

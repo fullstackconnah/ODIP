@@ -357,7 +357,8 @@ public enum MedicationForm
     Drops,
     Suppository,
     Enteral,
-    Other
+    Other,
+    Powder
 }
 
 public enum MedicationRoute
@@ -411,4 +412,14 @@ public enum MedicationAdministrationStatus
     Refused,
     Withheld,
     Missed
+}
+
+/// <summary>How a medication is physically packaged for administration.</summary>
+public enum PackagingType
+{
+    WebsterPack,
+    DosetteBox,
+    OriginalPackaging,
+    Sachet,
+    Other
 }

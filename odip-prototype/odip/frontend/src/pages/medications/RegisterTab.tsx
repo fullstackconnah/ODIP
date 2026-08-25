@@ -10,7 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { ComplianceFlagChips } from './MedicationBadges'
-import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS } from '@/api/types/medications'
+import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
 
 const STATUS_ITEMS = [
@@ -52,7 +52,18 @@ export default function RegisterTab() {
         </span>
       ),
     },
-    { key: 'doseDescription', header: 'Dose', render: m => m.doseDescription || '—' },
+    {
+      key: 'doseDescription',
+      header: 'Dose',
+      render: m => (
+        <div>
+          <span>{m.doseDescription || '—'}</span>
+          {m.packaging !== 'OriginalPackaging' && (
+            <div className="text-xs text-[var(--color-muted-foreground)]">{PACKAGING_LABELS[m.packaging]}</div>
+          )}
+        </div>
+      ),
+    },
     {
       key: 'type',
       header: 'Type',

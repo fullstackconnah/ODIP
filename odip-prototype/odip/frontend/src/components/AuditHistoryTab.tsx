@@ -1,4 +1,5 @@
 import { useAuditHistory, type AuditEntry, type AuditChange } from '../api/hooks';
+import { parseApiDate } from '@/lib/utils';
 
 interface Props {
   entityType: string;
@@ -19,7 +20,7 @@ const ACTION_STYLES: Record<string, string> = {
  * Formats an ISO timestamp into both relative (e.g., "2m ago") and absolute (e.g., "27 Mar 2026, 13:45") forms.
  */
 function formatRelative(iso: string): { relative: string; absolute: string } {
-  const date = new Date(iso);
+  const date = parseApiDate(iso);
   const diffMs = Date.now() - date.getTime();
   const diffMins = Math.floor(diffMs / 60_000);
   const diffHours = Math.floor(diffMins / 60);

@@ -40,6 +40,11 @@ public static class AuditedEntities
         // history NDIS medication management practice standards expect to be recoverable.
         typeof(ParticipantMedication),
         typeof(MedicationAdministration),
+
+        // Participant notes: free-text observations/preferences about a participant —
+        // who wrote or changed a note, and when, should be recoverable like any other
+        // participant-facing record.
+        typeof(ParticipantNote),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()
