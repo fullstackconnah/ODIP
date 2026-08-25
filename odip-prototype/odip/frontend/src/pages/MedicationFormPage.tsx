@@ -10,15 +10,34 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT_LEVELS, MEDICATION_STATUSES } from '@/api/types/enums'
-import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS } from '@/api/types/medications'
+import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT_LEVELS, MEDICATION_STATUSES, PACKAGING_TYPES } from '@/api/types/enums'
+import type { MedicationForm, MedicationRoute } from '@/api/types/enums'
+import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
+
+// Which medication forms make clinical sense for a given administration route. Used only to
+// surface a soft warning when the two fields disagree — the currently selected form is never
+// cleared automatically (see the inline warning under the Form field below).
+const ROUTE_FORM_MAP: Record<MedicationRoute, MedicationForm[]> = {
+  Oral: ['Tablet', 'Capsule', 'Liquid', 'Powder', 'Other'],
+  Subcutaneous: ['Injection', 'Other'],
+  Intramuscular: ['Injection', 'Other'],
+  Topical: ['Cream', 'Patch', 'Other'],
+  Inhaled: ['Inhaler', 'Other'],
+  Enteral: ['Liquid', 'Powder', 'Other'],
+  Rectal: ['Suppository', 'Other'],
+  Sublingual: ['Tablet', 'Drops', 'Other'],
+  Ocular: ['Drops', 'Other'],
+  Nasal: ['Drops', 'Other'],
+  Other: [...MEDICATION_FORMS],
+}
 
 const medicationSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   strength: z.string().optional(),
   form: z.string().min(1, 'Form is required'),
   route: z.string().min(1, 'Route is required'),
+  packaging: z.string().min(1, 'Packaging is required'),
   doseDescription: z.string().min(1, 'Dose description is required — e.g. 1 tablet (500mg)'),
   directions: z.string().optional(),
   type: z.string().min(1),
@@ -37,7 +56,6 @@ const medicationSchema = z.object({
   supportLevel: z.string().min(1),
   prescriberName: z.string().optional(),
   pharmacyName: z.string().optional(),
-  isDoseAidPacked: z.boolean().optional(),
   consentObtained: z.boolean().optional(),
   consentGivenBy: z.string().optional(),
   consentDate: z.string().optional(),
@@ -98,6 +116,7 @@ export default function MedicationFormPage() {
     defaultValues: {
       form: 'Tablet',
       route: 'Oral',
+      packaging: 'OriginalPackaging',
       type: 'Regular',
       timesOfDayList: [],
       drugSchedule: 'Unscheduled',
@@ -107,16 +126,21 @@ export default function MedicationFormPage() {
       isChemicalRestraint: false,
       bspInPlace: false,
       isHighIntensitySupport: false,
-      isDoseAidPacked: false,
       consentObtained: false,
       status: 'Active',
     },
   })
 
   const typeValue = useWatch({ control, name: 'type' })
+  const routeValue = useWatch({ control, name: 'route' })
+  const formValue = useWatch({ control, name: 'form' })
   const isPsychotropic = useWatch({ control, name: 'isPsychotropic' })
   const isChemicalRestraint = useWatch({ control, name: 'isChemicalRestraint' })
   const consentObtained = useWatch({ control, name: 'consentObtained' })
+
+  const compatibleForms = ROUTE_FORM_MAP[routeValue as MedicationRoute] ?? [...MEDICATION_FORMS]
+  const formMismatch = !!routeValue && !!formValue && !compatibleForms.includes(formValue as MedicationForm)
+  const formOptions = formMismatch ? [...compatibleForms, formValue as MedicationForm] : compatibleForms
 
   useEffect(() => {
     if (existing) {
@@ -125,6 +149,7 @@ export default function MedicationFormPage() {
         strength: existing.strength ?? '',
         form: existing.form ?? 'Tablet',
         route: existing.route ?? 'Oral',
+        packaging: existing.packaging ?? 'OriginalPackaging',
         doseDescription: existing.doseDescription ?? '',
         directions: existing.directions ?? '',
         type: existing.type ?? 'Regular',
@@ -143,7 +168,6 @@ export default function MedicationFormPage() {
         supportLevel: existing.supportLevel ?? 'SelfAdministered',
         prescriberName: existing.prescriberName ?? '',
         pharmacyName: existing.pharmacyName ?? '',
-        isDoseAidPacked: existing.isDoseAidPacked ?? false,
         consentObtained: existing.consentObtained ?? false,
         consentGivenBy: existing.consentGivenBy ?? '',
         consentDate: existing.consentDate ? existing.consentDate.split('T')[0] : '',
@@ -163,6 +187,7 @@ export default function MedicationFormPage() {
       strength: data.strength || undefined,
       form: data.form as CreateMedicationDto['form'],
       route: data.route as CreateMedicationDto['route'],
+      packaging: data.packaging as CreateMedicationDto['packaging'],
       doseDescription: data.doseDescription,
       directions: data.directions || undefined,
       type: data.type as CreateMedicationDto['type'],
@@ -181,7 +206,6 @@ export default function MedicationFormPage() {
       supportLevel: data.supportLevel as CreateMedicationDto['supportLevel'],
       prescriberName: data.prescriberName || undefined,
       pharmacyName: data.pharmacyName || undefined,
-      isDoseAidPacked: data.isDoseAidPacked ?? false,
       consentObtained: data.consentObtained ?? false,
       consentGivenBy: data.consentObtained ? (data.consentGivenBy || undefined) : undefined,
       consentDate: data.consentObtained ? (data.consentDate || undefined) : undefined,
@@ -250,21 +274,26 @@ export default function MedicationFormPage() {
             </FormField>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            <FormField label="Form" required error={errors.form?.message}>
-              <Controller
-                control={control}
-                name="form"
-                render={({ field }) => (
-                  <Dropdown
-                    variant="form"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    items={MEDICATION_FORMS.map(f => ({ value: f, label: FORM_LABELS[f] }))}
-                  />
-                )}
-              />
-            </FormField>
+            <div>
+              <FormField label="Form" required error={errors.form?.message}>
+                <Controller
+                  control={control}
+                  name="form"
+                  render={({ field }) => (
+                    <Dropdown
+                      variant="form"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      items={formOptions.map(f => ({ value: f, label: FORM_LABELS[f] }))}
+                    />
+                  )}
+                />
+              </FormField>
+              {formMismatch && (
+                <p className="text-xs text-amber-700 mt-1.5">Unusual form for this route — check the prescription</p>
+              )}
+            </div>
             <FormField label="Route" required error={errors.route?.message}>
               <Controller
                 control={control}
@@ -281,6 +310,21 @@ export default function MedicationFormPage() {
               />
             </FormField>
           </div>
+          <FormField label="Packaging" required error={errors.packaging?.message}>
+            <Controller
+              control={control}
+              name="packaging"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={PACKAGING_TYPES.map(p => ({ value: p, label: PACKAGING_LABELS[p] }))}
+                />
+              )}
+            />
+          </FormField>
           <FormField label="Dose Description" required error={errors.doseDescription?.message}>
             <input {...register('doseDescription')} placeholder="e.g. 1 tablet" />
           </FormField>
@@ -470,9 +514,6 @@ export default function MedicationFormPage() {
               <input {...register('pharmacyName')} placeholder="e.g. Chemist Warehouse" />
             </FormField>
           </div>
-          <FormField label="Dose Aid Packed (e.g. Webster pack)" layout="checkbox">
-            <input type="checkbox" {...register('isDoseAidPacked')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
           <FormField label="Storage Requirements">
             <input {...register('storageRequirements')} placeholder="e.g. Refrigerate" />
           </FormField>

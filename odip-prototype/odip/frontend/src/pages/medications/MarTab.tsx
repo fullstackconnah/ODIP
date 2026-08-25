@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
-import { ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
+import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MarEntryDto, MarPrnDto } from '@/api/types/medications'
 
 function todayIso(): string {
@@ -174,7 +174,10 @@ export default function MarTab() {
                         {entry.medicationName}{entry.strength ? ` ${entry.strength}` : ''}
                         {entry.doseDescription && <span className="text-[var(--color-muted-foreground)]"> · {entry.doseDescription}</span>}
                       </p>
-                      <p className="text-xs text-[var(--color-muted-foreground)]">{ROUTE_LABELS[entry.route]} · {FORM_LABELS[entry.form]}</p>
+                      <p className="text-xs text-[var(--color-muted-foreground)]">
+                        {ROUTE_LABELS[entry.route]} · {FORM_LABELS[entry.form]}
+                        {entry.packaging !== 'OriginalPackaging' && ` · ${PACKAGING_LABELS[entry.packaging]}`}
+                      </p>
                       {entry.isHighRisk && (
                         <span
                           className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"

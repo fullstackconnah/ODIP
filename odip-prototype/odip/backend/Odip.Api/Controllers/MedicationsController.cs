@@ -79,7 +79,7 @@ public class MedicationsController : ControllerBase
             SupportLevel = dto.SupportLevel,
             PrescriberName = dto.PrescriberName,
             PharmacyName = dto.PharmacyName,
-            IsDoseAidPacked = dto.IsDoseAidPacked,
+            Packaging = dto.Packaging,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             NextReviewDue = dto.NextReviewDue,
@@ -140,7 +140,7 @@ public class MedicationsController : ControllerBase
         med.SupportLevel = dto.SupportLevel;
         med.PrescriberName = dto.PrescriberName;
         med.PharmacyName = dto.PharmacyName;
-        med.IsDoseAidPacked = dto.IsDoseAidPacked;
+        med.Packaging = dto.Packaging;
         med.StartDate = dto.StartDate;
         med.EndDate = dto.EndDate;
         med.NextReviewDue = dto.NextReviewDue;
@@ -235,6 +235,7 @@ public class MedicationsController : ControllerBase
                     DoseDescription = m.DoseDescription,
                     Form = m.Form,
                     Route = m.Route,
+                    Packaging = m.Packaging,
                     ScheduledTime = t.ToString(@"hh\:mm"),
                     ScheduledAt = scheduledAt,
                     IsHighRisk = m.IsHighRisk,
@@ -521,6 +522,7 @@ public class MedicationsController : ControllerBase
             IsChemicalRestraint = m.IsChemicalRestraint,
             DrugSchedule = m.DrugSchedule,
             SupportLevel = m.SupportLevel,
+            Packaging = m.Packaging,
             StartDate = m.StartDate,
             EndDate = m.EndDate,
             NextReviewDue = m.NextReviewDue,
@@ -549,6 +551,7 @@ public class MedicationsController : ControllerBase
             IsChemicalRestraint = list.IsChemicalRestraint,
             DrugSchedule = list.DrugSchedule,
             SupportLevel = list.SupportLevel,
+            Packaging = list.Packaging,
             StartDate = list.StartDate,
             EndDate = list.EndDate,
             NextReviewDue = list.NextReviewDue,
@@ -563,7 +566,6 @@ public class MedicationsController : ControllerBase
             IsHighIntensitySupport = m.IsHighIntensitySupport,
             PrescriberName = m.PrescriberName,
             PharmacyName = m.PharmacyName,
-            IsDoseAidPacked = m.IsDoseAidPacked,
             ConsentObtained = m.ConsentObtained,
             ConsentGivenBy = m.ConsentGivenBy,
             ConsentDate = m.ConsentDate,

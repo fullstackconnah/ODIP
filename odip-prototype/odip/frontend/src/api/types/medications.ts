@@ -6,6 +6,7 @@ import type {
   MedicationSupportLevel,
   MedicationStatus,
   MedicationAdministrationStatus,
+  PackagingType,
 } from './enums'
 
 // ── Compliance flags ─────────────────────────────────────
@@ -30,6 +31,15 @@ export const FORM_LABELS: Record<MedicationForm, string> = {
   Drops: 'Drops',
   Suppository: 'Suppository',
   Enteral: 'Enteral',
+  Powder: 'Powder',
+  Other: 'Other',
+}
+
+export const PACKAGING_LABELS: Record<PackagingType, string> = {
+  WebsterPack: 'Webster / blister pack',
+  DosetteBox: 'Dosette box',
+  OriginalPackaging: 'Original packaging',
+  Sachet: 'Sachet',
   Other: 'Other',
 }
 
@@ -99,6 +109,7 @@ export interface MedicationListDto {
   isChemicalRestraint: boolean
   drugSchedule: DrugSchedule
   supportLevel: MedicationSupportLevel
+  packaging: PackagingType
   startDate: string | null
   endDate: string | null
   nextReviewDue: string | null
@@ -116,7 +127,6 @@ export interface MedicationDetailDto extends MedicationListDto {
   isHighIntensitySupport: boolean
   prescriberName: string | null
   pharmacyName: string | null
-  isDoseAidPacked: boolean
   consentObtained: boolean
   consentGivenBy: string | null
   consentDate: string | null
@@ -148,9 +158,9 @@ export interface CreateMedicationDto {
   isHighIntensitySupport: boolean
   drugSchedule: DrugSchedule
   supportLevel: MedicationSupportLevel
+  packaging: PackagingType
   prescriberName?: string
   pharmacyName?: string
-  isDoseAidPacked: boolean
   consentObtained: boolean
   consentGivenBy?: string
   consentDate?: string
@@ -222,6 +232,7 @@ export interface MarEntryDto {
   doseDescription: string | null
   form: MedicationForm
   route: MedicationRoute
+  packaging: PackagingType
   scheduledTime: string
   scheduledAt: string
   isHighRisk: boolean

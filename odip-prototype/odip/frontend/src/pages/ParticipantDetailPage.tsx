@@ -5,12 +5,12 @@ import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
-import { MedicationsTab } from './participant-detail'
+import { MedicationsTab, NotesTab } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -24,10 +24,10 @@ export default function ParticipantDetailPage() {
   const { canWrite } = usePermissions()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
-  type Tab = 'details' | 'bookings' | 'support' | 'medications' | 'history'
+  type Tab = 'details' | 'bookings' | 'support' | 'medications' | 'notes' | 'history'
   const initialTab = searchParams.get('tab')
   const [tab, setTab] = useState<Tab>(
-    initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'history' ? initialTab : 'details'
+    initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'history' ? initialTab : 'details'
   )
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
@@ -77,6 +77,7 @@ export default function ParticipantDetailPage() {
           { key: 'bookings', label: 'Bookings', icon: ClipboardList },
           { key: 'support', label: 'Support Profile', icon: Shield },
           { key: 'medications', label: 'Medications', icon: Pill },
+          { key: 'notes', label: 'Notes', icon: StickyNote },
           ...(isAdmin ? [{ key: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
@@ -176,6 +177,10 @@ export default function ParticipantDetailPage() {
 
       {tab === 'medications' && (
         <MedicationsTab participantId={id} />
+      )}
+
+      {tab === 'notes' && (
+        <NotesTab participantId={id} />
       )}
 
       {tab === 'history' && isAdmin && p && (

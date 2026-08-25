@@ -7,7 +7,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Users } from 'lucide-react'
+import { Plus, Users, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -42,7 +42,16 @@ export default function ParticipantsPage() {
   const { data: participants = [], isLoading } = useParticipants(queryParams)
 
   const participantColumns: Column<any>[] = [
-    { key: 'fullName', header: 'Name', sortable: true, className: 'font-medium' },
+    {
+      key: 'fullName',
+      header: 'Name',
+      sortable: true,
+      render: (p) => (
+        <span className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors">
+          {p.fullName}
+        </span>
+      ),
+    },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber || p.ndisNumber)}</span> },
     { key: 'planType', header: 'Plan Type' },
     { key: 'region', header: 'Region', sortable: true },
@@ -70,7 +79,16 @@ export default function ParticipantsPage() {
         )
       },
     },
-    { key: 'actions', header: '', render: (p) => canWrite ? actionButtons(p) : null },
+    {
+      key: 'actions',
+      header: '',
+      render: (p) => (
+        <span className="flex items-center justify-end gap-2">
+          {canWrite && actionButtons(p)}
+          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
+        </span>
+      ),
+    },
   ]
 
   return (

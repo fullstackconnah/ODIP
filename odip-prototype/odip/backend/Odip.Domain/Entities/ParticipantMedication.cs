@@ -57,8 +57,8 @@ public class ParticipantMedication : ITenantEntity
     public string? PrescriberName { get; set; }
     public string? PharmacyName { get; set; }
 
-    /// <summary>Webster-pak or equivalent dose administration aid.</summary>
-    public bool IsDoseAidPacked { get; set; }
+    /// <summary>How this medication is physically packaged for administration.</summary>
+    public PackagingType Packaging { get; set; } = PackagingType.OriginalPackaging;
 
     public DateTime StartDate { get; set; }
     public DateTime? EndDate { get; set; }
