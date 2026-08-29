@@ -177,3 +177,11 @@ export type MedicationStatus = typeof MEDICATION_STATUSES[number]
 // ── Medication Administration Status ─────────────────────
 export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed'] as const
 export type MedicationAdministrationStatus = typeof MEDICATION_ADMINISTRATION_STATUSES[number]
+
+// ── Routine Category ─────────────────────────────────────
+export const ROUTINE_CATEGORIES = ['PersonalCare', 'Meals', 'Medication', 'Mobility', 'Communication', 'Behaviour', 'Sleep', 'Activity', 'Other'] as const
+export type RoutineCategory = typeof ROUTINE_CATEGORIES[number]
+
+// ── Day of Week (System.DayOfWeek, JsonStringEnumConverter — Sunday-first) ─
+export const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
+export type DayOfWeekName = typeof DAYS_OF_WEEK[number]

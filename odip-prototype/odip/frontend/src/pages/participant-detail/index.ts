@@ -1,2 +1,3 @@
 export { default as MedicationsTab } from './MedicationsTab'
 export { default as NotesTab } from './NotesTab'
+export { default as RoutinesTab } from './RoutinesTab'
