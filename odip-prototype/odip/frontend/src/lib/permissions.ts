@@ -100,6 +100,12 @@ export function usePermissions() {
     canWriteRoutines: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
+     * Restrictive practice register entries carry authorisation/compliance information — same
+     * clinical/coordination gate as medication management, narrower than routines/notes.
+     */
+    canWriteRestrictivePractices: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Coordinator sees Provider Settings tab but cannot save changes.
      * False for Coordinator and SupportWorker.
      */

@@ -34,7 +34,6 @@ const participantSchema = z.object({
   requiresShowerChair: z.boolean().optional(),
   requiresCommode: z.boolean().optional(),
   requiresStandingMachine: z.boolean().optional(),
-  hasRestrictivePracticeFlag: z.boolean().optional(),
   supportRatio: z.string().min(1),
   mobilityNotes: z.string().optional(),
   equipmentRequirements: z.string().optional(),
@@ -106,7 +105,6 @@ export default function ParticipantCreatePage() {
       requiresShowerChair: false,
       requiresCommode: false,
       requiresStandingMachine: false,
-      hasRestrictivePracticeFlag: false,
       preferredStaffId: null,
     },
   })
@@ -149,7 +147,6 @@ export default function ParticipantCreatePage() {
         requiresShowerChair: existing.requiresShowerChair ?? false,
         requiresCommode: existing.requiresCommode ?? false,
         requiresStandingMachine: existing.requiresStandingMachine ?? false,
-        hasRestrictivePracticeFlag: existing.hasRestrictivePracticeFlag ?? false,
         supportRatio: existing.supportRatio ?? 'SharedSupport',
         mobilityNotes: existing.mobilityNotes ?? '',
         equipmentRequirements: existing.equipmentRequirements ?? '',
@@ -277,20 +274,14 @@ export default function ParticipantCreatePage() {
             <input type="checkbox" {...register('isIntensiveSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1">
-            <FormField
-              label={
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span>
-                  Restrictive Practice Flag
-                </span>
-              }
-              layout="checkbox"
-              hint="This flag is recorded in the participant's restrictive practices register."
-            >
-              <input type="checkbox" {...register('hasRestrictivePracticeFlag')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-            </FormField>
-          </div>
+          {isEdit && existing?.hasRestrictivePracticeFlag && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-1.5">
+              <span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span>
+              <p className="text-sm text-amber-900">
+                Restrictive practice flag — derived from an active entry in the participant's Restrictive Practices register (see that tab). It can no longer be set here directly.
+              </p>
+            </div>
+          )}
 
           <FormField label="Support Ratio" required error={errors.supportRatio?.message}>
             <Controller

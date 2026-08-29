@@ -33,6 +33,7 @@ public class OdipDbContext : DbContext
     public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
     public DbSet<ParticipantNote> ParticipantNotes => Set<ParticipantNote>();
     public DbSet<ParticipantRoutine> ParticipantRoutines => Set<ParticipantRoutine>();
+    public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
     public DbSet<ParticipantBooking> ParticipantBookings => Set<ParticipantBooking>();
@@ -1022,6 +1023,32 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId);
         });
 
+        // ── RestrictivePractice ───────────────────────────────────
+        modelBuilder.Entity<RestrictivePractice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.AuthorisedBy).HasMaxLength(200);
+
+            // Restrict: same idiom as ParticipantNote/ParticipantRoutine/ParticipantMedication →
+            // Participant — a participant with register history must not be silently
+            // cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany(p => p.RestrictivePractices)
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // SetNull: losing the linked medication (never happens in practice — medications are
+            // never hard-deleted) should not take the register entry down with it.
+            entity.HasOne(e => e.RelatedMedication)
+                .WithMany()
+                .HasForeignKey(e => e.RelatedMedicationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => e.RelatedMedicationId);
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -1145,6 +1172,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantRoutine>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantRoutine>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RestrictivePractice>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<RestrictivePractice>()
             .HasIndex(e => e.TenantId);
     }
 

@@ -48,6 +48,12 @@ public class Participant : ITenantEntity
     public bool RequiresCommode { get; set; }
     public bool RequiresStandingMachine { get; set; }
 
+    /// <summary>
+    /// Legacy independently-writable flag — no writer sets this anymore. Every read path now
+    /// derives the effective value from <see cref="RestrictivePractices"/> (true iff any active
+    /// row exists) instead. Kept as a column rather than dropped to avoid a wider migration
+    /// ripple; see the AddRestrictivePractices migration/task-5 report for details.
+    /// </summary>
     public bool HasRestrictivePracticeFlag { get; set; }
     public SupportRatio SupportRatio { get; set; }
     public string? MobilityNotes { get; set; }
@@ -69,4 +75,5 @@ public class Participant : ITenantEntity
     public SupportProfile? SupportProfile { get; set; }
     public ICollection<ParticipantBooking> Bookings { get; set; } = new List<ParticipantBooking>();
     public ICollection<ParticipantContact> ParticipantContacts { get; set; } = new List<ParticipantContact>();
+    public ICollection<RestrictivePractice> RestrictivePractices { get; set; } = new List<RestrictivePractice>();
 }

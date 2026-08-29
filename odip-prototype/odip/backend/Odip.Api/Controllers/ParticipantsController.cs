@@ -47,7 +47,9 @@ public class ParticipantsController : ControllerBase
                 PlanType = p.PlanType, Region = p.Region, IsRepeatClient = p.IsRepeatClient,
                 IsActive = p.IsActive, MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
                 IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
-                OvernightSupport = p.OvernightSupport, HasRestrictivePracticeFlag = p.HasRestrictivePracticeFlag
+                OvernightSupport = p.OvernightSupport,
+                // Derived: true iff the participant has any active restrictive-practice register row.
+                HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive)
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -60,6 +62,7 @@ public class ParticipantsController : ControllerBase
     {
         var p = await _db.Participants
             .Include(x => x.PreferredStaff)
+            .Include(x => x.RestrictivePractices)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -76,7 +79,8 @@ public class ParticipantsController : ControllerBase
             OvernightSupport = p.OvernightSupport, OvernightRatio = p.OvernightRatio,
             RequiresHiLoBed = p.RequiresHiLoBed, RequiresHoist = p.RequiresHoist, RequiresShowerChair = p.RequiresShowerChair,
             RequiresCommode = p.RequiresCommode, RequiresStandingMachine = p.RequiresStandingMachine,
-            HasRestrictivePracticeFlag = p.HasRestrictivePracticeFlag,
+            // Derived: true iff the participant has any active restrictive-practice register row.
+            HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive),
             MobilityNotes = p.MobilityNotes, EquipmentRequirements = p.EquipmentRequirements,
             TransportRequirements = p.TransportRequirements, MedicalSummary = p.MedicalSummary,
             BehaviourRiskSummary = p.BehaviourRiskSummary, Notes = p.Notes,
@@ -109,7 +113,7 @@ public class ParticipantsController : ControllerBase
             OvernightSupport = dto.OvernightSupport, OvernightRatio = dto.OvernightRatio,
             RequiresHiLoBed = dto.RequiresHiLoBed, RequiresHoist = dto.RequiresHoist, RequiresShowerChair = dto.RequiresShowerChair,
             RequiresCommode = dto.RequiresCommode, RequiresStandingMachine = dto.RequiresStandingMachine,
-            HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag,
+            // HasRestrictivePracticeFlag is intentionally not set from dto — derived on read only.
             SupportRatio = dto.SupportRatio, MobilityNotes = dto.MobilityNotes,
             EquipmentRequirements = dto.EquipmentRequirements, TransportRequirements = dto.TransportRequirements,
             MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
@@ -143,7 +147,7 @@ public class ParticipantsController : ControllerBase
         p.OvernightSupport = dto.OvernightSupport; p.OvernightRatio = dto.OvernightRatio;
         p.RequiresHiLoBed = dto.RequiresHiLoBed; p.RequiresHoist = dto.RequiresHoist; p.RequiresShowerChair = dto.RequiresShowerChair;
         p.RequiresCommode = dto.RequiresCommode; p.RequiresStandingMachine = dto.RequiresStandingMachine;
-        p.HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag;
+        // p.HasRestrictivePracticeFlag is intentionally left untouched — derived on read only.
         p.SupportRatio = dto.SupportRatio; p.MobilityNotes = dto.MobilityNotes;
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;
@@ -199,7 +203,9 @@ public class ParticipantsController : ControllerBase
             _db.SupportProfiles.Add(sp);
         }
         sp.CommunicationNotes = dto.CommunicationNotes; sp.BehaviourSupportNotes = dto.BehaviourSupportNotes;
-        sp.RestrictivePracticeDetails = dto.RestrictivePracticeDetails; sp.ManualHandlingNotes = dto.ManualHandlingNotes;
+        // sp.RestrictivePracticeDetails is intentionally left untouched — the register replaces
+        // it as the write path; existing legacy text stays readable via SupportProfileDto.
+        sp.ManualHandlingNotes = dto.ManualHandlingNotes;
         sp.MedicationHealthSummary = dto.MedicationHealthSummary; sp.EmergencyConsiderations = dto.EmergencyConsiderations;
         sp.TravelSpecificNotes = dto.TravelSpecificNotes; sp.ReviewDate = dto.ReviewDate;
         sp.UpdatedAt = DateTime.UtcNow;

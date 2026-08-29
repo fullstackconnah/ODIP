@@ -480,3 +480,18 @@ public enum RoutineCategory
     Activity,
     Other
 }
+
+/// <summary>
+/// The NDIS-authoritative restrictive practice categories, plus <see cref="Unclassified"/> for
+/// register rows backfilled from the old free-text <c>SupportProfile.RestrictivePracticeDetails</c>
+/// field (see the AddRestrictivePractices migration) where no specific category is known.
+/// </summary>
+public enum RestrictivePracticeType
+{
+    Seclusion,
+    ChemicalRestraint,
+    MechanicalRestraint,
+    PhysicalRestraint,
+    EnvironmentalRestraint,
+    Unclassified
+}
