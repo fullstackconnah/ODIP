@@ -38,6 +38,8 @@ const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
+const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
+const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +104,8 @@ const router = createBrowserRouter(
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
+        <Route path="/portal" element={<PrivateRoute page="portal"><PortalShiftsPage /></PrivateRoute>} />
+        <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
       </Route>
     </Route>
   )

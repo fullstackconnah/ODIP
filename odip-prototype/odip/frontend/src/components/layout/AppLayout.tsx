@@ -2,7 +2,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
   ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
-  CalendarClock, Pill
+  CalendarClock, Pill, CalendarCheck2
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -15,6 +15,7 @@ type NavEntry = NavLeaf | NavParent
 
 const navItems: NavEntry[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard' },
+  { to: '/portal', icon: CalendarCheck2, label: 'My Shifts', msIcon: 'calendar_today', page: 'portal' },
   {
     label: 'Trips',
     icon: Map,
