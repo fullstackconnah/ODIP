@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -54,7 +55,7 @@ public class RestrictivePracticesController : ControllerBase
 
         if (dto.RelatedMedicationId.HasValue)
         {
-            var medicationError = await ValidateRelatedMedicationAsync(dto.RelatedMedicationId.Value, participantId, ct);
+            var medicationError = await ValidateRelatedMedicationAsync(dto.Type, dto.RelatedMedicationId.Value, participantId, ct);
             if (medicationError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(medicationError));
         }
 
@@ -71,6 +72,18 @@ public class RestrictivePracticesController : ControllerBase
             IsActive = dto.IsActive,
         };
         _db.RestrictivePractices.Add(practice);
+
+        // Sync-write: keep Participant.HasRestrictivePracticeFlag consistent with the register in
+        // the SAME SaveChangesAsync call. RosteringController/PortalController read that column
+        // directly (not the derived computation ParticipantsController uses on read), so this is
+        // what keeps field staff seeing correct status without touching either controller. The
+        // query below only sees already-committed rows (this new `practice` isn't saved yet), so
+        // its own IsActive is OR'd in explicitly.
+        var hasOtherActiveEntry = await _db.RestrictivePractices
+            .Where(rp => rp.ParticipantId == participantId && rp.IsActive)
+            .AnyAsync(ct);
+        participant.HasRestrictivePracticeFlag = practice.IsActive || hasOtherActiveEntry;
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
@@ -86,7 +99,7 @@ public class RestrictivePracticesController : ControllerBase
 
         if (dto.RelatedMedicationId.HasValue)
         {
-            var medicationError = await ValidateRelatedMedicationAsync(dto.RelatedMedicationId.Value, practice.ParticipantId, ct);
+            var medicationError = await ValidateRelatedMedicationAsync(dto.Type, dto.RelatedMedicationId.Value, practice.ParticipantId, ct);
             if (medicationError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(medicationError));
         }
 
@@ -98,6 +111,18 @@ public class RestrictivePracticesController : ControllerBase
         practice.RelatedMedicationId = dto.RelatedMedicationId;
         practice.IsActive = dto.IsActive;
         practice.UpdatedAt = DateTime.UtcNow;
+
+        // Sync-write (see Create): recompute the participant's derived flag in the same
+        // SaveChangesAsync call. The query below still reflects this row's pre-update committed
+        // IsActive, so it's excluded and the new state (dto.IsActive) is OR'd in explicitly.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == practice.ParticipantId, ct);
+        if (participant != null)
+        {
+            var hasOtherActiveEntry = await _db.RestrictivePractices
+                .Where(rp => rp.ParticipantId == practice.ParticipantId && rp.Id != practice.Id && rp.IsActive)
+                .AnyAsync(ct);
+            participant.HasRestrictivePracticeFlag = dto.IsActive || hasOtherActiveEntry;
+        }
 
         await _db.SaveChangesAsync(ct);
 
@@ -112,6 +137,18 @@ public class RestrictivePracticesController : ControllerBase
         if (practice == null) return NotFound(ApiResponse<bool>.Fail("Restrictive practice entry not found"));
 
         _db.RestrictivePractices.Remove(practice);
+
+        // Sync-write (see Create): the deleted row can no longer contribute regardless of its own
+        // IsActive, so the recomputed flag is just "does any other active row remain".
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == practice.ParticipantId, ct);
+        if (participant != null)
+        {
+            var hasOtherActiveEntry = await _db.RestrictivePractices
+                .Where(rp => rp.ParticipantId == practice.ParticipantId && rp.Id != practice.Id && rp.IsActive)
+                .AnyAsync(ct);
+            participant.HasRestrictivePracticeFlag = hasOtherActiveEntry;
+        }
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<bool>.Ok(true));
@@ -119,9 +156,15 @@ public class RestrictivePracticesController : ControllerBase
 
     // ── Helpers ────────────────────────────────────────────────────
 
-    /// <summary>Returns an error message if the medication doesn't exist or belongs to a different participant; null if valid.</summary>
-    private async Task<string?> ValidateRelatedMedicationAsync(Guid medicationId, Guid participantId, CancellationToken ct)
+    /// <summary>
+    /// Returns an error message if RelatedMedicationId is set for a non-ChemicalRestraint type, if
+    /// the medication doesn't exist, or if it belongs to a different participant; null if valid.
+    /// </summary>
+    private async Task<string?> ValidateRelatedMedicationAsync(RestrictivePracticeType type, Guid medicationId, Guid participantId, CancellationToken ct)
     {
+        if (type != RestrictivePracticeType.ChemicalRestraint)
+            return "RelatedMedicationId can only be set when Type is ChemicalRestraint";
+
         var medication = await _db.ParticipantMedications.FirstOrDefaultAsync(m => m.Id == medicationId, ct);
         if (medication == null) return "Related medication not found";
         if (medication.ParticipantId != participantId) return "Related medication does not belong to this participant";

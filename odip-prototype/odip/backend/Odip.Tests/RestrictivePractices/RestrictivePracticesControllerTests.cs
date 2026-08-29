@@ -164,6 +164,28 @@ public class RestrictivePracticesControllerTests
     }
 
     [Fact]
+    public async Task Create_RelatedMedicationSetOnNonChemicalRestraintType_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var medication = SeedMedication(db, participant.Id);
+        var controller = new RestrictivePracticesController(db);
+
+        // Type is Seclusion (the CreateDto default type below), but RelatedMedicationId is set —
+        // only ChemicalRestraint entries may link a medication.
+        var dto = CreateDto(type: RestrictivePracticeType.Seclusion, relatedMedicationId: medication.Id);
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(bad.Value);
+        Assert.False(body.Success);
+        Assert.Contains(body.Errors!, e => e.Contains("only be set when Type is ChemicalRestraint", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
     public async Task Create_RelatedMedicationDoesNotExist_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
@@ -339,6 +361,152 @@ public class RestrictivePracticesControllerTests
         Assert.True(body.Data);
 
         Assert.False(await db.RestrictivePractices.AnyAsync(r => r.Id == practice.Id));
+    }
+
+    // ── Derived Participant.HasRestrictivePracticeFlag sync-write ──────────
+    // Fix round 1: RosteringController/PortalController read the raw column directly (not the
+    // derived-on-read computation ParticipantsController uses), so every register mutation here
+    // must keep that column in sync in the same SaveChangesAsync call.
+
+    [Fact]
+    public async Task Create_ActiveEntry_SetsParticipantFlagTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        Assert.False(participant.HasRestrictivePracticeFlag);
+        var controller = new RestrictivePracticesController(db);
+
+        await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.True(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Create_InactiveEntry_LeavesParticipantFlagFalse()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        await controller.Create(participant.Id, CreateDto(isActive: false), CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.False(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Update_DeactivateOnlyActiveEntry_ClearsParticipantFlag()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.HasRestrictivePracticeFlag = true; // simulates a prior Create having set it
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "d", IsActive = true,
+        };
+        db.RestrictivePractices.Add(practice);
+        db.SaveChanges();
+
+        var controller = new RestrictivePracticesController(db);
+        var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "d", IsActive = false };
+
+        await controller.Update(practice.Id, dto, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.False(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Update_ReactivateEntry_SetsParticipantFlagTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "d", IsActive = false,
+        };
+        db.RestrictivePractices.Add(practice);
+        db.SaveChanges();
+        Assert.False(participant.HasRestrictivePracticeFlag);
+
+        var controller = new RestrictivePracticesController(db);
+        var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "d", IsActive = true };
+
+        await controller.Update(practice.Id, dto, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.True(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Update_DeactivateOneOfTwoActiveEntries_KeepsParticipantFlagTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var practiceToDeactivate = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "First", IsActive = true,
+        };
+        var otherActivePractice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "Second", IsActive = true,
+        };
+        db.RestrictivePractices.AddRange(practiceToDeactivate, otherActivePractice);
+        participant.HasRestrictivePracticeFlag = true;
+        db.SaveChanges();
+
+        var controller = new RestrictivePracticesController(db);
+        var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "First", IsActive = false };
+
+        await controller.Update(practiceToDeactivate.Id, dto, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.True(saved.HasRestrictivePracticeFlag); // otherActivePractice is still active
+    }
+
+    [Fact]
+    public async Task Delete_LastActiveEntry_ClearsParticipantFlag()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.HasRestrictivePracticeFlag = true;
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "d", IsActive = true,
+        };
+        db.RestrictivePractices.Add(practice);
+        db.SaveChanges();
+
+        var controller = new RestrictivePracticesController(db);
+        await controller.Delete(practice.Id, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.False(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Delete_OneOfTwoActiveEntries_KeepsParticipantFlagTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var practiceToDelete = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "First", IsActive = true,
+        };
+        var otherActivePractice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "Second", IsActive = true,
+        };
+        db.RestrictivePractices.AddRange(practiceToDelete, otherActivePractice);
+        participant.HasRestrictivePracticeFlag = true;
+        db.SaveChanges();
+
+        var controller = new RestrictivePracticesController(db);
+        await controller.Delete(practiceToDelete.Id, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.True(saved.HasRestrictivePracticeFlag); // otherActivePractice is still active
     }
 
     // ── Tenant scoping ───────────────────────────────────────────────────

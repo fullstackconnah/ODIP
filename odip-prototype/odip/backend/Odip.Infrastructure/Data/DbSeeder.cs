@@ -1230,6 +1230,91 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Seeds a few demo <see cref="RestrictivePractice"/> register rows for the demo participants
+    /// whose OTHER seed data already implies a restrictive practice, mirroring exactly what the
+    /// AddRestrictivePractices migration's SQL backfill would produce for this data if it were
+    /// pre-existing production rows: an Unclassified entry from Sophie Brown's and Charlotte
+    /// White's <see cref="SupportProfile.RestrictivePracticeDetails"/> free text, plus a
+    /// ChemicalRestraint entry linked to Charlotte's Risperidone PRN (seeded with
+    /// <see cref="ParticipantMedication.IsChemicalRestraint"/> = true in
+    /// <see cref="SeedMedicationsAsync"/>). Deliberately does NOT invoke the migration's backfill
+    /// service — this covers the fact that migrations run against an empty database before this
+    /// seeder populates the legacy fields, so the real backfill never sees this seed data. Also
+    /// sets each participant's derived <see cref="Participant.HasRestrictivePracticeFlag"/> to
+    /// match, the same sync-write <see cref="Api.Controllers.RestrictivePracticesController"/>
+    /// performs on every register mutation. Idempotent via fixed GUIDs + an existence check, same
+    /// pattern as <see cref="SeedParticipantRoutinesAsync"/>.
+    /// </summary>
+    public static async Task SeedRestrictivePracticesAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.RestrictivePractices.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        // Fixed ID from SeedMedicationsAsync — Charlotte's Risperidone PRN (IsChemicalRestraint = true).
+        var risperidoneId = Guid.Parse("70000000-0000-0000-0000-000000000003");
+
+        var targetIds = new[] { sophieId, charlotteId };
+        var participants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+        if (participants.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var practices = new List<RestrictivePractice>();
+
+        if (participants.TryGetValue(sophieId, out var sophie))
+        {
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, ParticipantId = sophieId,
+                Type = RestrictivePracticeType.Unclassified,
+                Description = "Environmental restriction — locked doors during sleep. Authorised by NDIS Commission.",
+                IsActive = true, CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddMonths(-6),
+            });
+            sophie.HasRestrictivePracticeFlag = true;
+        }
+
+        if (participants.TryGetValue(charlotteId, out var charlotte))
+        {
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                Type = RestrictivePracticeType.Unclassified,
+                Description = "Continuous supervision in community settings. GPS tracker watch. Authorised.",
+                IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+
+            // Only add the ChemicalRestraint link if the medication was actually seeded (guards
+            // against SeedMedicationsAsync having been skipped for any reason).
+            if (await context.ParticipantMedications.IgnoreQueryFilters().AnyAsync(m => m.Id == risperidoneId, ct))
+            {
+                practices.Add(new RestrictivePractice
+                {
+                    Id = Guid.Parse("75000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                    Type = RestrictivePracticeType.ChemicalRestraint, RelatedMedicationId = risperidoneId,
+                    Description = "Risperidone",
+                    IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+                });
+            }
+
+            charlotte.HasRestrictivePracticeFlag = true;
+        }
+
+        if (practices.Count == 0)
+            return;
+
+        context.RestrictivePractices.AddRange(practices);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
     /// doesn't already have one. Runs on every startup — idempotent per tenant via a
     /// single existence check (not per-field), so a restart never duplicates the
