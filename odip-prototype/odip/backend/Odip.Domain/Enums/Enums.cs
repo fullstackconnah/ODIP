@@ -424,6 +424,49 @@ public enum PackagingType
     Other
 }
 
+/// <summary>
+/// Recurrence pattern for a Regular medication's <see cref="Odip.Domain.Entities.ParticipantMedication.TimesOfDay"/>
+/// schedule. Daily (the default/backfill value for pre-existing rows) is dosed every day at the
+/// listed times; SpecificDays only on the flagged weekdays (see <see cref="Weekdays"/>);
+/// EveryNDays every <c>IntervalDays</c> days starting from <c>AnchorDate</c>.
+/// </summary>
+public enum MedicationFrequency
+{
+    Daily,
+    SpecificDays,
+    EveryNDays
+}
+
+/// <summary>Bitmask of weekdays — backs <see cref="MedicationFrequency.SpecificDays"/>.</summary>
+[Flags]
+public enum Weekdays
+{
+    None = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 4,
+    Thursday = 8,
+    Friday = 16,
+    Saturday = 32,
+    Sunday = 64
+}
+
+/// <summary>
+/// State machine for a staff-witnessed medication administration (see
+/// <see cref="Odip.Domain.Entities.MedicationAdministration.WitnessStaffId"/>). NotRequired covers
+/// both "not a high-risk dose" and the legacy free-text-only <c>WitnessName</c> path (no staff
+/// record was selected, so there is nothing for anyone to approve/decline). Pending is set the
+/// moment a witness staff member is selected at administration time; only that named staff member
+/// can move it to Approved or Declined via the portal.
+/// </summary>
+public enum WitnessStatus
+{
+    NotRequired,
+    Pending,
+    Approved,
+    Declined
+}
+
 /// <summary>What kind of shift-relevant routine/specific this is — drives grouping in the frontend.</summary>
 public enum RoutineCategory
 {

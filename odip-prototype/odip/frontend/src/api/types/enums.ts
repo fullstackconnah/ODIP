@@ -178,6 +178,18 @@ export type MedicationStatus = typeof MEDICATION_STATUSES[number]
 export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed'] as const
 export type MedicationAdministrationStatus = typeof MEDICATION_ADMINISTRATION_STATUSES[number]
 
+// ── Medication Frequency ──────────────────────────────────
+export const MEDICATION_FREQUENCIES = ['Daily', 'SpecificDays', 'EveryNDays'] as const
+export type MedicationFrequency = typeof MEDICATION_FREQUENCIES[number]
+
+// ── Weekday (SpecificDays schedule picker) ────────────────
+export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
+export type Weekday = typeof WEEKDAYS[number]
+
+// ── Witness Status ────────────────────────────────────────
+export const WITNESS_STATUSES = ['NotRequired', 'Pending', 'Approved', 'Declined'] as const
+export type WitnessStatus = typeof WITNESS_STATUSES[number]
+
 // ── Routine Category ─────────────────────────────────────
 export const ROUTINE_CATEGORIES = ['PersonalCare', 'Meals', 'Medication', 'Mobility', 'Communication', 'Behaviour', 'Sleep', 'Activity', 'Other'] as const
 export type RoutineCategory = typeof ROUTINE_CATEGORIES[number]

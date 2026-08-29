@@ -976,8 +976,16 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.TripInstanceId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Restrict: same compliance-record idiom as ParticipantMedication/Participant above —
+            // a witness's Staff row must not be silently cascade-deleted out from under the MAR.
+            entity.HasOne(e => e.WitnessStaff)
+                .WithMany()
+                .HasForeignKey(e => e.WitnessStaffId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
+            entity.HasIndex(e => new { e.WitnessStaffId, e.WitnessStatus });
         });
 
         // ── ParticipantNote ───────────────────────────────────────

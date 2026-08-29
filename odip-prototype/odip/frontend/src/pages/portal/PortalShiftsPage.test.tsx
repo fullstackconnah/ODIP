@@ -4,12 +4,14 @@ import { MemoryRouter } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
 import type { PortalShiftsResponseDto } from '@/api/types'
 
-const { mockUseMyShifts } = vi.hoisted(() => ({
+const { mockUseMyShifts, mockUsePendingWitnessRequests } = vi.hoisted(() => ({
   mockUseMyShifts: vi.fn(),
+  mockUsePendingWitnessRequests: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useMyShifts: mockUseMyShifts,
+  usePendingWitnessRequests: mockUsePendingWitnessRequests,
 }))
 
 function renderPage() {
@@ -54,6 +56,7 @@ function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): P
 
 beforeEach(() => {
   mockUseMyShifts.mockReset()
+  mockUsePendingWitnessRequests.mockReset().mockReturnValue({ data: [], isLoading: false })
 })
 
 describe('PortalShiftsPage', () => {

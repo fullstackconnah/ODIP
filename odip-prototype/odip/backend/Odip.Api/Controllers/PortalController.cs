@@ -23,8 +23,13 @@ namespace Odip.Api.Controllers;
 /// belonging to another staff member 404s exactly the same as one that doesn't exist at all,
 /// so this surface can never be used to enumerate other staff's roster ids. Coordinator/admin
 /// routes (<see cref="RosteringController"/>, <see cref="MedicationsController"/>,
-/// <see cref="ParticipantRoutinesController"/>) are unaffected — this controller only reads,
-/// via purpose-built portal DTOs, never the coordinator-scoped ones.
+/// <see cref="ParticipantRoutinesController"/>) are unaffected — reads here always go via
+/// purpose-built portal DTOs, never the coordinator-scoped ones. The one write surface is witness
+/// approve/decline (<see cref="ApproveWitnessRequest"/>/<see cref="DeclineWitnessRequest"/>), and
+/// the same "only your own, 404 otherwise" scoping applies — matched on
+/// <c>MedicationAdministration.WitnessStaffId</c> instead of <c>Shift.StaffId</c>. These POSTs
+/// still go through <c>ReadOnlyMiddleware</c> like every other write in the app — there is no
+/// portal-specific exemption from the ReadOnly role's 403.
 ///
 /// Respects the SuperAdmin "view as" switching mechanism: <see cref="ICurrentTenant.ViewAsUserId"/>
 /// (set from the X-View-As-User header, only once a SuperAdmin has also scoped to a tenant via
@@ -132,6 +137,71 @@ public class PortalController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
+    // WITNESS APPROVALS
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The caller's own pending witness requests — administrations where they were selected as
+    /// the staff witness and haven't yet approved/declined. Always 200s; an unlinked account gets
+    /// an empty list, matching <see cref="GetMyShifts"/>'s never-500 convention.
+    /// </summary>
+    [HttpGet("witness-requests")]
+    public async Task<ActionResult<ApiResponse<List<PortalWitnessRequestDto>>>> GetWitnessRequests(CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return Ok(ApiResponse<List<PortalWitnessRequestDto>>.Ok(new List<PortalWitnessRequestDto>()));
+
+        var requests = await _db.MedicationAdministrations
+            .Include(a => a.Participant)
+            .Include(a => a.ParticipantMedication)
+            .Where(a => a.WitnessStaffId == staffId.Value && a.WitnessStatus == WitnessStatus.Pending)
+            .OrderBy(a => a.CreatedAt)
+            .ToListAsync(ct);
+
+        return Ok(ApiResponse<List<PortalWitnessRequestDto>>.Ok(requests.Select(ToWitnessRequestDto).ToList()));
+    }
+
+    /// <summary>
+    /// Approves or declines one of the caller's own pending witness requests. Only the named
+    /// witness (matched on their own resolved StaffId, exactly like <see cref="GetShiftDetail"/>
+    /// scopes shifts) may act on it — not linked, request not found, and request belongs to
+    /// someone else all 404 identically for the same reason documented on the class.
+    /// </summary>
+    [HttpPost("witness-requests/{id:guid}/approve")]
+    public Task<ActionResult<ApiResponse<PortalWitnessRequestDto>>> ApproveWitnessRequest(Guid id, CancellationToken ct) =>
+        RespondToWitnessRequestAsync(id, WitnessStatus.Approved, ct);
+
+    [HttpPost("witness-requests/{id:guid}/decline")]
+    public Task<ActionResult<ApiResponse<PortalWitnessRequestDto>>> DeclineWitnessRequest(Guid id, CancellationToken ct) =>
+        RespondToWitnessRequestAsync(id, WitnessStatus.Declined, ct);
+
+    private async Task<ActionResult<ApiResponse<PortalWitnessRequestDto>>> RespondToWitnessRequestAsync(
+        Guid id, WitnessStatus response, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<PortalWitnessRequestDto>.Fail("Witness request not found."));
+
+        var admin = await _db.MedicationAdministrations
+            .Include(a => a.Participant)
+            .Include(a => a.ParticipantMedication)
+            .FirstOrDefaultAsync(a => a.Id == id && a.WitnessStaffId == staffId.Value, ct);
+        if (admin == null)
+            return NotFound(ApiResponse<PortalWitnessRequestDto>.Fail("Witness request not found."));
+
+        if (admin.WitnessStatus != WitnessStatus.Pending)
+            return BadRequest(ApiResponse<PortalWitnessRequestDto>.Fail("This witness request has already been responded to."));
+
+        admin.WitnessStatus = response;
+        admin.WitnessRespondedAt = DateTime.UtcNow;
+        admin.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToWitnessRequestDto(admin)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // HELPERS
     // ══════════════════════════════════════════════════════════════
 
@@ -185,4 +255,10 @@ public class PortalController : ControllerBase
     private static PortalMedicationSummaryDto ToMedicationSummaryDto(ParticipantMedication m) => new(
         m.Id, m.Name, m.Strength, m.DoseDescription, m.Type, m.TimesOfDay, m.IsHighRisk, m.IsPsychotropic,
         m.IsChemicalRestraint, m.DrugSchedule, m.SupportLevel, m.PrnIndication);
+
+    private static PortalWitnessRequestDto ToWitnessRequestDto(MedicationAdministration a) => new(
+        a.Id, a.ParticipantId, a.Participant?.FullName ?? string.Empty,
+        a.ParticipantMedicationId, a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.Strength,
+        a.ParticipantMedication?.DoseDescription ?? string.Empty, a.DoseGiven, a.RecordedByName, a.AdministeredAt,
+        a.WitnessStatus, a.WitnessRespondedAt, a.CreatedAt);
 }

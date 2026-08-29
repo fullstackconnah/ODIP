@@ -10,9 +10,9 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT_LEVELS, MEDICATION_STATUSES, PACKAGING_TYPES } from '@/api/types/enums'
-import type { MedicationForm, MedicationRoute } from '@/api/types/enums'
-import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
+import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT_LEVELS, MEDICATION_STATUSES, PACKAGING_TYPES, MEDICATION_FREQUENCIES, WEEKDAYS } from '@/api/types/enums'
+import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
+import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
@@ -42,6 +42,10 @@ const medicationSchema = z.object({
   directions: z.string().optional(),
   type: z.string().min(1),
   timesOfDayList: z.array(z.string()).optional(),
+  frequency: z.string().min(1),
+  daysOfWeek: z.array(z.string()).optional(),
+  intervalDays: z.string().optional(),
+  anchorDate: z.string().optional(),
   prnIndication: z.string().optional(),
   prnMaxDosesPer24h: z.string().optional(),
   prnMinIntervalMinutes: z.string().optional(),
@@ -68,6 +72,17 @@ const medicationSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.type === 'Prn' && (!data.prnIndication || !data.prnIndication.trim())) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prnIndication'], message: 'Required for PRN medications' })
+  }
+  if (data.type === 'Regular' && data.frequency === 'SpecificDays' && !(data.daysOfWeek?.length)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['daysOfWeek'], message: 'Select at least one day of the week' })
+  }
+  if (data.type === 'Regular' && data.frequency === 'EveryNDays') {
+    if (!data.intervalDays || !data.intervalDays.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['intervalDays'], message: 'Required for an every-N-days schedule' })
+    }
+    if (!data.anchorDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['anchorDate'], message: 'Required for an every-N-days schedule' })
+    }
   }
   if (data.consentObtained) {
     if (!data.consentGivenBy || !data.consentGivenBy.trim()) {
@@ -119,6 +134,8 @@ export default function MedicationFormPage() {
       packaging: 'OriginalPackaging',
       type: 'Regular',
       timesOfDayList: [],
+      frequency: 'Daily',
+      daysOfWeek: [],
       drugSchedule: 'Unscheduled',
       supportLevel: 'SelfAdministered',
       isHighRisk: false,
@@ -132,6 +149,7 @@ export default function MedicationFormPage() {
   })
 
   const typeValue = useWatch({ control, name: 'type' })
+  const frequencyValue = useWatch({ control, name: 'frequency' })
   const routeValue = useWatch({ control, name: 'route' })
   const formValue = useWatch({ control, name: 'form' })
   const isPsychotropic = useWatch({ control, name: 'isPsychotropic' })
@@ -154,6 +172,10 @@ export default function MedicationFormPage() {
         directions: existing.directions ?? '',
         type: existing.type ?? 'Regular',
         timesOfDayList: existing.timesOfDay ? existing.timesOfDay.split(',').filter(Boolean) : [],
+        frequency: existing.frequency ?? 'Daily',
+        daysOfWeek: existing.daysOfWeek ?? [],
+        intervalDays: existing.intervalDays != null ? String(existing.intervalDays) : '',
+        anchorDate: existing.anchorDate ?? '',
         prnIndication: existing.prnIndication ?? '',
         prnMaxDosesPer24h: existing.prnMaxDosesPer24h != null ? String(existing.prnMaxDosesPer24h) : '',
         prnMinIntervalMinutes: existing.prnMinIntervalMinutes != null ? String(existing.prnMinIntervalMinutes) : '',
@@ -192,6 +214,10 @@ export default function MedicationFormPage() {
       directions: data.directions || undefined,
       type: data.type as CreateMedicationDto['type'],
       timesOfDay: data.type === 'Regular' && data.timesOfDayList?.length ? data.timesOfDayList.join(',') : undefined,
+      frequency: (data.type === 'Regular' ? data.frequency : 'Daily') as CreateMedicationDto['frequency'],
+      daysOfWeek: data.type === 'Regular' && data.frequency === 'SpecificDays' ? (data.daysOfWeek as Weekday[] ?? []) : [],
+      intervalDays: data.type === 'Regular' && data.frequency === 'EveryNDays' && data.intervalDays ? Number(data.intervalDays) : undefined,
+      anchorDate: data.type === 'Regular' && data.frequency === 'EveryNDays' ? (data.anchorDate || undefined) : undefined,
       prnIndication: data.type === 'Prn' ? (data.prnIndication || undefined) : undefined,
       prnMaxDosesPer24h: data.type === 'Prn' && data.prnMaxDosesPer24h ? Number(data.prnMaxDosesPer24h) : undefined,
       prnMinIntervalMinutes: data.type === 'Prn' && data.prnMinIntervalMinutes ? Number(data.prnMinIntervalMinutes) : undefined,
@@ -350,6 +376,7 @@ export default function MedicationFormPage() {
           </FormField>
 
           {typeValue === 'Regular' ? (
+            <>
             <Controller
               control={control}
               name="timesOfDayList"
@@ -390,6 +417,66 @@ export default function MedicationFormPage() {
                 )
               }}
             />
+
+            <FormField label="Frequency" required>
+              <Controller
+                control={control}
+                name="frequency"
+                render={({ field }) => (
+                  <ToggleGroup
+                    options={MEDICATION_FREQUENCIES.map(f => ({ key: f, label: FREQUENCY_LABELS[f] }))}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </FormField>
+
+            {frequencyValue === 'SpecificDays' && (
+              <Controller
+                control={control}
+                name="daysOfWeek"
+                render={({ field }) => {
+                  const selected: string[] = field.value ?? []
+                  return (
+                    <FormField label="Days of week" required error={errors.daysOfWeek?.message}>
+                      <div className="flex flex-wrap gap-2">
+                        {WEEKDAYS.map(day => {
+                          const active = selected.includes(day)
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => field.onChange(active ? selected.filter(d => d !== day) : [...selected, day])}
+                              aria-pressed={active}
+                              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                                active
+                                  ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                  : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
+                              }`}
+                            >
+                              {WEEKDAY_LABELS[day]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </FormField>
+                  )
+                }}
+              />
+            )}
+
+            {frequencyValue === 'EveryNDays' && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField label="Every N days" required error={errors.intervalDays?.message}>
+                  <input type="number" min="1" {...register('intervalDays')} placeholder="e.g. 2" />
+                </FormField>
+                <FormField label="Starting from" required error={errors.anchorDate?.message}>
+                  <input type="date" {...register('anchorDate')} />
+                </FormField>
+              </div>
+            )}
+            </>
           ) : (
             <>
               <FormField label="PRN Indication" required error={errors.prnIndication?.message} hint={!errors.prnIndication ? 'What symptom or situation should prompt this dose?' : undefined}>

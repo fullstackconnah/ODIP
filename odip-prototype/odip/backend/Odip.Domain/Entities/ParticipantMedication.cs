@@ -32,6 +32,22 @@ public class ParticipantMedication : ITenantEntity
     /// <summary>CSV of 24h times, e.g. "08:00,20:00". Used for <see cref="MedicationType.Regular"/> dosing.</summary>
     public string? TimesOfDay { get; set; }
 
+    /// <summary>
+    /// Recurrence pattern for <see cref="TimesOfDay"/>. Defaults to (and pre-existing rows are
+    /// backfilled to) Daily so behaviour is unchanged unless a schedule opts into SpecificDays or
+    /// EveryNDays. Only meaningful for <see cref="MedicationType.Regular"/>.
+    /// </summary>
+    public MedicationFrequency Frequency { get; set; } = MedicationFrequency.Daily;
+
+    /// <summary>Required when <see cref="Frequency"/> is SpecificDays — the weekdays the medication is due.</summary>
+    public Weekdays? DaysOfWeek { get; set; }
+
+    /// <summary>Required when <see cref="Frequency"/> is EveryNDays — dose every N days from <see cref="AnchorDate"/>.</summary>
+    public int? IntervalDays { get; set; }
+
+    /// <summary>Required when <see cref="Frequency"/> is EveryNDays — the reference date the interval counts from.</summary>
+    public DateOnly? AnchorDate { get; set; }
+
     public string? PrnIndication { get; set; }
     public int? PrnMaxDosesPer24h { get; set; }
     public int? PrnMinIntervalMinutes { get; set; }

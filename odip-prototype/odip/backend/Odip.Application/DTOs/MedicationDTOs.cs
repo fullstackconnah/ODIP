@@ -19,6 +19,10 @@ public record MedicationListDto
     public string DoseDescription { get; init; } = string.Empty;
     public MedicationType Type { get; init; }
     public string? TimesOfDay { get; init; }
+    public MedicationFrequency Frequency { get; init; }
+    public List<string> DaysOfWeek { get; init; } = new();
+    public int? IntervalDays { get; init; }
+    public DateOnly? AnchorDate { get; init; }
     public MedicationStatus Status { get; init; }
     public bool IsHighRisk { get; init; }
     public bool IsPsychotropic { get; init; }
@@ -75,6 +79,17 @@ public record CreateMedicationDto
 
     [StringLength(200)]
     public string? TimesOfDay { get; init; }
+
+    public MedicationFrequency Frequency { get; init; } = MedicationFrequency.Daily;
+
+    /// <summary>Weekday names (e.g. "Monday"), required when Frequency is SpecificDays.</summary>
+    public List<string> DaysOfWeek { get; init; } = new();
+
+    /// <summary>Required when Frequency is EveryNDays.</summary>
+    public int? IntervalDays { get; init; }
+
+    /// <summary>Required when Frequency is EveryNDays — the reference date the interval counts from.</summary>
+    public DateOnly? AnchorDate { get; init; }
 
     [StringLength(500)]
     public string? PrnIndication { get; init; }
@@ -138,6 +153,10 @@ public record AdministrationDto
     public string? DoseGiven { get; init; }
     public string RecordedByName { get; init; } = string.Empty;
     public string? WitnessName { get; init; }
+    public Guid? WitnessStaffId { get; init; }
+    public WitnessStatus WitnessStatus { get; init; }
+    public DateTime? WitnessRequestedAt { get; init; }
+    public DateTime? WitnessRespondedAt { get; init; }
     public string? Reason { get; init; }
     public string? PrnReason { get; init; }
     public string? PrnOutcome { get; init; }
@@ -156,8 +175,14 @@ public record CreateAdministrationDto
     [StringLength(200)]
     public string? DoseGiven { get; init; }
 
+    /// <summary>Legacy free-text witness — still honoured for backward compatibility when
+    /// <see cref="WitnessStaffId"/> isn't supplied, but new callers should select a staff witness.</summary>
     [StringLength(200)]
     public string? WitnessName { get; init; }
+
+    /// <summary>The staff member selected to witness a high-risk administration. Puts the record
+    /// into <see cref="WitnessStatus.Pending"/> for that staff member to approve/decline in their portal.</summary>
+    public Guid? WitnessStaffId { get; init; }
 
     [StringLength(1000)]
     public string? Reason { get; init; }

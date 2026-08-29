@@ -7,6 +7,9 @@ import type {
   MedicationStatus,
   MedicationAdministrationStatus,
   PackagingType,
+  MedicationFrequency,
+  Weekday,
+  WitnessStatus,
 } from './enums'
 
 // ── Compliance flags ─────────────────────────────────────
@@ -90,6 +93,29 @@ export const ADMIN_STATUS_LABELS: Record<MedicationAdministrationStatus, string>
   Missed: 'Missed',
 }
 
+export const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
+  Daily: 'Every day',
+  SpecificDays: 'Specific days of the week',
+  EveryNDays: 'Every N days',
+}
+
+export const WEEKDAY_LABELS: Record<Weekday, string> = {
+  Monday: 'Mon',
+  Tuesday: 'Tue',
+  Wednesday: 'Wed',
+  Thursday: 'Thu',
+  Friday: 'Fri',
+  Saturday: 'Sat',
+  Sunday: 'Sun',
+}
+
+export const WITNESS_STATUS_LABELS: Record<WitnessStatus, string> = {
+  NotRequired: 'Not required',
+  Pending: 'Pending',
+  Approved: 'Approved',
+  Declined: 'Declined',
+}
+
 // ── DTOs ────────────────────────────────────────────────
 
 export interface MedicationListDto {
@@ -103,6 +129,10 @@ export interface MedicationListDto {
   doseDescription: string | null
   type: MedicationType
   timesOfDay: string | null
+  frequency: MedicationFrequency
+  daysOfWeek: Weekday[]
+  intervalDays: number | null
+  anchorDate: string | null
   status: MedicationStatus
   isHighRisk: boolean
   isPsychotropic: boolean
@@ -146,6 +176,10 @@ export interface CreateMedicationDto {
   directions?: string
   type: MedicationType
   timesOfDay?: string
+  frequency: MedicationFrequency
+  daysOfWeek: Weekday[]
+  intervalDays?: number
+  anchorDate?: string
   prnIndication?: string
   prnMaxDosesPer24h?: number
   prnMinIntervalMinutes?: number
@@ -189,6 +223,10 @@ export interface AdministrationDto {
   doseGiven: string | null
   recordedByName: string | null
   witnessName: string | null
+  witnessStaffId: string | null
+  witnessStatus: WitnessStatus
+  witnessRequestedAt: string | null
+  witnessRespondedAt: string | null
   reason: string | null
   prnReason: string | null
   prnOutcome: string | null
@@ -203,7 +241,10 @@ export interface CreateAdministrationDto {
   administeredAt?: string
   status: MedicationAdministrationStatus
   doseGiven?: string
+  /** Legacy free-text witness — kept for back-compat; new callers should set witnessStaffId instead. */
   witnessName?: string
+  /** The staff member selected to witness a high-risk administration. Puts the record into a Pending state for that staff member to approve/decline in their portal. */
+  witnessStaffId?: string
   reason?: string
   prnReason?: string
   notes?: string
