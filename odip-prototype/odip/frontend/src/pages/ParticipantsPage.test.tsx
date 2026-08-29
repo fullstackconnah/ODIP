@@ -4,16 +4,18 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ParticipantsPage from './ParticipantsPage'
 
-const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate } = vi.hoisted(() => ({
+const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
   mockUseParticipants: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
+  mockUseParticipantAlertsAggregate: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useParticipants: mockUseParticipants,
   useDeleteParticipant: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useUpdateParticipant: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
 }))
 
 function baseParticipant(overrides: Record<string, unknown> = {}) {
@@ -49,6 +51,7 @@ function renderPage() {
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   mockUseParticipants.mockReturnValue({ data: [], isLoading: false })
+  mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
 })
 
 afterEach(() => {
@@ -100,6 +103,46 @@ describe('ParticipantsPage — medication quick button', () => {
 
     // Navigated to the participant-scoped medications view, not the row's own detail-page click.
     expect(screen.getByText('Participant detail page')).toBeInTheDocument()
+  })
+})
+
+describe('ParticipantsPage — alerts badge column', () => {
+  it('renders critical and warning counts from the aggregate endpoint, keyed by participant id', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [
+        baseParticipant({ id: 'p1', fullName: 'Jamie Smith' }),
+        baseParticipant({ id: 'p2', fullName: 'Alex Rivera' }),
+      ],
+      isLoading: false,
+    })
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        {
+          participantId: 'p1', participantName: 'Jamie Smith',
+          alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'Plan expired', deepLinkTab: 'details' }],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+        {
+          participantId: 'p2', participantName: 'Alex Rivera',
+          alerts: [],
+          criticalCount: 0, warningCount: 0, infoCount: 0,
+        },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    // One row has a Critical badge (count 1); the other shows the empty-state dash.
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('does not fetch or render the alerts column when the hook is not enabled (e.g. non-coordinator role)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    renderPage()
+
+    expect(screen.queryByText('Alerts')).not.toBeInTheDocument()
   })
 })
 

@@ -203,3 +203,7 @@ export type RoutineCategory = typeof ROUTINE_CATEGORIES[number]
 // ── Day of Week (System.DayOfWeek, JsonStringEnumConverter — Sunday-first) ─
 export const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 export type DayOfWeekName = typeof DAYS_OF_WEEK[number]
+
+// ── Alert Severity (computed participant risk alerts, task 6c) ───────────
+export const ALERT_SEVERITIES = ['Critical', 'Warning', 'Info'] as const
+export type AlertSeverity = typeof ALERT_SEVERITIES[number]

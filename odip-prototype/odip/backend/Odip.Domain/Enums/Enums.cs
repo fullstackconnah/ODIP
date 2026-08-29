@@ -520,3 +520,16 @@ public enum ServiceStreams
     CommunityAccessDailyLiving = 32,
     CommunityNursing = 64,
 }
+
+/// <summary>
+/// Ranking for a computed <see cref="Odip.Application.DTOs.ParticipantAlertDto"/> (task 6c —
+/// participant risk alerts). Declared in ascending urgency order so a plain numeric sort
+/// (<c>(int)Severity</c> ascending) puts <see cref="Critical"/> first — the order the frontend
+/// banner/table/dashboard card render alerts in.
+/// </summary>
+public enum AlertSeverity
+{
+    Critical = 0,
+    Warning = 1,
+    Info = 2,
+}

@@ -1,10 +1,11 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useParticipant, useParticipantBookings, useSupportProfile } from '@/api/hooks'
+import { useParticipant, useParticipantBookings, useSupportProfile, useParticipantAlerts } from '@/api/hooks'
 import { formatDateAu, maskNdisNumber } from '@/lib/utils'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { Card } from '@/components/Card'
 import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
@@ -22,7 +23,7 @@ function Tag({ label }: { label: string }) {
 }
 
 export default function ParticipantDetailPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canViewAlerts } = usePermissions()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   type Tab = 'details' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'history'
@@ -35,6 +36,7 @@ export default function ParticipantDetailPage() {
   const { data: p, isLoading } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: supportProfile } = useSupportProfile(id)
+  const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!p) return <div className="text-center py-12">Participant not found</div>
@@ -67,6 +69,9 @@ export default function ParticipantDetailPage() {
           <div className="mt-2">
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
+          {canViewAlerts && alertsData && (
+            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
+          )}
         </div>
         {canWrite && (
           <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">

@@ -114,6 +114,13 @@ export function usePermissions() {
     canWriteRestrictivePractices: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
+     * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
+     * (the portal already shows participant flags to support workers separately).
+     */
+    canViewAlerts: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Coordinator sees Provider Settings tab but cannot save changes.
      * False for Coordinator and SupportWorker.
      */
