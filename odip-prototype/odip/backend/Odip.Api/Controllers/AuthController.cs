@@ -86,6 +86,15 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(email))
             return Rejected("Exchange failed — token carried no email claim");
 
+        // Firebase issues an ID token as soon as an account is created, before the
+        // owner has clicked the verification link. Without this check, anyone who
+        // knows a pre-provisioned user's email (e.g. a coordinator's work address)
+        // could sign up in Firebase with that address and exchange the resulting
+        // unverified token for a fully authenticated ODIP session — a window that
+        // stays open for as long as the real owner hasn't claimed the account.
+        if (!IsEmailVerified(decodedToken.Claims))
+            return Rejected("Exchange failed — email not verified: {Email}", email);
+
         var domain = email.Split('@').Last().ToLower();
 
         // 2. SuperAdmin path — bypasses tenant resolution
@@ -311,6 +320,28 @@ public class AuthController : ControllerBase
 
     private static bool IsDevAuthEnabled()
         => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when the decoded Firebase token's "email_verified" claim is present and true.
+    /// Public (rather than private, unlike the controller's other claim helpers) specifically
+    /// so it can be unit tested directly: Exchange's full flow depends on the sealed,
+    /// non-DI FirebaseAuth.DefaultInstance.VerifyIdTokenAsync, which cannot be exercised in an
+    /// offline unit test without adding a Firebase abstraction layer — out of scope for this
+    /// hardening task. Accepts both the bool and string claim representations since Firebase
+    /// Admin SDK claim values arrive boxed as System.Object.
+    /// </summary>
+    public static bool IsEmailVerified(IReadOnlyDictionary<string, object> claims)
+    {
+        if (!claims.TryGetValue("email_verified", out var value) || value is null)
+            return false;
+
+        return value switch
+        {
+            bool b => b,
+            string s => bool.TryParse(s, out var parsed) && parsed,
+            _ => false
+        };
+    }
 
     private void SetJwtCookie(string token)
     {
