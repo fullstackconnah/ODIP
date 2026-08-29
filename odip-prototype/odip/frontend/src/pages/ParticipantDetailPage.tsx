@@ -4,6 +4,7 @@ import { formatDateAu, maskNdisNumber } from '@/lib/utils'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { Card } from '@/components/Card'
 import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
@@ -63,6 +64,9 @@ export default function ParticipantDetailPage() {
             <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
           </div>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
+          <div className="mt-2">
+            <ServiceStreamBadges value={p.serviceStreams} />
+          </div>
         </div>
         {canWrite && (
           <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">

@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { ClipboardList, BookOpen } from 'lucide-react'
+import { ClipboardList, BookOpen, FileClock } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { TabNav } from '@/components/TabNav'
-import { MarTab, RegisterTab } from './medications'
+import { MarTab, RegisterTab, ReportTab } from './medications'
 
-type Tab = 'administration' | 'register'
+type Tab = 'administration' | 'register' | 'report'
 
 export default function MedicationsPage() {
   const [tab, setTab] = useState<Tab>('administration')
@@ -20,6 +20,7 @@ export default function MedicationsPage() {
         tabs={[
           { key: 'administration', label: 'Administration', icon: ClipboardList },
           { key: 'register', label: 'Register', icon: BookOpen },
+          { key: 'report', label: 'Report', icon: FileClock },
         ]}
         active={tab}
         onChange={key => setTab(key as Tab)}
@@ -28,6 +29,7 @@ export default function MedicationsPage() {
       <div className="animate-fade-in">
         {tab === 'administration' && <MarTab />}
         {tab === 'register' && <RegisterTab />}
+        {tab === 'report' && <ReportTab />}
       </div>
     </div>
   )

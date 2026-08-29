@@ -1,4 +1,5 @@
 export { default as MarTab } from './MarTab'
 export { default as RegisterTab } from './RegisterTab'
+export { default as ReportTab } from './ReportTab'
 export { RecordAdministrationModal } from './RecordAdministrationModal'
 export { MedicationBadges, ComplianceFlagChips } from './MedicationBadges'

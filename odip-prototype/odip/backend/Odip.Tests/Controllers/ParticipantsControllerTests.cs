@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -20,6 +22,13 @@ namespace Odip.Tests.Controllers;
 /// </summary>
 public class ParticipantsControllerTests
 {
+    private static readonly JsonSerializerOptions ApiJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private static OdipDbContext CreateDb(string dbName)
     {
         var tenant = new Mock<ICurrentTenant>();
@@ -115,6 +124,130 @@ public class ParticipantsControllerTests
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.True(body.Data!.Items.Single(p => p.Id == withFlag.Id).HasRestrictivePracticeFlag);
         Assert.False(body.Data.Items.Single(p => p.Id == withoutFlag.Id).HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Create_ServiceStreamsFlags_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db);
+
+        var dto = MinimalCreateDto() with { ServiceStreams = Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal(Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip, body.Data!.ServiceStreams);
+        Assert.True(body.Data.ServiceStreams.HasFlag(Domain.Enums.ServiceStreams.STA));
+        Assert.True(body.Data.ServiceStreams.HasFlag(Domain.Enums.ServiceStreams.Trip));
+        Assert.False(body.Data.ServiceStreams.HasFlag(Domain.Enums.ServiceStreams.BSP));
+    }
+
+    [Fact]
+    public async Task Update_ServiceStreamsFlags_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db);
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            ServiceStreams = Domain.Enums.ServiceStreams.BSP | Domain.Enums.ServiceStreams.CommunityNursing,
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal(Domain.Enums.ServiceStreams.BSP | Domain.Enums.ServiceStreams.CommunityNursing, body.Data!.ServiceStreams);
+    }
+
+    [Fact]
+    public void ParticipantListDto_CombinedServiceStreams_SerialisesAsCommaSeparatedString()
+    {
+        // Proves the actual wire format the frontend receives: JsonStringEnumConverter (registered
+        // globally in Program.cs — see ApiJsonOptions here) natively serialises a combined [Flags]
+        // value as a comma-separated list of member names, and Enum.Parse/JsonStringEnumConverter
+        // read that same format back on input — no custom List<string> conversion needed.
+        var dto = new ParticipantListDto
+        {
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", FullName = "Sophie Brown",
+            ServiceStreams = Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip,
+        };
+
+        var json = JsonSerializer.Serialize(dto, ApiJsonOptions);
+        using var doc = JsonDocument.Parse(json);
+        var value = doc.RootElement.GetProperty("serviceStreams").GetString();
+
+        Assert.Equal("STA, Trip", value);
+
+        var roundTripped = JsonSerializer.Deserialize<ParticipantListDto>(json, ApiJsonOptions);
+        Assert.Equal(Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip, roundTripped!.ServiceStreams);
+    }
+
+    [Fact]
+    public void ParticipantListDto_NoServiceStreams_SerialisesAsNone()
+    {
+        var dto = new ParticipantListDto { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", FullName = "Sophie Brown" };
+
+        var json = JsonSerializer.Serialize(dto, ApiJsonOptions);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("None", doc.RootElement.GetProperty("serviceStreams").GetString());
+    }
+
+    [Fact]
+    public async Task Create_DefaultServiceStreams_IsNone()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db);
+
+        var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == createdBody.Data!.Id);
+        Assert.Equal(Domain.Enums.ServiceStreams.None, saved.ServiceStreams);
+    }
+
+    [Fact]
+    public async Task GetAll_ProjectsHasActiveMedicationsPerParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var withActiveMed = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        var withOnlyCeasedMed = new Participant { Id = Guid.NewGuid(), FirstName = "Harrison", LastName = "Lee", IsActive = true };
+        var withNoMeds = new Participant { Id = Guid.NewGuid(), FirstName = "Jamie", LastName = "Kim", IsActive = true };
+        db.Participants.AddRange(withActiveMed, withOnlyCeasedMed, withNoMeds);
+        db.ParticipantMedications.Add(new Domain.Entities.ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = withActiveMed.Id, Name = "Paracetamol",
+            Type = Domain.Enums.MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = Domain.Enums.MedicationStatus.Active, StartDate = DateTime.UtcNow,
+        });
+        db.ParticipantMedications.Add(new Domain.Entities.ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = withOnlyCeasedMed.Id, Name = "Ibuprofen",
+            Type = Domain.Enums.MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = Domain.Enums.MedicationStatus.Ceased, StartDate = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db);
+        var result = await controller.GetAll(null, null, null, null, null, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Data!.Items.Single(p => p.Id == withActiveMed.Id).HasActiveMedications);
+        Assert.False(body.Data.Items.Single(p => p.Id == withOnlyCeasedMed.Id).HasActiveMedications);
+        Assert.False(body.Data.Items.Single(p => p.Id == withNoMeds.Id).HasActiveMedications);
     }
 
     [Fact]

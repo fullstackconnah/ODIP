@@ -221,8 +221,11 @@ describe('ParticipantCreatePage Review step', () => {
       requiresShowerChair: false,
       requiresCommode: false,
       requiresStandingMachine: false,
+      serviceStreams: 'None',
     })
-    // Same DTO shape as before the wizard: no extraneous wizard-only keys leak into the payload.
+    // Same DTO shape as before the wizard (plus the intentional serviceStreams addition — 29
+    // fields -> 30): no extraneous wizard-only keys leak into the payload, and the array the
+    // form holds internally is converted to the wire string before submit.
     expect(Object.keys(payload).sort()).toEqual(
       [
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
@@ -231,7 +234,7 @@ describe('ParticipantCreatePage Review step', () => {
         'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'overnightRatio',
         'overnightSupport', 'planType', 'preferredName', 'preferredStaffId', 'region',
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
-        'requiresStandingMachine', 'supportRatio', 'transportRequirements',
+        'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
       ].sort()
     )
   })

@@ -68,6 +68,13 @@ public class Participant : ITenantEntity
     public Contact? PlanManagerContact { get; set; }
     public Guid? PreferredStaffId { get; set; }
     public Staff? PreferredStaff { get; set; }
+
+    /// <summary>
+    /// Business-stream tags (STA/BSP/In-Home Support/Trip/HIDPA/Community Access & Daily
+    /// Living/Community Nursing). Defaults to <see cref="ServiceStreams.None"/> — untagged; no
+    /// backfill is performed for participants that existed before this field was added.
+    /// </summary>
+    public ServiceStreams ServiceStreams { get; set; } = ServiceStreams.None;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

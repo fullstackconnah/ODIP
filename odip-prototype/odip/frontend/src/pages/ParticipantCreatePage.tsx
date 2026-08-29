@@ -8,9 +8,9 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType } from '@/api/types/enums'
-import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream } from '@/api/types/enums'
+import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const baseParticipantSchema = z.object({
@@ -23,6 +23,7 @@ const baseParticipantSchema = z.object({
   region: z.string().optional(),
   fundingOrganisation: z.string().optional(),
   isRepeatClient: z.boolean().optional(),
+  serviceStreams: z.array(z.string()).optional(),
   mobilityAidWheelchair: z.boolean().optional(),
   mobilityAidWalker: z.boolean().optional(),
   mobilitySupportOptions: z.array(z.string()).optional(),
@@ -102,7 +103,7 @@ function focusField(fieldName: string) {
 }
 
 const STEP_IDENTITY_FIELDS = ['firstName', 'lastName', 'preferredName', 'dateOfBirth', 'preferredStaffId'] as const
-const STEP_NDIS_FIELDS = ['ndisNumber', 'planType', 'region', 'fundingOrganisation', 'isRepeatClient'] as const
+const STEP_NDIS_FIELDS = ['ndisNumber', 'planType', 'region', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -167,6 +168,7 @@ export default function ParticipantCreatePage() {
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
       isRepeatClient: false,
+      serviceStreams: [],
       mobilityAidWheelchair: false,
       mobilityAidWalker: false,
       mobilitySupportOptions: [],
@@ -301,6 +303,7 @@ export default function ParticipantCreatePage() {
         region: existing.region ?? '',
         fundingOrganisation: existing.fundingOrganisation ?? '',
         isRepeatClient: existing.isRepeatClient ?? false,
+        serviceStreams: parseServiceStreams(existing.serviceStreams),
         mobilityAidWheelchair: existing.mobilityAidWheelchair ?? false,
         mobilityAidWalker: existing.mobilityAidWalker ?? false,
         mobilitySupportOptions: existing.mobilitySupportOptions ?? [],
@@ -327,6 +330,7 @@ export default function ParticipantCreatePage() {
 
   const onSubmit = async (data: ParticipantFormData) => {
     const payload: any = { ...data }
+    payload.serviceStreams = formatServiceStreams(data.serviceStreams as ServiceStream[] | undefined)
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
@@ -381,6 +385,12 @@ export default function ParticipantCreatePage() {
         { label: 'Region', value: watchedValues.region || '—' },
         { label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' },
         { label: 'Repeat Client', value: watchedValues.isRepeatClient ? 'Yes' : 'No' },
+        {
+          label: 'Service Streams',
+          value: watchedValues.serviceStreams?.length
+            ? watchedValues.serviceStreams.map((s) => SERVICE_STREAM_LABELS[s as ServiceStream] ?? s).join(', ')
+            : 'None',
+        },
       ],
     },
     {
@@ -569,6 +579,41 @@ export default function ParticipantCreatePage() {
               <FormField label="Repeat Client" layout="checkbox">
                 <input id="isRepeatClient" type="checkbox" {...register('isRepeatClient')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
+            </Card>
+
+            <Card title="Service Streams" className="space-y-4">
+              <fieldset className="m-0 p-0 border-0">
+                <legend className="sr-only">Service Streams</legend>
+                <Controller
+                  control={control}
+                  name="serviceStreams"
+                  render={({ field }) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                      {SERVICE_STREAMS.map((stream) => {
+                        const selected = field.value ?? []
+                        const checked = selected.includes(stream)
+                        return (
+                          <label key={stream} className="flex items-center gap-3 py-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                field.onChange(
+                                  e.target.checked
+                                    ? [...selected, stream]
+                                    : selected.filter((v) => v !== stream)
+                                )
+                              }}
+                              className="w-4 h-4 rounded border-[var(--color-border)]"
+                            />
+                            <span className="text-sm text-[var(--color-foreground)]">{SERVICE_STREAM_LABELS[stream]}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                />
+              </fieldset>
             </Card>
           </div>
         )}

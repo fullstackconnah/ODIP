@@ -476,6 +476,48 @@ public class MedicationsController : ControllerBase
         return Ok(ApiResponse<List<AdministrationDto>>.Ok(result));
     }
 
+    /// <summary>
+    /// Cross-participant medication administration report: every administration record,
+    /// optionally filtered to one participant and/or a date range, ordered by when the dose was
+    /// actually given (falling back to when it was scheduled, then when the record was created,
+    /// for records with neither) — descending, most recent first. Tenant-scoped via the global
+    /// query filter on <see cref="MedicationAdministration"/> (ITenantEntity). Narrower role gate
+    /// than the plain per-participant history read (<see cref="GetParticipantAdministrations"/>),
+    /// matching the create/update/register-adjacent endpoints on this controller.
+    /// </summary>
+    [HttpGet("medications/administrations/report")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<PagedResult<AdministrationDto>>>> GetAdministrationReport(
+        [FromQuery] Guid? participantId, [FromQuery] DateTime? from, [FromQuery] DateTime? to,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var query = _db.MedicationAdministrations
+            .Include(a => a.ParticipantMedication)
+            .Include(a => a.Participant)
+            .AsQueryable();
+
+        if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
+        if (from.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= from.Value);
+        if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
+
+        var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
+
+        var totalCount = await ordered.CountAsync(ct);
+        var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+
+        var result = new PagedResult<AdministrationDto>
+        {
+            Items = pageItems.Select(a => ToAdministrationDto(
+                a, FullName(a.Participant), a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.DoseDescription ?? string.Empty)).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        };
+        return Ok(ApiResponse<PagedResult<AdministrationDto>>.Ok(result));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private string GetRecordedByName() =>
