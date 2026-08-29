@@ -25,12 +25,9 @@ namespace Odip.Api.Controllers;
 public class MedicationsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    private readonly ICurrentTenant? _currentTenant;
+    private readonly ICurrentTenant _currentTenant;
 
-    // ICurrentTenant is optional (defaults to null) purely so existing tests that construct this
-    // controller with `new MedicationsController(db)` keep compiling unchanged — production DI
-    // always has ICurrentTenant registered and injects it regardless of the default.
-    public MedicationsController(OdipDbContext db, ICurrentTenant? currentTenant = null)
+    public MedicationsController(OdipDbContext db, ICurrentTenant currentTenant)
     {
         _db = db;
         _currentTenant = currentTenant;
@@ -495,7 +492,7 @@ public class MedicationsController : ControllerBase
     /// </summary>
     private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        var userId = _currentTenant?.ViewAsUserId;
+        var userId = _currentTenant.ViewAsUserId;
         if (userId is null)
         {
             var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;

@@ -20,7 +20,7 @@ namespace Odip.Tests.Medications;
 /// </summary>
 public class MedicationsFrequencyTests
 {
-    private static OdipDbContext CreateDb()
+    private static (OdipDbContext Db, ICurrentTenant Tenant) CreateDb()
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -30,7 +30,7 @@ public class MedicationsFrequencyTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        return new OdipDbContext(options, tenant.Object);
+        return (new OdipDbContext(options, tenant.Object), tenant.Object);
     }
 
     private static Participant SeedParticipant(OdipDbContext db)
@@ -47,7 +47,7 @@ public class MedicationsFrequencyTests
         // Simulates a pre-migration row: Frequency is never set explicitly, so it takes the
         // entity default (Daily) exactly as the migration backfills existing data — the medication
         // must still be due every day, unchanged from behaviour before this feature existed.
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var med = new ParticipantMedication
@@ -61,7 +61,7 @@ public class MedicationsFrequencyTests
 
         Assert.Equal(MedicationFrequency.Daily, med.Frequency);
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -71,7 +71,7 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task GetMar_SpecificDaysNotDueToday_ExcludesEntry()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         // Pick "today" as whatever weekday it happens to be, then flag every OTHER weekday as due
         // so today is guaranteed not due, regardless of when the suite runs.
@@ -98,7 +98,7 @@ public class MedicationsFrequencyTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -108,7 +108,7 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task GetMar_EveryNDaysNotDueToday_ExcludesEntry_AndDueDayIncludesIt()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         // Anchor 1 day after today with a 5-day interval -> today can't be a multiple, tomorrow is.
@@ -124,7 +124,7 @@ public class MedicationsFrequencyTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var notDueResult = await controller.GetMar(today, participant.Id, CancellationToken.None);
         var notDueBody = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(notDueResult.Result).Value);
@@ -148,9 +148,9 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task Create_SpecificDaysWithoutAnyDaySelected_ReturnsBadRequest()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = RegularDto() with { Frequency = MedicationFrequency.SpecificDays, DaysOfWeek = new List<string>() };
         var result = await controller.Create(participant.Id, dto, CancellationToken.None);
@@ -162,9 +162,9 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task Create_SpecificDaysWithDaysSelected_Saves()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = RegularDto() with { Frequency = MedicationFrequency.SpecificDays, DaysOfWeek = new List<string> { "Monday", "Wednesday" } };
         var result = await controller.Create(participant.Id, dto, CancellationToken.None);
@@ -181,9 +181,9 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task Create_EveryNDaysWithoutIntervalOrAnchor_ReturnsBadRequest()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = RegularDto() with { Frequency = MedicationFrequency.EveryNDays };
         var result = await controller.Create(participant.Id, dto, CancellationToken.None);
@@ -195,9 +195,9 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task Create_EveryNDaysWithIntervalAndAnchor_Saves()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = RegularDto() with { Frequency = MedicationFrequency.EveryNDays, IntervalDays = 2, AnchorDate = new DateOnly(2026, 1, 1) };
         var result = await controller.Create(participant.Id, dto, CancellationToken.None);
@@ -211,9 +211,9 @@ public class MedicationsFrequencyTests
     [Fact]
     public async Task Create_DailyFrequencyIsDefault_WhenNotSpecified()
     {
-        using var db = CreateDb();
+        var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var result = await controller.Create(participant.Id, RegularDto(), CancellationToken.None);
 
