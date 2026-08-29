@@ -77,6 +77,33 @@ describe('ParticipantCreatePage wizard navigation', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('does not re-steal focus on a later, unrelated revisit of a step that once failed validation', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    // Fail Next on step 0 — focus moves to the first invalid field.
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    const firstNameInput = screen.getByLabelText('First Name *')
+    expect(firstNameInput).toHaveFocus()
+
+    // Fix the field and advance.
+    await user.type(firstNameInput, 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument()
+
+    // Revisit step 0 via Back — the stale focus request from the earlier failure must not
+    // steal focus again.
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('First Name *')).not.toHaveFocus()
+
+    // Advance again, then revisit step 0 via the step pill instead of Back — same guarantee.
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument()
+    await user.click(within(stepNav()).getByRole('button', { name: /identity/i }))
+    expect(screen.getByLabelText('First Name *')).not.toHaveFocus()
+  })
+
   it('Back preserves values entered on a later step', async () => {
     const user = userEvent.setup()
     renderCreatePage()

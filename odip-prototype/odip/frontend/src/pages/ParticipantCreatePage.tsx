@@ -193,6 +193,14 @@ export default function ParticipantCreatePage() {
   // (rather than the field name alone) guarantees the effect below re-fires even when the
   // same field is re-requested twice in a row; the effect only reads it, it never needs to
   // clear it back out via setState.
+  //
+  // Deliberately depends on `focusRequest` ONLY, not `stepIndex`: a plain step change (Back,
+  // or clicking a step pill) never creates a new focusRequest object, so it must not re-run
+  // this effect — otherwise a stale request from an earlier failure would silently re-steal
+  // focus on every later, unrelated visit to that step. When a request IS created together
+  // with a step change (handleNext / handleInvalidSubmit call setStepIndex and requestFocus
+  // in the same handler, batched into one commit), the effect still sees the already-updated
+  // DOM for the new step by the time it runs, since effects fire after the full commit.
   const [focusRequest, setFocusRequest] = useState<{ field: string } | null>(null)
   const requestFocus = (fieldName: string) => setFocusRequest({ field: fieldName })
 
@@ -206,7 +214,15 @@ export default function ParticipantCreatePage() {
 
   useEffect(() => {
     if (focusRequest) focusField(focusRequest.field)
-  }, [focusRequest, stepIndex])
+  }, [focusRequest])
+
+  // Focus First Name once, on the wizard's initial mount only — a plain DOM focus() call (no
+  // state involved) rather than the native `autoFocus` HTML attribute, since step content is
+  // conditionally mounted/unmounted as steps change and `autoFocus` would otherwise re-fire
+  // (stealing focus back) on every later remount of step 0.
+  useEffect(() => {
+    focusField('firstName')
+  }, [])
 
   const currentStep = WIZARD_STEPS[stepIndex]
   const currentStepFieldSet = useMemo(() => new Set<keyof ParticipantFormData>(currentStep.fields), [currentStep])
@@ -472,7 +488,7 @@ export default function ParticipantCreatePage() {
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Personal Information" className="space-y-4">
               <FormField label="First Name" required error={errors.firstName?.message}>
-                <input id="firstName" {...register('firstName')} placeholder="e.g. John" autoFocus />
+                <input id="firstName" {...register('firstName')} placeholder="e.g. John" />
               </FormField>
 
               <FormField label="Last Name" required error={errors.lastName?.message}>
