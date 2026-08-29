@@ -25,6 +25,7 @@ RUN npm ci --no-audit --no-fund \
  || (echo "ERROR: npm ci left an incomplete node_modules (tsc missing)" >&2; exit 1)
 
 COPY frontend/ .
+RUN npm test
 RUN npm run build
 
 # Production stage

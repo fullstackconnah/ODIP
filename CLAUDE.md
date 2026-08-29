@@ -197,6 +197,8 @@ npm run lint
   layer, with fixtures defined inline within each test file rather than shared through a common
   base.
 
-- The frontend has no test suite currently — there are no unit or integration tests to run.
-  `npm run lint` and `npm run build` are the only verification gates available for frontend
-  changes.
+- Frontend tests use vitest + Testing Library (jsdom): `npm test` runs the suite (config in
+  `vite.config.ts`, setup in `src/test/setup.ts`, `*.test.tsx?` co-located with components).
+  The frontend Dockerfile runs `npm test` before `npm run build`, so a failing suite blocks
+  the deploy image build. `npm run lint` currently fails with pre-existing debt in non-test
+  files — the working gate is "no new lint errors", alongside `npm run build` and `npm test`.
