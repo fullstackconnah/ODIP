@@ -26,7 +26,7 @@ export default function PortalShiftsPage() {
 
   const { data, isLoading } = useMyShifts(weekStart, weekEnd)
   const isLinked = data?.isLinked ?? true // don't flash the "not linked" empty state before the first response lands
-  const shifts = data?.shifts ?? []
+  const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
   const byDay = useMemo(() => groupByDay(shifts), [shifts])
 
