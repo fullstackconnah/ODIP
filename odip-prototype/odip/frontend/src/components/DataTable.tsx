@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useMemo, useRef, useEffect } from 'react'
+import { type ReactNode, Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
@@ -15,7 +15,15 @@ type ColumnBase<T> = {
   align?: 'left' | 'center' | 'right'
   hidden?: boolean
   editable?: {
-    render: (row: T, onChange: (value: unknown) => void) => ReactNode
+    /**
+     * `ctx.errorId` is the id of the row's error message element (see `rowError` on
+     * `DataTableProps`) — defined only when that row currently has an error to show, `undefined`
+     * otherwise, so a caller never wires `aria-describedby` to an id that isn't actually
+     * rendered. Wire it (and `aria-invalid`) onto the rendered control for a screen-reader user
+     * to get the same "this field failed validation" signal a sighted user gets from the error
+     * text appearing under the row.
+     */
+    render: (row: T, onChange: (value: unknown) => void, ctx: { errorId?: string }) => ReactNode
   }
   bulkEditable?: {
     items: DropdownItem[]
@@ -48,7 +56,25 @@ export type DataTableProps<T> = {
   footer?: ReactNode
   loading?: boolean
   editingRow?: string | number | null
+  /**
+   * Row keys currently in "every editable column open at once" mode — the shape DS-01's
+   * DataTable docs deferred for a consumer needing N freeform rows all editable simultaneously
+   * (RP-01's bulk-add table), as opposed to `editingRow`'s one-row-at-a-time inline edit. A row
+   * whose key is in this set renders every `editable` column's edit control instead of the
+   * display cell. Independent of `editingRow` — a row can be in edit mode via either (or, for an
+   * unusual caller, both at once has no special meaning beyond "editing").
+   */
+  editingRows?: Set<string>
   onEditChange?: (row: T, key: string, value: unknown) => void
+  /**
+   * Per-row validation error shown as its own row directly beneath a row currently in edit mode
+   * (`editingRow` or `editingRows`) — return `undefined`/`''` for a row with nothing to show.
+   * Rendered with `role="alert"` (so a save-attempt's validation failures are announced) at a
+   * stable, deterministic id (`${rowKey}-row-error`) that's handed to that row's `editable.render`
+   * calls as `ctx.errorId` — wire it onto the failed row's inputs via `aria-describedby` (and set
+   * `aria-invalid`) so the association reaches assistive tech, not just sighted users.
+   */
+  rowError?: (row: T) => string | undefined
   className?: string
   compact?: boolean
   selectable?: boolean
@@ -120,7 +146,9 @@ export function DataTable<T>({
   footer,
   loading = false,
   editingRow,
+  editingRows,
   onEditChange,
+  rowError,
   className,
   compact = false,
   selectable = false,
@@ -279,59 +307,71 @@ export function DataTable<T>({
           )}
           {sortedData.map((row, rowIndex) => {
             const rowKey = String((row as any)[keyField])
-            const isEditing = editingRow != null && rowKey === String(editingRow)
+            const isEditing = (editingRow != null && rowKey === String(editingRow)) || (editingRows?.has(rowKey) ?? false)
             const extraClass = rowClassName?.(row) ?? ''
             const isClickable = onRowClick && !loading
+            const errorMessage = isEditing ? rowError?.(row) : undefined
+            // Stable per-row id, only handed to editable.render (as ctx.errorId) when there's
+            // actually an error <p> rendered at it — never a dangling aria-describedby reference.
+            const rowErrorId = errorMessage ? `${rowKey}-row-error` : undefined
 
             return (
-              <tr
-                key={rowKey}
-                className={`hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
-                onClick={isClickable ? () => onRowClick(row) : undefined}
-                onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
-                tabIndex={isClickable ? 0 : undefined}
-                role={isClickable ? 'button' : undefined}
-              >
-                {selectable && (
-                  <td
-                    className={`${cellPadding} w-10`}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedRows?.has(rowKey) ?? false}
-                      onChange={e => {
-                        const next = new Set(selectedRows ?? [])
-                        if (e.target.checked) {
-                          next.add(rowKey)
-                        } else {
-                          next.delete(rowKey)
-                        }
-                        onSelectionChange?.(next)
-                      }}
-                      className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
-                      aria-label={`Select row ${rowKey}`}
-                    />
-                  </td>
-                )}
-                {visibleColumns.map(col => {
-                  const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : ''
+              <Fragment key={rowKey}>
+                <tr
+                  className={`hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
+                  onClick={isClickable ? () => onRowClick(row) : undefined}
+                  onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
+                  tabIndex={isClickable ? 0 : undefined}
+                  role={isClickable ? 'button' : undefined}
+                >
+                  {selectable && (
+                    <td
+                      className={`${cellPadding} w-10`}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedRows?.has(rowKey) ?? false}
+                        onChange={e => {
+                          const next = new Set(selectedRows ?? [])
+                          if (e.target.checked) {
+                            next.add(rowKey)
+                          } else {
+                            next.delete(rowKey)
+                          }
+                          onSelectionChange?.(next)
+                        }}
+                        className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
+                        aria-label={`Select row ${rowKey}`}
+                      />
+                    </td>
+                  )}
+                  {visibleColumns.map(col => {
+                    const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : ''
 
-                  if (isEditing && col.editable) {
+                    if (isEditing && col.editable) {
+                      return (
+                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
+                          {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
+                        </td>
+                      )
+                    }
+
                     return (
                       <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
-                        {col.editable.render(row, (value) => onEditChange?.(row, col.key, value))}
+                        {renderCell(row, col, rowIndex)}
                       </td>
                     )
-                  }
-
-                  return (
-                    <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
-                      {renderCell(row, col, rowIndex)}
+                  })}
+                </tr>
+                {errorMessage && (
+                  <tr className={dividerClass}>
+                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} pt-0`}>
+                      <p id={rowErrorId} role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
                     </td>
-                  )
-                })}
-              </tr>
+                  </tr>
+                )}
+              </Fragment>
             )
           })}
         </tbody>

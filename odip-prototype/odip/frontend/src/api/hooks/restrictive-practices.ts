@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
-import type { RestrictivePracticeDto, CreateRestrictivePracticeDto, UpdateRestrictivePracticeDto } from '../types'
+import type {
+  RestrictivePracticeDto, CreateRestrictivePracticeDto, UpdateRestrictivePracticeDto,
+  BulkCreateRestrictivePracticeDto,
+} from '../types'
 
 export function useRestrictivePractices(participantId: string | undefined, includeInactive?: boolean) {
   return useQuery({
@@ -18,6 +21,20 @@ export function useCreateRestrictivePractice() {
   return useMutation({
     mutationFn: ({ participantId, data }: { participantId: string; data: CreateRestrictivePracticeDto }) =>
       apiPostRaw<RestrictivePracticeDto>(`/participants/${participantId}/restrictive-practices`, data),
+    onSuccess: (_res, variables) => {
+      qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
+      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
+      qc.invalidateQueries({ queryKey: ['participants'] })
+    },
+  })
+}
+
+/** RP-01: bulk-create N register entries in one request (the editable-table add flow's save). */
+export function useBulkCreateRestrictivePractices() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, data }: { participantId: string; data: BulkCreateRestrictivePracticeDto }) =>
+      apiPostRaw<RestrictivePracticeDto[]>(`/participants/${participantId}/restrictive-practices/bulk`, data),
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })

@@ -52,8 +52,10 @@ audit history, compatibility matrices, restrictive-practice registers.
 | `rowClassName` | `(row: T) => string` | Per-row extra classes (e.g. highlighting a flagged row). |
 | `emptyMessage` | `string` | Shown when `data` is empty and not loading. Default `'No data'`. |
 | `loading` | `boolean` | See States below. |
-| `editingRow` | `string \| number \| null` | Row whose `editable` columns render their edit control instead of the display cell. |
-| `onEditChange` | `(row: T, key: string, value: unknown) => void` | Fired by an editable column's `onChange`. |
+| `editingRow` | `string \| number \| null` | Row whose `editable` columns render their edit control instead of the display cell — the *row-at-a-time* shape (a claims table's amount field). |
+| `editingRows` | `Set<string>` | **RP-01.** Every row whose key is in this set renders every `editable` column's edit control, simultaneously, for as many rows as are in the set — the *N-freeform-rows-at-once* shape (a bulk-add table). Independent of `editingRow`; use whichever matches the consumer's edit model. |
+| `onEditChange` | `(row: T, key: string, value: unknown) => void` | Fired by an editable column's `onChange`, for either edit mode above. |
+| `rowError` | `(row: T) => string \| undefined` | Per-row validation error rendered as its own `role="alert"` row directly beneath a row currently in edit mode (`editingRow` or `editingRows`). Return `undefined` for a row with nothing to show. |
 | `selectable` / `selectedRows` / `onSelectionChange` | | Adds a checkbox column with select-all in the header. |
 | `compact` | `boolean` | Tighter cell padding. |
 | `verticalDividers` | `boolean` | **DS-02.** Adds a vertical rule between every column (header + body). Off by default — most tables read fine with only the horizontal row dividers already in place; turn it on for dense, many-column tables where tracking a column by eye benefits from a rule (e.g. a wide compatibility matrix). |
@@ -86,14 +88,26 @@ Column shape (`Column<T>`):
   existing rows, so a re-fetch doesn't flash the table empty.
 - **Empty**: `emptyMessage`, `aria-live="polite"` so a filter that empties the table is
   announced.
-- **Editable cell**: swaps a specific row's cell(s) to the column's `editable.render`
-  control while `editingRow` matches that row's key — the rest of the row (and every other
-  row) stays read-only. This is the affordance for a *row-at-a-time* inline edit (e.g. a
-  claims table's amount field). It is **not** an editable-grid/spreadsheet mode — for the
-  RP bulk-add table's "N freeform rows, all editable at once" need, build that as its own
-  small component composed from plain `<input>`s inside a table, or extend this contract
-  with a `editingRows: Set<string>` variant if a second consumer needs the same shape.
-  Documented here as a deliberate scope line, not an oversight.
+- **Editable cell — row-at-a-time**: swaps a specific row's cell(s) to the column's
+  `editable.render` control while `editingRow` matches that row's key — the rest of the row
+  (and every other row) stays read-only. E.g. a claims table's amount field.
+- **Editable cell — all rows at once (RP-01)**: every row whose key is in `editingRows`
+  swaps *all* of its `editable` columns to their edit control, simultaneously, for every row
+  in the set — the "N freeform rows, all editable at once" shape a bulk-add table needs
+  (RP-01's restrictive-practice bulk-add: pick a type + count, get an editable table with
+  that many rows, each becoming its own register entry on save). Each `editable.render` is
+  still just a plain controlled input the caller renders — DataTable doesn't add
+  spreadsheet/grid semantics (no arrow-key cell-to-cell navigation, no copy/paste across
+  cells) — keyboard navigation between cells is the browser's native Tab order across the
+  rendered `<input>`s, which is sufficient for this shape's row-by-row entry pattern. Pair
+  with `rowError` to show a per-row validation message (e.g. "Description is required")
+  directly under a row that failed to save, and give every `editable.render` control a
+  `min-h-[44px]` touch target like any other input. `editable.render`'s third argument,
+  `ctx.errorId`, is that row's error `<p>`'s id (only defined while the row actually has one
+  rendered) — wire it onto the rendered control as `aria-describedby={ctx.errorId}` +
+  `aria-invalid={ctx.errorId ? 'true' : undefined}` so the association reaches assistive tech,
+  not just sighted users reading the text under the row. See RestrictivePracticesTab's bulk-add
+  columns for the pattern applied to all four cell inputs of a row that failed to save.
 - **Selectable**: header checkbox is `indeterminate` when some-but-not-all visible rows
   are selected.
 
@@ -105,6 +119,10 @@ Column shape (`Column<T>`):
   `focus-visible` ring and Enter/Space activation.
 - Select-all and per-row checkboxes carry `aria-label`s (`"Select all rows"` /
   `"Select row {id}"`).
+- A row's error message (`rowError`, either editable mode) renders at a stable id
+  (`${rowKey}-row-error`) with `role="alert"`; that id is only ever handed to `editable.render`
+  (as `ctx.errorId`) for the row it belongs to, and only while the error `<p>` is actually
+  rendered — never a dangling `aria-describedby` reference to an id nothing renders.
 
 **When to use**: any tabular list of records. **When not to**: a small, fixed 2-3 row
 summary — reach for `Card`/`StatCard` instead.
@@ -123,6 +141,28 @@ summary — reach for `Card`/`StatCard` instead.
   emptyMessage="No participants match these filters."
   loading={isLoading}
   verticalDividers
+/>
+```
+
+`editingRows` (all-rows-at-once editable table — RP-01's bulk-add shape):
+
+```tsx
+<DataTable
+  data={rows}
+  keyField="id"
+  columns={[
+    {
+      key: 'description', header: 'Description',
+      editable: { render: (row, onChange) => (
+        <input value={row.description} onChange={e => onChange(e.target.value)}
+          className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-[var(--color-border)]" />
+      ) },
+    },
+    { key: 'remove', header: '', render: row => <button onClick={() => removeRow(row.id)}>Remove</button> },
+  ]}
+  editingRows={new Set(rows.map(r => r.id))}
+  onEditChange={(row, key, value) => updateRow(row.id, key, value)}
+  rowError={row => rowErrors.get(row.id)}
 />
 ```
 

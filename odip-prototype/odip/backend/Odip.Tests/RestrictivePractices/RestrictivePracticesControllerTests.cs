@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -565,5 +566,349 @@ public class RestrictivePracticesControllerTests
         using var verifyDb = CreateDb(dbName);
         var saved = await verifyDb.RestrictivePractices.IgnoreQueryFilters().SingleAsync();
         Assert.Equal(tenantId, saved.TenantId);
+    }
+
+    // ── Bulk create (RP-01) ─────────────────────────────────────────────────
+
+    private static BulkCreateRestrictivePracticeRowDto BulkRow(
+        string description = "Locked doors overnight for safety.",
+        RestrictivePracticeType type = RestrictivePracticeType.EnvironmentalRestraint,
+        string? authorisedBy = null, DateOnly? authorisationDate = null, DateOnly? reviewDate = null,
+        bool isActive = true) => new()
+    {
+        Description = description,
+        Type = type,
+        AuthorisedBy = authorisedBy,
+        AuthorisationDate = authorisationDate,
+        ReviewDate = reviewDate,
+        IsActive = isActive,
+    };
+
+    [Fact]
+    public async Task CreateBulk_ParticipantMissing_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto { Items = new() { BulkRow() } };
+        var result = await controller.CreateBulk(Guid.NewGuid(), dto, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateBulk_MoreThan50Rows_ReturnsBadRequestAndPersistsNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = Enumerable.Range(1, 51).Select(i => BulkRow(description: $"Row {i}")).ToList(),
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.False(body.Success);
+        Assert.Contains(body.Errors!, e => e.Contains("maximum of 50 rows", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_Exactly50Rows_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = Enumerable.Range(1, 50).Select(i => BulkRow(description: $"Row {i}")).ToList(),
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(50, body.Data!.Count);
+        Assert.Equal(50, await db.RestrictivePractices.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_NoItems_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto { Items = new() };
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("At least one row", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task CreateBulk_AllRowsValid_CreatesOneEntryPerRowAndReturnsThem()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new()
+            {
+                BulkRow(description: "Row one description.", type: RestrictivePracticeType.Seclusion, authorisedBy: "Dr. Chen"),
+                BulkRow(description: "Row two description.", type: RestrictivePracticeType.Seclusion, reviewDate: new DateOnly(2026, 12, 1)),
+                BulkRow(description: "Row three description.", type: RestrictivePracticeType.Seclusion),
+            },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Success);
+        Assert.Equal(3, body.Data!.Count);
+        Assert.All(body.Data, d => Assert.Equal(RestrictivePracticeType.Seclusion, d.Type));
+        Assert.All(body.Data, d => Assert.Equal(participant.Id, d.ParticipantId));
+
+        var saved = await db.RestrictivePractices.ToListAsync();
+        Assert.Equal(3, saved.Count);
+        Assert.Contains(saved, r => r.Description == "Row one description." && r.AuthorisedBy == "Dr. Chen");
+        Assert.Contains(saved, r => r.ReviewDate == new DateOnly(2026, 12, 1));
+    }
+
+    [Fact]
+    public async Task CreateBulk_OneInvalidRow_CreatesNothingAndReportsRowError()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new()
+            {
+                BulkRow(description: "Valid row."),
+                BulkRow(description: "   "), // blank/whitespace-only description
+                BulkRow(description: "Another valid row."),
+            },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.False(body.Success);
+        Assert.Contains(body.Errors!, e => e.StartsWith("Row 2:") && e.Contains("Description is required"));
+
+        // All-or-nothing: neither of the valid rows was persisted either.
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_DescriptionTooLong_ReturnsRowError()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(description: new string('x', 2001)) },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("2000 characters or fewer"));
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_AuthorisedByTooLong_ReturnsRowError()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(authorisedBy: new string('x', 201)) },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("200 characters or fewer"));
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_ChemicalRestraintRow_RejectedWithClearMessage_AndNothingCreated()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new()
+            {
+                BulkRow(description: "Valid environmental row."),
+                BulkRow(description: "Chemical row.", type: RestrictivePracticeType.ChemicalRestraint),
+            },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.StartsWith("Row 2:") && e.Contains("linked medication", StringComparison.OrdinalIgnoreCase));
+
+        // All-or-nothing: the valid row before it was not persisted either.
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_MultipleInvalidRows_ReportsOneErrorPerRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new()
+            {
+                BulkRow(description: ""),
+                BulkRow(type: RestrictivePracticeType.ChemicalRestraint),
+            },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.Equal(2, body.Errors!.Count);
+        Assert.Contains(body.Errors, e => e.StartsWith("Row 1:"));
+        Assert.Contains(body.Errors, e => e.StartsWith("Row 2:"));
+    }
+
+    [Fact]
+    public async Task CreateBulk_ActiveRows_SetParticipantFlagTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        Assert.False(participant.HasRestrictivePracticeFlag);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(isActive: true), BulkRow(isActive: false) },
+        };
+
+        await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.True(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task CreateBulk_AllRowsInactive_LeavesParticipantFlagFalse()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(isActive: false), BulkRow(isActive: false) },
+        };
+
+        await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.False(saved.HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task CreateBulk_TenantScoped_AutoAssignsTenantIdToEveryRow()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+
+        Guid participantId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+            seedDb.Participants.Add(participant);
+            participantId = participant.Id;
+            seedDb.SaveChanges();
+        }
+
+        using var scopedDb = CreateTenantScopedDb(dbName, tenantId);
+        var controller = new RestrictivePracticesController(scopedDb);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(description: "Row A"), BulkRow(description: "Row B") },
+        };
+
+        var result = await controller.CreateBulk(participantId, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        using var verifyDb = CreateDb(dbName);
+        var saved = await verifyDb.RestrictivePractices.IgnoreQueryFilters().ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, r => Assert.Equal(tenantId, r.TenantId));
+    }
+
+    [Fact]
+    public async Task CreateBulk_TenantScoped_OtherTenantsActiveEntriesDoNotLeakIntoFlagComputation()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        Guid participantId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantA, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+            seedDb.Participants.Add(participant);
+            participantId = participant.Id;
+            // A pre-existing active row for the SAME participant id but a different tenant should
+            // never be visible through tenant-scoped queries — this pins that the bulk endpoint's
+            // "hasOtherActiveEntry" lookup goes through the same tenant-filtered DbContext as
+            // everything else, not a raw cross-tenant query.
+            seedDb.RestrictivePractices.Add(new Domain.Entities.RestrictivePractice
+            {
+                Id = Guid.NewGuid(), TenantId = tenantB, ParticipantId = participantId, Description = "Tenant B entry", IsActive = true,
+            });
+            seedDb.SaveChanges();
+        }
+
+        using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
+        var controller = new RestrictivePracticesController(scopedDb);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(isActive: false) },
+        };
+
+        await controller.CreateBulk(participantId, dto, CancellationToken.None);
+
+        var saved = await scopedDb.Participants.SingleAsync(p => p.Id == participantId);
+        // Only tenant B's active row exists; tenant A's own bulk row is inactive. Since tenant
+        // scoping hides tenant B's row from tenant A's context, the flag must stay false.
+        Assert.False(saved.HasRestrictivePracticeFlag);
     }
 }
