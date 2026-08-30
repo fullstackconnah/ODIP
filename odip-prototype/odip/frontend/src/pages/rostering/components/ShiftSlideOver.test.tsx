@@ -325,9 +325,30 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
       />,
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/alex rivera is marked not compatible with this participant/i)
+    // role="status" (polite), not "alert" (assertive) — this is non-blocking, informational
+    // context, not a save-blocking error, so it shouldn't interrupt like the Blocking-finding alert does.
+    expect(screen.getByRole('status')).toHaveTextContent(/alex rivera is marked not compatible with this participant/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/you can still save this shift/i)
     // Non-blocking: no Blocking/Warning findings present, so Save stays enabled.
     expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('includes the exclusion reason in the warning when one is recorded on the compatibility row', () => {
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded', reason: 'Prior incident on shift' })],
+    })
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(/prior incident on shift/i)
   })
 
   it('shows a preferred hint (not an alert) when the currently selected staff member is marked Preferred', () => {
@@ -347,6 +368,7 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
 
     expect(screen.getByText(/alex rivera is a preferred staff member for this participant/i)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('shows neither hint nor warning for a staff member with no compatibility row (Allowed default)', () => {

@@ -95,14 +95,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // non-blocking warning both in the dropdown and inline once selected.
   const { data: compatibilityRows = [] } = useCompatibility(participantId || undefined)
   const compatibilityByStaffId = useMemo(() => {
-    const map = new Map<string, 'Preferred' | 'Allowed' | 'Excluded'>()
-    compatibilityRows.forEach(row => map.set(row.staffId, row.level))
+    const map = new Map<string, { level: 'Preferred' | 'Allowed' | 'Excluded'; reason: string | null }>()
+    compatibilityRows.forEach(row => map.set(row.staffId, { level: row.level, reason: row.reason }))
     return map
   }, [compatibilityRows])
   const sortedStaffOptions: DropdownItem[] = useMemo(() => {
     return staffOptions
       .map(option => {
-        const level = compatibilityByStaffId.get(option.value)
+        const level = compatibilityByStaffId.get(option.value)?.level
         return {
           ...option,
           description: level === 'Preferred' ? 'Preferred for this participant'
@@ -111,7 +111,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         }
       })
       // Array.prototype.sort is stable — ties (Allowed/no row) keep the caller's original order.
-      .sort((a, b) => COMPATIBILITY_RANK[compatibilityByStaffId.get(a.value) ?? 'Allowed'] - COMPATIBILITY_RANK[compatibilityByStaffId.get(b.value) ?? 'Allowed'])
+      .sort((a, b) => COMPATIBILITY_RANK[compatibilityByStaffId.get(a.value)?.level ?? 'Allowed'] - COMPATIBILITY_RANK[compatibilityByStaffId.get(b.value)?.level ?? 'Allowed'])
   }, [staffOptions, compatibilityByStaffId])
   const selectedStaffCompatibility = staffId ? compatibilityByStaffId.get(staffId) : undefined
   const selectedStaffLabel = staffOptions.find(s => s.value === staffId)?.label ?? 'This staff member'
@@ -242,12 +242,17 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                 items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
               />
             </FormField>
-            {selectedStaffCompatibility === 'Excluded' && (
-              <p role="alert" className="mt-1.5 text-xs font-medium text-destructive">
-                {selectedStaffLabel} is marked not compatible with this participant.
+            {selectedStaffCompatibility?.level === 'Excluded' && (
+              // status, not alert: this is informational and non-blocking (save still works), so an
+              // assertive interruption would overstate it — polite matches the Blocking-finding alert
+              // below it in severity terms while still surfacing on selection without needing focus.
+              <p role="status" className="mt-1.5 text-xs font-medium text-destructive">
+                {selectedStaffLabel} is marked not compatible with this participant
+                {selectedStaffCompatibility.reason ? `: ${selectedStaffCompatibility.reason}.` : '.'}
+                {' '}You can still save this shift — it just won't be suggested as a match.
               </p>
             )}
-            {selectedStaffCompatibility === 'Preferred' && (
+            {selectedStaffCompatibility?.level === 'Preferred' && (
               <p className="mt-1.5 text-xs text-primary">
                 {selectedStaffLabel} is a preferred staff member for this participant.
               </p>
