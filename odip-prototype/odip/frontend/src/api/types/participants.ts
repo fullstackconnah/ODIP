@@ -1,4 +1,4 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement } from './enums'
 import { SERVICE_STREAMS } from './enums'
 
 export const GENDER_LABELS: Record<Gender, string> = {
@@ -13,6 +13,13 @@ export const GENDER_LABELS: Record<Gender, string> = {
 export const FUNDING_SOURCE_LABELS: Record<FundingSource, string> = {
   Ndis: 'NDIS',
   Other: 'Other',
+}
+
+/** LIVING-01. */
+export const LIVING_ARRANGEMENT_LABELS: Record<LivingArrangement, string> = {
+  Family: 'Family',
+  Independent: 'Independent',
+  SupportedAccommodation: 'Supported Accommodation',
 }
 
 export const MOBILITY_SUPPORT_OPTIONS = [
@@ -128,6 +135,24 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   /** FUND-02. */
   fundingSource: FundingSource
   fundingOrganisation: string | null
+  /** LIVING-01. */
+  livingArrangement: LivingArrangement | null
+  mainSupportPersonName: string | null
+  mainSupportPersonRelationship: string | null
+  othersLivingInAccommodation: string | null
+  residentialInfo: string | null
+  livesWithOthers: boolean | null
+  whoLivesWith: string | null
+  silProviderName: string | null
+  silProviderContactPhone: string | null
+  accommodationType: string | null
+  onSiteSupportHours: string | null
+  livingArrangementNotes: string | null
+  /** INTAKE-06. */
+  addressStreet: string | null
+  addressSuburb: string | null
+  addressState: string | null
+  addressPostcode: string | null
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
   equipmentRequirements: string | null
@@ -158,6 +183,30 @@ export interface CreateParticipantDto {
   fundingSource?: FundingSource
   /** Reused "Other — specify" field: required iff fundingSource is Other; ignored when Ndis. */
   fundingOrganisation?: string
+  /** LIVING-01. Nullable — unset until intake captures it. */
+  livingArrangement?: LivingArrangement | null
+  /** LIVING-02 (Family). Required iff livingArrangement is Family. */
+  mainSupportPersonName?: string
+  mainSupportPersonRelationship?: string
+  othersLivingInAccommodation?: string
+  residentialInfo?: string
+  /** LIVING-03 (Independent). */
+  livesWithOthers?: boolean
+  /** Required iff livingArrangement is Independent and livesWithOthers is true. */
+  whoLivesWith?: string
+  /** LIVING-04 (Supported Accommodation). Required iff livingArrangement is SupportedAccommodation. */
+  silProviderName?: string
+  silProviderContactPhone?: string
+  accommodationType?: string
+  onSiteSupportHours?: string
+  /** Shared across all three arrangement types — see participants.ts's LIVING_ARRANGEMENT_LABELS doc. */
+  livingArrangementNotes?: string
+  /** INTAKE-06 — structured address. */
+  addressStreet?: string
+  addressSuburb?: string
+  addressState?: string
+  /** 4-digit AU postcode. */
+  addressPostcode?: string
   isRepeatClient: boolean
   mobilityAidWheelchair: boolean
   mobilityAidWalker: boolean

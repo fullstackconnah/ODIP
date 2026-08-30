@@ -11,8 +11,8 @@ import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, List
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS } from '@/api/types/participants'
-import type { Gender, FundingSource } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
+import type { Gender, FundingSource, LivingArrangement } from '@/api/types/enums'
 import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
@@ -125,6 +125,54 @@ export default function ParticipantDetailPage() {
               )}
               <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Preferred Staff</span><span>{p.preferredStaffName ?? '—'}</span>
+            </div>
+          </Card>
+          <Card title="Address & Living Arrangements">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+              <span className="text-[var(--color-muted-foreground)]">Address</span>
+              <span>{[p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode].filter(Boolean).join(', ') || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Living Arrangement</span>
+              <span>{p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : '—'}</span>
+              {/* LIVING-02/03/04: subsequent content changes per arrangement type — same
+                  "only show what's relevant" pattern as the FUND-02 funding-source fields above. */}
+              {p.livingArrangement === 'Family' && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">Main Support Person</span>
+                  <span>{p.mainSupportPersonName || '—'}{p.mainSupportPersonRelationship ? ` (${p.mainSupportPersonRelationship})` : ''}</span>
+                  <span className="text-[var(--color-muted-foreground)]">Others Living in the Accommodation</span>
+                  <span>{p.othersLivingInAccommodation || '—'}</span>
+                  <span className="text-[var(--color-muted-foreground)]">Residential Information</span>
+                  <span>{p.residentialInfo || '—'}</span>
+                </>
+              )}
+              {p.livingArrangement === 'Independent' && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">Lives With Others</span>
+                  <span>{p.livesWithOthers ? 'Yes' : 'No'}</span>
+                  {p.livesWithOthers && (
+                    <>
+                      <span className="text-[var(--color-muted-foreground)]">Who They Live With</span>
+                      <span>{p.whoLivesWith || '—'}</span>
+                    </>
+                  )}
+                </>
+              )}
+              {p.livingArrangement === 'SupportedAccommodation' && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">SIL Provider</span>
+                  <span>{p.silProviderName || '—'}{p.silProviderContactPhone ? ` (${p.silProviderContactPhone})` : ''}</span>
+                  <span className="text-[var(--color-muted-foreground)]">Accommodation Type</span>
+                  <span>{p.accommodationType || '—'}</span>
+                  <span className="text-[var(--color-muted-foreground)]">On-Site Support Hours</span>
+                  <span>{p.onSiteSupportHours || '—'}</span>
+                </>
+              )}
+              {p.livingArrangement && p.livingArrangementNotes && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">Living Arrangement Notes</span>
+                  <span>{p.livingArrangementNotes}</span>
+                </>
+              )}
             </div>
           </Card>
           <Card title="Support Needs">

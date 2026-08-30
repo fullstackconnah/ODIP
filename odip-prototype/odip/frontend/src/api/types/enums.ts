@@ -218,3 +218,12 @@ export type DayOfWeekName = typeof DAYS_OF_WEEK[number]
 // ── Alert Severity (computed participant risk alerts, task 6c) ───────────
 export const ALERT_SEVERITIES = ['Critical', 'Warning', 'Info'] as const
 export type AlertSeverity = typeof ALERT_SEVERITIES[number]
+
+// ── Living Arrangement (LIVING-01) ───────────────────────────────────────
+export const LIVING_ARRANGEMENTS = ['Family', 'Independent', 'SupportedAccommodation'] as const
+export type LivingArrangement = typeof LIVING_ARRANGEMENTS[number]
+
+// ── AU State/Territory (INTAKE-06 address — fixed dropdown, not a backend enum: the
+// entity/DTO field is a plain string, same convention as the existing Contact.State column) ──
+export const AU_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] as const
+export type AuState = typeof AU_STATES[number]

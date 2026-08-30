@@ -46,6 +46,21 @@ public enum Gender
     Other
 }
 
+/// <summary>
+/// LIVING-01: the participant's living arrangement type. Nullable on the entity — unset until
+/// intake captures it. Drives which of the LIVING-02/03/04 field groups the wizard's INTAKE-07
+/// conditional-visibility engine reveals (frontend `src/lib/conditionalFields.ts`); see
+/// <see cref="Odip.Domain.Entities.Participant.LivingArrangementNotes"/> for the one field
+/// genuinely shared across all three arrangement types (modelled once, per the backlog's
+/// "some fields shared across arrangement types" principle — mirrors INTAKE-04).
+/// </summary>
+public enum LivingArrangement
+{
+    Family,
+    Independent,
+    SupportedAccommodation
+}
+
 public enum SupportRatio
 {
     OneToOne,

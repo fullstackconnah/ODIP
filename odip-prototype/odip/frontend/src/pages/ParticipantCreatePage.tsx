@@ -9,9 +9,9 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource } from '@/api/types/enums'
-import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement } from '@/api/types/enums'
+import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import {
   useConditionalFields, useUnregisterHiddenFields, useFocusFallbackOnHide, stripHiddenFieldKeys,
@@ -25,6 +25,28 @@ const baseParticipantSchema = z.object({
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
   genderSelfDescription: z.string().optional(),
+  // INTAKE-06 — structured address. Lives on the Identity step (see the wizard-placement note
+  // above CONDITIONAL_FIELDS below): a participant's address doesn't depend on funding/support
+  // answers, so it sits with the other core-identity fields rather than opening a dedicated step.
+  addressStreet: z.string().optional(),
+  addressSuburb: z.string().optional(),
+  addressState: z.string().optional(),
+  addressPostcode: z.string().optional(),
+  // LIVING-01/02/03/04. Required-ness of the per-arrangement fields is enforced by
+  // livingArrangementRefine below, not by the base shape (each field is only relevant, and only
+  // rendered, when the matching arrangement type is selected — see CONDITIONAL_FIELDS).
+  livingArrangement: z.string().optional(),
+  mainSupportPersonName: z.string().optional(),
+  mainSupportPersonRelationship: z.string().optional(),
+  othersLivingInAccommodation: z.string().optional(),
+  residentialInfo: z.string().optional(),
+  livesWithOthers: z.boolean().optional(),
+  whoLivesWith: z.string().optional(),
+  silProviderName: z.string().optional(),
+  silProviderContactPhone: z.string().optional(),
+  accommodationType: z.string().optional(),
+  onSiteSupportHours: z.string().optional(),
+  livingArrangementNotes: z.string().optional(),
   ndisNumber: z.string().optional(),
   planStartDate: z.string().optional(),
   planEndDate: z.string().optional(),
@@ -131,10 +153,44 @@ function fundingSourceRefine(data: FundingFields, ctx: z.RefinementCtx) {
   }
 }
 
+// LIVING-01/02/03/04: each arrangement type requires its one key identifying field, both ends —
+// same shape as genderRefine/fundingSourceRefine. Independent's whoLivesWith is only required
+// when livesWithOthers is true (a second level of conditionality nested inside the
+// arrangement-type gate); mirrors the backend's ValidateLivingArrangement.
+type LivingFields = {
+  livingArrangement?: string
+  mainSupportPersonName?: string
+  livesWithOthers?: boolean
+  whoLivesWith?: string
+  silProviderName?: string
+}
+function livingArrangementRefine(data: LivingFields, ctx: z.RefinementCtx) {
+  if (data.livingArrangement === 'Family' && !data.mainSupportPersonName?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mainSupportPersonName'], message: "Please provide the main support person's name." })
+  }
+  if (data.livingArrangement === 'Independent' && data.livesWithOthers && !data.whoLivesWith?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['whoLivesWith'], message: 'Please specify who the participant lives with.' })
+  }
+  if (data.livingArrangement === 'SupportedAccommodation' && !data.silProviderName?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['silProviderName'], message: 'Please provide the SIL provider name.' })
+  }
+}
+
+// INTAKE-06: AU postcode is exactly 4 digits when supplied (optional field, so blank is fine) —
+// mirrors the backend's ValidateAddressPostcode.
+type AddressFields = { addressPostcode?: string }
+function addressPostcodeRefine(data: AddressFields, ctx: z.RefinementCtx) {
+  if (data.addressPostcode && !/^\d{4}$/.test(data.addressPostcode)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['addressPostcode'], message: 'Postcode must be exactly 4 digits.' })
+  }
+}
+
 const participantSchema = baseParticipantSchema
   .superRefine(equipmentRefine)
   .superRefine(genderRefine)
   .superRefine(fundingSourceRefine)
+  .superRefine(livingArrangementRefine)
+  .superRefine(addressPostcodeRefine)
 
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
 // favour of .issues), so it throws past react-hook-form instead of populating
@@ -160,7 +216,19 @@ function focusField(fieldName: string) {
   if (el instanceof HTMLElement) el.focus()
 }
 
-const STEP_IDENTITY_FIELDS = ['firstName', 'lastName', 'preferredName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId'] as const
+// Living arrangements (LIVING-01..04) and address (INTAKE-06) live on the Identity step rather
+// than a new wizard step or the Support Needs step: neither depends on funding/support-need
+// answers, and where/how a participant lives is core identity/intake context — putting them here
+// avoids inserting a step, which would renumber every later step and break every test that
+// assumes the current step order (see the Wave-3 report for the fuller reasoning).
+const STEP_IDENTITY_FIELDS = [
+  'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId',
+  'addressStreet', 'addressSuburb', 'addressState', 'addressPostcode',
+  'livingArrangement', 'mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo',
+  'livesWithOthers', 'whoLivesWith',
+  'silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours',
+  'livingArrangementNotes',
+] as const
 const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingSource', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
@@ -195,7 +263,7 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 // inputs of its own, so there is nothing to validate before landing on it besides the
 // preceding step.
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
-  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine),
+  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)),
@@ -234,6 +302,44 @@ const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
     visibleWhen: (v) => v.fundingSource !== 'Other',
     focusFallback: 'fundingSource',
   },
+  {
+    // LIVING-02 (Family arrangement fields).
+    fields: ['mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo'],
+    visibleWhen: (v) => v.livingArrangement === 'Family',
+    focusFallback: 'livingArrangement',
+  },
+  {
+    // LIVING-03 (Independent arrangement) — the "lives with others" toggle itself.
+    fields: ['livesWithOthers'],
+    visibleWhen: (v) => v.livingArrangement === 'Independent',
+    focusFallback: 'livingArrangement',
+  },
+  {
+    // LIVING-03 — "who" is a second level of conditionality nested inside the arrangement gate:
+    // only shown once the participant is Independent AND said they live with others.
+    fields: ['whoLivesWith'],
+    visibleWhen: (v) => v.livingArrangement === 'Independent' && !!v.livesWithOthers,
+    focusFallback: 'livesWithOthers',
+  },
+  {
+    // LIVING-04 (Supported Accommodation fields) — controller ruling, since the backlog's
+    // source bullet was empty.
+    fields: ['silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours'],
+    visibleWhen: (v) => v.livingArrangement === 'SupportedAccommodation',
+    focusFallback: 'livingArrangement',
+  },
+  {
+    // LIVING-01's one genuinely shared field: modelled ONCE and shown for whichever arrangement
+    // is selected, rather than duplicated per arrangement type (mirrors INTAKE-04's
+    // de-duplication principle). Deliberately a single def unioning all three arrangement types
+    // — see conditionalFields.ts's multi-def pitfall warning for why listing the same field name
+    // in three separate per-arrangement defs would be wrong (AND-visibility across defs means it
+    // would only ever show when every def's predicate is true simultaneously, i.e. never, for a
+    // single-select field).
+    fields: ['livingArrangementNotes'],
+    visibleWhen: (v) => v.livingArrangement === 'Family' || v.livingArrangement === 'Independent' || v.livingArrangement === 'SupportedAccommodation',
+    focusFallback: 'livingArrangement',
+  },
 ]
 
 export default function ParticipantCreatePage() {
@@ -251,6 +357,8 @@ export default function ParticipantCreatePage() {
     resolver: participantResolver,
     defaultValues: {
       genderSelfDescription: '',
+      livingArrangement: '',
+      livesWithOthers: false,
       fundingSource: 'Ndis',
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
@@ -441,6 +549,22 @@ export default function ParticipantCreatePage() {
         dateOfBirth: existing.dateOfBirth ? existing.dateOfBirth.split('T')[0] : '',
         gender: existing.gender ?? '',
         genderSelfDescription: existing.genderSelfDescription ?? '',
+        addressStreet: existing.addressStreet ?? '',
+        addressSuburb: existing.addressSuburb ?? '',
+        addressState: existing.addressState ?? '',
+        addressPostcode: existing.addressPostcode ?? '',
+        livingArrangement: existing.livingArrangement ?? '',
+        mainSupportPersonName: existing.mainSupportPersonName ?? '',
+        mainSupportPersonRelationship: existing.mainSupportPersonRelationship ?? '',
+        othersLivingInAccommodation: existing.othersLivingInAccommodation ?? '',
+        residentialInfo: existing.residentialInfo ?? '',
+        livesWithOthers: existing.livesWithOthers ?? false,
+        whoLivesWith: existing.whoLivesWith ?? '',
+        silProviderName: existing.silProviderName ?? '',
+        silProviderContactPhone: existing.silProviderContactPhone ?? '',
+        accommodationType: existing.accommodationType ?? '',
+        onSiteSupportHours: existing.onSiteSupportHours ?? '',
+        livingArrangementNotes: existing.livingArrangementNotes ?? '',
         ndisNumber: existing.ndisNumber ?? '',
         planStartDate: existing.planStartDate ? existing.planStartDate.split('T')[0] : '',
         planEndDate: existing.planEndDate ? existing.planEndDate.split('T')[0] : '',
@@ -532,6 +656,30 @@ export default function ParticipantCreatePage() {
             : '—',
         },
         { label: 'Preferred Staff Member', value: preferredStaffName },
+        {
+          label: 'Address',
+          value: [watchedValues.addressStreet, watchedValues.addressSuburb, watchedValues.addressState, watchedValues.addressPostcode]
+            .filter(Boolean).join(', ') || '—',
+        },
+        {
+          label: 'Living Arrangement',
+          value: watchedValues.livingArrangement
+            ? (LIVING_ARRANGEMENT_LABELS[watchedValues.livingArrangement as LivingArrangement] ?? watchedValues.livingArrangement)
+            : '—',
+        },
+        // LIVING-02/03/04: only the fields relevant to the selected arrangement type appear in
+        // the review summary — same isVisible gate the step's own inputs use.
+        ...(isVisible('mainSupportPersonName') ? [{ label: 'Main Support Person', value: watchedValues.mainSupportPersonName || '—' }] : []),
+        ...(isVisible('mainSupportPersonRelationship') ? [{ label: 'Relationship to Participant', value: watchedValues.mainSupportPersonRelationship || '—' }] : []),
+        ...(isVisible('othersLivingInAccommodation') ? [{ label: 'Others Living in the Accommodation', value: watchedValues.othersLivingInAccommodation || '—' }] : []),
+        ...(isVisible('residentialInfo') ? [{ label: 'Residential Information', value: watchedValues.residentialInfo || '—' }] : []),
+        ...(isVisible('livesWithOthers') ? [{ label: 'Lives With Others', value: watchedValues.livesWithOthers ? 'Yes' : 'No' }] : []),
+        ...(isVisible('whoLivesWith') ? [{ label: 'Who They Live With', value: watchedValues.whoLivesWith || '—' }] : []),
+        ...(isVisible('silProviderName') ? [{ label: 'SIL Provider Name', value: watchedValues.silProviderName || '—' }] : []),
+        ...(isVisible('silProviderContactPhone') ? [{ label: 'SIL Provider Contact', value: watchedValues.silProviderContactPhone || '—' }] : []),
+        ...(isVisible('accommodationType') ? [{ label: 'Accommodation Type', value: watchedValues.accommodationType || '—' }] : []),
+        ...(isVisible('onSiteSupportHours') ? [{ label: 'On-Site Support Hours', value: watchedValues.onSiteSupportHours || '—' }] : []),
+        ...(isVisible('livingArrangementNotes') ? [{ label: 'Living Arrangement Notes', value: watchedValues.livingArrangementNotes || '—' }] : []),
       ],
     },
     {
@@ -731,6 +879,97 @@ export default function ParticipantCreatePage() {
                   )}
                 />
               </FormField>
+            </Card>
+
+            {/* INTAKE-06 — structured address. */}
+            <Card title="Address" className="space-y-4">
+              <FormField label="Street">
+                <input id="addressStreet" {...register('addressStreet')} placeholder="e.g. 12 Example Street" />
+              </FormField>
+
+              <FormField label="Suburb">
+                <input id="addressSuburb" {...register('addressSuburb')} placeholder="e.g. Fortitude Valley" />
+              </FormField>
+
+              <FormField label="State">
+                <select id="addressState" {...register('addressState')}>
+                  <option value="">Not specified</option>
+                  {AU_STATES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Postcode" error={errors.addressPostcode?.message} hint="4 digits, e.g. 4000">
+                <input id="addressPostcode" {...register('addressPostcode')} inputMode="numeric" maxLength={4} placeholder="e.g. 4000" />
+              </FormField>
+            </Card>
+
+            {/* LIVING-01/02/03/04 — living arrangement type plus its conditional per-type
+                fields, revealed via the INTAKE-07 engine (isVisible below). */}
+            <Card title="Living Arrangements" className="space-y-4">
+              <FormField label="Living Arrangement">
+                <select id="livingArrangement" {...register('livingArrangement')}>
+                  <option value="">Not specified</option>
+                  {LIVING_ARRANGEMENTS.map((a) => (
+                    <option key={a} value={a}>{LIVING_ARRANGEMENT_LABELS[a]}</option>
+                  ))}
+                </select>
+              </FormField>
+
+              {isVisible('mainSupportPersonName') && (
+                <>
+                  <FormField label="Main Support Person" required error={errors.mainSupportPersonName?.message}>
+                    {/* Free text for now — plausibly links to a future CONTACT-01 typed contact
+                        rather than free text; CONTACT-01 isn't built yet (see Participant.cs). */}
+                    <input id="mainSupportPersonName" {...register('mainSupportPersonName')} placeholder="e.g. Jane Citizen" />
+                  </FormField>
+                  <FormField label="Relationship to Participant">
+                    <input id="mainSupportPersonRelationship" {...register('mainSupportPersonRelationship')} placeholder="e.g. Mother" />
+                  </FormField>
+                  <FormField label="Others Living in the Accommodation">
+                    <textarea id="othersLivingInAccommodation" {...register('othersLivingInAccommodation')} rows={2} placeholder="Who else lives there..." />
+                  </FormField>
+                  <FormField label="Residential Information">
+                    <textarea id="residentialInfo" {...register('residentialInfo')} rows={2} placeholder="Home layout, accessibility..." />
+                  </FormField>
+                </>
+              )}
+
+              {isVisible('livesWithOthers') && (
+                <FormField label="Lives With Others" layout="checkbox">
+                  <input id="livesWithOthers" type="checkbox" {...register('livesWithOthers')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+                </FormField>
+              )}
+
+              {isVisible('whoLivesWith') && (
+                <FormField label="Who They Live With" required error={errors.whoLivesWith?.message}>
+                  <input id="whoLivesWith" {...register('whoLivesWith')} placeholder="e.g. Housemates" />
+                </FormField>
+              )}
+
+              {isVisible('silProviderName') && (
+                <>
+                  <FormField label="SIL Provider Name" required error={errors.silProviderName?.message}>
+                    <input id="silProviderName" {...register('silProviderName')} placeholder="e.g. Sunrise SIL Services" />
+                  </FormField>
+                  <FormField label="SIL Provider Contact (Phone)">
+                    <input id="silProviderContactPhone" {...register('silProviderContactPhone')} placeholder="e.g. 0400 000 000" />
+                  </FormField>
+                  <FormField label="Accommodation Type">
+                    <input id="accommodationType" {...register('accommodationType')} placeholder="e.g. Group home" />
+                  </FormField>
+                  <FormField label="On-Site Support Hours">
+                    <input id="onSiteSupportHours" {...register('onSiteSupportHours')} placeholder="e.g. 24/7 or 9-5 weekdays" />
+                  </FormField>
+                </>
+              )}
+
+              {isVisible('livingArrangementNotes') && (
+                <FormField label="Living Arrangement Notes">
+                  <textarea id="livingArrangementNotes" {...register('livingArrangementNotes')} rows={2} placeholder="Any additional notes..." />
+                </FormField>
+              )}
             </Card>
           </div>
         )}
