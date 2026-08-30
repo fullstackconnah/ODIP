@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, isToday, formatShiftTimeRange } from '@/pages/rostering/lib/roster'
+import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, isToday, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { RATIO_LABELS } from './lib/portal'
 import type { PortalShiftSummaryDto } from '@/api/types'
 
@@ -20,11 +20,45 @@ function groupByDay(shifts: PortalShiftSummaryDto[]): Map<string, PortalShiftSum
   return byDay
 }
 
+/**
+ * Skeleton for the loading state — mirrors the real day-group/shift-card chrome so there's
+ * no layout jump once data arrives. The "Loading" announcement lives outside the aria-hidden
+ * decorative wrapper so screen readers still hear it (nesting it inside an aria-hidden
+ * ancestor, as some other loading states in this app do, would silence it).
+ */
+function ShiftsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <span className="sr-only" role="status" aria-live="polite">Loading your shifts…</span>
+      <div aria-hidden="true" className="space-y-6">
+        {[0, 1].map(group => (
+          <div key={group}>
+            <div className="h-4 w-40 rounded bg-[var(--color-accent)] animate-pulse mb-2" />
+            <div className="space-y-2">
+              {[0, 1].map(row => (
+                <div key={row} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
+                      <div className="h-3 w-24 rounded bg-[var(--color-accent)] animate-pulse" />
+                    </div>
+                    <div className="h-5 w-14 rounded-full bg-[var(--color-accent)] animate-pulse shrink-0" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function PortalShiftsPage() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
   const weekEnd = useMemo(() => daysOfWeek(weekStart)[6], [weekStart])
 
-  const { data, isLoading } = useMyShifts(weekStart, weekEnd)
+  const { data, isLoading, isError, refetch } = useMyShifts(weekStart, weekEnd)
   const isLinked = data?.isLinked ?? true // don't flash the "not linked" empty state before the first response lands
   const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
@@ -38,7 +72,7 @@ export default function PortalShiftsPage() {
         <div className="flex items-center gap-2">
           <Link
             to="/portal/witness-approvals"
-            className="relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
+            className="relative inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
           >
             <ShieldCheck className="w-4 h-4" />
             Witness approvals
@@ -54,7 +88,7 @@ export default function PortalShiftsPage() {
           <button
             type="button"
             onClick={() => setWeekStart(w => shiftWeek(w, -1))}
-            className="p-2 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
             aria-label="Previous week"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -63,7 +97,7 @@ export default function PortalShiftsPage() {
           <button
             type="button"
             onClick={() => setWeekStart(w => shiftWeek(w, 1))}
-            className="p-2 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
             aria-label="Next week"
           >
             <ChevronRight className="w-4 h-4" />
@@ -71,20 +105,37 @@ export default function PortalShiftsPage() {
           <button
             type="button"
             onClick={() => setWeekStart(weekStartOf(new Date()))}
-            className="px-3 py-2 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
+            className="h-11 px-3 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
           >
             This week
           </button>
         </div>
       </PageHeader>
 
-      {!isLoading && !isLinked ? (
+      {isLoading ? (
+        <ShiftsSkeleton />
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center text-center py-24 gap-3">
+          <AlertTriangle className="w-16 h-16 text-[var(--color-foreground)] opacity-20" aria-hidden="true" />
+          <p className="text-lg font-semibold text-[var(--color-muted-foreground)]" role="alert">Couldn't load your shifts</p>
+          <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">
+            Check your connection and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-2 inline-flex items-center justify-center h-11 px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      ) : !isLinked ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Your account isn't linked to a staff record"
           description="My Shifts shows the roster for a linked staff member. Ask an admin to link your account to your staff record in Settings › Users."
         />
-      ) : !isLoading && shifts.length === 0 && tripAssignments.length === 0 ? (
+      ) : shifts.length === 0 && tripAssignments.length === 0 ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -139,7 +190,7 @@ export default function PortalShiftsPage() {
                       <div className="min-w-0">
                         <p className="font-medium text-[var(--color-foreground)] truncate">{a.tripName}</p>
                         <p className="text-sm text-[var(--color-muted-foreground)]">
-                          {a.assignmentStart} – {a.assignmentEnd}
+                          {formatEffectiveRange(a.assignmentStart, a.assignmentEnd)}
                           {a.isDriver && <span className="ml-2 inline-flex items-center gap-1"><Car className="w-3 h-3" /> Driver</span>}
                         </p>
                       </div>
