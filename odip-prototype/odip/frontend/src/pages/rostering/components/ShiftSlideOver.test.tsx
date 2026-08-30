@@ -387,4 +387,39 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
   })
+
+  it('does not dangle aria-describedby for an explicit Allowed-level compatibility row (no notice paragraph is rendered for it)', () => {
+    // Distinct from the "no compatibility row" case above: this asserts the guard checks the
+    // *level*, not merely "a row exists" — an explicit Allowed row must behave the same as no
+    // row at all, since only Excluded/Preferred ever render the linked notice paragraph.
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Allowed' })],
+    })
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
+
+    // aria-labelledby (wired by FormField for the custom Dropdown control) makes the field's
+    // accessible name the "Staff" label text, not the dropdown's placeholder/selected value.
+    // The field still carries the built-in "Leave unassigned..." hint's id (that's independent
+    // of compatibility level) — the bug this guards against is every id in aria-describedby
+    // resolving to a real element, i.e. no id referencing the Excluded/Preferred notice
+    // paragraph when neither is rendered.
+    const field = screen.getByRole('button', { name: 'Staff' })
+    const describedBy = field.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    for (const id of describedBy!.split(' ')) {
+      expect(document.getElementById(id)).not.toBeNull()
+    }
+  })
 })

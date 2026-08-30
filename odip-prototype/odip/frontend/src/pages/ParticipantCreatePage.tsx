@@ -681,7 +681,7 @@ export default function ParticipantCreatePage() {
                         const selected = field.value ?? []
                         const checked = selected.includes(option)
                         return (
-                          <label key={option} className="flex items-center gap-3 py-1">
+                          <label key={option} className="flex items-center gap-3 py-1 min-h-[44px]">
                             <input
                               type="checkbox"
                               checked={checked}

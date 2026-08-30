@@ -104,11 +104,22 @@ export function WeekToolbar({
           </div>
         )}
         {groupBy === 'staff' && (
-          <ToggleGroup
-            options={[{ key: 'unfilled', label: 'Unfilled only' }]}
-            value={unfilledOnly ? 'unfilled' : ''}
-            onChange={() => onUnfilledOnlyChange(!unfilledOnly)}
-          />
+          // A single on/off filter is a toggle button (aria-pressed), not a one-option radio
+          // group — ToggleGroup's role="radiogroup"/role="radio" semantics assume >=2 mutually
+          // exclusive options, and its arrow-key roving-tabindex handling would otherwise fire
+          // on every arrow key with only one option to rove between (index±1 mod 1 is always 0).
+          <button
+            type="button"
+            aria-pressed={unfilledOnly}
+            onClick={() => onUnfilledOnlyChange(!unfilledOnly)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              unfilledOnly
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            Unfilled only
+          </button>
         )}
         <button
           type="button"
