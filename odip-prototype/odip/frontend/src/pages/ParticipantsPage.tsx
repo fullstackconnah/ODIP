@@ -64,7 +64,19 @@ export default function ParticipantsPage() {
     { key: 'planType', header: 'Plan Type' },
     { key: 'region', header: 'Region', sortable: true },
     { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px]', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
-    { key: 'mobilityAidWheelchair', header: '\u{1F9BD}', type: 'boolean', align: 'center' },
+    {
+      key: 'mobilityAidWheelchair',
+      // The emoji alone has no accessible name for a screen reader — sr-only text gives the
+      // column a real header while keeping the compact glyph for sighted users.
+      header: (
+        <span title="Wheelchair">
+          <span aria-hidden="true">{'\u{1F9BD}'}</span>
+          <span className="sr-only">Wheelchair</span>
+        </span>
+      ),
+      type: 'boolean',
+      align: 'center',
+    },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
     { key: 'supportRatio', header: 'Support Ratio' },
     { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },

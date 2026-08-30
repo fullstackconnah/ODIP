@@ -49,7 +49,8 @@ describe('MedicationFormPage frequency controls', () => {
   it('defaults to Daily with SpecificDays/EveryNDays controls hidden', () => {
     renderCreatePage()
 
-    expect(screen.getByRole('button', { name: 'Every day' })).toBeInTheDocument()
+    // ToggleGroup is a single-select radio group (role="radio"), not a set of independent buttons.
+    expect(screen.getByRole('radio', { name: 'Every day' })).toBeInTheDocument()
     expect(screen.queryByText(/^Days of week/)).not.toBeInTheDocument()
     expect(screen.queryByText(/^Starting from/)).not.toBeInTheDocument()
   })
@@ -58,9 +59,10 @@ describe('MedicationFormPage frequency controls', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.click(screen.getByRole('button', { name: 'Specific days of the week' }))
+    await user.click(screen.getByRole('radio', { name: 'Specific days of the week' }))
 
     expect(screen.getByText(/^Days of week/)).toBeInTheDocument()
+    // The weekday picker itself is a separate hand-rolled multi-select button group, not a ToggleGroup.
     expect(screen.getByRole('button', { name: 'Mon' })).toBeInTheDocument()
     expect(screen.queryByText(/^Starting from/)).not.toBeInTheDocument()
   })
@@ -69,7 +71,7 @@ describe('MedicationFormPage frequency controls', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.click(screen.getByRole('button', { name: 'Every N days' }))
+    await user.click(screen.getByRole('radio', { name: 'Every N days' }))
 
     expect(screen.getByText(/^Starting from/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mon' })).not.toBeInTheDocument()
@@ -79,7 +81,7 @@ describe('MedicationFormPage frequency controls', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.click(screen.getByRole('button', { name: 'Every N days' }))
+    await user.click(screen.getByRole('radio', { name: 'Every N days' }))
     expect(screen.queryByText(/^Due every/)).not.toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText('e.g. 2'), '2')
@@ -93,9 +95,9 @@ describe('MedicationFormPage frequency controls', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.click(screen.getByRole('button', { name: 'PRN (as needed)' }))
+    await user.click(screen.getByRole('radio', { name: 'PRN (as needed)' }))
 
-    expect(screen.queryByRole('button', { name: 'Every day' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Every day' })).not.toBeInTheDocument()
     expect(screen.getByText(/PRN Indication/i)).toBeInTheDocument()
   })
 

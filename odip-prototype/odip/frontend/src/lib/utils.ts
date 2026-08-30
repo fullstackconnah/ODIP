@@ -42,3 +42,15 @@ export function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return '—'
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(amount)
 }
+
+/**
+ * Formats "HH:mm:ss" or "HH:mm" as "h:mma" (lowercase, no space) for compact tabular display —
+ * e.g. shift times on the rostering board and routine times on the participant detail page.
+ * Shared here so both call sites use one implementation instead of two copies drifting apart.
+ */
+export function formatShiftTime(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const period = h >= 12 ? 'pm' : 'am'
+  const hour12 = h % 12 === 0 ? 12 : h % 12
+  return m === 0 ? `${hour12}${period}` : `${hour12}:${String(m).padStart(2, '0')}${period}`
+}

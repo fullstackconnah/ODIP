@@ -97,3 +97,23 @@ describe('RecordAdministrationModal witness picker', () => {
     }))
   })
 })
+
+describe('RecordAdministrationModal AnimatedField tab order', () => {
+  // AnimatedField keeps a collapsed field's DOM around for the grid-template-rows collapse
+  // animation, but marks its wrapper `inert` while collapsed so keyboard users can't Tab into a
+  // field that isn't visible — this asserts that wrapper attribute directly, since jsdom doesn't
+  // model inert's actual focus-blocking behaviour.
+  it('marks the collapsed witness field inert so it is out of the tab order', () => {
+    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    const witnessTrigger = screen.getByRole('button', { name: /witness/i })
+    expect(witnessTrigger.closest('[inert]')).not.toBeNull()
+  })
+
+  it('removes inert from the witness field once it becomes visible', () => {
+    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+
+    const witnessTrigger = screen.getByRole('button', { name: /witness/i })
+    expect(witnessTrigger.closest('[inert]')).toBeNull()
+  })
+})
