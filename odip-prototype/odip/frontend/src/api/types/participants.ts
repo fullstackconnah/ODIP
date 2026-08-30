@@ -44,6 +44,17 @@ export const SERVICE_STREAM_LABELS: Record<ServiceStream, string> = {
   CommunityNursing: 'Community Nursing',
 }
 
+/** Full expansions for the abbreviated stream labels — surfaced as a title tooltip on badges. */
+export const SERVICE_STREAM_TITLES: Record<ServiceStream, string> = {
+  STA: 'Short Term Accommodation',
+  BSP: 'Behaviour Support Plan',
+  InHomeSupport: 'In-Home Support',
+  Trip: 'Trip',
+  HIDPA: 'High Intensity Daily Personal Activities',
+  CommunityAccessDailyLiving: 'Community Access / Daily Living',
+  CommunityNursing: 'Community Nursing',
+}
+
 /**
  * The backend exposes ServiceStreams as a plain [Flags] enum column. Program.cs registers a
  * global JsonStringEnumConverter, which natively serialises a combined flags value as a

@@ -1,4 +1,4 @@
-import { parseServiceStreams, SERVICE_STREAM_LABELS } from '@/api/types/participants'
+import { parseServiceStreams, SERVICE_STREAM_LABELS, SERVICE_STREAM_TITLES } from '@/api/types/participants'
 
 const CHIP_CLASS = 'inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-secondary-container)] text-[#0d1c2e]'
 
@@ -14,7 +14,7 @@ export function ServiceStreamBadges({ value, className }: { value: string | null
   return (
     <span className={`inline-flex flex-wrap items-center gap-1 ${className ?? ''}`}>
       {streams.map((s) => (
-        <span key={s} className={CHIP_CLASS}>{SERVICE_STREAM_LABELS[s]}</span>
+        <span key={s} className={CHIP_CLASS} title={SERVICE_STREAM_TITLES[s]}>{SERVICE_STREAM_LABELS[s]}</span>
       ))}
     </span>
   )
