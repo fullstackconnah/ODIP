@@ -1137,6 +1137,99 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Seeds a few demo <see cref="ParticipantRoutine"/> rows — per-day routines and
+    /// shift-critical specifics support workers must know — for the same demo participants
+    /// as <see cref="SeedParticipantNotesAsync"/>. Idempotent via fixed GUIDs + an existence
+    /// check, same pattern as that method.
+    /// </summary>
+    public static async Task SeedParticipantRoutinesAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.ParticipantRoutines.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+
+        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
+        if (existingParticipants.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var routines = new List<ParticipantRoutine>();
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, ParticipantId = sophieId,
+                Title = "Epilepsy medication window", Description = "Keppra 500mg BD — must be given within 30 minutes of the scheduled time. If a dose is missed, follow the seizure medication protocol in her file, not the standard PRN process.",
+                Category = RoutineCategory.Medication, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddMonths(-6),
+            });
+
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, ParticipantId = sophieId,
+                Title = "Morning routine", Description = "Wake gently — avoid sudden noise or lights. Offer a warm drink before getting up. Takes about 45 minutes; do not rush transitions.",
+                Category = RoutineCategory.PersonalCare, DayOfWeek = null, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(8, 0),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddMonths(-6),
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                Title = "Line-of-sight supervision", Description = "Flight risk in unfamiliar environments — maintain continuous line-of-sight supervision whenever off the property. Do not rely on verbal check-ins alone.",
+                Category = RoutineCategory.Behaviour, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                Title = "Saturday swimming session", Description = "Local pool 10am — bring noise-cancelling headphones for the change rooms, which can get loud and crowded.",
+                Category = RoutineCategory.Activity, DayOfWeek = DayOfWeek.Saturday, StartTime = new TimeOnly(9, 30), EndTime = new TimeOnly(11, 30),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(harrisonId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, ParticipantId = harrisonId,
+                Title = "Insulin — confirm, don't dose", Description = "Harrison manages his own insulin dosing around meals. Confirm carb counts with him before he eats, but do not administer on his behalf unless he asks.",
+                Category = RoutineCategory.Medication, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, ParticipantId = harrisonId,
+                Title = "Evening meal prep", Description = "Prefers to help prep dinner rather than have it made for him — offer him a task (chopping, stirring) rather than taking over.",
+                Category = RoutineCategory.Meals, DayOfWeek = null, StartTime = new TimeOnly(17, 30), EndTime = new TimeOnly(18, 30),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (routines.Count == 0)
+            return;
+
+        context.ParticipantRoutines.AddRange(routines);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
     /// doesn't already have one. Runs on every startup — idempotent per tenant via a
     /// single existence check (not per-field), so a restart never duplicates the

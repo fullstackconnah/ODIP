@@ -1,16 +1,18 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { X, Trash2 } from 'lucide-react'
+import { X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
+import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
-  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, getRosterFindings,
+  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, getRosterFindings,
 } from '@/api/hooks'
 import { FindingsList } from './FindingsList'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
-import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
+import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
+import { getRelevantRoutines } from '../lib/routines'
 
 export type ShiftSlideOverTarget =
   | {
@@ -77,6 +79,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const createShift = useCreateShift()
   const updateShift = useUpdateShift()
   const deleteShift = useDeleteShift()
+
+  // Read-only: surfaces the participant's routines/specifics relevant to this shift window so
+  // a support worker doesn't have to leave the roster board to check them.
+  const { data: participantRoutines = [] } = useParticipantRoutines(participantId || undefined)
+  const relevantRoutines = participantId && serviceDate && startTime && endTime
+    ? getRelevantRoutines(participantRoutines, { serviceDate, startTime, endTime, endsNextDay })
+    : []
 
   // Live dry-run: re-checks findings whenever the candidate shape changes, debounced so we
   // don't fire a request per keystroke. Never writes — POST /shifts/check is a pure preview.
@@ -244,6 +253,36 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           <FormField label="Notes">
             <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />
           </FormField>
+
+          {relevantRoutines.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-medium text-foreground">Routines &amp; specifics</p>
+              <ul className="space-y-2">
+                {relevantRoutines.map(routine => (
+                  <li
+                    key={routine.id}
+                    className={`rounded-sm border px-3 py-2 text-sm ${
+                      routine.isCritical
+                        ? 'border-destructive/30 bg-error-container/20'
+                        : 'border-border bg-card'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {routine.isCritical && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Critical" />}
+                      <span className="font-medium text-foreground">{routine.title}</span>
+                      <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground whitespace-nowrap">
+                        {ROUTINE_CATEGORY_LABELS[routine.category]}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {routine.startTime && routine.endTime ? formatShiftTimeRange(routine.startTime, routine.endTime) : 'Untimed'}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-foreground">{routine.description}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {findings.length > 0 && (
             <div>

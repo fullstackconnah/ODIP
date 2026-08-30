@@ -423,3 +423,17 @@ public enum PackagingType
     Sachet,
     Other
 }
+
+/// <summary>What kind of shift-relevant routine/specific this is — drives grouping in the frontend.</summary>
+public enum RoutineCategory
+{
+    PersonalCare,
+    Meals,
+    Medication,
+    Mobility,
+    Communication,
+    Behaviour,
+    Sleep,
+    Activity,
+    Other
+}
