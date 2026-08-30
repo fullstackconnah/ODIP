@@ -93,6 +93,138 @@ describe('DataTable — editable cell affordance', () => {
   })
 })
 
+describe('DataTable — editingRows (RP-01 all-rows-editable mode)', () => {
+  const editableColumns: Column<Row>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      editable: { render: (row, onChange) => <input aria-label={`edit-name-${row.id}`} defaultValue={row.name} onChange={e => onChange(e.target.value)} /> },
+    },
+    {
+      key: 'age',
+      header: 'Age',
+      editable: { render: (row, onChange) => <input aria-label={`edit-age-${row.id}`} defaultValue={row.age} onChange={e => onChange(e.target.value)} /> },
+    },
+  ]
+
+  it('renders every editable column\'s control for every row whose key is in editingRows, simultaneously', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1', '2'])}
+        onEditChange={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('edit-name-1')).toBeInTheDocument()
+    expect(screen.getByLabelText('edit-age-1')).toBeInTheDocument()
+    expect(screen.getByLabelText('edit-name-2')).toBeInTheDocument()
+    expect(screen.getByLabelText('edit-age-2')).toBeInTheDocument()
+  })
+
+  it('leaves a row out of edit mode when its key is not in editingRows', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1'])}
+        onEditChange={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('edit-name-1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('edit-name-2')).not.toBeInTheDocument()
+    expect(screen.getByText('Alex')).toBeInTheDocument() // row 2's plain display cell
+  })
+
+  it('fires onEditChange with the row, column key, and new value when an editable cell changes', async () => {
+    const user = userEvent.setup()
+    const onEditChange = vi.fn()
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1'])}
+        onEditChange={onEditChange}
+      />
+    )
+
+    await user.clear(screen.getByLabelText('edit-name-1'))
+    await user.type(screen.getByLabelText('edit-name-1'), 'X')
+
+    expect(onEditChange).toHaveBeenCalledWith(rows[0], 'name', 'X')
+  })
+
+  it('is keyboard-navigable: tabbing moves focus between the editable inputs in DOM order', async () => {
+    const user = userEvent.setup()
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1', '2'])}
+        onEditChange={vi.fn()}
+      />
+    )
+
+    await user.tab()
+    expect(screen.getByLabelText('edit-name-1')).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText('edit-age-1')).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText('edit-name-2')).toHaveFocus()
+  })
+
+  it('shows a per-row error message with role="alert" only under a row currently in edit mode', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1'])}
+        onEditChange={vi.fn()}
+        rowError={row => (row.id === '1' ? 'Description is required' : undefined)}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Description is required')
+  })
+
+  it('does not show a row error for a row with no error even in edit mode', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1', '2'])}
+        onEditChange={vi.fn()}
+        rowError={row => (row.id === '1' ? 'Description is required' : undefined)}
+      />
+    )
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('does not show a row error for a row outside edit mode even if rowError would return one', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={editableColumns}
+        keyField="id"
+        editingRows={new Set(['1'])}
+        onEditChange={vi.fn()}
+        rowError={() => 'Always errors'}
+      />
+    )
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+})
+
 describe('DataTable — verticalDividers (DS-02)', () => {
   it('applies no vertical-divider classes by default', () => {
     render(<DataTable data={rows} columns={columns} keyField="id" />)

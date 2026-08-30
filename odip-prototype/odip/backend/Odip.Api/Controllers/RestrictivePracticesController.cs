@@ -89,6 +89,93 @@ public class RestrictivePracticesController : ControllerBase
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
     }
 
+    /// <summary>
+    /// RP-01: bulk-create N register entries in one request — the editable-table add flow's save
+    /// step. All rows are validated together and the write is all-or-nothing: either every row is
+    /// created, or (on any validation failure) none are and the response carries one message per
+    /// failing row so the table can surface errors against the right row. A single
+    /// <see cref="OdipDbContext.SaveChangesAsync"/> call is already wrapped in one implicit DB
+    /// transaction by EF Core, so no explicit <c>BeginTransactionAsync</c> is needed here — and
+    /// since every row is validated in memory before anything is added to the context, a bad row
+    /// never reaches SaveChangesAsync at all.
+    ///
+    /// ChemicalRestraint rows are rejected rather than supported unlinked: a chemical restraint
+    /// entry needs its own <c>RelatedMedicationId</c>, and the bulk table has no per-row
+    /// medication column to capture one (see RP-01's spec — description/authorised
+    /// by/authorisation date/review date only). Half-supporting it (silently dropping the link)
+    /// would produce a compliance-relevant register entry with a validation rule quietly not
+    /// enforced, which is worse than telling the coordinator to use the single-entry form for
+    /// that one row. This is the documented, deliberately simpler choice for RP-01.
+    /// </summary>
+    [HttpPost("participants/{participantId:guid}/restrictive-practices/bulk")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<RestrictivePracticeDto>>>> CreateBulk(
+        Guid participantId, [FromBody] BulkCreateRestrictivePracticeDto dto, CancellationToken ct)
+    {
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
+        if (participant == null) return NotFound(ApiResponse<List<RestrictivePracticeDto>>.Fail("Participant not found"));
+
+        if (dto.Items.Count == 0)
+            return BadRequest(ApiResponse<List<RestrictivePracticeDto>>.Fail("At least one row is required"));
+
+        var errors = new List<string>();
+        for (var i = 0; i < dto.Items.Count; i++)
+        {
+            var row = dto.Items[i];
+            var label = $"Row {i + 1}";
+
+            if (row.Type == RestrictivePracticeType.ChemicalRestraint)
+            {
+                errors.Add($"{label}: Chemical restraint entries need a linked medication — add these individually from the single-entry form, not bulk-add.");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(row.Description))
+            {
+                errors.Add($"{label}: Description is required");
+                continue;
+            }
+            if (row.Description.Length > 2000)
+            {
+                errors.Add($"{label}: Description must be 2000 characters or fewer");
+                continue;
+            }
+            if (row.AuthorisedBy != null && row.AuthorisedBy.Length > 200)
+            {
+                errors.Add($"{label}: Authorised by must be 200 characters or fewer");
+            }
+        }
+
+        if (errors.Count > 0)
+            return BadRequest(ApiResponse<List<RestrictivePracticeDto>>.Fail(errors));
+
+        var practices = dto.Items.Select(row => new RestrictivePractice
+        {
+            Id = Guid.NewGuid(),
+            ParticipantId = participantId,
+            Type = row.Type,
+            Description = row.Description,
+            AuthorisedBy = row.AuthorisedBy,
+            AuthorisationDate = row.AuthorisationDate,
+            ReviewDate = row.ReviewDate,
+            RelatedMedicationId = null,
+            IsActive = row.IsActive,
+        }).ToList();
+
+        _db.RestrictivePractices.AddRange(practices);
+
+        // Sync-write (see Create): recompute the participant's derived flag once for the whole
+        // batch. The query only sees already-committed rows (none of `practices` is saved yet),
+        // so whether any new row is active is OR'd in explicitly, same as Create/Update/Delete.
+        var hasOtherActiveEntry = await _db.RestrictivePractices
+            .Where(rp => rp.ParticipantId == participantId && rp.IsActive)
+            .AnyAsync(ct);
+        participant.HasRestrictivePracticeFlag = practices.Any(p => p.IsActive) || hasOtherActiveEntry;
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
+    }
+
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Update(

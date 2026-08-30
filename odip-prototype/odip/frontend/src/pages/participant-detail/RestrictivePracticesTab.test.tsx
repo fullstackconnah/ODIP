@@ -7,24 +7,26 @@ import type { MedicationListDto } from '@/api/types/medications'
 
 const {
   mockUseRestrictivePractices, mockUseParticipantMedications,
-  mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync,
+  mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockBulkCreateMutateAsync,
 } = vi.hoisted(() => ({
   mockUseRestrictivePractices: vi.fn(() => ({ data: [] as RestrictivePracticeDto[], isLoading: false })),
   mockUseParticipantMedications: vi.fn(() => ({ data: [] as MedicationListDto[], isLoading: false })),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockDeleteMutateAsync: vi.fn(),
+  mockBulkCreateMutateAsync: vi.fn(),
 }))
 
-// Only the API layer is mocked — Modal, FormField, ConfirmDialog, Dropdown, EmptyState are the
-// real components, so this exercises the actual add/edit/delete wiring (same approach as
-// RoutinesTab.test.tsx).
+// Only the API layer is mocked — Modal, FormField, ConfirmDialog, Dropdown, DataTable, EmptyState
+// are the real components, so this exercises the actual add/edit/delete/bulk-add wiring (same
+// approach as RoutinesTab.test.tsx).
 vi.mock('@/api/hooks', () => ({
   useRestrictivePractices: mockUseRestrictivePractices,
   useParticipantMedications: mockUseParticipantMedications,
   useCreateRestrictivePractice: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdateRestrictivePractice: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeleteRestrictivePractice: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
+  useBulkCreateRestrictivePractices: () => ({ mutateAsync: mockBulkCreateMutateAsync, isPending: false }),
 }))
 
 function makePractice(overrides: Partial<RestrictivePracticeDto> = {}): RestrictivePracticeDto {
@@ -84,6 +86,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockClear()
   mockUpdateMutateAsync.mockClear()
   mockDeleteMutateAsync.mockClear()
+  mockBulkCreateMutateAsync.mockClear()
   mockUseRestrictivePractices.mockReturnValue({ data: [], isLoading: false })
   mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
   setUserRole('Coordinator')
@@ -271,5 +274,162 @@ describe('RestrictivePracticesTab', () => {
 
     expect(screen.getByText('Inactive entries (1)')).toBeInTheDocument()
     expect(screen.queryByText('Retired entry')).not.toBeInTheDocument()
+  })
+})
+
+describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
+  async function openBulkRows(user: ReturnType<typeof userEvent.setup>, count: string) {
+    await user.click(screen.getByRole('button', { name: /bulk add/i }))
+    await user.clear(screen.getByLabelText(/number of entries/i))
+    await user.type(screen.getByLabelText(/number of entries/i), count)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+  }
+
+  it('hides the Bulk add action for a ReadOnly user', () => {
+    setUserRole('ReadOnly')
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    expect(screen.queryByRole('button', { name: /bulk add/i })).not.toBeInTheDocument()
+  })
+
+  it('opens the bulk-add setup step, offering every type except Chemical restraint', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: /bulk add/i }))
+    expect(screen.getByRole('dialog', { name: /bulk add restrictive practices/i })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/restrictive practice type/i))
+    expect(screen.getByRole('option', { name: /^seclusion/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^chemical restraint/i })).not.toBeInTheDocument()
+  })
+
+  it('rejects an invalid row count before generating rows', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: /bulk add/i }))
+    await user.clear(screen.getByLabelText(/number of entries/i))
+    await user.type(screen.getByLabelText(/number of entries/i), '0')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(screen.getByText(/enter a whole number between 1 and 50/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Description, row 1')).not.toBeInTheDocument()
+  })
+
+  it('generates an editable table with the requested number of rows, all editable at once', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '2')
+
+    expect(screen.getByLabelText('Description, row 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Authorised by, row 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Authorisation date, row 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Review date, row 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Description, row 2')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Description, row 3')).not.toBeInTheDocument()
+  })
+
+  it('adds another row via the Add row control', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+    await user.click(screen.getByRole('button', { name: /add row/i }))
+
+    expect(screen.getByLabelText('Description, row 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Description, row 2')).toBeInTheDocument()
+  })
+
+  it('removes a row via its remove control, but disables removing the last remaining row', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '2')
+    await user.click(screen.getByRole('button', { name: 'Remove row 2' }))
+
+    expect(screen.queryByLabelText('Description, row 2')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove row 1' })).toBeDisabled()
+  })
+
+  it('requires a description on every row before saving, surfaced per row', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+
+    expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Description is required')
+  })
+
+  it('saves every row sharing the picked type in a single bulk request, then closes', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '2')
+    await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
+    await user.type(screen.getByLabelText('Description, row 2'), 'Second entry')
+    await user.click(screen.getByRole('button', { name: /save 2 entries/i }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockBulkCreateMutateAsync.mock.calls[0]
+    expect(call.participantId).toBe('participant-1')
+    expect(call.data.items).toHaveLength(2)
+    expect(call.data.items[0]).toMatchObject({ type: 'Seclusion', description: 'First entry' })
+    expect(call.data.items[1]).toMatchObject({ type: 'Seclusion', description: 'Second entry' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a server row-level error against the right row without closing the modal', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockRejectedValue({
+      response: { data: { errors: ['Row 2: Description is required'] } },
+    })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '2')
+    await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
+    await user.type(screen.getByLabelText('Description, row 2'), 'Second entry')
+    await user.click(screen.getByRole('button', { name: /save 2 entries/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Description is required')
+    expect(screen.getByRole('dialog', { name: /bulk add/i })).toBeInTheDocument()
+  })
+
+  it('surfaces a whole-request server error as a banner when it is not row-prefixed', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockRejectedValue({
+      response: { data: { errors: ['Participant not found'] } },
+    })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+    await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+
+    expect(await screen.findByText('Participant not found')).toBeInTheDocument()
+  })
+
+  it('goes back to the setup step via Back', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+
+    expect(screen.getByRole('dialog', { name: /bulk add restrictive practices/i })).toBeInTheDocument()
+  })
+
+  it('leaves the single-entry New entry modal flow unaffected by the bulk-add path', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
+    expect(screen.getByRole('dialog', { name: /new restrictive practice entry/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/number of entries/i)).not.toBeInTheDocument()
   })
 })
