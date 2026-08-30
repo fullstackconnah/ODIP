@@ -210,6 +210,186 @@ public class SameTenantWritePathTests
         Assert.Contains("driver", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task VehicleAssignments_Update_DriverFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var ownDriver = SeedUserInTenant(db, tenantAId, "Own", "Driver");
+        var foreignDriver = SeedUserInTenant(db, tenantBId, "Foreign", "Driver");
+        var trip = SeedTrip(db, tenantAId);
+        var vehicle = new Vehicle { Id = Guid.NewGuid(), TenantId = tenantAId, VehicleName = "Van 1", VehicleType = VehicleType.Van, TotalSeats = 8, IsActive = true };
+        db.Vehicles.Add(vehicle);
+        db.SaveChanges();
+
+        var controller = new VehicleAssignmentsController(db);
+        var created = await controller.Create(
+            new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = vehicle.Id, DriverStaffId = ownDriver.Id },
+            CancellationToken.None);
+        var assignmentId = Assert.IsType<ApiResponse<VehicleAssignmentDto>>(
+            Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updateDto = new UpdateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = vehicle.Id, DriverStaffId = foreignDriver.Id };
+        var result = await controller.Update(assignmentId, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<VehicleAssignmentDto>>(badRequest.Value);
+        Assert.Contains("driver", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        var reloaded = await db.VehicleAssignments.SingleAsync(a => a.Id == assignmentId);
+        Assert.Equal(ownDriver.Id, reloaded.DriverUserId); // unchanged
+    }
+
+    // ── Staff availability + staff (trip) assignments: fix-round-1 finding ──
+    // These write UserId directly from the request DTO with no prior validation at all before
+    // this fix — closing spec §4.4's gap ("everywhere a user foreign key is written from a
+    // request DTO"), which §7 names these two tables as receiving.
+
+    [Fact]
+    public async Task StaffAvailability_Create_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var controller = new StaffAvailabilityController(db);
+
+        var dto = new CreateStaffAvailabilityDto
+        {
+            StaffId = foreignStaff.Id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2),
+            AvailabilityType = AvailabilityType.Unavailable,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAvailabilityDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.StaffAvailabilities.ToListAsync());
+    }
+
+    [Fact]
+    public async Task StaffAvailability_Create_InactiveStaff_ReturnsBadRequest()
+    {
+        var (db, tenantAId, _) = CreateDbWithTwoTenants();
+        var inactiveStaff = SeedUserInTenant(db, tenantAId, "Inactive", "Staff");
+        inactiveStaff.IsActive = false;
+        db.SaveChanges();
+        var controller = new StaffAvailabilityController(db);
+
+        var dto = new CreateStaffAvailabilityDto
+        {
+            StaffId = inactiveStaff.Id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2),
+            AvailabilityType = AvailabilityType.Unavailable,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAvailabilityDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StaffAvailability_Update_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var ownStaff = SeedUserInTenant(db, tenantAId, "Own", "Staff");
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var controller = new StaffAvailabilityController(db);
+
+        var created = await controller.Create(
+            new CreateStaffAvailabilityDto
+            {
+                StaffId = ownStaff.Id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2),
+                AvailabilityType = AvailabilityType.Unavailable,
+            }, CancellationToken.None);
+        var availabilityId = Assert.IsType<ApiResponse<StaffAvailabilityDto>>(
+            Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updateDto = new UpdateStaffAvailabilityDto
+        {
+            StaffId = foreignStaff.Id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2),
+            AvailabilityType = AvailabilityType.Leave,
+        };
+        var result = await controller.Update(availabilityId, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAvailabilityDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StaffAssignments_Create_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var trip = SeedTrip(db, tenantAId);
+        var controller = new StaffAssignmentsController(db);
+
+        var dto = new CreateStaffAssignmentDto
+        {
+            TripInstanceId = trip.Id, StaffId = foreignStaff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 1), AssignmentEnd = new DateOnly(2026, 9, 3),
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.StaffAssignments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task StaffAssignments_Create_InactiveStaff_ReturnsBadRequest()
+    {
+        var (db, tenantAId, _) = CreateDbWithTwoTenants();
+        var inactiveStaff = SeedUserInTenant(db, tenantAId, "Inactive", "Staff");
+        inactiveStaff.IsActive = false;
+        db.SaveChanges();
+        var trip = SeedTrip(db, tenantAId);
+        var controller = new StaffAssignmentsController(db);
+
+        var dto = new CreateStaffAssignmentDto
+        {
+            TripInstanceId = trip.Id, StaffId = inactiveStaff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 1), AssignmentEnd = new DateOnly(2026, 9, 3),
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StaffAssignments_Update_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var ownStaff = SeedUserInTenant(db, tenantAId, "Own", "Staff");
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var trip = SeedTrip(db, tenantAId);
+        var controller = new StaffAssignmentsController(db);
+
+        var created = await controller.Create(
+            new CreateStaffAssignmentDto
+            {
+                TripInstanceId = trip.Id, StaffId = ownStaff.Id,
+                AssignmentStart = new DateOnly(2026, 9, 1), AssignmentEnd = new DateOnly(2026, 9, 3),
+            }, CancellationToken.None);
+        var assignmentId = Assert.IsType<ApiResponse<StaffAssignmentDto>>(
+            Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updateDto = new UpdateStaffAssignmentDto
+        {
+            TripInstanceId = trip.Id, StaffId = foreignStaff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 1), AssignmentEnd = new DateOnly(2026, 9, 3),
+        };
+        var result = await controller.Update(assignmentId, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        var reloaded = await db.StaffAssignments.SingleAsync(a => a.Id == assignmentId);
+        Assert.Equal(ownStaff.Id, reloaded.UserId); // unchanged
+    }
+
     // ── Tasks: task owner ────────────────────────────────────────────────
 
     [Fact]

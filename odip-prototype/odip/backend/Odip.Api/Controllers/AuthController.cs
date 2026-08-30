@@ -125,6 +125,7 @@ public class AuthController : ControllerBase
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
+                Id = superAdmin.Id,
                 Token = superAdminToken,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 Username = superAdmin.Username,
@@ -162,6 +163,7 @@ public class AuthController : ControllerBase
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
+            Id = user.Id,
             Token = tenantToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(30),
             Username = user.Username,
@@ -214,6 +216,7 @@ public class AuthController : ControllerBase
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
+                Id = user.Id,
                 Token = superAdminToken,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 Username = user.Username,
@@ -239,6 +242,7 @@ public class AuthController : ControllerBase
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
+            Id = user.Id,
             Token = tenantToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(30),
             Username = user.Username,

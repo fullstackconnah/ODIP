@@ -1086,6 +1086,12 @@ public record ItineraryDayAccommodationEventDto
 
 public record AuthResponseDto
 {
+    /// <summary>
+    /// The signed-in user's own id. Post staff/user unification this is the frontend's
+    /// self-exclusion source (spec §5) — e.g. excluding yourself from a witness/picker — now
+    /// that there is no separate StaffId concept to serve that role.
+    /// </summary>
+    public Guid Id { get; init; }
     public string Token { get; init; } = string.Empty;
     public DateTime ExpiresAt { get; init; }
     public string Username { get; init; } = string.Empty;

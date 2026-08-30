@@ -133,6 +133,49 @@ public class StaffControllerGuardrailTests
         Assert.IsType<CreatedAtActionResult>(result.Result);
     }
 
+    // ── Update: Coordinator cannot promote to Admin ──────────────────────
+
+    [Fact]
+    public async Task Update_CoordinatorAttemptsToPromoteExistingSupportWorkerToAdmin_ReturnsBadRequest()
+    {
+        var (db, tenantId) = CreateDb();
+        var existing = SeedUser(db, tenantId, UserRole.SupportWorker, "Regular", "Worker");
+        var controller = MakeController(db, "Coordinator");
+
+        var dto = new UpdateStaffDto
+        {
+            FirstName = existing.FirstName, LastName = existing.LastName, Email = existing.Email,
+            Role = UserRole.Admin, Position = Position.SupportWorker, IsActive = true,
+        };
+        var result = await controller.Update(existing.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffDetailDto>>(badRequest.Value);
+        Assert.Contains("Only an Admin", body.Errors![0]);
+
+        var reloaded = await db.Users.SingleAsync(u => u.Id == existing.Id);
+        Assert.Equal(UserRole.SupportWorker, reloaded.Role); // unchanged
+    }
+
+    [Fact]
+    public async Task Update_AdminPromotesSupportWorkerToAdmin_Succeeds()
+    {
+        var (db, tenantId) = CreateDb();
+        var existing = SeedUser(db, tenantId, UserRole.SupportWorker, "Regular", "Worker");
+        var controller = MakeController(db, "Admin");
+
+        var dto = new UpdateStaffDto
+        {
+            FirstName = existing.FirstName, LastName = existing.LastName, Email = existing.Email,
+            Role = UserRole.Admin, Position = Position.SupportWorker, IsActive = true,
+        };
+        var result = await controller.Update(existing.Id, dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffDetailDto>>(ok.Value);
+        Assert.Equal(UserRole.Admin, body.Data!.Role);
+    }
+
     // ── Update: cannot edit an existing SuperAdmin account ───────────────
 
     [Fact]

@@ -531,10 +531,21 @@ public class StaffAvailabilityController : ControllerBase
     private readonly OdipDbContext _db;
     public StaffAvailabilityController(OdipDbContext db) => _db = db;
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the availability record's staff/user ref (required, not
+    /// nullable, on this DTO): must resolve to an active User — same-tenant scoping comes for
+    /// free from _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidStaffRefAsync(Guid userId, CancellationToken ct) =>
+        _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAvailabilityDto>>> Create([FromBody] CreateStaffAvailabilityDto dto, CancellationToken ct)
     {
+        if (!await IsValidStaffRefAsync(dto.StaffId, ct))
+            return BadRequest(ApiResponse<StaffAvailabilityDto>.Fail("Staff member not found."));
+
         var a = new StaffAvailability
         {
             Id = Guid.NewGuid(), UserId = dto.StaffId, StartDateTime = dto.StartDateTime,
@@ -557,6 +568,9 @@ public class StaffAvailabilityController : ControllerBase
     {
         var a = await _db.StaffAvailabilities.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAvailabilityDto>.Fail("Availability not found"));
+
+        if (!await IsValidStaffRefAsync(dto.StaffId, ct))
+            return BadRequest(ApiResponse<StaffAvailabilityDto>.Fail("Staff member not found."));
 
         a.StartDateTime = dto.StartDateTime; a.EndDateTime = dto.EndDateTime;
         a.AvailabilityType = dto.AvailabilityType; a.IsRecurring = dto.IsRecurring;
@@ -591,10 +605,21 @@ public class StaffAssignmentsController : ControllerBase
     private readonly OdipDbContext _db;
     public StaffAssignmentsController(OdipDbContext db) => _db = db;
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the trip staffing assignment's staff/user ref (required,
+    /// not nullable, on this DTO): must resolve to an active User — same-tenant scoping comes for
+    /// free from _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidStaffRefAsync(Guid userId, CancellationToken ct) =>
+        _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Create([FromBody] CreateStaffAssignmentDto dto, CancellationToken ct)
     {
+        if (!await IsValidStaffRefAsync(dto.StaffId, ct))
+            return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
+
         var assignment = new StaffAssignment
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, UserId = dto.StaffId,
@@ -642,6 +667,9 @@ public class StaffAssignmentsController : ControllerBase
     {
         var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Assignment not found"));
+
+        if (!await IsValidStaffRefAsync(dto.StaffId, ct))
+            return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
 
         a.UserId = dto.StaffId; a.AssignmentRole = dto.AssignmentRole;
         a.AssignmentStart = dto.AssignmentStart; a.AssignmentEnd = dto.AssignmentEnd;
