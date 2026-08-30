@@ -75,6 +75,20 @@ describe('MedicationFormPage frequency controls', () => {
     expect(screen.queryByRole('button', { name: 'Mon' })).not.toBeInTheDocument()
   })
 
+  it('restates the every-N-days schedule in plain language once both fields are filled', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.click(screen.getByRole('button', { name: 'Every N days' }))
+    expect(screen.queryByText(/^Due every/)).not.toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('e.g. 2'), '2')
+    const anchorInput = screen.getByLabelText(/Starting from/)
+    await user.type(anchorInput, '2026-08-30')
+
+    expect(screen.getByText(/^Due every 2 days, starting 30\/08\/2026\.$/)).toBeInTheDocument()
+  })
+
   it('hides the frequency controls entirely for PRN medications', async () => {
     const user = userEvent.setup()
     renderCreatePage()

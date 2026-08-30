@@ -151,7 +151,11 @@ function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
 
 export default function RoutinesTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteRoutines } = usePermissions()
-  const { data: routines = [], isLoading } = useParticipantRoutines(participantId)
+  // includeInactive=true: the edit form lets staff flip a routine to inactive (see the "Active"
+  // field below), so the list has to fetch inactive ones too and surface them in their own
+  // disclosure — otherwise toggling a routine off would make it vanish with no way back,
+  // unlike every sibling tab's soft-hide pattern (Notes' Archived, Medications' Ceased).
+  const { data: routines = [], isLoading } = useParticipantRoutines(participantId, true)
   const createRoutine = useCreateRoutine()
   const updateRoutine = useUpdateRoutine()
   const deleteRoutine = useDeleteRoutine()
@@ -162,8 +166,11 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   const [modalError, setModalError] = useState<string | null>(null)
   const [deletingRoutine, setDeletingRoutine] = useState<ParticipantRoutineDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
 
-  const groups = useMemo(() => groupRoutines(routines), [routines])
+  const activeRoutines = useMemo(() => routines.filter(r => r.isActive), [routines])
+  const inactiveRoutines = useMemo(() => routines.filter(r => !r.isActive), [routines])
+  const groups = useMemo(() => groupRoutines(activeRoutines), [activeRoutines])
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -286,8 +293,8 @@ export default function RoutinesTab({ participantId }: { participantId: string |
         <div className="space-y-5">
           {groups.map(group => (
             <div key={group.label}>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
-                <ChevronDown className="w-4 h-4" /> {group.label}
+              <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
+                {group.label}
               </h3>
               <div className="space-y-3">
                 {group.items.map(r => (
@@ -296,6 +303,32 @@ export default function RoutinesTab({ participantId }: { participantId: string |
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/*
+        ChevronDown is reserved for interactive disclosures like this one — it's kept off the
+        day-group headings above so a static icon never implies a toggle that isn't there,
+        matching how Notes' Archived section and Medications' Ceased section use it.
+      */}
+      {inactiveRoutines.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowInactive(v => !v)}
+            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
+            aria-expanded={showInactive}
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
+            Inactive routines ({inactiveRoutines.length})
+          </button>
+          {showInactive && (
+            <div className="space-y-3 mt-3">
+              {inactiveRoutines.map(r => (
+                <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

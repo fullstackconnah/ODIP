@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
 import type { PortalShiftDetailDto } from '@/api/types'
@@ -146,5 +146,21 @@ describe('PortalShiftDetailPage', () => {
 
     expect(screen.getByText(/couldn't be found/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+  })
+
+  it('offers a retry action on the error state, for a failed request as much as a real 404', () => {
+    const refetch = vi.fn()
+    mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderAt('shift-1')
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces a loading state rather than a silent gap', () => {
+    mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderAt('shift-1')
+
+    expect(screen.getByRole('status')).toHaveTextContent(/loading shift/i)
   })
 })

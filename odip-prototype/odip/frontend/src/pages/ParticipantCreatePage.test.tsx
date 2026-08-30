@@ -185,8 +185,13 @@ describe('ParticipantCreatePage Review step', () => {
     // No form controls remain — Review is read-only. NDIS Number is one of the fields typed.
     expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
 
+    // Each group's Edit button carries a distinct accessible name (aria-label) even though
+    // they all show the same "Edit" visible text — five identical "Edit" accessible names
+    // would be indistinguishable to screen reader users navigating by role.
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(5)
+
     // Review groups render in step order: Identity(0), NDIS(1), Support(2), Medical(3), Risks(4).
-    await user.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+    await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
     expect(screen.getByLabelText('NDIS Number')).toHaveValue('431234567')
