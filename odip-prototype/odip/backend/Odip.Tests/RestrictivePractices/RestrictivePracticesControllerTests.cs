@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -593,6 +594,47 @@ public class RestrictivePracticesControllerTests
         var result = await controller.CreateBulk(Guid.NewGuid(), dto, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateBulk_MoreThan50Rows_ReturnsBadRequestAndPersistsNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = Enumerable.Range(1, 51).Select(i => BulkRow(description: $"Row {i}")).ToList(),
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
+        Assert.False(body.Success);
+        Assert.Contains(body.Errors!, e => e.Contains("maximum of 50 rows", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_Exactly50Rows_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = Enumerable.Range(1, 50).Select(i => BulkRow(description: $"Row {i}")).ToList(),
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(50, body.Data!.Count);
+        Assert.Equal(50, await db.RestrictivePractices.CountAsync());
     }
 
     [Fact]

@@ -102,7 +102,12 @@ Column shape (`Column<T>`):
   rendered `<input>`s, which is sufficient for this shape's row-by-row entry pattern. Pair
   with `rowError` to show a per-row validation message (e.g. "Description is required")
   directly under a row that failed to save, and give every `editable.render` control a
-  `min-h-[44px]` touch target like any other input.
+  `min-h-[44px]` touch target like any other input. `editable.render`'s third argument,
+  `ctx.errorId`, is that row's error `<p>`'s id (only defined while the row actually has one
+  rendered) — wire it onto the rendered control as `aria-describedby={ctx.errorId}` +
+  `aria-invalid={ctx.errorId ? 'true' : undefined}` so the association reaches assistive tech,
+  not just sighted users reading the text under the row. See RestrictivePracticesTab's bulk-add
+  columns for the pattern applied to all four cell inputs of a row that failed to save.
 - **Selectable**: header checkbox is `indeterminate` when some-but-not-all visible rows
   are selected.
 
@@ -114,6 +119,10 @@ Column shape (`Column<T>`):
   `focus-visible` ring and Enter/Space activation.
 - Select-all and per-row checkboxes carry `aria-label`s (`"Select all rows"` /
   `"Select row {id}"`).
+- A row's error message (`rowError`, either editable mode) renders at a stable id
+  (`${rowKey}-row-error`) with `role="alert"`; that id is only ever handed to `editable.render`
+  (as `ctx.errorId`) for the row it belongs to, and only while the error `<p>` is actually
+  rendered — never a dangling `aria-describedby` reference to an id nothing renders.
 
 **When to use**: any tabular list of records. **When not to**: a small, fixed 2-3 row
 summary — reach for `Card`/`StatCard` instead.

@@ -372,11 +372,13 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       key: 'description',
       header: 'Description',
       editable: {
-        render: (row, onChange) => {
+        render: (row, onChange, ctx) => {
           const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
           return (
             <input
               aria-label={`Description, row ${rowNumber}`}
+              aria-invalid={ctx.errorId ? 'true' : undefined}
+              aria-describedby={ctx.errorId}
               value={row.description}
               onChange={e => onChange(e.target.value)}
               placeholder="What the restrictive practice involves..."
@@ -390,11 +392,13 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       key: 'authorisedBy',
       header: 'Authorised by',
       editable: {
-        render: (row, onChange) => {
+        render: (row, onChange, ctx) => {
           const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
           return (
             <input
               aria-label={`Authorised by, row ${rowNumber}`}
+              aria-invalid={ctx.errorId ? 'true' : undefined}
+              aria-describedby={ctx.errorId}
               value={row.authorisedBy}
               onChange={e => onChange(e.target.value)}
               placeholder="e.g. Dr. Chen"
@@ -408,12 +412,14 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       key: 'authorisationDate',
       header: 'Authorisation date',
       editable: {
-        render: (row, onChange) => {
+        render: (row, onChange, ctx) => {
           const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
           return (
             <input
               type="date"
               aria-label={`Authorisation date, row ${rowNumber}`}
+              aria-invalid={ctx.errorId ? 'true' : undefined}
+              aria-describedby={ctx.errorId}
               value={row.authorisationDate}
               onChange={e => onChange(e.target.value)}
               className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
@@ -426,12 +432,14 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       key: 'reviewDate',
       header: 'Review date',
       editable: {
-        render: (row, onChange) => {
+        render: (row, onChange, ctx) => {
           const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
           return (
             <input
               type="date"
               aria-label={`Review date, row ${rowNumber}`}
+              aria-invalid={ctx.errorId ? 'true' : undefined}
+              aria-describedby={ctx.errorId}
               value={row.reviewDate}
               onChange={e => onChange(e.target.value)}
               className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"

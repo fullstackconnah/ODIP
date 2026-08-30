@@ -15,7 +15,15 @@ type ColumnBase<T> = {
   align?: 'left' | 'center' | 'right'
   hidden?: boolean
   editable?: {
-    render: (row: T, onChange: (value: unknown) => void) => ReactNode
+    /**
+     * `ctx.errorId` is the id of the row's error message element (see `rowError` on
+     * `DataTableProps`) — defined only when that row currently has an error to show, `undefined`
+     * otherwise, so a caller never wires `aria-describedby` to an id that isn't actually
+     * rendered. Wire it (and `aria-invalid`) onto the rendered control for a screen-reader user
+     * to get the same "this field failed validation" signal a sighted user gets from the error
+     * text appearing under the row.
+     */
+    render: (row: T, onChange: (value: unknown) => void, ctx: { errorId?: string }) => ReactNode
   }
   bulkEditable?: {
     items: DropdownItem[]
@@ -61,7 +69,10 @@ export type DataTableProps<T> = {
   /**
    * Per-row validation error shown as its own row directly beneath a row currently in edit mode
    * (`editingRow` or `editingRows`) — return `undefined`/`''` for a row with nothing to show.
-   * Rendered with `role="alert"` so a save-attempt's validation failures are announced.
+   * Rendered with `role="alert"` (so a save-attempt's validation failures are announced) at a
+   * stable, deterministic id (`${rowKey}-row-error`) that's handed to that row's `editable.render`
+   * calls as `ctx.errorId` — wire it onto the failed row's inputs via `aria-describedby` (and set
+   * `aria-invalid`) so the association reaches assistive tech, not just sighted users.
    */
   rowError?: (row: T) => string | undefined
   className?: string
@@ -300,6 +311,9 @@ export function DataTable<T>({
             const extraClass = rowClassName?.(row) ?? ''
             const isClickable = onRowClick && !loading
             const errorMessage = isEditing ? rowError?.(row) : undefined
+            // Stable per-row id, only handed to editable.render (as ctx.errorId) when there's
+            // actually an error <p> rendered at it — never a dangling aria-describedby reference.
+            const rowErrorId = errorMessage ? `${rowKey}-row-error` : undefined
 
             return (
               <Fragment key={rowKey}>
@@ -338,7 +352,7 @@ export function DataTable<T>({
                     if (isEditing && col.editable) {
                       return (
                         <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
-                          {col.editable.render(row, (value) => onEditChange?.(row, col.key, value))}
+                          {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
@@ -353,7 +367,7 @@ export function DataTable<T>({
                 {errorMessage && (
                   <tr className={dividerClass}>
                     <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} pt-0`}>
-                      <p role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
+                      <p id={rowErrorId} role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
                     </td>
                   </tr>
                 )}

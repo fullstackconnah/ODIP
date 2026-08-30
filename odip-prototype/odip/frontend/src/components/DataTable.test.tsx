@@ -223,6 +223,64 @@ describe('DataTable — editingRows (RP-01 all-rows-editable mode)', () => {
 
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
+
+  // editable.render's third argument (ctx.errorId) is how a caller associates its cell inputs
+  // with the row's error message for assistive tech — these pin that the id DataTable hands
+  // back actually resolves to the rendered role="alert" element (not a dangling reference).
+  const columnsWithAriaWiring: Column<Row>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      editable: {
+        render: (row, onChange, ctx) => (
+          <input
+            aria-label={`edit-name-${row.id}`}
+            defaultValue={row.name}
+            onChange={e => onChange(e.target.value)}
+            aria-invalid={ctx.errorId ? 'true' : undefined}
+            aria-describedby={ctx.errorId}
+          />
+        ),
+      },
+    },
+  ]
+
+  it('hands editable.render a stable errorId that resolves to the rendered error element, with aria-invalid set', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columnsWithAriaWiring}
+        keyField="id"
+        editingRows={new Set(['1'])}
+        onEditChange={vi.fn()}
+        rowError={row => (row.id === '1' ? 'Description is required' : undefined)}
+      />
+    )
+
+    const input = screen.getByLabelText('edit-name-1')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    const describedById = input.getAttribute('aria-describedby')
+    expect(describedById).toBeTruthy()
+    expect(document.getElementById(describedById!)).toHaveTextContent('Description is required')
+    expect(document.getElementById(describedById!)).toHaveAttribute('role', 'alert')
+  })
+
+  it('passes an undefined errorId (no aria-invalid/aria-describedby) for a row with no error', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columnsWithAriaWiring}
+        keyField="id"
+        editingRows={new Set(['1', '2'])}
+        onEditChange={vi.fn()}
+        rowError={row => (row.id === '1' ? 'Description is required' : undefined)}
+      />
+    )
+
+    const cleanInput = screen.getByLabelText('edit-name-2')
+    expect(cleanInput).not.toHaveAttribute('aria-invalid')
+    expect(cleanInput).not.toHaveAttribute('aria-describedby')
+  })
 })
 
 describe('DataTable — verticalDividers (DS-02)', () => {

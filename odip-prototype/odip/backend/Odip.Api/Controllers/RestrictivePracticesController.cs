@@ -118,6 +118,13 @@ public class RestrictivePracticesController : ControllerBase
         if (dto.Items.Count == 0)
             return BadRequest(ApiResponse<List<RestrictivePracticeDto>>.Fail("At least one row is required"));
 
+        // The frontend caps the row-count input at 50, but that's a UI courtesy, not a security
+        // boundary — anything hitting this endpoint directly (curl, a script, a future consumer)
+        // must be stopped here too, before an unbounded payload can bulk-insert into a
+        // compliance-relevant register in a single SaveChangesAsync.
+        if (dto.Items.Count > 50)
+            return BadRequest(ApiResponse<List<RestrictivePracticeDto>>.Fail("A maximum of 50 rows can be added at once."));
+
         var errors = new List<string>();
         for (var i = 0; i < dto.Items.Count; i++)
         {
