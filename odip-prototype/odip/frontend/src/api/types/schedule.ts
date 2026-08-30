@@ -1,4 +1,4 @@
-import type { TripStatus, StaffRole, VehicleType, AssignmentStatus, VehicleAssignmentStatus } from './enums'
+import type { TripStatus, Position, VehicleType, AssignmentStatus, VehicleAssignmentStatus } from './enums'
 import type { StaffAvailabilityDto } from './staff'
 
 export interface ScheduleOverviewDto {
@@ -37,7 +37,7 @@ export interface ScheduleStaffDto {
   firstName: string
   lastName: string
   fullName: string
-  role: StaffRole
+  role: Position
   region: string | null
   isDriverEligible: boolean
   isFirstAidQualified: boolean

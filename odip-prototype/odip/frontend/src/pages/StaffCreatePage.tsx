@@ -9,12 +9,14 @@ import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { usePermissions } from '@/lib/permissions'
 
 const staffSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  role: z.string().min(1, 'Role is required'),
-  email: z.string().optional(),
+  position: z.string().min(1, 'Position is required'),
+  role: z.string().min(1, 'Account role is required'),
+  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   mobile: z.string().optional(),
   region: z.string().optional(),
   isDriverEligible: z.boolean().optional(),
@@ -41,10 +43,23 @@ export default function StaffCreatePage() {
   const updateStaff = useUpdateStaff()
   const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
+  const { isCoordinator } = usePermissions()
+
+  // The account-role dropdown always hides SuperAdmin (never grantable from this form), and
+  // additionally hides Admin when the person filling out the form is a Coordinator — a
+  // Coordinator cannot promote anyone to Admin (enforced server-side too; see
+  // StaffController's role guardrails).
+  const ROLE_OPTIONS = [
+    { value: 'SupportWorker', label: 'Support Worker' },
+    { value: 'Coordinator', label: 'Coordinator' },
+    { value: 'ReadOnly', label: 'Read Only' },
+    ...(isCoordinator ? [] : [{ value: 'Admin', label: 'Admin' }]),
+  ]
 
   const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
     resolver: zodResolver(staffSchema),
     defaultValues: {
+      position: 'SupportWorker',
       role: 'SupportWorker',
       isDriverEligible: false,
       isFirstAidQualified: false,
@@ -59,6 +74,7 @@ export default function StaffCreatePage() {
       reset({
         firstName: existing.firstName ?? '',
         lastName: existing.lastName ?? '',
+        position: existing.position ?? 'SupportWorker',
         role: existing.role ?? 'SupportWorker',
         email: existing.email ?? '',
         mobile: existing.mobile ?? '',
@@ -134,8 +150,8 @@ export default function StaffCreatePage() {
             <input {...register('lastName')} placeholder="e.g. Mitchell" />
           </FormField>
 
-          <FormField label="Role" required>
-            <select {...register('role')}>
+          <FormField label="Position" required error={errors.position?.message}>
+            <select {...register('position')}>
               <option value="SupportWorker">Support Worker</option>
               <option value="SeniorSupportWorker">Senior Support Worker</option>
               <option value="Coordinator">Coordinator</option>
@@ -149,12 +165,29 @@ export default function StaffCreatePage() {
           </FormField>
         </Card>
 
-        {/* Contact */}
-        <Card title="Contact" className="space-y-4">
-          <FormField label="Email">
+        {/* Account */}
+        <Card title="Account" className="space-y-4">
+          {isEdit && existing?.username && (
+            <FormField label="Username" hint="Generated automatically from the staff member's name and cannot be changed here.">
+              <input value={existing.username} disabled readOnly />
+            </FormField>
+          )}
+
+          <FormField label="Email" required error={errors.email?.message} hint={!errors.email ? 'Used to sign in to the app.' : undefined}>
             <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
           </FormField>
 
+          <FormField label="Account Role" required error={errors.role?.message} hint={!errors.role ? 'Controls what this person can access and edit in the app.' : undefined}>
+            <select {...register('role')}>
+              {ROLE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </FormField>
+        </Card>
+
+        {/* Contact */}
+        <Card title="Contact" className="space-y-4">
           <FormField label="Mobile">
             <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
           </FormField>

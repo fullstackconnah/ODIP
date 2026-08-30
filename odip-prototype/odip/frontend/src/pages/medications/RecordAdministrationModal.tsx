@@ -74,12 +74,13 @@ export function RecordAdministrationModal({
   const amendAdministration = useAmendAdministration()
   const isPending = isAmend ? amendAdministration.isPending : recordAdministration.isPending
   const { data: staffList } = useStaff()
-  const { staffId: currentStaffId } = usePermissions()
+  const { id: currentUserId } = usePermissions()
   // Excludes the signed-in user from the witness picker outright — a staff member can't witness
   // their own administration (enforced server-side too; see MedicationsController.RecordAdministration).
-  // When the account has no linked StaffId (currentStaffId is null), this filter is a no-op and
-  // behaviour is unchanged from before this exclusion existed.
-  const activeStaff = (staffList ?? []).filter(s => s.isActive && s.id !== currentStaffId)
+  // When the account has no resolvable id (currentUserId is null — e.g. a stale odip_user blob
+  // from before this field existed), this filter is a no-op and behaviour degrades gracefully
+  // rather than crashing; the server still enforces the exclusion regardless.
+  const activeStaff = (staffList ?? []).filter(s => s.isActive && s.id !== currentUserId)
 
   const [status, setStatus] = useState<MedicationAdministrationStatus>(existingAdministration?.status ?? 'Administered')
   const [doseGiven, setDoseGiven] = useState(existingAdministration?.doseGiven ?? doseDescription ?? '')
@@ -138,7 +139,7 @@ export function RecordAdministrationModal({
       // Belt-and-suspenders: the picker already excludes the signed-in user (see activeStaff
       // above), but catch it here too rather than letting a self-selection reach the backend's
       // 400 (MedicationsController.RecordAdministration) as the first sign anything's wrong.
-      else if (!isAmend && currentStaffId && witnessStaffId === currentStaffId) {
+      else if (!isAmend && currentUserId && witnessStaffId === currentUserId) {
         errs.witnessStaffId = "You can't witness your own administration"
       }
     }

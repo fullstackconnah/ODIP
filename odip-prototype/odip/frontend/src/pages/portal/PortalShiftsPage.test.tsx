@@ -22,17 +22,8 @@ function renderPage() {
   )
 }
 
-const NOT_LINKED: PortalShiftsResponseDto = {
-  isLinked: false,
-  staffId: null,
-  shifts: [],
-  tripAssignments: [],
-}
-
 function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): PortalShiftsResponseDto {
   return {
-    isLinked: true,
-    staffId: 'staff-1',
     shifts: [
       {
         id: 'shift-1',
@@ -66,14 +57,6 @@ describe('PortalShiftsPage', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent(/loading your shifts/i)
     expect(screen.queryByText(/nothing rostered this week/i)).not.toBeInTheDocument()
-  })
-
-  it('shows guidance when the account is not linked to a staff record', () => {
-    mockUseMyShifts.mockReturnValue({ data: NOT_LINKED, isLoading: false })
-    renderPage()
-
-    expect(screen.getByText(/isn't linked to a staff record/i)).toBeInTheDocument()
-    expect(screen.queryByText('Mia Chen')).not.toBeInTheDocument()
   })
 
   it('renders the caller\'s own shifts, grouped by day, as links to the shift detail route', () => {

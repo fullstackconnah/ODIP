@@ -4,7 +4,6 @@ import {
   useAdminTenantsSummary,
   useCreateAdminUser,
   useUpdateAdminUser,
-  useStaff,
 } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
@@ -48,10 +47,8 @@ export default function UserFormPanel({
   // trigger hear nothing. aria-labelledby wires each label to its dropdown explicitly.
   const tenantLabelId = useId()
   const roleLabelId = useId()
-  const staffLabelId = useId()
 
   const { data: tenants = [] } = useAdminTenantsSummary()
-  const { data: staffList = [] } = useStaff()
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
 
@@ -61,7 +58,6 @@ export default function UserFormPanel({
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [role, setRole] = useState('')
-  const [staffId, setStaffId] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -78,7 +74,6 @@ export default function UserFormPanel({
       setEmail(user.email)
       setUsername(user.username)
       setRole(user.role)
-      setStaffId(user.staffId ?? '')
       setIsActive(user.isActive)
       setPassword('')
     } else {
@@ -88,7 +83,6 @@ export default function UserFormPanel({
       setEmail('')
       setUsername('')
       setRole('')
-      setStaffId('')
       setIsActive(true)
       setPassword('')
     }
@@ -117,7 +111,6 @@ export default function UserFormPanel({
             email: email.trim(),
             username: username.trim(),
             role,
-            staffId: staffId || null,
             isActive,
           },
         })
@@ -129,7 +122,6 @@ export default function UserFormPanel({
           email: email.trim(),
           username: username.trim(),
           role,
-          staffId: staffId || null,
           password: password || undefined,
         })
       }
@@ -259,25 +251,6 @@ export default function UserFormPanel({
               aria-labelledby={roleLabelId}
               aria-required="true"
             />
-          </div>
-
-          {/* Linked staff record — drives the "My Shifts" portal (User.StaffId) */}
-          <div>
-            <label id={staffLabelId} className={labelClass}>Linked Staff Record</label>
-            <Dropdown
-              variant="form"
-              value={staffId}
-              onChange={setStaffId}
-              items={[
-                { value: '', label: 'None' },
-                ...staffList.map(s => ({ value: s.id, label: s.fullName })),
-              ]}
-              label="None"
-              aria-labelledby={staffLabelId}
-            />
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-              Links this login to a staff member so they see their rostered shifts in the My Shifts portal.
-            </p>
           </div>
 
           {/* Password — create mode only */}

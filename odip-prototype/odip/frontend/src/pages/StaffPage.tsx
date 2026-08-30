@@ -42,7 +42,7 @@ export default function StaffPage() {
 
   const staffColumns: Column<any>[] = [
     { key: 'fullName', header: 'Name', sortable: true, className: 'font-medium' },
-    { key: 'role', header: 'Role', sortable: true },
+    { key: 'position', header: 'Position', sortable: true },
     { key: 'region', header: 'Region', sortable: true },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
     { key: 'isFirstAidQualified', header: 'First Aid', type: 'boolean', align: 'center' },
@@ -70,7 +70,7 @@ export default function StaffPage() {
           <Dropdown
             variant="pill"
             value={current}
-            onChange={val => updateStaff.mutate({ id: s.id, data: { ...s, isActive: val === 'Active' } })}
+            onChange={val => updateStaff.mutate({ id: s.id, data: { ...s, email: s.email ?? '', isActive: val === 'Active' } })}
             colorClass={ACTIVE_STATUS_COLORS[current]}
             items={ACTIVE_STATUS_ITEMS}
             disabled={!canWrite}
