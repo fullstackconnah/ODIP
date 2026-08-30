@@ -4,6 +4,7 @@ import {
   useAdminTenantsSummary,
   useCreateAdminUser,
   useUpdateAdminUser,
+  useStaff,
 } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
@@ -43,6 +44,7 @@ export default function UserFormPanel({
   const isEdit = !!user
 
   const { data: tenants = [] } = useAdminTenantsSummary()
+  const { data: staffList = [] } = useStaff()
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
 
@@ -52,6 +54,7 @@ export default function UserFormPanel({
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [role, setRole] = useState('')
+  const [staffId, setStaffId] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +71,7 @@ export default function UserFormPanel({
       setEmail(user.email)
       setUsername(user.username)
       setRole(user.role)
+      setStaffId(user.staffId ?? '')
       setIsActive(user.isActive)
       setPassword('')
     } else {
@@ -77,6 +81,7 @@ export default function UserFormPanel({
       setEmail('')
       setUsername('')
       setRole('')
+      setStaffId('')
       setIsActive(true)
       setPassword('')
     }
@@ -105,6 +110,7 @@ export default function UserFormPanel({
             email: email.trim(),
             username: username.trim(),
             role,
+            staffId: staffId || null,
             isActive,
           },
         })
@@ -116,6 +122,7 @@ export default function UserFormPanel({
           email: email.trim(),
           username: username.trim(),
           role,
+          staffId: staffId || null,
           password: password || undefined,
         })
       }
@@ -241,6 +248,24 @@ export default function UserFormPanel({
               items={ROLE_OPTIONS}
               label="Select role"
             />
+          </div>
+
+          {/* Linked staff record — drives the "My Shifts" portal (User.StaffId) */}
+          <div>
+            <label className={labelClass}>Linked Staff Record</label>
+            <Dropdown
+              variant="form"
+              value={staffId}
+              onChange={setStaffId}
+              items={[
+                { value: '', label: 'None' },
+                ...staffList.map(s => ({ value: s.id, label: s.fullName })),
+              ]}
+              label="None"
+            />
+            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+              Links this login to a staff member so they see their rostered shifts in the My Shifts portal.
+            </p>
           </div>
 
           {/* Password — create mode only */}

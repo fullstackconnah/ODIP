@@ -2,6 +2,7 @@ export type UserRole = 'SuperAdmin' | 'Admin' | 'Coordinator' | 'SupportWorker' 
 
 export type PageKey =
   | 'dashboard'
+  | 'portal'
   | 'trips'
   | 'schedule'
   | 'participants'
@@ -20,6 +21,7 @@ export type PageKey =
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
+  'portal',
   'trips',
   'schedule',
   'participants',

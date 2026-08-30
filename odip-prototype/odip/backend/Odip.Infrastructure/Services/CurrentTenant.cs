@@ -37,9 +37,22 @@ public sealed class CurrentTenant : ICurrentTenant
         }
 
         // User-level view-as: only a SuperAdmin who has scoped to a tenant may set this.
-        // Note: ViewAsUserId is accepted without validating that the user belongs to the selected
-        // tenant. This is safe while ViewAsUserId has no backend consumers; add validation
-        // (e.g. a DB lookup) before using it in query filters or audit logs.
+        // Note: ViewAsUserId is accepted here without validating that the user belongs to the
+        // selected tenant. Its first real consumer is
+        // Odip.Api.Controllers.PortalController.ResolveCurrentStaffIdAsync, which prefers
+        // ViewAsUserId over the caller's own JWT subject to resolve the viewed user's linked
+        // Staff record. That's safe as-is because of the ordering above: ViewAsUserId is only
+        // ever populated when `wasSuperAdmin && TenantId.HasValue` — i.e. only AFTER
+        // X-View-As-Tenant has already forced IsSuperAdmin=false and overridden TenantId to the
+        // selected tenant. PortalController looks the viewed user up via `_db.Users`, and
+        // User's tenant query filter (`IsSuperAdmin || TenantId == _tenant.TenantId`) still
+        // applies at that point — IsSuperAdmin is false and TenantId is the override — so an
+        // out-of-tenant ViewAsUserId simply resolves to no row (null StaffId / not-linked),
+        // never a cross-tenant read. This does NOT generalise: any future consumer that reads
+        // ViewAsUserId directly against a query that bypasses the Users tenant filter (a raw
+        // SQL query, `IgnoreQueryFilters()`, or a non-ITenantEntity table keyed by user id)
+        // would need its own validation that the viewed user actually belongs to TenantId
+        // before trusting this value.
         if (wasSuperAdmin && TenantId.HasValue)
         {
             var userHeader = accessor.HttpContext?.Request.Headers["X-View-As-User"].FirstOrDefault();
