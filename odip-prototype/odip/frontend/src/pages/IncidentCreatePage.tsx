@@ -1,8 +1,7 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
@@ -10,11 +9,19 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
+import { SERVICE_STREAMS } from '@/api/types/enums'
+import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
+// INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
+// selecting "Trip" is what reveals the trip-select dropdown below.
+const INCIDENT_SERVICE_TYPES = ['None', ...SERVICE_STREAMS] as const
+
 const incidentSchema = z.object({
-  tripInstanceId: z.string().min(1, 'Trip is required'),
+  serviceType: z.string().optional(),
+  tripInstanceId: z.string().optional(),
   incidentType: z.string().min(1, 'Incident type is required'),
+  otherTypeSpecify: z.string().optional(),
   severity: z.string().min(1, 'Severity is required'),
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
@@ -41,9 +48,31 @@ const incidentSchema = z.object({
   familyNotifiedAt: z.string().optional(),
   supportCoordinatorNotified: z.boolean().optional(),
   supportCoordinatorNotifiedAt: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.serviceType === 'Trip' && !data.tripInstanceId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tripInstanceId'], message: 'A trip must be selected when the service type is Trip.' })
+  }
+  if (data.incidentType === 'Other' && !data.otherTypeSpecify?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['otherTypeSpecify'], message: 'Please specify the incident type.' })
+  }
 })
 
 type IncidentFormData = z.infer<typeof incidentSchema>
+
+// @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in favour
+// of .issues), so it throws past react-hook-form instead of populating formState.errors on
+// validation failure. Resolve directly against zod's safeParse/.issues API instead of routing
+// through that resolver (same workaround as ParticipantCreatePage's participantResolver).
+const incidentResolver: Resolver<IncidentFormData> = (values) => {
+  const result = incidentSchema.safeParse(values)
+  if (result.success) return { values: result.data, errors: {} }
+  const errors: FieldErrors<IncidentFormData> = {}
+  for (const issue of result.error.issues) {
+    const field = String(issue.path[0]) as keyof IncidentFormData
+    if (!errors[field]) errors[field] = { type: issue.code, message: issue.message }
+  }
+  return { values: {}, errors }
+}
 
 export default function IncidentCreatePage() {
   const navigate = useNavigate()
@@ -58,8 +87,9 @@ export default function IncidentCreatePage() {
   const { data: existingIncident } = useIncident(id)
 
   const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<IncidentFormData>({
-    resolver: zodResolver(incidentSchema),
+    resolver: incidentResolver,
     defaultValues: {
+      serviceType: 'None',
       severity: 'Medium',
       incidentType: 'Other',
       status: 'Draft',
@@ -70,6 +100,8 @@ export default function IncidentCreatePage() {
     },
   })
 
+  const serviceType = useWatch({ control, name: 'serviceType' })
+  const incidentType = useWatch({ control, name: 'incidentType' })
   const wereEmergencyCalled = useWatch({ control, name: 'wereEmergencyServicesCalled' })
   const familyNotified = useWatch({ control, name: 'familyNotified' })
   const supportCoordinatorNotified = useWatch({ control, name: 'supportCoordinatorNotified' })
@@ -78,8 +110,10 @@ export default function IncidentCreatePage() {
     if (isEdit && existingIncident) {
       const i = existingIncident
       reset({
+        serviceType: i.serviceType ?? 'None',
         tripInstanceId: i.tripInstanceId ?? '',
         incidentType: i.incidentType ?? 'Other',
+        otherTypeSpecify: i.otherTypeSpecify ?? '',
         severity: i.severity ?? 'Medium',
         title: i.title ?? '',
         description: i.description ?? '',
@@ -111,9 +145,11 @@ export default function IncidentCreatePage() {
 
   const onSubmit = async (data: IncidentFormData) => {
     const base: CreateIncidentDto = {
-      tripInstanceId: data.tripInstanceId,
+      serviceType: (data.serviceType || 'None') as CreateIncidentDto['serviceType'],
+      tripInstanceId: data.serviceType === 'Trip' ? data.tripInstanceId || undefined : undefined,
       reportedByStaffId: data.reportedByStaffId,
       incidentType: data.incidentType as IncidentType,
+      otherTypeSpecify: data.incidentType === 'Other' ? data.otherTypeSpecify || undefined : undefined,
       severity: data.severity as IncidentSeverity,
       title: data.title,
       description: data.description,
@@ -187,14 +223,24 @@ export default function IncidentCreatePage() {
             <input {...register('title')} placeholder="Brief incident summary" autoFocus />
           </FormField>
 
-          <FormField label="Trip" required error={errors.tripInstanceId?.message}>
-            <select {...register('tripInstanceId')}>
-              <option value="">Select a trip...</option>
-              {trips.map((t: TripListDto) => (
-                <option key={t.id} value={t.id}>{t.tripName}</option>
+          <FormField label="Service Type" required>
+            <select {...register('serviceType')}>
+              {INCIDENT_SERVICE_TYPES.map((s) => (
+                <option key={s} value={s}>{s === 'None' ? 'None / not applicable' : SERVICE_STREAM_LABELS[s]}</option>
               ))}
             </select>
           </FormField>
+
+          {serviceType === 'Trip' && (
+            <FormField label="Trip" required error={errors.tripInstanceId?.message}>
+              <select {...register('tripInstanceId')}>
+                <option value="">Select a trip...</option>
+                {trips.map((t: TripListDto) => (
+                  <option key={t.id} value={t.id}>{t.tripName}</option>
+                ))}
+              </select>
+            </FormField>
+          )}
 
           <FormField label="Incident Type" required>
             <select {...register('incidentType')}>
@@ -211,6 +257,12 @@ export default function IncidentCreatePage() {
               <option value="Other">Other</option>
             </select>
           </FormField>
+
+          {incidentType === 'Other' && (
+            <FormField label="Specify Incident Type" required error={errors.otherTypeSpecify?.message}>
+              <input {...register('otherTypeSpecify')} placeholder="Describe the incident type" />
+            </FormField>
+          )}
 
           <FormField label="Severity" required>
             <select {...register('severity')}>
