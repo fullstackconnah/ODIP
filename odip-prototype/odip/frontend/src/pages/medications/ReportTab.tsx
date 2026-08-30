@@ -37,6 +37,8 @@ export default function ReportTab() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
+  const rangeInvalid = Boolean(from && to && from > to)
+
   const { data: participants = [] } = useParticipants()
   const { data: report, isLoading } = useAdministrationsReport({
     participantId: participantId || undefined,
@@ -102,16 +104,24 @@ export default function ReportTab() {
         <div>
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-to">To</label>
           <input id="report-to" type="date" value={to} onChange={e => setTo(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+            aria-invalid={rangeInvalid || undefined}
+            aria-describedby={rangeInvalid ? 'report-range-error' : undefined}
+            className={`px-3 py-2 rounded-lg bg-[var(--color-input)] border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] ${rangeInvalid ? 'border-[var(--color-destructive)]' : 'border-[var(--color-border)]'}`} />
         </div>
-        {report && (
+        {report && !rangeInvalid && (
           <span className="text-sm text-[var(--color-muted-foreground)] ml-auto">
             {report.totalCount} administration{report.totalCount === 1 ? '' : 's'}
           </span>
         )}
       </div>
 
-      {!isLoading && items.length === 0 ? (
+      {rangeInvalid && (
+        <p id="report-range-error" role="alert" className="text-sm text-[var(--color-destructive)]">
+          The "From" date must be on or before the "To" date.
+        </p>
+      )}
+
+      {rangeInvalid ? null : !isLoading && items.length === 0 ? (
         <EmptyState
           icon={FileClock}
           title="No administrations found"

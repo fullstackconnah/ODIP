@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
   const { data: allStaff = [] } = useStaff({ isActive: 'true' })
-  const { data: alertsAggregate = [] } = useParticipantAlertsAggregate(canViewAlerts)
+  const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
 
   if (isLoading) {
     return (
@@ -188,9 +188,18 @@ export default function DashboardPage() {
               Critical Participant Alerts
             </p>
             <p className={`text-3xl font-display font-bold ${criticalAlertItems.length > 0 ? 'text-[var(--color-destructive)]' : 'text-[var(--color-primary)]'}`}>
-              {criticalAlertItems.length > 0 ? criticalAlertItems.length : <span className="material-symbols-outlined text-3xl leading-none">check_circle</span>}
+              {alertsLoading ? (
+                <span className="inline-block h-7 w-7 rounded-full bg-[var(--color-muted)] animate-pulse" />
+              ) : criticalAlertItems.length > 0 ? (
+                criticalAlertItems.length
+              ) : (
+                <span className="material-symbols-outlined text-3xl leading-none" aria-hidden="true">check_circle</span>
+              )}
             </p>
-            {criticalAlertItems.length === 0 && (
+            {/* Don't claim "All clear" while the alerts request is still in flight — a false
+                negative here is worse than a brief blank line, since coordinators rely on this
+                tile to know whether any participant needs urgent attention. */}
+            {!alertsLoading && criticalAlertItems.length === 0 && (
               <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All clear</p>
             )}
           </Link>

@@ -37,4 +37,24 @@ describe('ParticipantAlertsBanner', () => {
 
     expect(onSelectTab).toHaveBeenCalledWith('details')
   })
+
+  it('collapses a participant with many alerts behind a "+N more" toggle, so the header does not explode', async () => {
+    const user = userEvent.setup()
+    const manyAlerts: ParticipantAlertDto[] = Array.from({ length: 6 }, (_, i) => ({
+      type: `alert-${i}`, severity: 'Warning', message: `Alert message ${i}`, deepLinkTab: 'details',
+    }))
+    render(<ParticipantAlertsBanner alerts={manyAlerts} />)
+
+    // Only the top 3 alert rows are shown up front, plus the "+3 more" toggle.
+    expect(screen.getAllByText(/Alert message \d/)).toHaveLength(3)
+    const moreButton = screen.getByRole('button', { name: '+3 more alerts' })
+    expect(moreButton).toBeInTheDocument()
+
+    await user.click(moreButton)
+
+    // Expanding reveals every alert, and a "Show fewer" toggle replaces "+N more".
+    expect(screen.getAllByText(/Alert message \d/)).toHaveLength(6)
+    expect(screen.queryByRole('button', { name: /more alerts/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument()
+  })
 })

@@ -114,4 +114,16 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.queryByText('2')).not.toBeInTheDocument()
   })
+
+  it('does not claim "All clear" while the alerts request is still loading (a false negative would be worse than a blank tile)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: true })
+    renderPage()
+
+    expect(screen.getByText('Critical Participant Alerts')).toBeInTheDocument()
+    // The unrelated Qualification Issues tile also renders "All clear" (its own zero-issue
+    // state, from the useStaff mock's empty list) — assert only the Critical Alerts tile's own
+    // copy is absent, by checking the count stays at that one pre-existing occurrence.
+    expect(screen.getAllByText('All clear')).toHaveLength(1)
+  })
 })
