@@ -41,6 +41,7 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? NdisNumber { get; init; }
     public DateOnly? PlanStartDate { get; init; }
     public DateOnly? PlanEndDate { get; init; }
+    public ParticipantFundingSource FundingSource { get; init; }
     public string? FundingOrganisation { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
     public SupportRatio OvernightRatio { get; init; }
@@ -81,6 +82,10 @@ public record CreateParticipantDto
     public PlanType PlanType { get; init; }
     [StringLength(100)]
     public string? Region { get; init; }
+    /// <summary>FUND-02. Defaults to Ndis — matches the entity default and the migration backfill.</summary>
+    public ParticipantFundingSource FundingSource { get; init; } = ParticipantFundingSource.Ndis;
+    /// <summary>Reused "Other — specify" field: required (and validated server-side, see
+    /// ParticipantsController.ValidateFundingSource) iff FundingSource is Other; ignored when Ndis.</summary>
     [StringLength(200)]
     public string? FundingOrganisation { get; init; }
     public bool IsRepeatClient { get; init; }

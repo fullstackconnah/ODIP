@@ -1,17 +1,22 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft, Check } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender } from '@/api/types/enums'
-import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource } from '@/api/types/enums'
+import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import {
+  useConditionalFields, useUnregisterHiddenFields, useFocusFallbackOnHide, stripHiddenFieldKeys,
+  type ConditionalFieldDef, type ConditionPredicate,
+} from '@/lib/conditionalFields'
 
 const baseParticipantSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -23,8 +28,13 @@ const baseParticipantSchema = z.object({
   ndisNumber: z.string().optional(),
   planStartDate: z.string().optional(),
   planEndDate: z.string().optional(),
-  planType: z.string().min(1),
+  // Required only when fundingSource is Ndis (see fundingSourceRefine) — hidden+excluded
+  // entirely when Other, so it must not be unconditionally required here.
+  planType: z.string().optional(),
   region: z.string().optional(),
+  fundingSource: z.string().min(1),
+  // Required only when fundingSource is Other (see fundingSourceRefine) — hidden+excluded
+  // entirely when Ndis.
   fundingOrganisation: z.string().optional(),
   isRepeatClient: z.boolean().optional(),
   serviceStreams: z.array(z.string()).optional(),
@@ -63,15 +73,20 @@ type EquipmentFields = {
   requiresStandingMachine?: boolean
   equipmentRequirements?: string
 }
+// Equipment-notes gating (the notes field stays visible but disabled/read-only until an
+// equipment item is ticked) is a visible-but-disabled pattern, not a hide — it intentionally
+// stays outside the INTAKE-07 conditional-visibility engine (see src/lib/conditionalFields.ts's
+// module doc for why), but expresses its predicate with the engine's own ConditionPredicate type
+// for a shared vocabulary between the two.
+const equipmentEnabledPredicate: ConditionPredicate<EquipmentFields> = (data) => !!(
+  data.requiresHiLoBed
+  || data.requiresHoist
+  || data.requiresShowerChair
+  || data.requiresCommode
+  || data.requiresStandingMachine
+)
 function equipmentRefine(data: EquipmentFields, ctx: z.RefinementCtx) {
-  const hasAnyEquipment = !!(
-    data.requiresHiLoBed
-    || data.requiresHoist
-    || data.requiresShowerChair
-    || data.requiresCommode
-    || data.requiresStandingMachine
-  )
-  if (data.equipmentRequirements && data.equipmentRequirements.trim() !== '' && !hasAnyEquipment) {
+  if (data.equipmentRequirements && data.equipmentRequirements.trim() !== '' && !equipmentEnabledPredicate(data)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['equipmentRequirements'],
@@ -94,7 +109,32 @@ function genderRefine(data: GenderFields, ctx: z.RefinementCtx) {
   }
 }
 
-const participantSchema = baseParticipantSchema.superRefine(equipmentRefine).superRefine(genderRefine)
+// FUND-02: FundingSource "Other" requires the reused FundingOrganisation "specify" field;
+// FundingSource "Ndis" requires PlanType (the field the NDIS plan fields step has always
+// required, now conditional since it's hidden+excluded when Other). Same standalone-function
+// pattern as genderRefine/equipmentRefine.
+type FundingFields = { fundingSource?: string; fundingOrganisation?: string; planType?: string }
+function fundingSourceRefine(data: FundingFields, ctx: z.RefinementCtx) {
+  if (data.fundingSource === 'Other' && !data.fundingOrganisation?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['fundingOrganisation'],
+      message: 'Please specify the funding organisation.',
+    })
+  }
+  if (data.fundingSource === 'Ndis' && !data.planType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['planType'],
+      message: 'Plan type is required.',
+    })
+  }
+}
+
+const participantSchema = baseParticipantSchema
+  .superRefine(equipmentRefine)
+  .superRefine(genderRefine)
+  .superRefine(fundingSourceRefine)
 
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
 // favour of .issues), so it throws past react-hook-form instead of populating
@@ -121,7 +161,7 @@ function focusField(fieldName: string) {
 }
 
 const STEP_IDENTITY_FIELDS = ['firstName', 'lastName', 'preferredName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId'] as const
-const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
+const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingSource', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -156,7 +196,7 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 // preceding step.
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine),
-  baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)),
+  baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
@@ -169,6 +209,33 @@ const PLAN_TYPE_LABELS: Record<string, string> = {
   AgencyManaged: 'Agency Managed',
 }
 
+// INTAKE-07 conditional-visibility declarations for this wizard — see
+// src/lib/conditionalFields.ts's module doc for the engine's full API. Two consumers today:
+// gender self-description (migrated ad-hoc conditional, INTAKE-05) and FUND-02's funding-source
+// gating (the first "real" consumer this capability was built for). Later waves (diagnoses
+// gating, living arrangements, service-specific fields) extend this same array.
+const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
+  {
+    fields: ['genderSelfDescription'],
+    visibleWhen: (v) => v.gender === 'Other',
+    focusFallback: 'gender',
+  },
+  {
+    // FUND-02: "Other" reveals the reused free-text specify field...
+    fields: ['fundingOrganisation'],
+    visibleWhen: (v) => v.fundingSource === 'Other',
+    focusFallback: 'fundingSource',
+  },
+  {
+    // ...and hides the NDIS-specific plan fields — "subsequent form content changing per
+    // source" per the FUND-02 backlog text. Grouped as one unit since they're all gated by
+    // the exact same answer.
+    fields: ['ndisNumber', 'planStartDate', 'planEndDate', 'planType'],
+    visibleWhen: (v) => v.fundingSource !== 'Other',
+    focusFallback: 'fundingSource',
+  },
+]
+
 export default function ParticipantCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -180,10 +247,11 @@ export default function ParticipantCreatePage() {
   const activeStaff = staffList.filter(s => s.isActive)
   const mutation = isEdit ? updateParticipant : createParticipant
 
-  const { register, handleSubmit, reset, control, setValue, getValues, setError, clearErrors, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, reset, control, setValue, getValues, setError, clearErrors, unregister, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
     resolver: participantResolver,
     defaultValues: {
       genderSelfDescription: '',
+      fundingSource: 'Ndis',
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
       isRepeatClient: false,
@@ -292,24 +360,77 @@ export default function ParticipantCreatePage() {
     requestFocus(firstField)
   }
 
-  const genderValue = useWatch({ control, name: 'gender' })
   const overnightSupportValue = useWatch({ control, name: 'overnightSupport' })
-  const hasHiLoBed = useWatch({ control, name: 'requiresHiLoBed' })
-  const hasHoist = useWatch({ control, name: 'requiresHoist' })
-  const hasShowerChair = useWatch({ control, name: 'requiresShowerChair' })
-  const hasCommode = useWatch({ control, name: 'requiresCommode' })
-  const hasStandingMachine = useWatch({ control, name: 'requiresStandingMachine' })
-  const hasAnyEquipment = !!(hasHiLoBed || hasHoist || hasShowerChair || hasCommode || hasStandingMachine)
 
   // Watches the whole form (no `name`) so the Review step can render live values without
-  // relying on getValues(), which wouldn't reflect uncontrolled register()'d input changes.
+  // relying on getValues(), which wouldn't reflect uncontrolled register()'d input changes. Also
+  // the single source of truth for the equipment-notes enabled predicate and the INTAKE-07
+  // conditional-visibility engine below, both of which read across several fields at once.
   const watchedValues = useWatch({ control })
+  const hasAnyEquipment = equipmentEnabledPredicate(watchedValues)
+
+  // INTAKE-07 — see src/lib/conditionalFields.ts's module doc. isVisible/hiddenFields drive JSX
+  // gating and the Review step below; the two hooks handle unregister-on-hide (validation +
+  // payload exclusion) and focus-fallback (accessibility) as side effects.
+  const { isVisible, hiddenFields } = useConditionalFields(watchedValues, CONDITIONAL_FIELDS)
+  useUnregisterHiddenFields(unregister, hiddenFields)
+  useFocusFallbackOnHide(CONDITIONAL_FIELDS, hiddenFields)
+
+  // FUND-02 review-round fix: the server unconditionally clears FundingOrganisation on save
+  // whenever FundingSource != Other (defence in depth against a stale value lingering — see
+  // ParticipantsController.ValidateFundingSource's neighbouring assignment). That means a
+  // same-session Other -> Ndis switch silently loses whatever the user typed into "Funding
+  // Organisation" the moment they save, with no warning. Guarded here: switching AWAY from
+  // Other while the specify field holds non-blank text is intercepted before it commits to the
+  // form (see the Funding Source <select>'s onChange below) and held as a pending value until
+  // the user confirms via the dialog below Cancel reverts the select to Other with the text
+  // untouched; Confirm applies the switch (the field then hides/unregisters as normal, and the
+  // text is what the server clears on save).
+  const [pendingFundingSourceValue, setPendingFundingSourceValue] = useState<string | null>(null)
+  const fundingSourceRegistration = register('fundingSource')
+  const handleFundingSourceChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = e.target.value
+    const previousValue = watchedValues.fundingSource // still the pre-change value at this point
+    const specify = getValues('fundingOrganisation')
+    const leavingOtherWithText = previousValue === 'Other' && nextValue !== 'Other' && !!specify?.trim()
+    if (leavingOtherWithText) {
+      // The browser already applied the user's pick to the native <select> before this event
+      // fires (this field is registered uncontrolled, no `value` prop) — revert that immediately
+      // so the control visibly stays on "Other" while the dialog is open. RHF's own state was
+      // never touched (its onChange isn't invoked on this path), so it's still in sync.
+      e.target.value = 'Other'
+      setPendingFundingSourceValue(nextValue)
+      return
+    }
+    fundingSourceRegistration.onChange(e)
+  }
+  const confirmFundingSourceChange = () => {
+    if (pendingFundingSourceValue) {
+      setValue('fundingSource', pendingFundingSourceValue, { shouldDirty: true, shouldValidate: true })
+    }
+    setPendingFundingSourceValue(null)
+  }
+  const cancelFundingSourceChange = () => setPendingFundingSourceValue(null)
 
   useEffect(() => {
     if (overnightSupportValue === 'None') {
       setValue('overnightRatio', 'OneToOne')
     }
   }, [overnightSupportValue, setValue])
+
+  // Round-trip fix: planType is unregistered (its value dropped entirely, by design — see
+  // useUnregisterHiddenFields) whenever fundingSource is Other, since it's hidden then. Nothing
+  // restores that value when the field reappears on a later switch back to Ndis (unregister vs.
+  // register isn't a save/restore pair) — left alone, a user who tries Other and switches back to
+  // Ndis would find Plan Type silently blank and Next blocked by fundingSourceRefine's "Ndis
+  // requires planType" rule, with no field visibly showing why. Same pattern as the
+  // overnightRatio effect above: re-apply the schema default the moment Ndis is selected with no
+  // planType value, whatever caused it to be missing.
+  useEffect(() => {
+    if (watchedValues.fundingSource === 'Ndis' && !watchedValues.planType) {
+      setValue('planType', 'SelfManaged')
+    }
+  }, [watchedValues.fundingSource, watchedValues.planType, setValue])
 
   useEffect(() => {
     if (existing) {
@@ -325,6 +446,7 @@ export default function ParticipantCreatePage() {
         planEndDate: existing.planEndDate ? existing.planEndDate.split('T')[0] : '',
         planType: existing.planType ?? 'SelfManaged',
         region: existing.region ?? '',
+        fundingSource: existing.fundingSource ?? 'Ndis',
         fundingOrganisation: existing.fundingOrganisation ?? '',
         isRepeatClient: existing.isRepeatClient ?? false,
         serviceStreams: parseServiceStreams(existing.serviceStreams),
@@ -353,7 +475,11 @@ export default function ParticipantCreatePage() {
   }, [existing, reset])
 
   const onSubmit = async (data: ParticipantFormData) => {
-    const payload: any = { ...data }
+    // INTAKE-07: unregister-on-hide should already have dropped hidden fields' keys from `data`
+    // (react-hook-form's default unregister options exclude them from validation AND from the
+    // values object handleSubmit builds) — stripHiddenFieldKeys is the defence-in-depth pass
+    // guaranteeing it regardless, per the engine's module doc.
+    const payload: any = stripHiddenFieldKeys({ ...data }, hiddenFields)
     payload.serviceStreams = formatServiceStreams(data.serviceStreams as ServiceStream[] | undefined)
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
@@ -411,12 +537,20 @@ export default function ParticipantCreatePage() {
     {
       step: 1,
       rows: [
-        { label: 'NDIS Number', value: watchedValues.ndisNumber || '—' },
-        { label: 'Plan Start Date', value: watchedValues.planStartDate || '—' },
-        { label: 'Plan End Date', value: watchedValues.planEndDate || '—' },
-        { label: 'Plan Type', value: PLAN_TYPE_LABELS[watchedValues.planType ?? ''] ?? '—' },
+        {
+          label: 'Funding Source',
+          value: watchedValues.fundingSource
+            ? (FUNDING_SOURCE_LABELS[watchedValues.fundingSource as FundingSource] ?? watchedValues.fundingSource)
+            : '—',
+        },
+        // FUND-02: only the fields relevant to the selected funding source appear in the
+        // review summary — same isVisible gate the step's own inputs use.
+        ...(isVisible('ndisNumber') ? [{ label: 'NDIS Number', value: watchedValues.ndisNumber || '—' }] : []),
+        ...(isVisible('planStartDate') ? [{ label: 'Plan Start Date', value: watchedValues.planStartDate || '—' }] : []),
+        ...(isVisible('planEndDate') ? [{ label: 'Plan End Date', value: watchedValues.planEndDate || '—' }] : []),
+        ...(isVisible('planType') ? [{ label: 'Plan Type', value: PLAN_TYPE_LABELS[watchedValues.planType ?? ''] ?? '—' }] : []),
         { label: 'Region', value: watchedValues.region || '—' },
-        { label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' },
+        ...(isVisible('fundingOrganisation') ? [{ label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' }] : []),
         { label: 'Repeat Client', value: watchedValues.isRepeatClient ? 'Yes' : 'No' },
         {
           label: 'Service Streams',
@@ -465,6 +599,15 @@ export default function ParticipantCreatePage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {unsavedChangesDialog}
+      <ConfirmDialog
+        open={pendingFundingSourceValue !== null}
+        onCancel={cancelFundingSourceChange}
+        onConfirm={confirmFundingSourceChange}
+        title="Switch away from Other funding source?"
+        message="The funding organisation you specified will be cleared when you save this participant. Switching back to Other later won't bring it back."
+        confirmLabel="Switch and clear"
+        variant="danger"
+      />
       <div className="flex items-center gap-4">
         <Link to={isEdit ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -559,7 +702,7 @@ export default function ParticipantCreatePage() {
                 </select>
               </FormField>
 
-              {genderValue === 'Other' && (
+              {isVisible('genderSelfDescription') && (
                 <FormField label="Gender Self-Description" required error={errors.genderSelfDescription?.message}>
                   <input id="genderSelfDescription" {...register('genderSelfDescription')} placeholder="How the participant describes their gender" />
                 </FormField>
@@ -595,46 +738,67 @@ export default function ParticipantCreatePage() {
         {stepIndex === 1 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="NDIS & Funding" className="space-y-4">
-              <FormField label="NDIS Number">
-                <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
+              <FormField label="Funding Source" required error={errors.fundingSource?.message}>
+                <select id="fundingSource" {...fundingSourceRegistration} onChange={handleFundingSourceChange}>
+                  {FUNDING_SOURCES.map((s) => (
+                    <option key={s} value={s}>{FUNDING_SOURCE_LABELS[s]}</option>
+                  ))}
+                </select>
               </FormField>
 
-              <FormField label="Plan Start Date">
-                <input id="planStartDate" type="date" {...register('planStartDate')} />
-              </FormField>
+              {/* FUND-02, via the INTAKE-07 engine: NDIS shows the plan fields (current
+                  behaviour); Other hides them and shows the specify field below instead —
+                  "subsequent form content changing per source" per the backlog text. */}
+              {isVisible('ndisNumber') && (
+                <FormField label="NDIS Number">
+                  <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
+                </FormField>
+              )}
 
-              <FormField label="Plan End Date">
-                <input id="planEndDate" type="date" {...register('planEndDate')} />
-              </FormField>
+              {isVisible('planStartDate') && (
+                <FormField label="Plan Start Date">
+                  <input id="planStartDate" type="date" {...register('planStartDate')} />
+                </FormField>
+              )}
 
-              <FormField label="Plan Type" required error={errors.planType?.message}>
-                <Controller
-                  control={control}
-                  name="planType"
-                  render={({ field }) => (
-                    <Dropdown
-                      id="planType"
-                      variant="form"
-                      value={field.value ?? ''}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      items={[
-                        { value: 'SelfManaged', label: 'Self Managed' },
-                        { value: 'PlanManaged', label: 'Plan Managed' },
-                        { value: 'AgencyManaged', label: 'Agency Managed' },
-                      ]}
-                    />
-                  )}
-                />
-              </FormField>
+              {isVisible('planEndDate') && (
+                <FormField label="Plan End Date">
+                  <input id="planEndDate" type="date" {...register('planEndDate')} />
+                </FormField>
+              )}
+
+              {isVisible('planType') && (
+                <FormField label="Plan Type" required error={errors.planType?.message}>
+                  <Controller
+                    control={control}
+                    name="planType"
+                    render={({ field }) => (
+                      <Dropdown
+                        id="planType"
+                        variant="form"
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        items={[
+                          { value: 'SelfManaged', label: 'Self Managed' },
+                          { value: 'PlanManaged', label: 'Plan Managed' },
+                          { value: 'AgencyManaged', label: 'Agency Managed' },
+                        ]}
+                      />
+                    )}
+                  />
+                </FormField>
+              )}
 
               <FormField label="Region">
                 <input id="region" {...register('region')} placeholder="e.g. QLD" />
               </FormField>
 
-              <FormField label="Funding Organisation">
-                <input id="fundingOrganisation" {...register('fundingOrganisation')} placeholder="e.g. Plan Partners" />
-              </FormField>
+              {isVisible('fundingOrganisation') && (
+                <FormField label="Funding Organisation" required error={errors.fundingOrganisation?.message}>
+                  <input id="fundingOrganisation" {...register('fundingOrganisation')} placeholder="e.g. Plan Partners" />
+                </FormField>
+              )}
 
               <FormField label="Repeat Client" layout="checkbox">
                 <input id="isRepeatClient" type="checkbox" {...register('isRepeatClient')} className="w-4 h-4 rounded border-[var(--color-border)]" />

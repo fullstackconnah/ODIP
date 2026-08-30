@@ -429,4 +429,123 @@ public class ParticipantsControllerTests
         Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, oldRow.Level);
         Assert.Equal("Set by coordinator", oldRow.Reason);
     }
+
+    // ── FUND-02: funding source (NDIS vs Other) ────────────────────────
+
+    [Fact]
+    public async Task Create_DefaultFundingSource_IsNdis()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        var saved = await db.Participants.SingleAsync();
+        Assert.Equal(Domain.Enums.ParticipantFundingSource.Ndis, saved.FundingSource);
+        Assert.Null(saved.FundingOrganisation);
+    }
+
+    [Fact]
+    public async Task Create_FundingSourceOtherWithoutSpecify_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = null };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("funding organisation", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_FundingSourceOtherWithSpecify_Succeeds_RoundTripsThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = "Self-funded" };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal(Domain.Enums.ParticipantFundingSource.Other, body.Data!.FundingSource);
+        Assert.Equal("Self-funded", body.Data.FundingOrganisation);
+    }
+
+    [Fact]
+    public async Task Create_FundingSourceNdis_IgnoresAndClearsStrayFundingOrganisation()
+    {
+        // Server-side defence in depth: even if a client sends FundingOrganisation text alongside
+        // FundingSource = Ndis (e.g. a stale value left over from switching Other -> Ndis
+        // client-side before the INTAKE-07 engine's payload exclusion kicks in), the server never
+        // persists it — Ndis ignores the field entirely, mirroring the frontend's exclusion rule.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Ndis, FundingOrganisation = "Stray Plan Manager" };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        var saved = await db.Participants.SingleAsync();
+        Assert.Equal(Domain.Enums.ParticipantFundingSource.Ndis, saved.FundingSource);
+        Assert.Null(saved.FundingOrganisation);
+    }
+
+    [Fact]
+    public async Task Update_FundingSourceOtherWithoutSpecify_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = "   ",
+        };
+
+        var result = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("funding organisation", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Update_SwitchFromOtherToNdis_ClearsFundingOrganisation()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true,
+            FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = "Maple Plan Management",
+        };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            FundingSource = Domain.Enums.ParticipantFundingSource.Ndis, FundingOrganisation = "Maple Plan Management",
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var saved = await db.Participants.SingleAsync();
+        Assert.Equal(Domain.Enums.ParticipantFundingSource.Ndis, saved.FundingSource);
+        Assert.Null(saved.FundingOrganisation);
+    }
 }

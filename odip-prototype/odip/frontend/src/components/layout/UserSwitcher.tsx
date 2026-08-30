@@ -27,9 +27,15 @@ export default function UserSwitcher() {
       localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user') || '{}')
     }
 
-    // Override odip_user with impersonated user's role and name
+    // Override odip_user with the impersonated user's id, role and name. `id` matters just as
+    // much as fullName/role here: usePermissions() exposes it as the self-exclusion source (e.g.
+    // excluding yourself from a medication witness picker — see RecordAdministrationModal), and
+    // without this override that check kept comparing against the SuperAdmin's own id while
+    // "viewing as" someone else, so the impersonated user was never excluded from their own
+    // picker. odip_superadmin_user (saved above) still holds the original id, so switching back
+    // via clearUser restores it correctly.
     const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
-    const overriddenUser = { ...currentUser, fullName: user.fullName, role: user.role }
+    const overriddenUser = { ...currentUser, id: user.id, fullName: user.fullName, role: user.role }
     localStorage.setItem('odip_user', JSON.stringify(overriddenUser))
     localStorage.setItem('odip_viewing_user', user.id)
 

@@ -1,4 +1,4 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource } from './enums'
 import { SERVICE_STREAMS } from './enums'
 
 export const GENDER_LABELS: Record<Gender, string> = {
@@ -6,6 +6,12 @@ export const GENDER_LABELS: Record<Gender, string> = {
   Female: 'Female',
   NonBinary: 'Non-binary',
   PreferNotToSay: 'Prefer not to say',
+  Other: 'Other',
+}
+
+/** FUND-02. */
+export const FUNDING_SOURCE_LABELS: Record<FundingSource, string> = {
+  Ndis: 'NDIS',
   Other: 'Other',
 }
 
@@ -119,6 +125,8 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   ndisNumber: string | null
   planStartDate: string | null
   planEndDate: string | null
+  /** FUND-02. */
+  fundingSource: FundingSource
   fundingOrganisation: string | null
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
@@ -146,6 +154,9 @@ export interface CreateParticipantDto {
   planEndDate?: string
   planType: PlanType
   region?: string
+  /** FUND-02. Defaults server-side to Ndis when omitted. */
+  fundingSource?: FundingSource
+  /** Reused "Other — specify" field: required iff fundingSource is Other; ignored when Ndis. */
   fundingOrganisation?: string
   isRepeatClient: boolean
   mobilityAidWheelchair: boolean

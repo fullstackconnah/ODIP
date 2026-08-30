@@ -8,6 +8,29 @@ public enum PlanType
 }
 
 /// <summary>
+/// FUND-02: participant funding source, replacing free-text-only <c>FundingOrganisation</c> as
+/// the primary signal. <see cref="Ndis"/> (the default/backfill value) means the participant's
+/// NDIS plan fields (number, plan type, dates) are the relevant funding detail; <see cref="Other"/>
+/// means the (reused) <see cref="Odip.Domain.Entities.Participant.FundingOrganisation"/> column
+/// holds a required free-text "who funds this" answer instead, and the NDIS plan fields are
+/// irrelevant. The wizard's INTAKE-07 conditional-visibility engine gates both directions off
+/// this field — see frontend `src/lib/conditionalFields.ts`. Backfill (see the
+/// AddParticipantFundingSource migration): rows with a non-empty pre-existing
+/// FundingOrganisation become Other, empty/null rows become Ndis.
+/// Named <c>ParticipantFundingSource</c> rather than the plain <c>FundingSource</c> the backlog
+/// text uses because that name is already taken by the unrelated billing
+/// <see cref="Odip.Domain.Billing.FundingSource"/> entity (a claims-routing funding-source
+/// table) — same namespace tree, so a bare `FundingSource` here would be ambiguous everywhere
+/// both `Odip.Domain.Enums` and `Odip.Domain.Billing` are in scope (e.g. DTOs.cs already `using`s
+/// both).
+/// </summary>
+public enum ParticipantFundingSource
+{
+    Ndis,
+    Other
+}
+
+/// <summary>
 /// Participant identity gender (INTAKE-05). Mirrors the Master Data Dictionary's PID-009
 /// convention ("M F NB Textbox" — a fixed set plus a free-text escape hatch): <see cref="Other"/>
 /// pairs with <see cref="Odip.Domain.Entities.Participant.GenderSelfDescription"/> for an
