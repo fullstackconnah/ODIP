@@ -35,6 +35,18 @@ const staffSchema = z.object({
 
 type StaffFormData = z.infer<typeof staffSchema>
 
+// Every account-role value the backend can return on an existing record, even ones this form
+// never offers as a selectable option (SuperAdmin, and Admin when the actor is a Coordinator) —
+// used to label a locked/blocked role field with its real current value rather than showing a
+// blank select.
+const ROLE_LABELS: Record<string, string> = {
+  SupportWorker: 'Support Worker',
+  Coordinator: 'Coordinator',
+  ReadOnly: 'Read Only',
+  Admin: 'Admin',
+  SuperAdmin: 'SuperAdmin',
+}
+
 export default function StaffCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -55,6 +67,26 @@ export default function StaffCreatePage() {
     { value: 'ReadOnly', label: 'Read Only' },
     ...(isCoordinator ? [] : [{ value: 'Admin', label: 'Admin' }]),
   ]
+  const roleOptionValues = ROLE_OPTIONS.map(o => o.value)
+
+  // The target's CURRENT role may not be one of the actor's assignable options — e.g. a
+  // Coordinator editing an existing Admin (Admin isn't offered as a promotion target, but the
+  // record itself already holds it), or anyone editing a SuperAdmin account. The backend only
+  // blocks a role PROMOTION, not edits to a record's other fields, so the fix here must not block
+  // the whole form just because the role select can't offer the current value — it must let
+  // every other field (Mobile, Notes, qualifications, ...) still save.
+  //
+  // SuperAdmin is the one case that IS blocked wholesale server-side (StaffController's
+  // guardrails: an Admin/Coordinator actor cannot edit an existing SuperAdmin account at all,
+  // full stop) — a submitable form there would just 400, so it's blocked outright below with a
+  // clear message instead. Settings → Users is the SuperAdmin-only account administration
+  // surface for that case (see spec §2).
+  const existingRole = existing?.role
+  const isTargetSuperAdmin = isEdit && existingRole === 'SuperAdmin'
+  const isRoleLocked = isEdit && !!existingRole && !isTargetSuperAdmin && !roleOptionValues.includes(existingRole)
+  const roleSelectOptions = isRoleLocked && existingRole
+    ? [...ROLE_OPTIONS, { value: existingRole, label: ROLE_LABELS[existingRole] ?? existingRole }]
+    : ROLE_OPTIONS
 
   const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
     resolver: zodResolver(staffSchema),
@@ -123,6 +155,30 @@ export default function StaffCreatePage() {
 
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
+  if (isTargetSuperAdmin) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Link to="/staff" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-xl md:text-2xl font-bold">Edit Staff Member</h1>
+        </div>
+        <Card className="space-y-2">
+          <p role="alert" className="text-sm font-medium text-[var(--color-destructive)]">
+            SuperAdmin accounts can't be edited here.
+          </p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            SuperAdmin accounts are managed in Settings › Users. Contact a SuperAdmin if this account's role or profile needs to change.
+          </p>
+          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
+            Back to Staff
+          </Link>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {unsavedChangesDialog}
@@ -177,9 +233,18 @@ export default function StaffCreatePage() {
             <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
           </FormField>
 
-          <FormField label="Account Role" required error={errors.role?.message} hint={!errors.role ? 'Controls what this person can access and edit in the app.' : undefined}>
-            <select {...register('role')}>
-              {ROLE_OPTIONS.map(o => (
+          <FormField
+            label="Account Role"
+            required
+            error={errors.role?.message}
+            hint={
+              isRoleLocked
+                ? 'Only an Admin can change this role.'
+                : (!errors.role ? 'Controls what this person can access and edit in the app.' : undefined)
+            }
+          >
+            <select {...register('role')} disabled={isRoleLocked} aria-disabled={isRoleLocked}>
+              {roleSelectOptions.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
