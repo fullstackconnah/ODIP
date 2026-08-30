@@ -145,4 +145,16 @@ public class StaffParticipantCompatibility : ITenantEntity
     public CompatibilityLevel Level { get; set; }
     public string? Reason { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Origin marker (task 6d): true iff this row was created/is still owned by
+    /// <see cref="Odip.Infrastructure.Services.StaffCompatibilityLinkService"/> because a
+    /// participant's <see cref="Participant.PreferredStaffId"/> was set — as opposed to a human
+    /// writing this cell directly in the compatibility matrix (<c>RosteringController.UpsertCompatibility</c>,
+    /// the matrix's only writer, always stamps this false). The service never mutates or deletes
+    /// a row where this is false, so a human's explicit judgement — including "Excluded", a
+    /// safety signal — is never silently overwritten just because someone later picked that same
+    /// staff member from the participant's preferred-staff dropdown.
+    /// </summary>
+    public bool AutoLinked { get; set; }
 }

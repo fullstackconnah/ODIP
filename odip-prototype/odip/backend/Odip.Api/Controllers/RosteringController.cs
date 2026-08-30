@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -33,12 +34,17 @@ public class RosteringController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly RosterConflictService _conflictService = new();
     private readonly ShiftPatternExpander _expander = new();
+    private readonly StaffCompatibilityLinkService _compatLink;
 
     /// <summary>Availability types that render as a leave/unavailable bar on the board (matches <see cref="RosterConflictService"/>'s own STAFF_UNAVAILABLE set).</summary>
     private static readonly AvailabilityType[] LeaveTypes =
         { AvailabilityType.Unavailable, AvailabilityType.Leave, AvailabilityType.Training };
 
-    public RosteringController(OdipDbContext db) => _db = db;
+    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink)
+    {
+        _db = db;
+        _compatLink = compatLink;
+    }
 
     // ══════════════════════════════════════════════════════════════
     // BOARD
@@ -557,6 +563,9 @@ public class RosteringController : ControllerBase
 
         var row = await _db.StaffParticipantCompatibilities
             .FirstOrDefaultAsync(c => c.StaffId == dto.StaffId && c.ParticipantId == dto.ParticipantId, ct);
+        // Absence of a row means Allowed (the entity's documented sparse default) — same value
+        // StaffCompatibilityLinkService.SyncFromCompatibilityUpsertAsync expects for a new row.
+        var previousLevel = row?.Level ?? CompatibilityLevel.Allowed;
 
         if (row == null)
         {
@@ -567,6 +576,14 @@ public class RosteringController : ControllerBase
         row.Level = dto.Level;
         row.Reason = dto.Reason;
         row.UpdatedAt = DateTime.UtcNow;
+        // This endpoint is the compatibility matrix's only human-facing writer — every call
+        // takes ownership of the row away from the participant-preferred-staff auto-link (task
+        // 6d; see StaffCompatibilityLinkService for why).
+        row.AutoLinked = false;
+
+        // Task 6d: reflect a Preferred mark (or a move off it) back onto the participant's
+        // PreferredStaffId, in the same transaction as this compatibility write.
+        await _compatLink.SyncFromCompatibilityUpsertAsync(row, previousLevel, ct);
 
         await _db.SaveChangesAsync(ct);
 
