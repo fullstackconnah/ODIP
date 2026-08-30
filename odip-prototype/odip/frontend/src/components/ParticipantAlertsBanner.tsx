@@ -26,23 +26,29 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
   const hiddenCount = alerts.length - visibleAlerts.length
 
   return (
-    <div className="space-y-1.5 mt-3" role="alert" aria-label="Participant risk alerts">
+    <div className="space-y-1.5 mt-3" aria-label="Participant risk alerts">
       {visibleAlerts.map((a) => {
         const style = ALERT_SEVERITY_STYLES[a.severity]
         const Icon = style.icon
+        // Critical rows interrupt (assertive `role="alert"`) — they need urgent attention.
+        // Warning/Info rows are announced politely (`role="status"`) once the reader is idle,
+        // so a participant with several non-critical alerts doesn't get talked over. The role
+        // sits on this wrapper, not the <button> itself, so the row keeps its button semantics.
+        const role = a.severity === 'Critical' ? 'alert' : 'status'
         return (
-          <button
-            key={`${a.type}:${a.message}`}
-            type="button"
-            onClick={() => onSelectTab?.(a.deepLinkTab)}
-            className={`w-full flex items-center gap-2 text-left text-sm px-3 py-2 rounded-lg ${style.bg} ${style.text} hover:opacity-90 transition-opacity`}
-          >
-            <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1">{a.message}</span>
-            {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
-                pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-            <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
-          </button>
+          <div key={`${a.type}:${a.message}`} role={role}>
+            <button
+              type="button"
+              onClick={() => onSelectTab?.(a.deepLinkTab)}
+              className={`w-full flex items-center gap-2 text-left text-sm px-3 py-2 rounded-lg ${style.bg} ${style.text} hover:opacity-90 transition-opacity`}
+            >
+              <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span className="flex-1">{a.message}</span>
+              {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
+                  pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
+              <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
+            </button>
+          </div>
         )
       })}
       {hiddenCount > 0 && (
