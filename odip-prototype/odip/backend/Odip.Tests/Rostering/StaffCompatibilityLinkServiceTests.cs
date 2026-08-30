@@ -12,7 +12,7 @@ namespace Odip.Tests.Rostering;
 
 /// <summary>
 /// Covers <see cref="StaffCompatibilityLinkService"/> (task 6d): the link between
-/// <see cref="Participant.PreferredStaffId"/> and the rostering
+/// <see cref="Participant.PreferredUserId"/> and the rostering
 /// <see cref="StaffParticipantCompatibility"/> matrix. Same EF InMemory + Moq&lt;ICurrentTenant&gt;
 /// pattern as <c>RosteringControllerTests</c>. Each test calls the service directly against a
 /// tracked <c>OdipDbContext</c> and then calls <c>SaveChangesAsync</c> itself — mirroring how
@@ -34,17 +34,22 @@ public class StaffCompatibilityLinkServiceTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static Staff SeedStaff(OdipDbContext db, string firstName = "Ben", string lastName = "Turner")
+    private static User SeedStaff(OdipDbContext db, string firstName = "Ben", string lastName = "Turner")
     {
-        var staff = new Staff { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
+        var staff = new User
+        {
+            Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName,
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(staff);
         db.SaveChanges();
         return staff;
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng", Guid? preferredStaffId = null)
+    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng", Guid? preferredUserId = null)
     {
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, PreferredStaffId = preferredStaffId };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, PreferredUserId = preferredUserId };
         db.Participants.Add(participant);
         db.SaveChanges();
         return participant;
@@ -63,7 +68,7 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Preferred, row.Level);
         Assert.True(row.AutoLinked);
         Assert.False(string.IsNullOrEmpty(row.Reason));
@@ -80,11 +85,11 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        // Second call with oldStaffId == newStaffId (both staff.Id) must not touch anything.
+        // Second call with oldUserId == newUserId (both staff.Id) must not touch anything.
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, staff.Id, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var rows = await db.StaffParticipantCompatibilities.Where(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id).ToListAsync();
+        var rows = await db.StaffParticipantCompatibilities.Where(c => c.UserId == staff.Id && c.ParticipantId == participant.Id).ToListAsync();
         Assert.Single(rows);
     }
 
@@ -96,7 +101,7 @@ public class StaffCompatibilityLinkServiceTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Allowed, AutoLinked = false, Reason = "Coordinator note", UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -105,7 +110,7 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Allowed, row.Level); // untouched
         Assert.Equal("Coordinator note", row.Reason);
         Assert.False(row.AutoLinked);
@@ -121,7 +126,7 @@ public class StaffCompatibilityLinkServiceTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Excluded, AutoLinked = false, Reason = "Documented incident", UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -130,7 +135,7 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Excluded, row.Level);
         Assert.Equal("Documented incident", row.Reason);
     }
@@ -152,8 +157,8 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, oldStaff.Id, newStaff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participant.Id));
-        var newRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == newStaff.Id && c.ParticipantId == participant.Id);
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == oldStaff.Id && c.ParticipantId == participant.Id));
+        var newRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == newStaff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Preferred, newRow.Level);
         Assert.True(newRow.AutoLinked);
     }
@@ -167,7 +172,7 @@ public class StaffCompatibilityLinkServiceTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = oldStaff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = oldStaff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = false, Reason = "Set by coordinator directly", UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -177,7 +182,7 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         // Human-edited row for the old pairing survives, level untouched.
-        var oldRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participant.Id);
+        var oldRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == oldStaff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Preferred, oldRow.Level);
         Assert.Equal("Set by coordinator directly", oldRow.Reason);
     }
@@ -194,12 +199,12 @@ public class StaffCompatibilityLinkServiceTests
 
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None);
         await db.SaveChangesAsync();
-        Assert.True(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id));
+        Assert.True(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id));
 
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, staff.Id, null, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id));
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id));
     }
 
     [Fact]
@@ -210,7 +215,7 @@ public class StaffCompatibilityLinkServiceTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = false, Reason = "Marked directly in the matrix", UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -219,7 +224,7 @@ public class StaffCompatibilityLinkServiceTests
         await service.SyncFromParticipantPreferredStaffAsync(participant.Id, staff.Id, null, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(CompatibilityLevel.Preferred, row.Level);
         Assert.Equal("Marked directly in the matrix", row.Reason);
     }
@@ -227,16 +232,16 @@ public class StaffCompatibilityLinkServiceTests
     // ── SyncFromCompatibilityUpsertAsync: reflect matrix -> participant ─────
 
     [Fact]
-    public async Task MarkPreferredInMatrix_ParticipantPreferredStaffIdEmpty_IsPopulated()
+    public async Task MarkPreferredInMatrix_ParticipantPreferredUserIdEmpty_IsPopulated()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
-        var participant = SeedParticipant(db, preferredStaffId: null);
+        var participant = SeedParticipant(db, preferredUserId: null);
         var service = new StaffCompatibilityLinkService(db);
 
         var row = new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
         };
         db.StaffParticipantCompatibilities.Add(row);
@@ -245,7 +250,7 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(staff.Id, reloaded.PreferredStaffId);
+        Assert.Equal(staff.Id, reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -254,12 +259,12 @@ public class StaffCompatibilityLinkServiceTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var existingPreferred = SeedStaff(db, "Existing", "Preferred");
         var newlyMarkedPreferred = SeedStaff(db, "Newly", "Marked");
-        var participant = SeedParticipant(db, preferredStaffId: existingPreferred.Id);
+        var participant = SeedParticipant(db, preferredUserId: existingPreferred.Id);
         var service = new StaffCompatibilityLinkService(db);
 
         var row = new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = newlyMarkedPreferred.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = newlyMarkedPreferred.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
         };
         db.StaffParticipantCompatibilities.Add(row);
@@ -268,20 +273,20 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(existingPreferred.Id, reloaded.PreferredStaffId); // unchanged
+        Assert.Equal(existingPreferred.Id, reloaded.PreferredUserId); // unchanged
     }
 
     [Fact]
-    public async Task MoveOffPreferredInMatrix_MatchesParticipantsCurrentPreferredStaffId_ClearsIt()
+    public async Task MoveOffPreferredInMatrix_MatchesParticipantsCurrentPreferredUserId_ClearsIt()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
-        var participant = SeedParticipant(db, preferredStaffId: staff.Id);
+        var participant = SeedParticipant(db, preferredUserId: staff.Id);
         var service = new StaffCompatibilityLinkService(db);
 
         var row = new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Excluded, AutoLinked = false, Reason = "New incident", UpdatedAt = DateTime.UtcNow,
         };
         db.StaffParticipantCompatibilities.Add(row);
@@ -290,21 +295,21 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Null(reloaded.PreferredStaffId);
+        Assert.Null(reloaded.PreferredUserId);
     }
 
     [Fact]
-    public async Task MoveOffPreferredInMatrix_DoesNotMatchParticipantsCurrentPreferredStaffId_LeavesItAlone()
+    public async Task MoveOffPreferredInMatrix_DoesNotMatchParticipantsCurrentPreferredUserId_LeavesItAlone()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var someoneElse = SeedStaff(db, "Someone", "Else");
         var staff = SeedStaff(db, "Downgraded", "Staff");
-        var participant = SeedParticipant(db, preferredStaffId: someoneElse.Id);
+        var participant = SeedParticipant(db, preferredUserId: someoneElse.Id);
         var service = new StaffCompatibilityLinkService(db);
 
         var row = new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Excluded, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
         };
         db.StaffParticipantCompatibilities.Add(row);
@@ -313,7 +318,7 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(someoneElse.Id, reloaded.PreferredStaffId); // untouched
+        Assert.Equal(someoneElse.Id, reloaded.PreferredUserId); // untouched
     }
 
     // ── Tenant scoping ───────────────────────────────────────────────────
@@ -333,7 +338,7 @@ public class StaffCompatibilityLinkServiceTests
         {
             seedDb.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
             {
-                Id = Guid.NewGuid(), TenantId = tenantB, StaffId = staffId, ParticipantId = participantId,
+                Id = Guid.NewGuid(), TenantId = tenantB, UserId = staffId, ParticipantId = participantId,
                 Level = CompatibilityLevel.Preferred, AutoLinked = true, UpdatedAt = DateTime.UtcNow,
             });
             seedDb.SaveChanges();
@@ -347,13 +352,13 @@ public class StaffCompatibilityLinkServiceTests
         await db.SaveChangesAsync();
 
         var tenantARow = await db.StaffParticipantCompatibilities
-            .SingleAsync(c => c.StaffId == staffId && c.ParticipantId == participantId);
+            .SingleAsync(c => c.UserId == staffId && c.ParticipantId == participantId);
         Assert.Equal(tenantA, tenantARow.TenantId);
 
         // Both rows exist independently in the underlying store — tenant B's original is untouched.
         using var verifyDb = CreateDb(dbName, null, isSuperAdmin: true);
         var allRows = await verifyDb.StaffParticipantCompatibilities.IgnoreQueryFilters()
-            .Where(c => c.StaffId == staffId && c.ParticipantId == participantId).ToListAsync();
+            .Where(c => c.UserId == staffId && c.ParticipantId == participantId).ToListAsync();
         Assert.Equal(2, allRows.Count);
         Assert.Contains(allRows, r => r.TenantId == tenantB);
     }

@@ -92,7 +92,7 @@ public class AdminUsersController : ControllerBase
                 u.Role.ToString(),
                 u.TenantId,
                 u.Tenant != null ? u.Tenant.Name : "",
-                u.StaffId,
+                null,
                 u.IsActive,
                 u.CreatedAt,
                 u.LastLoginAt))
@@ -131,7 +131,7 @@ public class AdminUsersController : ControllerBase
             user.Role.ToString(),
             user.TenantId,
             user.Tenant?.Name ?? "",
-            user.StaffId,
+            null,
             user.IsActive,
             user.CreatedAt,
             user.LastLoginAt);
@@ -205,7 +205,6 @@ public class AdminUsersController : ControllerBase
             Email = dto.Email,
             Username = dto.Username,
             Role = role,
-            StaffId = dto.StaffId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -242,7 +241,7 @@ public class AdminUsersController : ControllerBase
             user.Role.ToString(),
             user.TenantId,
             tenant.Name,
-            user.StaffId,
+            null,
             user.IsActive,
             user.CreatedAt,
             user.LastLoginAt);
@@ -324,7 +323,6 @@ public class AdminUsersController : ControllerBase
         user.Email = dto.Email;
         user.Username = dto.Username;
         user.Role = role;
-        user.StaffId = dto.StaffId;
         user.IsActive = dto.IsActive;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -367,7 +365,7 @@ public class AdminUsersController : ControllerBase
             user.Role.ToString(),
             user.TenantId,
             user.Tenant?.Name ?? "",
-            user.StaffId,
+            null,
             user.IsActive,
             user.CreatedAt,
             user.LastLoginAt);

@@ -10,8 +10,8 @@ public class StaffAssignment
     public Guid Id { get; set; }
     public Guid TripInstanceId { get; set; }
     public TripInstance TripInstance { get; set; } = null!;
-    public Guid StaffId { get; set; }
-    public Staff Staff { get; set; } = null!;
+    public Guid UserId { get; set; }
+    public User User { get; set; } = null!;
     public string? AssignmentRole { get; set; }
     public DateOnly AssignmentStart { get; set; }
     public DateOnly AssignmentEnd { get; set; }

@@ -331,7 +331,7 @@ public class MedicationsController : ControllerBase
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
 
-        Staff? witnessStaff = null;
+        User? witnessStaff = null;
         if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
         {
             if (dto.WitnessStaffId is null && string.IsNullOrWhiteSpace(dto.WitnessName))
@@ -339,7 +339,7 @@ public class MedicationsController : ControllerBase
 
             if (dto.WitnessStaffId.HasValue)
             {
-                witnessStaff = await _db.Staff.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value, ct);
+                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value, ct);
                 if (witnessStaff == null)
                     return BadRequest(ApiResponse<AdministrationDto>.Fail("Selected witness staff member was not found."));
 
@@ -395,7 +395,7 @@ public class MedicationsController : ControllerBase
             DoseGiven = dto.DoseGiven,
             RecordedByName = GetRecordedByName(),
             WitnessName = witnessStaff?.FullName ?? dto.WitnessName,
-            WitnessStaffId = witnessStaff?.Id,
+            WitnessUserId = witnessStaff?.Id,
             WitnessStatus = witnessStaff != null ? WitnessStatus.Pending : WitnessStatus.NotRequired,
             WitnessRequestedAt = witnessStaff != null ? DateTime.UtcNow : null,
             Reason = dto.Reason,
@@ -722,7 +722,7 @@ public class MedicationsController : ControllerBase
         DoseGiven = a.DoseGiven,
         RecordedByName = a.RecordedByName,
         WitnessName = a.WitnessName,
-        WitnessStaffId = a.WitnessStaffId,
+        WitnessStaffId = a.WitnessUserId,
         WitnessStatus = a.WitnessStatus,
         WitnessRequestedAt = a.WitnessRequestedAt,
         WitnessRespondedAt = a.WitnessRespondedAt,

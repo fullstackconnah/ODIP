@@ -118,13 +118,13 @@ public class VehiclesController : ControllerBase
     [HttpGet("{id:guid}/assignments")]
     public async Task<ActionResult<ApiResponse<List<VehicleAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
     {
-        var items = await _db.VehicleAssignments.Include(a => a.TripInstance).Include(a => a.DriverStaff)
+        var items = await _db.VehicleAssignments.Include(a => a.TripInstance).Include(a => a.DriverUser)
             .Where(a => a.VehicleId == id)
             .Select(a => new VehicleAssignmentDto
             {
                 Id = a.Id, TripInstanceId = a.TripInstanceId, VehicleId = a.VehicleId,
-                Status = a.Status, DriverStaffId = a.DriverStaffId,
-                DriverName = a.DriverStaff != null ? a.DriverStaff.FirstName + " " + a.DriverStaff.LastName : null,
+                Status = a.Status, DriverStaffId = a.DriverUserId,
+                DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
                 HasOverlapConflict = a.HasOverlapConflict
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<VehicleAssignmentDto>>.Ok(items));
@@ -149,7 +149,7 @@ public class VehicleAssignmentsController : ControllerBase
         var assignment = new VehicleAssignment
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, VehicleId = dto.VehicleId,
-            DriverStaffId = dto.DriverStaffId, SeatRequirement = dto.SeatRequirement,
+            DriverUserId = dto.DriverStaffId, SeatRequirement = dto.SeatRequirement,
             WheelchairPositionRequirement = dto.WheelchairPositionRequirement,
             PickupTravelNotes = dto.PickupTravelNotes, Comments = dto.Comments,
             RequestedDate = DateOnly.FromDateTime(DateTime.UtcNow)
@@ -167,14 +167,14 @@ public class VehicleAssignmentsController : ControllerBase
         _db.VehicleAssignments.Add(assignment);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(assignment).Reference(a => a.Vehicle).LoadAsync(ct);
-        if (assignment.DriverStaffId.HasValue) await _db.Entry(assignment).Reference(a => a.DriverStaff).LoadAsync(ct);
+        if (assignment.DriverUserId.HasValue) await _db.Entry(assignment).Reference(a => a.DriverUser).LoadAsync(ct);
         return Ok(ApiResponse<VehicleAssignmentDto>.Ok(new VehicleAssignmentDto
         {
             Id = assignment.Id, TripInstanceId = assignment.TripInstanceId, VehicleId = assignment.VehicleId,
             VehicleName = assignment.Vehicle?.VehicleName, Registration = assignment.Vehicle?.Registration,
             Status = assignment.Status, RequestedDate = assignment.RequestedDate, ConfirmedDate = assignment.ConfirmedDate,
-            DriverStaffId = assignment.DriverStaffId,
-            DriverName = assignment.DriverStaff != null ? assignment.DriverStaff.FirstName + " " + assignment.DriverStaff.LastName : null,
+            DriverStaffId = assignment.DriverUserId,
+            DriverName = assignment.DriverUser != null ? assignment.DriverUser.FirstName + " " + assignment.DriverUser.LastName : null,
             SeatRequirement = assignment.SeatRequirement, WheelchairPositionRequirement = assignment.WheelchairPositionRequirement,
             PickupTravelNotes = assignment.PickupTravelNotes, Comments = assignment.Comments, HasOverlapConflict = hasConflict
         }));
@@ -187,21 +187,21 @@ public class VehicleAssignmentsController : ControllerBase
         var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
-        a.VehicleId = dto.VehicleId; a.DriverStaffId = dto.DriverStaffId;
+        a.VehicleId = dto.VehicleId; a.DriverUserId = dto.DriverStaffId;
         a.SeatRequirement = dto.SeatRequirement; a.WheelchairPositionRequirement = dto.WheelchairPositionRequirement;
         a.PickupTravelNotes = dto.PickupTravelNotes; a.Comments = dto.Comments;
         a.Status = dto.Status; a.ConfirmedDate = dto.ConfirmedDate; a.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         await _db.Entry(a).Reference(x => x.Vehicle).LoadAsync(ct);
-        if (a.DriverStaffId.HasValue) await _db.Entry(a).Reference(x => x.DriverStaff).LoadAsync(ct);
+        if (a.DriverUserId.HasValue) await _db.Entry(a).Reference(x => x.DriverUser).LoadAsync(ct);
         return Ok(ApiResponse<VehicleAssignmentDto>.Ok(new VehicleAssignmentDto
         {
             Id = a.Id, TripInstanceId = a.TripInstanceId, VehicleId = a.VehicleId,
             VehicleName = a.Vehicle?.VehicleName, Registration = a.Vehicle?.Registration,
             Status = a.Status, RequestedDate = a.RequestedDate, ConfirmedDate = a.ConfirmedDate,
-            DriverStaffId = a.DriverStaffId,
-            DriverName = a.DriverStaff != null ? a.DriverStaff.FirstName + " " + a.DriverStaff.LastName : null,
+            DriverStaffId = a.DriverUserId,
+            DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
             SeatRequirement = a.SeatRequirement, WheelchairPositionRequirement = a.WheelchairPositionRequirement,
             PickupTravelNotes = a.PickupTravelNotes, Comments = a.Comments, HasOverlapConflict = a.HasOverlapConflict
         }));
@@ -219,6 +219,12 @@ public class VehicleAssignmentsController : ControllerBase
     }
 }
 
+/// <summary>
+/// Staff CRUD, now backed by <see cref="User"/> post staff/user-unification — every staff member
+/// IS a user account. Route name (<c>api/v1/staff</c>) is kept deliberately (design spec §2). The
+/// role filter below (excluding SuperAdmin/ReadOnly) is a compile-time approximation of the old
+/// Staff-only listing; Task 2 removes it per the design spec §4.2 role guardrails/rewrite.
+/// </summary>
 [ApiController]
 [Authorize]
 [Route("api/v1/staff")]
@@ -227,11 +233,17 @@ public class StaffController : ControllerBase
     private readonly OdipDbContext _db;
     public StaffController(OdipDbContext db) => _db = db;
 
+    private static IQueryable<User> StaffLike(IQueryable<User> users) =>
+        users.Where(u => u.Role != UserRole.SuperAdmin && u.Role != UserRole.ReadOnly);
+
+    private static string DeriveUsername(string firstName, string lastName) =>
+        $"{firstName}.{lastName}".Trim().ToLowerInvariant().Replace(" ", "");
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<StaffListDto>>>> GetAll(
         [FromQuery] bool? isActive, CancellationToken ct)
     {
-        var query = _db.Staff.OrderBy(s => s.LastName).AsQueryable();
+        var query = StaffLike(_db.Users).OrderBy(s => s.LastName).AsQueryable();
         if (isActive.HasValue) query = query.Where(s => s.IsActive == isActive.Value);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -239,7 +251,7 @@ public class StaffController : ControllerBase
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Role = s.Role, Email = s.Email,
+                FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
                 Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
                 IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -263,13 +275,13 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var s = await _db.Staff.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FirstName + " " + s.LastName, Role = s.Role, Email = s.Email,
+            FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -288,10 +300,13 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
-        var s = new Staff
+        var username = DeriveUsername(dto.FirstName, dto.LastName);
+        var s = new User
         {
-            Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, Role = dto.Role,
-            Email = dto.Email, Mobile = dto.Mobile, Region = dto.Region,
+            Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
+            Username = username, Email = dto.Email ?? $"{username}@placeholder.local",
+            Role = UserRole.SupportWorker, Position = dto.Role,
+            Mobile = dto.Mobile, Region = dto.Region,
             IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
             IsMedicationCompetent = dto.IsMedicationCompetent, IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
             IsOvernightEligible = dto.IsOvernightEligible, IsActive = dto.IsActive, Notes = dto.Notes,
@@ -302,12 +317,12 @@ public class StaffController : ControllerBase
             WorkerScreeningNumber = dto.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate
         };
-        _db.Staff.Add(s);
+        _db.Users.Add(s);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FullName, Role = s.Role, Email = s.Email,
+            FullName = s.FullName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -326,11 +341,11 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Update(Guid id, [FromBody] UpdateStaffDto dto, CancellationToken ct)
     {
-        var s = await _db.Staff.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
-        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Role = dto.Role;
-        s.Email = dto.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
+        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Role;
+        s.Email = dto.Email ?? s.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
@@ -347,7 +362,7 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FullName, Role = s.Role, Email = s.Email,
+            FullName = s.FullName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -367,7 +382,7 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var s = await _db.Staff.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -377,11 +392,11 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}/availability")]
     public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAvailability(Guid id, CancellationToken ct)
     {
-        var items = await _db.StaffAvailabilities.Where(a => a.StaffId == id)
+        var items = await _db.StaffAvailabilities.Where(a => a.UserId == id)
             .OrderBy(a => a.StartDateTime)
             .Select(a => new StaffAvailabilityDto
             {
-                Id = a.Id, StaffId = a.StaffId, StartDateTime = a.StartDateTime,
+                Id = a.Id, StaffId = a.UserId, StartDateTime = a.StartDateTime,
                 EndDateTime = a.EndDateTime, AvailabilityType = a.AvailabilityType,
                 IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
             }).ToListAsync(ct);
@@ -392,11 +407,11 @@ public class StaffController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<StaffAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
     {
         var items = await _db.StaffAssignments.Include(a => a.TripInstance)
-            .Where(a => a.StaffId == id)
+            .Where(a => a.UserId == id)
             .Select(a => new StaffAssignmentDto
             {
                 Id = a.Id, TripInstanceId = a.TripInstanceId, TripName = a.TripInstance.TripName,
-                StaffId = a.StaffId, AssignmentRole = a.AssignmentRole,
+                StaffId = a.UserId, AssignmentRole = a.AssignmentRole,
                 AssignmentStart = a.AssignmentStart, AssignmentEnd = a.AssignmentEnd,
                 Status = a.Status, IsDriver = a.IsDriver, SleepoverType = a.SleepoverType,
                 HasConflict = a.HasConflict
@@ -416,13 +431,13 @@ public class StaffController : ControllerBase
         var unavailableStaffIds = await _db.StaffAvailabilities
             .Where(a => (a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Leave)
                 && a.StartDateTime < endDt && a.EndDateTime > startDt)
-            .Select(a => a.StaffId).Distinct().ToListAsync(ct);
+            .Select(a => a.UserId).Distinct().ToListAsync(ct);
 
-        var items = await _db.Staff.Where(s => s.IsActive && !unavailableStaffIds.Contains(s.Id))
+        var items = await StaffLike(_db.Users).Where(s => s.IsActive && !unavailableStaffIds.Contains(s.Id))
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Role = s.Role,
+                FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker,
                 IsDriverEligible = s.IsDriverEligible, IsFirstAidQualified = s.IsFirstAidQualified,
                 IsMedicationCompetent = s.IsMedicationCompetent, IsManualHandlingCompetent = s.IsManualHandlingCompetent,
                 IsOvernightEligible = s.IsOvernightEligible, IsActive = s.IsActive
@@ -445,7 +460,7 @@ public class StaffAvailabilityController : ControllerBase
     {
         var a = new StaffAvailability
         {
-            Id = Guid.NewGuid(), StaffId = dto.StaffId, StartDateTime = dto.StartDateTime,
+            Id = Guid.NewGuid(), UserId = dto.StaffId, StartDateTime = dto.StartDateTime,
             EndDateTime = dto.EndDateTime, AvailabilityType = dto.AvailabilityType,
             IsRecurring = dto.IsRecurring, RecurrenceNotes = dto.RecurrenceNotes, Notes = dto.Notes
         };
@@ -453,7 +468,7 @@ public class StaffAvailabilityController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<StaffAvailabilityDto>.Ok(new StaffAvailabilityDto
         {
-            Id = a.Id, StaffId = a.StaffId, StartDateTime = a.StartDateTime,
+            Id = a.Id, StaffId = a.UserId, StartDateTime = a.StartDateTime,
             EndDateTime = a.EndDateTime, AvailabilityType = a.AvailabilityType,
             IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
         }));
@@ -473,7 +488,7 @@ public class StaffAvailabilityController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<StaffAvailabilityDto>.Ok(new StaffAvailabilityDto
         {
-            Id = a.Id, StaffId = a.StaffId, StartDateTime = a.StartDateTime,
+            Id = a.Id, StaffId = a.UserId, StartDateTime = a.StartDateTime,
             EndDateTime = a.EndDateTime, AvailabilityType = a.AvailabilityType,
             IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
         }));
@@ -505,7 +520,7 @@ public class StaffAssignmentsController : ControllerBase
     {
         var assignment = new StaffAssignment
         {
-            Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, StaffId = dto.StaffId,
+            Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, UserId = dto.StaffId,
             AssignmentRole = dto.AssignmentRole, AssignmentStart = dto.AssignmentStart,
             AssignmentEnd = dto.AssignmentEnd, IsDriver = dto.IsDriver,
             SleepoverType = dto.SleepoverType, ShiftNotes = dto.ShiftNotes
@@ -513,7 +528,7 @@ public class StaffAssignmentsController : ControllerBase
 
         // Check staff overlap conflict
         var hasConflict = await _db.StaffAssignments
-            .AnyAsync(a => a.StaffId == dto.StaffId && a.Id != assignment.Id
+            .AnyAsync(a => a.UserId == dto.StaffId && a.Id != assignment.Id
                 && a.Status != AssignmentStatus.Cancelled
                 && a.AssignmentStart <= dto.AssignmentEnd && a.AssignmentEnd >= dto.AssignmentStart, ct);
 
@@ -523,7 +538,7 @@ public class StaffAssignmentsController : ControllerBase
             var startDt = dto.AssignmentStart.ToDateTime(TimeOnly.MinValue);
             var endDt = dto.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
             hasConflict = await _db.StaffAvailabilities
-                .AnyAsync(sa => sa.StaffId == dto.StaffId
+                .AnyAsync(sa => sa.UserId == dto.StaffId
                     && (sa.AvailabilityType == AvailabilityType.Unavailable || sa.AvailabilityType == AvailabilityType.Leave)
                     && sa.StartDateTime < endDt && sa.EndDateTime > startDt, ct);
         }
@@ -532,12 +547,12 @@ public class StaffAssignmentsController : ControllerBase
         _db.StaffAssignments.Add(assignment);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(assignment).Reference(a => a.TripInstance).LoadAsync(ct);
-        await _db.Entry(assignment).Reference(a => a.Staff).LoadAsync(ct);
+        await _db.Entry(assignment).Reference(a => a.User).LoadAsync(ct);
         return Ok(ApiResponse<StaffAssignmentDto>.Ok(new StaffAssignmentDto
         {
             Id = assignment.Id, TripInstanceId = assignment.TripInstanceId, TripName = assignment.TripInstance?.TripName,
-            StaffId = assignment.StaffId,
-            StaffName = assignment.Staff != null ? assignment.Staff.FirstName + " " + assignment.Staff.LastName : null,
+            StaffId = assignment.UserId,
+            StaffName = assignment.User != null ? assignment.User.FirstName + " " + assignment.User.LastName : null,
             AssignmentRole = assignment.AssignmentRole, AssignmentStart = assignment.AssignmentStart, AssignmentEnd = assignment.AssignmentEnd,
             Status = assignment.Status, IsDriver = assignment.IsDriver, SleepoverType = assignment.SleepoverType,
             ShiftNotes = assignment.ShiftNotes, HasConflict = hasConflict
@@ -551,18 +566,18 @@ public class StaffAssignmentsController : ControllerBase
         var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Assignment not found"));
 
-        a.StaffId = dto.StaffId; a.AssignmentRole = dto.AssignmentRole;
+        a.UserId = dto.StaffId; a.AssignmentRole = dto.AssignmentRole;
         a.AssignmentStart = dto.AssignmentStart; a.AssignmentEnd = dto.AssignmentEnd;
         a.IsDriver = dto.IsDriver; a.SleepoverType = dto.SleepoverType;
         a.ShiftNotes = dto.ShiftNotes; a.Status = dto.Status; a.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         await _db.Entry(a).Reference(x => x.TripInstance).LoadAsync(ct);
-        await _db.Entry(a).Reference(x => x.Staff).LoadAsync(ct);
+        await _db.Entry(a).Reference(x => x.User).LoadAsync(ct);
         return Ok(ApiResponse<StaffAssignmentDto>.Ok(new StaffAssignmentDto
         {
             Id = a.Id, TripInstanceId = a.TripInstanceId, TripName = a.TripInstance?.TripName,
-            StaffId = a.StaffId, StaffName = a.Staff != null ? a.Staff.FirstName + " " + a.Staff.LastName : null,
+            StaffId = a.UserId, StaffName = a.User != null ? a.User.FirstName + " " + a.User.LastName : null,
             AssignmentRole = a.AssignmentRole, AssignmentStart = a.AssignmentStart, AssignmentEnd = a.AssignmentEnd,
             Status = a.Status, IsDriver = a.IsDriver, SleepoverType = a.SleepoverType,
             ShiftNotes = a.ShiftNotes, HasConflict = a.HasConflict

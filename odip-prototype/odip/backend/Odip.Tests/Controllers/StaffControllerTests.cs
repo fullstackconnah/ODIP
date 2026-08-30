@@ -42,7 +42,7 @@ public class StaffControllerTests
         {
             FirstName = "Jane",
             LastName = "Doe",
-            Role = StaffRole.SupportWorker,
+            Role = Position.SupportWorker,
             IsActive = true,
             WorkerScreeningNumber = "WWCC1234567",
             WorkerScreeningExpiryDate = new DateOnly(2027, 6, 30),
@@ -56,7 +56,7 @@ public class StaffControllerTests
         Assert.Equal("WWCC1234567", body.Data!.WorkerScreeningNumber);
         Assert.Equal(new DateOnly(2027, 6, 30), body.Data!.WorkerScreeningExpiryDate);
 
-        var saved = await db.Staff.SingleAsync(s => s.FirstName == "Jane" && s.LastName == "Doe");
+        var saved = await db.Users.SingleAsync(s => s.FirstName == "Jane" && s.LastName == "Doe");
         Assert.Equal("WWCC1234567", saved.WorkerScreeningNumber);
         Assert.Equal(new DateOnly(2027, 6, 30), saved.WorkerScreeningExpiryDate);
     }
@@ -72,7 +72,7 @@ public class StaffControllerTests
         {
             FirstName = "John",
             LastName = "Smith",
-            Role = StaffRole.SupportWorker,
+            Role = Position.SupportWorker,
             IsActive = true,
         };
         var createResult = await controller.Create(createDto, CancellationToken.None);
@@ -84,7 +84,7 @@ public class StaffControllerTests
         {
             FirstName = "John",
             LastName = "Smith",
-            Role = StaffRole.SupportWorker,
+            Role = Position.SupportWorker,
             IsActive = true,
             WorkerScreeningNumber = "WWCC9876543",
             WorkerScreeningExpiryDate = new DateOnly(2028, 1, 15),
@@ -97,7 +97,7 @@ public class StaffControllerTests
         Assert.Equal("WWCC9876543", body.Data!.WorkerScreeningNumber);
         Assert.Equal(new DateOnly(2028, 1, 15), body.Data!.WorkerScreeningExpiryDate);
 
-        var reloaded = await db.Staff.SingleAsync(s => s.Id == staffId);
+        var reloaded = await db.Users.SingleAsync(s => s.Id == staffId);
         Assert.Equal("WWCC9876543", reloaded.WorkerScreeningNumber);
         Assert.Equal(new DateOnly(2028, 1, 15), reloaded.WorkerScreeningExpiryDate);
     }

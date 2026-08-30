@@ -69,7 +69,7 @@ public class ParticipantsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
         var p = await _db.Participants
-            .Include(x => x.PreferredStaff)
+            .Include(x => x.PreferredUser)
             .Include(x => x.RestrictivePractices)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
@@ -98,9 +98,9 @@ public class ParticipantsController : ControllerBase
             TransportRequirements = p.TransportRequirements, MedicalSummary = p.MedicalSummary,
             BehaviourRiskSummary = p.BehaviourRiskSummary, Notes = p.Notes,
             CreatedAt = p.CreatedAt, UpdatedAt = p.UpdatedAt,
-            PreferredStaffId = p.PreferredStaffId,
-            PreferredStaffName = p.PreferredStaff != null
-                ? p.PreferredStaff.FirstName + " " + p.PreferredStaff.LastName
+            PreferredStaffId = p.PreferredUserId,
+            PreferredStaffName = p.PreferredUser != null
+                ? p.PreferredUser.FirstName + " " + p.PreferredUser.LastName
                 : null,
         }));
     }
@@ -130,7 +130,7 @@ public class ParticipantsController : ControllerBase
             SupportRatio = dto.SupportRatio, MobilityNotes = dto.MobilityNotes,
             EquipmentRequirements = dto.EquipmentRequirements, TransportRequirements = dto.TransportRequirements,
             MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
-            PreferredStaffId = dto.PreferredStaffId,
+            PreferredUserId = dto.PreferredStaffId,
             ServiceStreams = dto.ServiceStreams,
         };
         _db.Participants.Add(participant);
@@ -155,7 +155,7 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
-        var previousPreferredStaffId = p.PreferredStaffId;
+        var previousPreferredStaffId = p.PreferredUserId;
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
         p.DateOfBirth = dto.DateOfBirth; p.NdisNumber = dto.NdisNumber; p.PlanType = dto.PlanType;
@@ -170,7 +170,7 @@ public class ParticipantsController : ControllerBase
         p.SupportRatio = dto.SupportRatio; p.MobilityNotes = dto.MobilityNotes;
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;
-        p.Notes = dto.Notes; p.PreferredStaffId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
+        p.Notes = dto.Notes; p.PreferredUserId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
         p.UpdatedAt = DateTime.UtcNow;
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching

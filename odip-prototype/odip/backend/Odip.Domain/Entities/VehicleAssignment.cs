@@ -15,8 +15,8 @@ public class VehicleAssignment
     public DateOnly? RequestedDate { get; set; }
     public DateOnly? ConfirmedDate { get; set; }
     public VehicleAssignmentStatus Status { get; set; } = VehicleAssignmentStatus.Requested;
-    public Guid? DriverStaffId { get; set; }
-    public Staff? DriverStaff { get; set; }
+    public Guid? DriverUserId { get; set; }
+    public User? DriverUser { get; set; }
     public int? SeatRequirement { get; set; }
     public int? WheelchairPositionRequirement { get; set; }
     public string? PickupTravelNotes { get; set; }

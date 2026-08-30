@@ -52,18 +52,19 @@ public class RosteringAuditTests
         Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Amy", LastName = "Ng"
     };
 
-    private static Staff NewStaff(string firstName = "Ben") => new()
+    private static User NewStaff(string firstName = "Ben") => new()
     {
         Id = Guid.NewGuid(), TenantId = TenantId, FirstName = firstName, LastName = "Turner",
-        Role = StaffRole.SupportWorker, IsActive = true
+        Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+        Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true
     };
 
-    private static Shift NewShift(Participant participant, Staff? staff = null) => new()
+    private static Shift NewShift(Participant participant, User? staff = null) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = TenantId,
         ParticipantId = participant.Id,
-        StaffId = staff?.Id,
+        UserId = staff?.Id,
         ServiceDate = ServiceDate,
         StartTime = new TimeOnly(9, 0),
         EndTime = new TimeOnly(17, 0),
@@ -98,7 +99,7 @@ public class RosteringAuditTests
         var participant = NewParticipant();
         var staff = NewStaff();
         db.Participants.Add(participant);
-        db.Staff.Add(staff);
+        db.Users.Add(staff);
         await db.SaveChangesAsync();
 
         var shift = NewShift(participant, staff);
@@ -121,26 +122,26 @@ public class RosteringAuditTests
     }
 
     [Fact]
-    public async Task AssignStaffToShift_WritesAuditLogWithStaffIdChange()
+    public async Task AssignStaffToShift_WritesAuditLogWithUserIdChange()
     {
         using var db = CreateDb(Guid.NewGuid());
         var participant = NewParticipant();
         var staff = NewStaff();
         db.Participants.Add(participant);
-        db.Staff.Add(staff);
+        db.Users.Add(staff);
         await db.SaveChangesAsync();
 
         var shift = NewShift(participant); // unfilled
         db.Shifts.Add(shift);
         await db.SaveChangesAsync();
 
-        shift.StaffId = staff.Id;
+        shift.UserId = staff.Id;
         await db.SaveChangesAsync();
 
         var updateLog = db.AuditLogs
             .Where(a => a.EntityType == nameof(Shift) && a.EntityId == shift.Id && a.Action == AuditAction.Updated)
             .Single();
-        Assert.Contains("StaffId", updateLog.Changes);
+        Assert.Contains("UserId", updateLog.Changes);
         Assert.Contains(staff.Id.ToString(), updateLog.Changes);
     }
 
@@ -202,14 +203,14 @@ public class RosteringAuditTests
         var participant = NewParticipant();
         var staff = NewStaff();
         db.Participants.Add(participant);
-        db.Staff.Add(staff);
+        db.Users.Add(staff);
         await db.SaveChangesAsync();
 
         var compatibility = new StaffParticipantCompatibility
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
-            StaffId = staff.Id,
+            UserId = staff.Id,
             ParticipantId = participant.Id,
             Level = CompatibilityLevel.Allowed,
         };

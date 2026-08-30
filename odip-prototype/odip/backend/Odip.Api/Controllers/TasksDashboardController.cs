@@ -476,14 +476,14 @@ public class ConflictsController : ControllerBase
         foreach (var a in staffAssignments)
         {
             var hasConflict = staffAssignments.Any(other => other.Id != a.Id
-                && other.StaffId == a.StaffId
+                && other.UserId == a.UserId
                 && other.AssignmentStart <= a.AssignmentEnd && other.AssignmentEnd >= a.AssignmentStart);
 
             if (!hasConflict)
             {
                 var startDt = a.AssignmentStart.ToDateTime(TimeOnly.MinValue);
                 var endDt = a.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
-                hasConflict = unavailability.Any(ua => ua.StaffId == a.StaffId
+                hasConflict = unavailability.Any(ua => ua.UserId == a.UserId
                     && ua.StartDateTime < endDt && ua.EndDateTime > startDt);
             }
             if (a.HasConflict != hasConflict) { a.HasConflict = hasConflict; updated++; }

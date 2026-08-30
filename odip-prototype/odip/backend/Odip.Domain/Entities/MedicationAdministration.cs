@@ -40,10 +40,10 @@ public class MedicationAdministration : ITenantEntity
     /// </summary>
     public string? WitnessName { get; set; }
 
-    /// <summary>The staff member selected to witness this administration, if any. Only this staff
-    /// member (via their own <c>User.StaffId</c>) may approve/decline the resulting request.</summary>
-    public Guid? WitnessStaffId { get; set; }
-    public Staff? WitnessStaff { get; set; }
+    /// <summary>The user selected to witness this administration, if any. Only this user may
+    /// approve/decline the resulting request.</summary>
+    public Guid? WitnessUserId { get; set; }
+    public User? WitnessUser { get; set; }
 
     public WitnessStatus WitnessStatus { get; set; } = WitnessStatus.NotRequired;
     public DateTime? WitnessRequestedAt { get; set; }

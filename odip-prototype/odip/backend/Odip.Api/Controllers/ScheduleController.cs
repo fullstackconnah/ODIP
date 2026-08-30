@@ -78,8 +78,8 @@ public class ScheduleController : ControllerBase
             where tripIds.Contains(b.TripInstanceId)
                && (b.BookingStatus == BookingStatus.Confirmed
                    || b.BookingStatus == BookingStatus.Held)
-               && p.PreferredStaffId != null
-            select new { b.TripInstanceId, StaffId = p.PreferredStaffId!.Value }
+               && p.PreferredUserId != null
+            select new { b.TripInstanceId, StaffId = p.PreferredUserId!.Value }
         ).ToListAsync(ct);
 
         // prefsByStaff[staffId][tripId] = count
@@ -123,15 +123,17 @@ public class ScheduleController : ControllerBase
         }).ToList();
 
         // ── 2. Load all active staff with assignments & availability ──
-        var allStaff = await _db.Staff
-            .Where(s => s.IsActive)
+        // Approximates today's Staff-only listing now that Staff has merged into User — see the
+        // same filter/rationale in RosteringController.GetBoard.
+        var allStaff = await _db.Users
+            .Where(s => s.IsActive && s.Role != UserRole.SuperAdmin && s.Role != UserRole.ReadOnly)
             .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
             .ToListAsync(ct);
 
         var staffIds = allStaff.Select(s => s.Id).ToList();
 
         var staffAssignments = await _db.StaffAssignments
-            .Where(a => staffIds.Contains(a.StaffId) && a.Status != AssignmentStatus.Cancelled)
+            .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled)
             .ToListAsync(ct);
 
         // Load availability within the overall trip window
@@ -139,14 +141,14 @@ public class ScheduleController : ControllerBase
         var overallEnd = trips.Max(t => t.StartDate.AddDays(t.DurationDays - 1)).ToDateTime(TimeOnly.MaxValue);
 
         var staffAvailability = await _db.StaffAvailabilities
-            .Where(a => staffIds.Contains(a.StaffId)
+            .Where(a => staffIds.Contains(a.UserId)
                 && a.StartDateTime < overallEnd && a.EndDateTime > overallStart)
             .ToListAsync(ct);
 
         var staffDtos = allStaff.Select(s =>
         {
-            var myAssignments = staffAssignments.Where(a => a.StaffId == s.Id).ToList();
-            var myAvailability = staffAvailability.Where(a => a.StaffId == s.Id).ToList();
+            var myAssignments = staffAssignments.Where(a => a.UserId == s.Id).ToList();
+            var myAvailability = staffAvailability.Where(a => a.UserId == s.Id).ToList();
 
             var tripStatuses = trips.Select(t =>
             {
@@ -205,7 +207,7 @@ public class ScheduleController : ControllerBase
                 FirstName = s.FirstName,
                 LastName = s.LastName,
                 FullName = s.FirstName + " " + s.LastName,
-                Role = s.Role,
+                Role = s.Position ?? Position.SupportWorker,
                 Region = s.Region,
                 IsDriverEligible = s.IsDriverEligible,
                 IsFirstAidQualified = s.IsFirstAidQualified,
@@ -215,7 +217,7 @@ public class ScheduleController : ControllerBase
                 TripStatuses = tripStatuses,
                 Availability = myAvailability.Select(a => new StaffAvailabilityDto
                 {
-                    Id = a.Id, StaffId = a.StaffId,
+                    Id = a.Id, StaffId = a.UserId,
                     StartDateTime = a.StartDateTime, EndDateTime = a.EndDateTime,
                     AvailabilityType = a.AvailabilityType,
                     IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes

@@ -24,7 +24,7 @@ public class TripInstance : ITenantEntity
     public DateOnly? BookingCutoffDate { get; set; }
     public TripStatus Status { get; set; } = TripStatus.Draft;
     public Guid? LeadCoordinatorId { get; set; }
-    public Staff? LeadCoordinator { get; set; }
+    public User? LeadCoordinator { get; set; }
     public int? MinParticipants { get; set; }
     public int? MaxParticipants { get; set; }
     public int? RequiredWheelchairCapacity { get; set; }

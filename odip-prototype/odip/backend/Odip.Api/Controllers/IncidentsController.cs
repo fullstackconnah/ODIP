@@ -31,7 +31,7 @@ public class IncidentsController : ControllerBase
     {
         var query = _db.IncidentReports
             .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByStaff)
+            .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
             .AsQueryable();
 
@@ -58,7 +58,7 @@ public class IncidentsController : ControllerBase
                 Title = i.Title,
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
-                ReportedByName = i.ReportedByStaff.FirstName + " " + i.ReportedByStaff.LastName,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -76,10 +76,10 @@ public class IncidentsController : ControllerBase
     {
         var item = await _db.IncidentReports
             .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByStaff)
+            .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
-            .Include(i => i.InvolvedStaff)
-            .Include(i => i.ReviewedByStaff)
+            .Include(i => i.InvolvedUser)
+            .Include(i => i.ReviewedByUser)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -92,7 +92,7 @@ public class IncidentsController : ControllerBase
                 Title = i.Title,
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
-                ReportedByName = i.ReportedByStaff.FirstName + " " + i.ReportedByStaff.LastName,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -103,10 +103,10 @@ public class IncidentsController : ControllerBase
                 // Detail fields
                 ParticipantBookingId = i.ParticipantBookingId,
                 InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedStaffId = i.InvolvedStaffId,
-                InvolvedStaffName = i.InvolvedStaff != null
-                    ? i.InvolvedStaff.FirstName + " " + i.InvolvedStaff.LastName : null,
-                ReportedByStaffId = i.ReportedByStaffId,
+                InvolvedStaffId = i.InvolvedUserId,
+                InvolvedStaffName = i.InvolvedUser != null
+                    ? i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName : null,
+                ReportedByStaffId = i.ReportedByUserId,
                 Description = i.Description,
                 ImmediateActionsTaken = i.ImmediateActionsTaken,
                 WereEmergencyServicesCalled = i.WereEmergencyServicesCalled,
@@ -115,9 +115,9 @@ public class IncidentsController : ControllerBase
                 WitnessStatements = i.WitnessStatements,
                 QscReportedAt = i.QscReportedAt,
                 QscReferenceNumber = i.QscReferenceNumber,
-                ReviewedByStaffId = i.ReviewedByStaffId,
-                ReviewedByName = i.ReviewedByStaff != null
-                    ? i.ReviewedByStaff.FirstName + " " + i.ReviewedByStaff.LastName : null,
+                ReviewedByStaffId = i.ReviewedByUserId,
+                ReviewedByName = i.ReviewedByUser != null
+                    ? i.ReviewedByUser.FirstName + " " + i.ReviewedByUser.LastName : null,
                 ReviewedAt = i.ReviewedAt,
                 ReviewNotes = i.ReviewNotes,
                 CorrectiveActions = i.CorrectiveActions,
@@ -143,8 +143,8 @@ public class IncidentsController : ControllerBase
             TripInstanceId = dto.TripInstanceId,
             ParticipantBookingId = dto.ParticipantBookingId,
             InvolvedParticipantId = dto.InvolvedParticipantId,
-            InvolvedStaffId = dto.InvolvedStaffId,
-            ReportedByStaffId = dto.ReportedByStaffId,
+            InvolvedUserId = dto.InvolvedStaffId,
+            ReportedByUserId = dto.ReportedByStaffId,
             IncidentType = dto.IncidentType,
             Severity = dto.Severity,
             Title = dto.Title,
@@ -169,7 +169,7 @@ public class IncidentsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
-        await _db.Entry(incident).Reference(i => i.ReportedByStaff).LoadAsync(ct);
+        await _db.Entry(incident).Reference(i => i.ReportedByUser).LoadAsync(ct);
         if (incident.InvolvedParticipantId.HasValue) await _db.Entry(incident).Reference(i => i.InvolvedParticipant).LoadAsync(ct);
 
         return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
@@ -183,7 +183,7 @@ public class IncidentsController : ControllerBase
             Title = incident.Title,
             IncidentDateTime = incident.IncidentDateTime,
             Location = incident.Location,
-            ReportedByName = incident.ReportedByStaff != null ? incident.ReportedByStaff.FirstName + " " + incident.ReportedByStaff.LastName : null,
+            ReportedByName = incident.ReportedByUser != null ? incident.ReportedByUser.FirstName + " " + incident.ReportedByUser.LastName : null,
             InvolvedParticipantName = incident.InvolvedParticipant != null
                 ? incident.InvolvedParticipant.FirstName + " " + incident.InvolvedParticipant.LastName : null,
             QscReportingStatus = incident.QscReportingStatus,
@@ -204,8 +204,8 @@ public class IncidentsController : ControllerBase
         i.TripInstanceId = dto.TripInstanceId;
         i.ParticipantBookingId = dto.ParticipantBookingId;
         i.InvolvedParticipantId = dto.InvolvedParticipantId;
-        i.InvolvedStaffId = dto.InvolvedStaffId;
-        i.ReportedByStaffId = dto.ReportedByStaffId;
+        i.InvolvedUserId = dto.InvolvedStaffId;
+        i.ReportedByUserId = dto.ReportedByStaffId;
         i.IncidentType = dto.IncidentType;
         i.Severity = dto.Severity;
         i.Status = dto.Status;
@@ -221,7 +221,7 @@ public class IncidentsController : ControllerBase
         i.QscReportingStatus = dto.QscReportingStatus;
         i.QscReportedAt = dto.QscReportedAt;
         i.QscReferenceNumber = dto.QscReferenceNumber;
-        i.ReviewedByStaffId = dto.ReviewedByStaffId;
+        i.ReviewedByUserId = dto.ReviewedByStaffId;
         i.ReviewNotes = dto.ReviewNotes;
         i.CorrectiveActions = dto.CorrectiveActions;
         i.FamilyNotified = dto.FamilyNotified;
@@ -241,7 +241,7 @@ public class IncidentsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(i).Reference(x => x.TripInstance).LoadAsync(ct);
-        await _db.Entry(i).Reference(x => x.ReportedByStaff).LoadAsync(ct);
+        await _db.Entry(i).Reference(x => x.ReportedByUser).LoadAsync(ct);
         if (i.InvolvedParticipantId.HasValue) await _db.Entry(i).Reference(x => x.InvolvedParticipant).LoadAsync(ct);
 
         return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
@@ -255,7 +255,7 @@ public class IncidentsController : ControllerBase
             Title = i.Title,
             IncidentDateTime = i.IncidentDateTime,
             Location = i.Location,
-            ReportedByName = i.ReportedByStaff != null ? i.ReportedByStaff.FirstName + " " + i.ReportedByStaff.LastName : null,
+            ReportedByName = i.ReportedByUser != null ? i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName : null,
             InvolvedParticipantName = i.InvolvedParticipant != null
                 ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
             QscReportingStatus = i.QscReportingStatus,
@@ -283,7 +283,7 @@ public class IncidentsController : ControllerBase
     {
         var items = await _db.IncidentReports
             .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByStaff)
+            .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
             .Where(i => i.TripInstanceId == tripId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
@@ -298,7 +298,7 @@ public class IncidentsController : ControllerBase
                 Title = i.Title,
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
-                ReportedByName = i.ReportedByStaff.FirstName + " " + i.ReportedByStaff.LastName,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -317,7 +317,7 @@ public class IncidentsController : ControllerBase
         var cutoff = DateTime.UtcNow.AddHours(-24);
         var items = await _db.IncidentReports
             .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByStaff)
+            .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
             .Where(i => i.IsActive
                 && i.QscReportingStatus == QscReportingStatus.Required
@@ -335,7 +335,7 @@ public class IncidentsController : ControllerBase
                 Title = i.Title,
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
-                ReportedByName = i.ReportedByStaff.FirstName + " " + i.ReportedByStaff.LastName,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,

@@ -570,7 +570,7 @@ public record StaffListDto
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
-    public StaffRole Role { get; init; }
+    public Position Role { get; init; }
     public string? Email { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -598,7 +598,7 @@ public record CreateStaffDto
     public string FirstName { get; init; } = string.Empty;
     [Required, StringLength(100, MinimumLength = 1)]
     public string LastName { get; init; } = string.Empty;
-    public StaffRole Role { get; init; }
+    public Position Role { get; init; }
     [StringLength(200), EmailAddress]
     public string? Email { get; init; }
     [StringLength(50)]
@@ -1134,7 +1134,7 @@ public record ScheduleStaffDto
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
-    public StaffRole Role { get; init; }
+    public Position Role { get; init; }
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }

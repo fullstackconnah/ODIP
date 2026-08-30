@@ -20,7 +20,10 @@ namespace Odip.Tests.Portal;
 /// Moq&lt;ICurrentTenant&gt; pattern as RosteringControllerTests/MedicationsControllerTests,
 /// plus a ClaimsPrincipal set directly on ControllerContext.HttpContext.User (mirroring
 /// RosteringAuditTests' approach), since PortalController resolves the caller's identity from
-/// the JWT's NameIdentifier claim rather than from ICurrentTenant.
+/// the JWT's NameIdentifier claim rather than from ICurrentTenant. Post staff/user unification a
+/// staff member IS a User account directly — the "not linked" state from before the merge is only
+/// reachable now when the caller's identity can't be resolved to any User row at all (no claim,
+/// or a claim pointing at a user id that doesn't exist).
 /// </summary>
 public class PortalControllerTests
 {
@@ -54,12 +57,16 @@ public class PortalControllerTests
         };
     }
 
-    private static Staff SeedStaff(OdipDbContext db, string firstName = "Ben", string lastName = "Turner")
+    private static User SeedUser(OdipDbContext db, string firstName = "Ben", string lastName = "Turner", UserRole role = UserRole.SupportWorker)
     {
-        var staff = new Staff { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
+        var user = new User
+        {
+            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
+            FirstName = firstName, LastName = lastName, Role = role, IsActive = true
+        };
+        db.Users.Add(user);
         db.SaveChanges();
-        return staff;
+        return user;
     }
 
     private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng")
@@ -70,18 +77,6 @@ public class PortalControllerTests
         return participant;
     }
 
-    private static User SeedUser(OdipDbContext db, Guid? staffId, UserRole role = UserRole.SupportWorker)
-    {
-        var user = new User
-        {
-            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
-            FirstName = "Test", LastName = "User", Role = role, StaffId = staffId, IsActive = true
-        };
-        db.Users.Add(user);
-        db.SaveChanges();
-        return user;
-    }
-
     private static Shift SeedShift(OdipDbContext db, Guid participantId, Guid? staffId, DateOnly? serviceDate = null) =>
         SeedShiftInternal(db, participantId, staffId, serviceDate ?? ServiceDate);
 
@@ -89,7 +84,7 @@ public class PortalControllerTests
     {
         var shift = new Shift
         {
-            Id = Guid.NewGuid(), ParticipantId = participantId, StaffId = staffId, ServiceDate = serviceDate,
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId, ServiceDate = serviceDate,
             StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
             NightType = SleepoverType.None, Status = ShiftStatus.Published
         };
@@ -103,11 +98,12 @@ public class PortalControllerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task GetMyShifts_NullStaffId_ReturnsNotLinkedPayload_Never500()
+    public async Task GetMyShifts_CallerUserRowNotFound_ReturnsNotLinkedPayload_Never500()
     {
         var (db, tenant) = CreateDb();
-        var user = SeedUser(db, staffId: null);
-        var controller = MakeController(db, tenant.Object, user.Id);
+        // Caller identity resolves to a user id that was never seeded — mirrors the old
+        // "unlinked" state, since every seeded User now IS its own staff identity.
+        var controller = MakeController(db, tenant.Object, Guid.NewGuid());
 
         var result = await controller.GetMyShifts(null, null, CancellationToken.None);
 
@@ -121,11 +117,10 @@ public class PortalControllerTests
     }
 
     [Fact]
-    public async Task GetShiftDetail_NullStaffId_Returns404NotLinked()
+    public async Task GetShiftDetail_CallerUserRowNotFound_Returns404NotLinked()
     {
         var (db, tenant) = CreateDb();
-        var user = SeedUser(db, staffId: null);
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var controller = MakeController(db, tenant.Object, Guid.NewGuid());
 
         var result = await controller.GetShiftDetail(Guid.NewGuid(), CancellationToken.None);
 
@@ -161,14 +156,13 @@ public class PortalControllerTests
     public async Task GetMyShifts_ReturnsOnlyCallersOwnShifts()
     {
         var (db, tenant) = CreateDb();
-        var myStaff = SeedStaff(db, "Ben", "Turner");
-        var otherStaff = SeedStaff(db, "Cara", "Lee");
+        var myUser = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
         var participant = SeedParticipant(db);
-        var myShift = SeedShift(db, participant.Id, myStaff.Id);
-        SeedShift(db, participant.Id, otherStaff.Id); // belongs to someone else — must not appear
+        var myShift = SeedShift(db, participant.Id, myUser.Id);
+        SeedShift(db, participant.Id, otherUser.Id); // belongs to someone else — must not appear
 
-        var user = SeedUser(db, myStaff.Id);
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
 
         var result = await controller.GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
 
@@ -183,7 +177,7 @@ public class PortalControllerTests
     public async Task GetShiftDetail_OwnShift_ReturnsFullDetail()
     {
         var (db, tenant) = CreateDb();
-        var staff = SeedStaff(db);
+        var user = SeedUser(db);
         var participant = SeedParticipant(db);
         participant.MobilityAidWheelchair = true;
         participant.EquipmentRequirements = "Hoist required for transfers";
@@ -209,8 +203,7 @@ public class PortalControllerTests
         });
         db.SaveChanges();
 
-        var shift = SeedShift(db, participant.Id, staff.Id);
-        var user = SeedUser(db, staff.Id);
+        var shift = SeedShift(db, participant.Id, user.Id);
         var controller = MakeController(db, tenant.Object, user.Id);
 
         var result = await controller.GetShiftDetail(shift.Id, CancellationToken.None);
@@ -233,13 +226,12 @@ public class PortalControllerTests
     public async Task GetShiftDetail_ForeignShift_Returns404NotFound()
     {
         var (db, tenant) = CreateDb();
-        var myStaff = SeedStaff(db, "Ben", "Turner");
-        var otherStaff = SeedStaff(db, "Cara", "Lee");
+        var myUser = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
         var participant = SeedParticipant(db);
-        var foreignShift = SeedShift(db, participant.Id, otherStaff.Id);
+        var foreignShift = SeedShift(db, participant.Id, otherUser.Id);
 
-        var user = SeedUser(db, myStaff.Id);
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
 
         var result = await controller.GetShiftDetail(foreignShift.Id, CancellationToken.None);
 
@@ -251,8 +243,7 @@ public class PortalControllerTests
     public async Task GetShiftDetail_NonexistentShiftId_Returns404NotFound()
     {
         var (db, tenant) = CreateDb();
-        var staff = SeedStaff(db);
-        var user = SeedUser(db, staff.Id);
+        var user = SeedUser(db);
         var controller = MakeController(db, tenant.Object, user.Id);
 
         var result = await controller.GetShiftDetail(Guid.NewGuid(), CancellationToken.None);
@@ -264,11 +255,10 @@ public class PortalControllerTests
     public async Task GetShiftDetail_UnfilledShift_NotVisibleToAnyStaff()
     {
         var (db, tenant) = CreateDb();
-        var staff = SeedStaff(db);
+        var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var unfilledShift = SeedShift(db, participant.Id, staffId: null);
 
-        var user = SeedUser(db, staff.Id);
         var controller = MakeController(db, tenant.Object, user.Id);
 
         var result = await controller.GetShiftDetail(unfilledShift.Id, CancellationToken.None);
@@ -285,13 +275,11 @@ public class PortalControllerTests
     {
         var (db, _) = CreateDb();
 
-        var viewedStaff = SeedStaff(db, "Dana", "Reyes");
+        var viewedUser = SeedUser(db, "Dana", "Reyes");
         var participant = SeedParticipant(db);
-        var viewedShift = SeedShift(db, participant.Id, viewedStaff.Id);
+        var viewedShift = SeedShift(db, participant.Id, viewedUser.Id);
 
-        var viewedUser = SeedUser(db, viewedStaff.Id);
-        // SuperAdmin caller typically has no linked Staff record of their own.
-        var superAdminUser = SeedUser(db, staffId: null, UserRole.SuperAdmin);
+        var superAdminUser = SeedUser(db, "Super", "Admin", UserRole.SuperAdmin);
 
         // A tenant mock with ViewAsUserId pointing at the viewed user, paired with a controller
         // whose JWT identity is the SuperAdmin's own id — the resolution must prefer
@@ -308,7 +296,7 @@ public class PortalControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
         Assert.True(body.Data!.IsLinked);
-        Assert.Equal(viewedStaff.Id, body.Data.StaffId);
+        Assert.Equal(viewedUser.Id, body.Data.StaffId);
         var shift = Assert.Single(body.Data.Shifts);
         Assert.Equal(viewedShift.Id, shift.Id);
     }

@@ -11,7 +11,7 @@ public static class AuditedEntities
         typeof(Participant),
         typeof(ParticipantBooking),
         typeof(IncidentReport),
-        typeof(Staff),
+        typeof(User),
         typeof(StaffAssignment),
         typeof(VehicleAssignment),
 
@@ -22,7 +22,7 @@ public static class AuditedEntities
         typeof(Shift),
 
         // ShiftPattern is the origination point for a recurring staff/participant pairing:
-        // every Shift the pattern later expands into inherits DefaultStaffId from it, so who
+        // every Shift the pattern later expands into inherits DefaultUserId from it, so who
         // set up (or changed) that pairing, and when, is the same class of question as who
         // rostered a single shift. Audited for the same reason as Shift itself.
         typeof(ShiftPattern),

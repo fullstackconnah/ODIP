@@ -17,8 +17,8 @@ public class TripClaim
     public DateTime? SubmittedDate { get; set; }
     public DateTime? PaidDate { get; set; }
 
-    public Guid? AuthorisedByStaffId { get; set; }
-    public Staff? AuthorisedByStaff { get; set; }
+    public Guid? AuthorisedByUserId { get; set; }
+    public User? AuthorisedByUser { get; set; }
 
     public string? Notes { get; set; }
 

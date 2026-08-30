@@ -8,8 +8,8 @@ namespace Odip.Domain.Entities;
 public class StaffAvailability
 {
     public Guid Id { get; set; }
-    public Guid StaffId { get; set; }
-    public Staff Staff { get; set; } = null!;
+    public Guid UserId { get; set; }
+    public User User { get; set; } = null!;
     public DateTime StartDateTime { get; set; }
     public DateTime EndDateTime { get; set; }
     public AvailabilityType AvailabilityType { get; set; }

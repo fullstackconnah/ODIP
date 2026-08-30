@@ -273,8 +273,8 @@ public class ParticipantsControllerTests
     public async Task Create_WithPreferredStaffId_UpsertsAutoLinkedPreferredCompatibilityRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var staff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
+        var staff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        db.Users.Add(staff);
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
@@ -285,7 +285,7 @@ public class ParticipantsControllerTests
         var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
 
         var row = await db.StaffParticipantCompatibilities
-            .SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == createdBody.Data!.Id);
+            .SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == createdBody.Data!.Id);
         Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, row.Level);
         Assert.True(row.AutoLinked);
     }
@@ -294,9 +294,9 @@ public class ParticipantsControllerTests
     public async Task Update_ChangesPreferredStaffId_RemovesOldAutoLinkedRow_CreatesNewOne()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var oldStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        var newStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        db.Staff.AddRange(oldStaff, newStaff);
+        var oldStaff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        var newStaff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        db.Users.AddRange(oldStaff, newStaff);
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
@@ -313,8 +313,8 @@ public class ParticipantsControllerTests
         var updateResult = await controller.Update(participantId, updateDto, CancellationToken.None);
         Assert.IsType<OkObjectResult>(updateResult.Result);
 
-        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participantId));
-        var newRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == newStaff.Id && c.ParticipantId == participantId);
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == oldStaff.Id && c.ParticipantId == participantId));
+        var newRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == newStaff.Id && c.ParticipantId == participantId);
         Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, newRow.Level);
         Assert.True(newRow.AutoLinked);
     }
@@ -323,15 +323,15 @@ public class ParticipantsControllerTests
     public async Task Update_ClearsPreferredStaffId_RemovesAutoLinkedCompatibilityRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var staff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
+        var staff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        db.Users.Add(staff);
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var createDto = MinimalCreateDto() with { PreferredStaffId = staff.Id };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
-        Assert.True(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participantId));
+        Assert.True(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == staff.Id && c.ParticipantId == participantId));
 
         var updateDto = new UpdateParticipantDto
         {
@@ -342,21 +342,21 @@ public class ParticipantsControllerTests
         var updateResult = await controller.Update(participantId, updateDto, CancellationToken.None);
         Assert.IsType<OkObjectResult>(updateResult.Result);
 
-        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participantId));
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.UserId == staff.Id && c.ParticipantId == participantId));
     }
 
     [Fact]
     public async Task Update_ChangesPreferredStaffId_HumanManagedOldRow_IsNotDeleted()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var oldStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        var newStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
-        db.Staff.AddRange(oldStaff, newStaff);
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, PreferredStaffId = oldStaff.Id };
+        var oldStaff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        var newStaff = new Domain.Entities.User { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = Domain.Enums.UserRole.SupportWorker, IsActive = true };
+        db.Users.AddRange(oldStaff, newStaff);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, PreferredUserId = oldStaff.Id };
         db.Participants.Add(participant);
         db.StaffParticipantCompatibilities.Add(new Domain.Rostering.StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = oldStaff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = oldStaff.Id, ParticipantId = participant.Id,
             Level = Domain.Rostering.CompatibilityLevel.Preferred, AutoLinked = false, Reason = "Set by coordinator", UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -371,7 +371,7 @@ public class ParticipantsControllerTests
         var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
         Assert.IsType<OkObjectResult>(updateResult.Result);
 
-        var oldRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participant.Id);
+        var oldRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == oldStaff.Id && c.ParticipantId == participant.Id);
         Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, oldRow.Level);
         Assert.Equal("Set by coordinator", oldRow.Reason);
     }

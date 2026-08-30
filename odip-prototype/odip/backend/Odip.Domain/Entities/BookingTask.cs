@@ -21,7 +21,7 @@ public class BookingTask
     public TaskType TaskType { get; set; }
     public string Title { get; set; } = string.Empty;
     public Guid? OwnerId { get; set; }
-    public Staff? Owner { get; set; }
+    public User? Owner { get; set; }
     public TaskPriority Priority { get; set; } = TaskPriority.Medium;
     public DateOnly? DueDate { get; set; }
     public TaskItemStatus Status { get; set; } = TaskItemStatus.NotStarted;

@@ -13,7 +13,7 @@ public class RosterConflictServiceTests
 
     // ── Helpers ──────────────────────────────────────────────
 
-    private static Staff CompliantStaff() => new()
+    private static User CompliantStaff() => new()
     {
         Id = Guid.NewGuid(),
         TenantId = TenantId,
@@ -41,7 +41,7 @@ public class RosterConflictServiceTests
     };
 
     private static Shift CandidateShift(
-        Staff staff,
+        User staff,
         Participant participant,
         DateOnly? serviceDate = null,
         TimeOnly? start = null,
@@ -54,8 +54,8 @@ public class RosterConflictServiceTests
         TenantId = TenantId,
         ParticipantId = participant.Id,
         Participant = participant,
-        StaffId = staff.Id,
-        Staff = staff,
+        UserId = staff.Id,
+        User = staff,
         ServiceDate = serviceDate ?? ServiceDate,
         StartTime = start ?? new TimeOnly(9, 0),
         EndTime = end ?? new TimeOnly(17, 0),
@@ -65,7 +65,7 @@ public class RosterConflictServiceTests
     };
 
     private static RosterCheckContext CompliantContext(
-        Staff staff,
+        User staff,
         Participant participant,
         IReadOnlyList<Shift>? staffShiftsInWeek = null,
         IReadOnlyList<Shift>? participantShiftsOnDate = null,
@@ -178,12 +178,12 @@ public class RosterConflictServiceTests
         var overlapping = CandidateShift(staff, participant, start: new TimeOnly(16, 0), end: new TimeOnly(20, 0));
         var assignment = new StaffAssignment
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, Staff = staff,
+            Id = Guid.NewGuid(), UserId = staff.Id, User = staff,
             AssignmentStart = ServiceDate.AddDays(-1), AssignmentEnd = ServiceDate.AddDays(1),
         };
         var availability = new StaffAvailability
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, Staff = staff,
+            Id = Guid.NewGuid(), UserId = staff.Id, User = staff,
             AvailabilityType = AvailabilityType.Unavailable,
             StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
             EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
@@ -275,8 +275,8 @@ public class RosterConflictServiceTests
         var assignment = new StaffAssignment
         {
             Id = Guid.NewGuid(),
-            StaffId = staff.Id,
-            Staff = staff,
+            UserId = staff.Id,
+            User = staff,
             AssignmentStart = ServiceDate.AddDays(-1),
             AssignmentEnd = ServiceDate.AddDays(1),
         };
@@ -295,8 +295,8 @@ public class RosterConflictServiceTests
         var assignment = new StaffAssignment
         {
             Id = Guid.NewGuid(),
-            StaffId = staff.Id,
-            Staff = staff,
+            UserId = staff.Id,
+            User = staff,
             AssignmentStart = ServiceDate.AddDays(5),
             AssignmentEnd = ServiceDate.AddDays(7),
         };
@@ -317,8 +317,8 @@ public class RosterConflictServiceTests
         var availability = new StaffAvailability
         {
             Id = Guid.NewGuid(),
-            StaffId = staff.Id,
-            Staff = staff,
+            UserId = staff.Id,
+            User = staff,
             AvailabilityType = AvailabilityType.Unavailable,
             StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
             EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
@@ -338,8 +338,8 @@ public class RosterConflictServiceTests
         var availability = new StaffAvailability
         {
             Id = Guid.NewGuid(),
-            StaffId = staff.Id,
-            Staff = staff,
+            UserId = staff.Id,
+            User = staff,
             AvailabilityType = AvailabilityType.Available,
             StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
             EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
@@ -502,8 +502,8 @@ public class RosterConflictServiceTests
         var participant = CompliantParticipant();
         var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
         var unfilled = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
-        unfilled.StaffId = null;
-        unfilled.Staff = null;
+        unfilled.UserId = null;
+        unfilled.User = null;
 
         var findings = new RosterConflictService().Check(
             candidate, CompliantContext(staff, participant, participantShiftsOnDate: new[] { unfilled }));

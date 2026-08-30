@@ -17,11 +17,13 @@ using Xunit;
 namespace Odip.Tests.Auth;
 
 /// <summary>
-/// Coverage for the StaffId field added to AuthResponseDto (exercised via DevLogin, which
-/// bypasses Firebase entirely — Exchange runs the exact same StaffIdResolver call but can't be
-/// unit-tested without mocking the FirebaseAuth static SDK). Same EF InMemory + Moq&lt;ICurrentTenant&gt;
-/// pattern as PortalControllerTests/MedicationsWitnessTests, since AuthController now resolves
-/// StaffId via the same shared <see cref="StaffIdResolver"/> those controllers use.
+/// Coverage for the StaffId field on AuthResponseDto (exercised via DevLogin, which bypasses
+/// Firebase entirely — Exchange runs the exact same StaffIdResolver call but can't be
+/// unit-tested without mocking the FirebaseAuth static SDK). Post staff/user unification, every
+/// User IS the staff record — <see cref="StaffIdResolver"/> resolves to the user's own Id, so
+/// the "unlinked" (null StaffId) case from before the merge no longer exists as a reachable
+/// state; these tests assert the new invariant (StaffId == the resolved user's own Id) instead.
+/// Same EF InMemory + Moq&lt;ICurrentTenant&gt; pattern as PortalControllerTests/MedicationsWitnessTests.
 /// </summary>
 public class AuthControllerStaffIdTests
 {
@@ -65,20 +67,12 @@ public class AuthControllerStaffIdTests
         return tenant;
     }
 
-    private static Staff SeedStaff(OdipDbContext db, string firstName, string lastName)
-    {
-        var staff = new Staff { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
-        db.SaveChanges();
-        return staff;
-    }
-
-    private static User SeedUser(OdipDbContext db, Guid tenantId, Guid? staffId, UserRole role = UserRole.SupportWorker)
+    private static User SeedUser(OdipDbContext db, Guid tenantId, UserRole role = UserRole.SupportWorker)
     {
         var user = new User
         {
             Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
-            FirstName = "Test", LastName = "User", Role = role, StaffId = staffId, IsActive = true,
+            FirstName = "Test", LastName = "User", Role = role, IsActive = true,
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -103,14 +97,13 @@ public class AuthControllerStaffIdTests
     }
 
     [Fact]
-    public async Task DevLogin_UserLinkedToStaff_ResponseCarriesStaffId()
+    public async Task DevLogin_ResponseCarriesUsersOwnId()
     {
         await WithDevAuthEnabledAsync(async () =>
         {
             var (db, tenantMock) = CreateDb();
             var tenant = SeedTenant(db);
-            var staff = SeedStaff(db, "Ben", "Turner");
-            var user = SeedUser(db, tenant.Id, staff.Id);
+            var user = SeedUser(db, tenant.Id);
             var controller = MakeController(db, tenantMock.Object);
 
             var result = await controller.DevLogin(new DevLoginDto { Username = user.Username }, CancellationToken.None);
@@ -118,18 +111,18 @@ public class AuthControllerStaffIdTests
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value);
             Assert.True(body.Success);
-            Assert.Equal(staff.Id, body.Data!.StaffId);
+            Assert.Equal(user.Id, body.Data!.StaffId);
         });
     }
 
     [Fact]
-    public async Task DevLogin_UserNotLinkedToStaff_ResponseStaffIdIsNull()
+    public async Task DevLogin_PlainSupportWorkerUser_ResponseCarriesOwnId()
     {
         await WithDevAuthEnabledAsync(async () =>
         {
             var (db, tenantMock) = CreateDb();
             var tenant = SeedTenant(db);
-            var user = SeedUser(db, tenant.Id, staffId: null);
+            var user = SeedUser(db, tenant.Id);
             var controller = MakeController(db, tenantMock.Object);
 
             var result = await controller.DevLogin(new DevLoginDto { Username = user.Username }, CancellationToken.None);
@@ -137,21 +130,20 @@ public class AuthControllerStaffIdTests
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value);
             Assert.True(body.Success);
-            Assert.Null(body.Data!.StaffId);
+            Assert.Equal(user.Id, body.Data!.StaffId);
+            Assert.NotNull(body.Data.StaffId);
         });
     }
 
     [Fact]
-    public async Task DevLogin_ViewAsUserSet_ResponseCarriesViewedUsersStaffId_NotCallersOwn()
+    public async Task DevLogin_ViewAsUserSet_ResponseCarriesViewedUsersOwnId_NotCallersOwn()
     {
         await WithDevAuthEnabledAsync(async () =>
         {
             var (db, _) = CreateDb();
             var tenant = SeedTenant(db);
-            var callerStaff = SeedStaff(db, "Alex", "Field");
-            var viewedStaff = SeedStaff(db, "Dana", "Reyes");
-            var caller = SeedUser(db, tenant.Id, callerStaff.Id);
-            var viewedUser = SeedUser(db, tenant.Id, viewedStaff.Id);
+            var caller = SeedUser(db, tenant.Id);
+            var viewedUser = SeedUser(db, tenant.Id);
 
             var tenantMock = new Mock<ICurrentTenant>();
             tenantMock.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -161,25 +153,25 @@ public class AuthControllerStaffIdTests
             var controller = MakeController(db, tenantMock.Object);
 
             // Signing in as `caller`, but ViewAsUserId (X-View-As-User) points at `viewedUser` —
-            // the response must carry the VIEWED user's StaffId, not the caller's own, mirroring
+            // the response must carry the VIEWED user's own id, not the caller's own, mirroring
             // PortalController.ResolveCurrentStaffIdAsync's priority order exactly.
             var result = await controller.DevLogin(new DevLoginDto { Username = caller.Username }, CancellationToken.None);
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value);
-            Assert.Equal(viewedStaff.Id, body.Data!.StaffId);
-            Assert.NotEqual(callerStaff.Id, body.Data.StaffId);
+            Assert.Equal(viewedUser.Id, body.Data!.StaffId);
+            Assert.NotEqual(caller.Id, body.Data.StaffId);
         });
     }
 
     [Fact]
-    public async Task DevLogin_SuperAdminUser_ResponseStaffIdIsNull()
+    public async Task DevLogin_SuperAdminUser_ResponseStaffIdIsOwnId()
     {
         await WithDevAuthEnabledAsync(async () =>
         {
             var (db, tenantMock) = CreateDb();
             var tenant = SeedTenant(db);
-            var superAdmin = SeedUser(db, tenant.Id, staffId: null, role: UserRole.SuperAdmin);
+            var superAdmin = SeedUser(db, tenant.Id, role: UserRole.SuperAdmin);
             var controller = MakeController(db, tenantMock.Object);
 
             var result = await controller.DevLogin(new DevLoginDto { Username = superAdmin.Username }, CancellationToken.None);
@@ -187,7 +179,9 @@ public class AuthControllerStaffIdTests
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value);
             Assert.Equal("SuperAdmin", body.Data!.Role);
-            Assert.Null(body.Data.StaffId);
+            // Post staff/user unification a SuperAdmin is still a User row like any other, so
+            // StaffId resolves to their own id rather than null.
+            Assert.Equal(superAdmin.Id, body.Data.StaffId);
         });
     }
 }
