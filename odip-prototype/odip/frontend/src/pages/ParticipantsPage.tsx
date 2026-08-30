@@ -30,7 +30,7 @@ export default function ParticipantsPage() {
   const [search, setSearch] = useState('')
   const deleteParticipant = useDeleteParticipant()
   const updateParticipant = useUpdateParticipant()
-  const { data: alertsAggregate } = useParticipantAlertsAggregate(canViewAlerts)
+  const { data: alertsAggregate, isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
   const alertsByParticipant = useMemo(
     () => new Map((alertsAggregate ?? []).map((a) => [a.participantId, a])),
     [alertsAggregate],
@@ -93,6 +93,9 @@ export default function ParticipantsPage() {
       header: 'Alerts',
       align: 'center' as const,
       render: (p: ParticipantListDto) => {
+        if (alertsLoading) {
+          return <span className="inline-block h-4 w-9 rounded-full bg-[var(--color-muted)] animate-pulse" />
+        }
         const entry = alertsByParticipant.get(p.id)
         const total = entry ? entry.criticalCount + entry.warningCount + entry.infoCount : 0
         if (total === 0) return <span className="text-[var(--color-muted-foreground)]">—</span>
@@ -106,6 +109,14 @@ export default function ParticipantsPage() {
             {entry!.warningCount > 0 && (
               <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Warning.bg} ${ALERT_SEVERITY_STYLES.Warning.text}`}>
                 <ALERT_SEVERITY_STYLES.Warning.icon className="w-3 h-3" /> {entry!.warningCount}
+              </span>
+            )}
+            {/* Previously missing: an Info-only entry (critical/warning both 0) fell through to
+                an empty span here — the cell looked identical to "no alerts" even though `total`
+                was non-zero, silently hiding Info-severity alerts from the at-a-glance column. */}
+            {entry!.infoCount > 0 && (
+              <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Info.bg} ${ALERT_SEVERITY_STYLES.Info.text}`}>
+                <ALERT_SEVERITY_STYLES.Info.icon className="w-3 h-3" /> {entry!.infoCount}
               </span>
             )}
           </span>

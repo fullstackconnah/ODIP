@@ -144,6 +144,45 @@ describe('ParticipantsPage — alerts badge column', () => {
 
     expect(screen.queryByText('Alerts')).not.toBeInTheDocument()
   })
+
+  it('renders an Info badge for a participant whose only alerts are Info severity (previously fell through to a blank cell)', () => {
+    // Give the row a real NDIS number and a tagged service stream so those columns' own
+    // unrelated dash placeholders (for a null number / 'None' streams) can't be confused with
+    // the alerts column's dash.
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', ndisNumber: '430123456', serviceStreams: 'STA' })],
+      isLoading: false,
+    })
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        {
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
+          alerts: [{ type: 'note-reminder', severity: 'Info', message: 'Support plan review due soon', deepLinkTab: 'support' }],
+          criticalCount: 0, warningCount: 0, infoCount: 1,
+        },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('shows a loading placeholder rather than the "no alerts" dash while the aggregate is still fetching', () => {
+    // Give the row a real NDIS number and a tagged service stream so those columns' own
+    // unrelated dash placeholders (for a null number / 'None' streams) can't be confused with
+    // the alerts column's dash.
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', ndisNumber: '430123456', serviceStreams: 'STA' })],
+      isLoading: false,
+    })
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: true })
+    renderPage()
+
+    // No dash yet — that would falsely assert "no alerts" before the request has resolved.
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
 })
 
 describe('ParticipantsPage — row click', () => {
