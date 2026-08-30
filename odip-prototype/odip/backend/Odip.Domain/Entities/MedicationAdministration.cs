@@ -32,7 +32,22 @@ public class MedicationAdministration : ITenantEntity
 
     /// <summary>Set server-side from the recording user's JWT claims — never client-supplied.</summary>
     public string RecordedByName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Kept populated for backward compatibility with existing reads/reports — mirrors
+    /// <see cref="WitnessStaff"/>'s name when a staff witness is selected, or the legacy free-text
+    /// witness name when one isn't (older/unmigrated callers).
+    /// </summary>
     public string? WitnessName { get; set; }
+
+    /// <summary>The staff member selected to witness this administration, if any. Only this staff
+    /// member (via their own <c>User.StaffId</c>) may approve/decline the resulting request.</summary>
+    public Guid? WitnessStaffId { get; set; }
+    public Staff? WitnessStaff { get; set; }
+
+    public WitnessStatus WitnessStatus { get; set; } = WitnessStatus.NotRequired;
+    public DateTime? WitnessRequestedAt { get; set; }
+    public DateTime? WitnessRespondedAt { get; set; }
 
     /// <summary>Required when Status is not Administered (refused/withheld/missed).</summary>
     public string? Reason { get; set; }

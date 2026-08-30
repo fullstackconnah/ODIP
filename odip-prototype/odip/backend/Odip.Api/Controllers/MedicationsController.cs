@@ -7,6 +7,8 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
+using Odip.Domain.Medications;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -23,7 +25,13 @@ namespace Odip.Api.Controllers;
 public class MedicationsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public MedicationsController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant _currentTenant;
+
+    public MedicationsController(OdipDbContext db, ICurrentTenant currentTenant)
+    {
+        _db = db;
+        _currentTenant = currentTenant;
+    }
 
     // ── Participant medication list / create ─────────────────────────
 
@@ -50,7 +58,9 @@ public class MedicationsController : ControllerBase
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Participant not found"));
 
-        var validationError = ValidateMedicationDto(dto.Type, dto.TimesOfDay, dto.PrnIndication, dto.PrnMaxDosesPer24h, dto.IsChemicalRestraint, dto.Purpose);
+        var validationError = ValidateMedicationDto(
+            dto.Type, dto.TimesOfDay, dto.PrnIndication, dto.PrnMaxDosesPer24h, dto.IsChemicalRestraint, dto.Purpose,
+            dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);
         if (validationError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(validationError));
 
         var med = new ParticipantMedication
@@ -65,6 +75,10 @@ public class MedicationsController : ControllerBase
             Directions = dto.Directions,
             Type = dto.Type,
             TimesOfDay = dto.TimesOfDay,
+            Frequency = dto.Frequency,
+            DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek),
+            IntervalDays = dto.IntervalDays,
+            AnchorDate = dto.AnchorDate,
             PrnIndication = dto.PrnIndication,
             PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h,
             PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes,
@@ -115,7 +129,9 @@ public class MedicationsController : ControllerBase
         var med = await _db.ParticipantMedications.Include(m => m.Participant).FirstOrDefaultAsync(m => m.Id == id, ct);
         if (med == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Medication not found"));
 
-        var validationError = ValidateMedicationDto(dto.Type, dto.TimesOfDay, dto.PrnIndication, dto.PrnMaxDosesPer24h, dto.IsChemicalRestraint, dto.Purpose);
+        var validationError = ValidateMedicationDto(
+            dto.Type, dto.TimesOfDay, dto.PrnIndication, dto.PrnMaxDosesPer24h, dto.IsChemicalRestraint, dto.Purpose,
+            dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);
         if (validationError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(validationError));
 
         med.Name = dto.Name;
@@ -126,6 +142,10 @@ public class MedicationsController : ControllerBase
         med.Directions = dto.Directions;
         med.Type = dto.Type;
         med.TimesOfDay = dto.TimesOfDay;
+        med.Frequency = dto.Frequency;
+        med.DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek);
+        med.IntervalDays = dto.IntervalDays;
+        med.AnchorDate = dto.AnchorDate;
         med.PrnIndication = dto.PrnIndication;
         med.PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h;
         med.PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes;
@@ -214,6 +234,7 @@ public class MedicationsController : ControllerBase
         foreach (var m in regularMeds)
         {
             if (!TryValidateTimesOfDayCsv(m.TimesOfDay, out var times)) continue;
+            if (!MedicationScheduleCalculator.IsDue(m, targetDate)) continue;
             var participantName = FullName(m.Participant);
 
             foreach (var t in times)
@@ -310,8 +331,23 @@ public class MedicationsController : ControllerBase
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
 
-        if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.WitnessName))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A witness name is required for high-risk medication administration."));
+        Staff? witnessStaff = null;
+        if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
+        {
+            if (dto.WitnessStaffId is null && string.IsNullOrWhiteSpace(dto.WitnessName))
+                return BadRequest(ApiResponse<AdministrationDto>.Fail("A witness is required for high-risk medication administration."));
+
+            if (dto.WitnessStaffId.HasValue)
+            {
+                witnessStaff = await _db.Staff.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value, ct);
+                if (witnessStaff == null)
+                    return BadRequest(ApiResponse<AdministrationDto>.Fail("Selected witness staff member was not found."));
+
+                var administeringStaffId = await ResolveCurrentStaffIdAsync(ct);
+                if (administeringStaffId.HasValue && administeringStaffId.Value == witnessStaff.Id)
+                    return BadRequest(ApiResponse<AdministrationDto>.Fail("A staff member cannot witness their own administration."));
+            }
+        }
 
         var limitBreachAcknowledged = false;
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered)
@@ -358,7 +394,10 @@ public class MedicationsController : ControllerBase
             Status = dto.Status,
             DoseGiven = dto.DoseGiven,
             RecordedByName = GetRecordedByName(),
-            WitnessName = dto.WitnessName,
+            WitnessName = witnessStaff?.FullName ?? dto.WitnessName,
+            WitnessStaffId = witnessStaff?.Id,
+            WitnessStatus = witnessStaff != null ? WitnessStatus.Pending : WitnessStatus.NotRequired,
+            WitnessRequestedAt = witnessStaff != null ? DateTime.UtcNow : null,
             Reason = dto.Reason,
             PrnReason = dto.PrnReason,
             Notes = dto.Notes,
@@ -444,6 +483,47 @@ public class MedicationsController : ControllerBase
         ?? User?.FindFirst(ClaimTypes.Name)?.Value
         ?? "Unknown";
 
+    /// <summary>
+    /// Resolves the caller's linked Staff id, the same way PortalController does — ViewAsUserId
+    /// takes priority (SuperAdmin tenant/user switching), falling back to the JWT's own subject
+    /// claim. Returns null (never throws) when there's no current HTTP context/claim (e.g. a test
+    /// constructing this controller directly with no ControllerContext), the user isn't found, or
+    /// the user has no linked Staff record — any of which just means "skip the self-witness check".
+    /// </summary>
+    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    {
+        var userId = _currentTenant.ViewAsUserId;
+        if (userId is null)
+        {
+            var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(claim, out var parsed)) return null;
+            userId = parsed;
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
+        return user?.StaffId;
+    }
+
+    private static Weekdays? ParseDaysOfWeek(List<string>? days)
+    {
+        if (days == null || days.Count == 0) return null;
+        var result = Weekdays.None;
+        foreach (var d in days)
+        {
+            if (Enum.TryParse<Weekdays>(d, ignoreCase: true, out var flag)) result |= flag;
+        }
+        return result == Weekdays.None ? null : result;
+    }
+
+    private static List<string> FormatDaysOfWeek(Weekdays? mask)
+    {
+        if (mask is null || mask == Weekdays.None) return new List<string>();
+        return MedicationScheduleCalculator.WeekdayOrder
+            .Where(d => (mask.Value & d) != 0)
+            .Select(d => d.ToString())
+            .ToList();
+    }
+
     private async Task<int> GetPrnDosesInLast24hAsync(Guid medicationId, CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddHours(-24);
@@ -455,7 +535,8 @@ public class MedicationsController : ControllerBase
 
     private static string? ValidateMedicationDto(
         MedicationType type, string? timesOfDay, string? prnIndication, int? prnMaxDosesPer24h,
-        bool isChemicalRestraint, string? purpose)
+        bool isChemicalRestraint, string? purpose,
+        MedicationFrequency frequency, List<string>? daysOfWeek, int? intervalDays, DateOnly? anchorDate)
     {
         if (type == MedicationType.Prn)
         {
@@ -466,6 +547,12 @@ public class MedicationsController : ControllerBase
         {
             if (!TryValidateTimesOfDayCsv(timesOfDay, out _))
                 return "Regular medications require times of day as a comma-separated list of HH:mm values (e.g. \"08:00,20:00\").";
+
+            if (frequency == MedicationFrequency.SpecificDays && ParseDaysOfWeek(daysOfWeek) is null)
+                return "Select at least one day of the week for a specific-days schedule.";
+
+            if (frequency == MedicationFrequency.EveryNDays && (intervalDays is null || intervalDays <= 0 || anchorDate is null))
+                return "An every-N-days schedule requires a positive interval and an anchor date.";
         }
 
         if (isChemicalRestraint && string.IsNullOrWhiteSpace(purpose))
@@ -516,6 +603,10 @@ public class MedicationsController : ControllerBase
             DoseDescription = m.DoseDescription,
             Type = m.Type,
             TimesOfDay = m.TimesOfDay,
+            Frequency = m.Frequency,
+            DaysOfWeek = FormatDaysOfWeek(m.DaysOfWeek),
+            IntervalDays = m.IntervalDays,
+            AnchorDate = m.AnchorDate,
             Status = m.Status,
             IsHighRisk = m.IsHighRisk,
             IsPsychotropic = m.IsPsychotropic,
@@ -545,6 +636,10 @@ public class MedicationsController : ControllerBase
             DoseDescription = list.DoseDescription,
             Type = list.Type,
             TimesOfDay = list.TimesOfDay,
+            Frequency = list.Frequency,
+            DaysOfWeek = list.DaysOfWeek,
+            IntervalDays = list.IntervalDays,
+            AnchorDate = list.AnchorDate,
             Status = list.Status,
             IsHighRisk = list.IsHighRisk,
             IsPsychotropic = list.IsPsychotropic,
@@ -592,6 +687,10 @@ public class MedicationsController : ControllerBase
         DoseGiven = a.DoseGiven,
         RecordedByName = a.RecordedByName,
         WitnessName = a.WitnessName,
+        WitnessStaffId = a.WitnessStaffId,
+        WitnessStatus = a.WitnessStatus,
+        WitnessRequestedAt = a.WitnessRequestedAt,
+        WitnessRespondedAt = a.WitnessRespondedAt,
         Reason = a.Reason,
         PrnReason = a.PrnReason,
         PrnOutcome = a.PrnOutcome,

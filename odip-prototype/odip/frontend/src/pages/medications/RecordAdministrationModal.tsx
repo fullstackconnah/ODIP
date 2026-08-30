@@ -4,7 +4,8 @@ import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField } from '@/components/FormField'
-import { useRecordAdministration, useAmendAdministration } from '@/api/hooks'
+import { Dropdown } from '@/components/Dropdown'
+import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
@@ -62,12 +63,17 @@ export function RecordAdministrationModal({
   const recordAdministration = useRecordAdministration()
   const amendAdministration = useAmendAdministration()
   const isPending = isAmend ? amendAdministration.isPending : recordAdministration.isPending
+  const { data: staffList } = useStaff()
+  const activeStaff = (staffList ?? []).filter(s => s.isActive)
 
   const [status, setStatus] = useState<MedicationAdministrationStatus>(existingAdministration?.status ?? 'Administered')
   const [doseGiven, setDoseGiven] = useState(existingAdministration?.doseGiven ?? doseDescription ?? '')
   const [reason, setReason] = useState(existingAdministration?.reason ?? '')
   const [prnReason, setPrnReason] = useState(existingAdministration?.prnReason ?? '')
+  // Legacy free-text witness — only ever shown/edited when amending an administration that
+  // already used it (the create flow below always uses the staff picker instead).
   const [witnessName, setWitnessName] = useState(existingAdministration?.witnessName ?? '')
+  const [witnessStaffId, setWitnessStaffId] = useState(existingAdministration?.witnessStaffId ?? '')
   const [notes, setNotes] = useState(existingAdministration?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -86,6 +92,7 @@ export function RecordAdministrationModal({
     setReason(existingAdministration?.reason ?? '')
     setPrnReason(existingAdministration?.prnReason ?? '')
     setWitnessName(existingAdministration?.witnessName ?? '')
+    setWitnessStaffId(existingAdministration?.witnessStaffId ?? '')
     setNotes(existingAdministration?.notes ?? '')
     setError(null)
     setFieldErrors({})
@@ -110,7 +117,10 @@ export function RecordAdministrationModal({
     const errs: Record<string, string> = {}
     if (requiresReason && !reason.trim()) errs.reason = 'Required — e.g. participant declined after prompting'
     if (requiresPrnReason && !prnReason.trim()) errs.prnReason = 'Required for a PRN dose'
-    if (requiresWitness && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
+    if (requiresWitness) {
+      if (isAmend && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
+      if (!isAmend && !witnessStaffId) errs.witnessStaffId = 'Select the staff member who witnessed this dose'
+    }
     setFieldErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -120,7 +130,6 @@ export function RecordAdministrationModal({
       administeredAt: status === 'Administered' ? (existingAdministration?.administeredAt ?? new Date().toISOString()) : undefined,
       status,
       doseGiven: doseGiven || undefined,
-      witnessName: requiresWitness ? witnessName : undefined,
       reason: requiresReason ? reason : undefined,
       prnReason: requiresPrnReason ? prnReason : undefined,
       notes: notes || undefined,
@@ -130,6 +139,7 @@ export function RecordAdministrationModal({
   function buildCreateFields(acknowledgeLimitBreach: boolean): CreateAdministrationDto {
     return {
       ...buildCommonFields(),
+      witnessStaffId: requiresWitness ? witnessStaffId : undefined,
       scheduledAt: scheduledAt ?? undefined,
       tripInstanceId: tripInstanceId ?? undefined,
       acknowledgeLimitBreach,
@@ -139,6 +149,10 @@ export function RecordAdministrationModal({
   function buildAmendFields(): UpdateAdministrationDto {
     return {
       ...buildCommonFields(),
+      // Amending only ever edits the legacy free-text witness field — the staff-witness
+      // Pending/Approved/Declined workflow (see the portal's Witness approvals queue) is managed
+      // separately and isn't reassignable through this form.
+      witnessName: requiresWitness ? witnessName : undefined,
       // The backend unconditionally overwrites prnOutcome/prnOutcomeAt on PUT — pass through
       // the existing values so amending an administration doesn't silently wipe a previously
       // recorded PRN outcome.
@@ -246,9 +260,21 @@ export function RecordAdministrationModal({
           </AnimatedField>
 
           <AnimatedField show={requiresWitness}>
-            <FormField label="Witness name" required error={fieldErrors.witnessName} hint={!fieldErrors.witnessName ? 'High-risk medication — a second worker must witness this dose' : undefined}>
-              <input value={witnessName} onChange={e => { setWitnessName(e.target.value); clearFieldError('witnessName') }} />
-            </FormField>
+            {isAmend ? (
+              <FormField label="Witness name" required error={fieldErrors.witnessName} hint={!fieldErrors.witnessName ? 'High-risk medication — a second worker must witness this dose' : undefined}>
+                <input value={witnessName} onChange={e => { setWitnessName(e.target.value); clearFieldError('witnessName') }} />
+              </FormField>
+            ) : (
+              <FormField label="Witness" required error={fieldErrors.witnessStaffId} hint={!fieldErrors.witnessStaffId ? 'High-risk medication — select the staff member who witnessed this dose. They will need to approve it in their portal.' : undefined}>
+                <Dropdown
+                  variant="form"
+                  value={witnessStaffId}
+                  onChange={v => { setWitnessStaffId(v); clearFieldError('witnessStaffId') }}
+                  items={activeStaff.map(s => ({ value: s.id, label: s.fullName }))}
+                  aria-invalid={fieldErrors.witnessStaffId ? 'true' : undefined}
+                />
+              </FormField>
+            )}
           </AnimatedField>
 
           <FormField label="Notes">

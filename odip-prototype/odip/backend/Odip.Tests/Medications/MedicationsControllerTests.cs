@@ -27,7 +27,7 @@ public class MedicationsControllerTests
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static OdipDbContext CreateDb(string dbName)
+    private static (OdipDbContext Db, ICurrentTenant Tenant) CreateDb(string dbName)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -37,7 +37,7 @@ public class MedicationsControllerTests
             .UseInMemoryDatabase(dbName)
             .Options;
 
-        return new OdipDbContext(options, tenant.Object);
+        return (new OdipDbContext(options, tenant.Object), tenant.Object);
     }
 
     private static Participant SeedParticipant(OdipDbContext db, string firstName = "Sophie", string lastName = "Brown")
@@ -70,9 +70,9 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_PrnWithoutIndication_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = PrnDto(prnIndication: null);
 
@@ -87,9 +87,9 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_PrnWithoutMaxDoses_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = PrnDto(maxDoses: null);
 
@@ -101,9 +101,9 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_RegularWithoutTimesOfDay_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = RegularDto(timesOfDay: null!);
 
@@ -115,9 +115,9 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_ChemicalRestraintWithoutPurpose_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var dto = PrnDto() with { IsChemicalRestraint = true, Purpose = null };
 
@@ -129,8 +129,8 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_ParticipantMissing_ReturnsNotFound()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new MedicationsController(db);
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var controller = new MedicationsController(db, tenant);
 
         var result = await controller.Create(Guid.NewGuid(), RegularDto(), CancellationToken.None);
 
@@ -140,9 +140,9 @@ public class MedicationsControllerTests
     [Fact]
     public async Task Create_ValidRegular_SavesAndReturnsDetail()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
 
         var result = await controller.Create(participant.Id, RegularDto(), CancellationToken.None);
 
@@ -161,7 +161,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetById_ChemicalRestraintWithoutBsp_FlagsChemicalRestraintUnauthorised()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -174,7 +174,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetById(med.Id, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -185,7 +185,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetById_ChemicalRestraintWithBspAndAuth_NoUnauthorisedFlag()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -198,7 +198,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetById(med.Id, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -209,7 +209,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetById_ReviewDateInPastAndActive_FlagsReviewOverdue()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -221,7 +221,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetById(med.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -233,7 +233,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_NotAdministeredWithoutReason_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -244,7 +244,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Missed, Reason = null };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -259,7 +259,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_HighRiskAdministeredWithoutWitness_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -270,7 +270,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessName = null };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -284,7 +284,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_HighRiskAdministeredWithWitness_Saves()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -295,7 +295,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessName = "Rachel Thompson" };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -311,7 +311,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_PrnWithoutPrnReason_ReturnsBadRequest()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -322,7 +322,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, PrnReason = null };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -336,7 +336,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_PrnMaxDosesReached_BlockedWithoutAcknowledge()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -361,7 +361,7 @@ public class MedicationsControllerTests
             });
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto
         {
             Status = MedicationAdministrationStatus.Administered, PrnReason = "Headache",
@@ -379,7 +379,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_PrnMaxDosesReachedWithAcknowledge_SavesWithLimitBreachFlag()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -403,7 +403,7 @@ public class MedicationsControllerTests
             });
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto
         {
             Status = MedicationAdministrationStatus.Administered, PrnReason = "Headache",
@@ -422,7 +422,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task RecordAdministration_PrnMinIntervalNotElapsed_BlockedWithoutAcknowledge()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var med = new ParticipantMedication
         {
@@ -439,7 +439,7 @@ public class MedicationsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, PrnReason = "Headache" };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -454,7 +454,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetMar_RegularMedication_ReturnsOneEntryPerTimeOfDay()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var med = new ParticipantMedication
@@ -466,7 +466,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -479,7 +479,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetMar_PastScheduledTimeWithNoAdministration_IsOverdue()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         // Use "now minus 2 hours" as the time-of-day so today's slot is clearly in the past.
         // Guard against the 2-hour subtraction rolling into the previous day (which would make
@@ -500,7 +500,7 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -512,7 +512,7 @@ public class MedicationsControllerTests
     [Fact]
     public async Task GetMar_RecordedAdministration_NotOverdueAndAttached()
     {
-        using var db = CreateDb(Guid.NewGuid().ToString());
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var med = new ParticipantMedication
@@ -531,7 +531,7 @@ public class MedicationsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new MedicationsController(db);
+        var controller = new MedicationsController(db, tenant);
         var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);

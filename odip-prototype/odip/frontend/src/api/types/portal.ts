@@ -7,6 +7,7 @@ import type {
   MedicationType,
   MedicationSupportLevel,
   DrugSchedule,
+  WitnessStatus,
 } from './enums'
 import type { ParticipantRoutineDto } from './routines'
 
@@ -101,4 +102,22 @@ export interface PortalShiftDetailDto {
   // Reuses the Task 2 routine shape — feed straight into getRelevantRoutines().
   routines: ParticipantRoutineDto[]
   medications: PortalMedicationSummaryDto[]
+}
+
+// ── Witness approvals ────────────────────────────────────
+
+export interface PortalWitnessRequestDto {
+  id: string
+  participantId: string
+  participantName: string
+  medicationId: string
+  medicationName: string
+  strength: string | null
+  doseDescription: string
+  doseGiven: string | null
+  recordedByName: string
+  administeredAt: string | null
+  witnessStatus: WitnessStatus
+  witnessRespondedAt: string | null
+  createdAt: string
 }

@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { usePermissions, type PageKey } from '@/lib/permissions'
+import { usePendingWitnessRequests } from '@/api/hooks'
 
 type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey }
 type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeaf[] }
@@ -79,6 +80,10 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const permissions = usePermissions()
+  // Only relevant to staff who can see the portal at all — fetching it unconditionally is fine
+  // since usePendingWitnessRequests already resolves to an empty list for an unlinked account.
+  const { data: pendingWitnessRequests } = usePendingWitnessRequests()
+  const pendingWitnessCount = pendingWitnessRequests?.length ?? 0
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>()
     navItems.forEach(item => {
@@ -221,7 +226,15 @@ export default function AppLayout() {
                 onClick={() => setSidebarOpen(false)}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{msIcon}</span>
-                {label}
+                <span className="flex-1">{label}</span>
+                {to === '/portal' && pendingWitnessCount > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
+                    aria-label={`${pendingWitnessCount} witness approval${pendingWitnessCount === 1 ? '' : 's'} pending`}
+                  >
+                    {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
+                  </span>
+                )}
               </NavLink>
             )
           })}

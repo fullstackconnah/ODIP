@@ -114,3 +114,24 @@ public record PortalShiftDetailDto(
     PortalParticipantSummaryDto Participant,
     List<ParticipantRoutineDto> Routines,
     List<PortalMedicationSummaryDto> Medications);
+
+/// <summary>
+/// A medication administration awaiting (or already given) the caller's staff-witness sign-off —
+/// GET /api/v1/portal/witness-requests returns the caller's own Pending ones; approve/decline act
+/// on one by its administration id. Deliberately excludes anything beyond what a witness needs to
+/// confirm what they saw (no full clinical/consent detail — see PortalMedicationSummaryDto remarks).
+/// </summary>
+public record PortalWitnessRequestDto(
+    Guid Id,
+    Guid ParticipantId,
+    string ParticipantName,
+    Guid MedicationId,
+    string MedicationName,
+    string? Strength,
+    string DoseDescription,
+    string? DoseGiven,
+    string RecordedByName,
+    DateTime? AdministeredAt,
+    WitnessStatus WitnessStatus,
+    DateTime? WitnessRespondedAt,
+    DateTime CreatedAt);
