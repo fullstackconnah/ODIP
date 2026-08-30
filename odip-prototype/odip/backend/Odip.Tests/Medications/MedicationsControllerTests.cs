@@ -331,6 +331,121 @@ public class MedicationsControllerTests
         Assert.Empty(await db.MedicationAdministrations.ToListAsync());
     }
 
+    // ── MED-03: wrong medication administered ──────────────────────────────
+
+    [Fact]
+    public async Task RecordAdministration_WrongMedicationWithoutNote_ReturnsBadRequest()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        // Reason satisfies the generic non-Administered requirement, but Notes ("what was given
+        // instead") is left blank — MED-03 requires it specifically for WrongMedication.
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.WrongMedication, Reason = "Grabbed the wrong blister pack", Notes = null };
+
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.False(body.Success);
+        Assert.Contains("what was given instead", body.Errors![0]);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordAdministration_WrongMedicationWithoutReason_ReturnsBadRequest()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.WrongMedication, Reason = null, Notes = "Gave Paracetamol 500mg instead" };
+
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordAdministration_WrongMedicationWithReasonAndNote_Saves()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var dto = new CreateAdministrationDto
+        {
+            Status = MedicationAdministrationStatus.WrongMedication,
+            Reason = "Grabbed the wrong blister pack",
+            Notes = "Gave Paracetamol 500mg instead",
+        };
+
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(ok.Value);
+        Assert.True(body.Success);
+        Assert.Equal(MedicationAdministrationStatus.WrongMedication, body.Data!.Status);
+        Assert.Equal("Gave Paracetamol 500mg instead", body.Data.Notes);
+        Assert.Equal(1, await db.MedicationAdministrations.CountAsync());
+    }
+
+    [Fact]
+    public async Task UpdateAdministration_ChangedToWrongMedicationWithoutNote_ReturnsBadRequest()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+        };
+        db.ParticipantMedications.Add(med);
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var dto = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.WrongMedication, Reason = "Wrong pack", Notes = null };
+
+        var result = await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.Contains("what was given instead", body.Errors![0]);
+    }
+
     // ── PRN ceiling ──────────────────────────────────────────────────────
 
     [Fact]

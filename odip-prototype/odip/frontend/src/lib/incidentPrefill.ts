@@ -1,0 +1,105 @@
+// INC-03: shared shape for the "drop into a draft incident" hand-off from the MAR flow
+// (RecordAdministrationModal) to the incident create form (IncidentCreatePage). Nothing is
+// persisted server-side here — this is purely router-state prefill data. If the coordinator/
+// support worker never submits the incident form, nothing exists (no ghost drafts).
+import { ADMIN_STATUS_LABELS, INCIDENT_TRIGGER_OUTCOMES } from '@/api/types/medications'
+import type { MedicationAdministrationStatus } from '@/api/types/enums'
+import { parseApiDate, formatWithTimeZone } from '@/lib/utils'
+
+export interface MarIncidentPrefillState {
+  source: 'mar-administration'
+  outcome: MedicationAdministrationStatus
+  participantId: string
+  participantName: string
+  medicationName: string
+  strength?: string | null
+  doseDescription?: string | null
+  scheduledAt?: string | null
+  administeredAt?: string | null
+  administeredAtTimeZone?: string | null
+  recordedByName?: string | null
+  recordedByUserId?: string | null
+  /** The reason recorded on the MAR entry (why the dose was refused/withheld/missed/wrong). */
+  reason?: string | null
+  /** MED-03: for a WrongMedication outcome, what was actually given instead. */
+  notes?: string | null
+  /** INC-01 linkage — only ever set when the MAR context has an active trip to derive it from. */
+  tripInstanceId?: string | null
+}
+
+/** Whether a MAR outcome is one of the auto-incident triggers (MED-03/INC-03 controller ruling:
+ * refused/withheld/missed/wrong-medication). */
+export function isIncidentTriggerOutcome(status: MedicationAdministrationStatus): boolean {
+  return (INCIDENT_TRIGGER_OUTCOMES as readonly MedicationAdministrationStatus[]).includes(status)
+}
+
+/** Narrows an unknown value (react-router location.state) down to a MAR incident prefill. */
+export function isMarIncidentPrefillState(state: unknown): state is MarIncidentPrefillState {
+  return !!state && typeof state === 'object' && (state as { source?: unknown }).source === 'mar-administration'
+}
+
+function toDatetimeLocalValue(iso: string, timeZone: string | null | undefined): string {
+  const date = parseApiDate(iso)
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || undefined,
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(date)
+    const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00'
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+  } catch {
+    return iso.slice(0, 16)
+  }
+}
+
+const OUTCOME_VERB: Record<MedicationAdministrationStatus, string> = {
+  Administered: 'administered',
+  Refused: 'refused',
+  Withheld: 'withheld',
+  Missed: 'missed',
+  WrongMedication: 'given the wrong medication',
+}
+
+/** Generates a description skeleton from what the MAR flow already knows — the coordinator
+ * still reviews/edits it before submitting, this just saves re-typing what's already on record. */
+export function buildIncidentDescriptionSkeleton(p: MarIncidentPrefillState): string {
+  const med = `${p.medicationName}${p.strength ? ` ${p.strength}` : ''}${p.doseDescription ? ` (${p.doseDescription})` : ''}`
+  const when = p.administeredAt
+    ? formatWithTimeZone(p.administeredAt, p.administeredAtTimeZone, { dateStyle: 'medium', timeStyle: 'short' })
+    : p.scheduledAt
+      ? `scheduled for ${formatWithTimeZone(p.scheduledAt, p.administeredAtTimeZone, { dateStyle: 'medium', timeStyle: 'short' })}`
+      : null
+
+  const lines = [
+    `${p.participantName} was ${OUTCOME_VERB[p.outcome]} — ${med}${when ? ` (${when})` : ''}.`,
+  ]
+  if (p.outcome === 'WrongMedication' && p.notes) {
+    lines.push(`Given instead: ${p.notes}.`)
+  }
+  if (p.reason) {
+    lines.push(`Reason recorded on the MAR: ${p.reason}.`)
+  }
+  if (p.recordedByName) {
+    lines.push(`Recorded by ${p.recordedByName}.`)
+  }
+  lines.push('', '[Add further detail about what happened, immediate response and follow-up above.]')
+  return lines.join('\n')
+}
+
+export function buildIncidentTitleSkeleton(p: MarIncidentPrefillState): string {
+  return `${ADMIN_STATUS_LABELS[p.outcome]} — ${p.medicationName} (${p.participantName})`
+}
+
+/** Best-effort incidentDateTime for the datetime-local field — prefers the actual administered
+ * instant (rendered in the zone it was captured in), falling back to the scheduled time, then now. */
+export function buildIncidentDateTime(p: MarIncidentPrefillState): string {
+  const iso = p.administeredAt ?? p.scheduledAt
+  if (!iso) return new Date().toISOString().slice(0, 16)
+  return toDatetimeLocalValue(iso, p.administeredAtTimeZone)
+}
+
+/** MED-03/INC-03 default severity heuristic — a wrong medication is treated as more serious than
+ * a refused/withheld/missed dose by default; the coordinator can still change it before submitting. */
+export function suggestedIncidentSeverity(outcome: MedicationAdministrationStatus): 'Medium' | 'High' {
+  return outcome === 'WrongMedication' ? 'High' : 'Medium'
+}

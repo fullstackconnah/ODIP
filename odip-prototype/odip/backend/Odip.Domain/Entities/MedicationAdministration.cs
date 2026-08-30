@@ -77,7 +77,8 @@ public class MedicationAdministration : ITenantEntity
     public DateTime? WitnessRequestedAt { get; set; }
     public DateTime? WitnessRespondedAt { get; set; }
 
-    /// <summary>Required when Status is not Administered (refused/withheld/missed).</summary>
+    /// <summary>Required when Status is not Administered (refused/withheld/missed/wrong
+    /// medication — MED-03).</summary>
     public string? Reason { get; set; }
 
     public string? PrnReason { get; set; }
@@ -87,6 +88,9 @@ public class MedicationAdministration : ITenantEntity
     /// <summary>True when this dose was recorded despite breaching the PRN max-doses/min-interval ceiling.</summary>
     public bool LimitBreachAcknowledged { get; set; }
 
+    /// <summary>MED-03: also required (non-whitespace) when Status is WrongMedication — holds
+    /// what was actually given instead of the prescribed medication. Optional for every other
+    /// status.</summary>
     public string? Notes { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

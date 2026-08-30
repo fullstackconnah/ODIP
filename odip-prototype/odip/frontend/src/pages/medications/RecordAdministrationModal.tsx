@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { AxiosError } from 'axios'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -9,6 +11,8 @@ import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api
 import { usePermissions } from '@/lib/permissions'
 import { getClientTimeZone } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
+import { isIncidentTriggerOutcome } from '@/lib/incidentPrefill'
+import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
 
@@ -33,6 +37,7 @@ const STATUS_OPTIONS: { key: MedicationAdministrationStatus; label: string }[] =
   { key: 'Refused', label: ADMIN_STATUS_LABELS.Refused },
   { key: 'Withheld', label: ADMIN_STATUS_LABELS.Withheld },
   { key: 'Missed', label: ADMIN_STATUS_LABELS.Missed },
+  { key: 'WrongMedication', label: ADMIN_STATUS_LABELS.WrongMedication },
 ]
 
 const SUBMIT_LABEL: Record<MedicationAdministrationStatus, string> = {
@@ -40,6 +45,7 @@ const SUBMIT_LABEL: Record<MedicationAdministrationStatus, string> = {
   Refused: 'Record refusal',
   Withheld: 'Record withheld dose',
   Missed: 'Record missed dose',
+  WrongMedication: 'Record wrong medication',
 }
 
 /** Animates a conditional field in/out using the same grid-template-rows collapse
@@ -71,11 +77,12 @@ export function RecordAdministrationModal({
   isHighRisk, isPrn, scheduledAt, tripInstanceId, existingAdministration,
 }: RecordAdministrationModalProps) {
   const isAmend = !!existingAdministration
+  const navigate = useNavigate()
   const recordAdministration = useRecordAdministration()
   const amendAdministration = useAmendAdministration()
   const isPending = isAmend ? amendAdministration.isPending : recordAdministration.isPending
   const { data: staffList } = useStaff()
-  const { id: currentUserId, fullName: currentUserFullName } = usePermissions()
+  const { id: currentUserId, fullName: currentUserFullName, canCreateIncidents } = usePermissions()
   // Who this record will be attributed to — always server-derived (see
   // MedicationsController.RecordAdministration's ResolveCurrentStaffIdAsync), never editable
   // here. For a new record that's the signed-in (or, under SuperAdmin "view as", viewed-as) user;
@@ -108,9 +115,17 @@ export function RecordAdministrationModal({
   // offer to retry the same submission with acknowledgeLimitBreach: true.
   const [limitBreachMessage, setLimitBreachMessage] = useState<string | null>(null)
 
+  // INC-03: once a trigger outcome (refused/withheld/missed/wrong medication) has been saved,
+  // this holds the saved record so the form gives way to the "drop into a draft incident"
+  // prompt below. Nothing is filed automatically — this is purely an offer to navigate.
+  const [savedTriggerAdministration, setSavedTriggerAdministration] = useState<AdministrationDto | null>(null)
+
   const requiresReason = status !== 'Administered'
   const requiresPrnReason = isPrn && status === 'Administered'
   const requiresWitness = isHighRisk && status === 'Administered'
+  // MED-03: wrong-medication recording additionally requires a note on what was actually given
+  // instead of the prescribed medication — required both ends (see MedicationsController).
+  const requiresWrongMedNote = status === 'WrongMedication'
 
   function reset() {
     setStatus(existingAdministration?.status ?? 'Administered')
@@ -123,11 +138,44 @@ export function RecordAdministrationModal({
     setError(null)
     setFieldErrors({})
     setLimitBreachMessage(null)
+    setSavedTriggerAdministration(null)
   }
 
   function handleClose() {
     reset()
     onClose()
+  }
+
+  /** INC-03 "Not now" — the coordinator/support worker declines to file an incident. The MAR
+   * record itself already saved; nothing else happens (no ghost draft anywhere). */
+  function dismissIncidentPrompt() {
+    handleClose()
+  }
+
+  /** INC-03 primary action — navigates to the incident form pre-populated with everything the
+   * MAR flow already knows. Nothing is persisted until the coordinator submits that form. */
+  function goToIncident() {
+    if (!savedTriggerAdministration) return
+    const prefill: MarIncidentPrefillState = {
+      source: 'mar-administration',
+      outcome: savedTriggerAdministration.status,
+      participantId: savedTriggerAdministration.participantId,
+      participantName: savedTriggerAdministration.participantName,
+      medicationName: savedTriggerAdministration.medicationName,
+      strength,
+      doseDescription: savedTriggerAdministration.doseDescription,
+      scheduledAt: savedTriggerAdministration.scheduledAt,
+      administeredAt: savedTriggerAdministration.administeredAt,
+      administeredAtTimeZone: savedTriggerAdministration.administeredAtTimeZone,
+      recordedByName: savedTriggerAdministration.recordedByName,
+      recordedByUserId: savedTriggerAdministration.recordedByUserId,
+      reason: savedTriggerAdministration.reason,
+      notes: savedTriggerAdministration.status === 'WrongMedication' ? savedTriggerAdministration.notes : null,
+      tripInstanceId: savedTriggerAdministration.tripInstanceId,
+    }
+    reset()
+    onClose()
+    navigate('/incidents/new', { state: prefill })
   }
 
   function clearFieldError(key: string) {
@@ -141,7 +189,12 @@ export function RecordAdministrationModal({
 
   function validate(): boolean {
     const errs: Record<string, string> = {}
-    if (requiresReason && !reason.trim()) errs.reason = 'Required — e.g. participant declined after prompting'
+    if (requiresReason && !reason.trim()) {
+      errs.reason = requiresWrongMedNote
+        ? 'Required — what led to the wrong medication being given'
+        : 'Required — e.g. participant declined after prompting'
+    }
+    if (requiresWrongMedNote && !notes.trim()) errs.notes = 'Required — what was actually given instead'
     if (requiresPrnReason && !prnReason.trim()) errs.prnReason = 'Required for a PRN dose'
     if (requiresWitness) {
       if (isAmend && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
@@ -214,9 +267,15 @@ export function RecordAdministrationModal({
           })
       if (res.success) {
         setLimitBreachMessage(null)
-        reset()
         onSuccess?.()
-        onClose()
+        // INC-03: the record is saved either way — for a trigger outcome, hold the modal open
+        // on the drop-into-draft-incident prompt instead of closing immediately.
+        if (res.data && isIncidentTriggerOutcome(res.data.status)) {
+          setSavedTriggerAdministration(res.data)
+        } else {
+          reset()
+          onClose()
+        }
       } else {
         const message = res.errors?.[0] || res.message || 'Failed to record administration.'
         // A 400 surfaced as a resolved envelope should also open the acknowledge dialog,
@@ -248,28 +307,80 @@ export function RecordAdministrationModal({
       <Modal
         open={open}
         onClose={handleClose}
-        title={`${isAmend ? 'Amend administration' : 'Record administration'} — ${medicationName}${strength ? ` ${strength}` : ''}`}
+        title={savedTriggerAdministration
+          ? 'Report as incident?'
+          : `${isAmend ? 'Amend administration' : 'Record administration'} — ${medicationName}${strength ? ` ${strength}` : ''}`}
         size="md"
         footer={
-          <>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form="record-administration-form"
-              disabled={isPending}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all"
-            >
-              {isPending ? 'Saving...' : (isAmend ? 'Save amendment' : SUBMIT_LABEL[status])}
-            </button>
-          </>
+          savedTriggerAdministration ? (
+            canCreateIncidents ? (
+              <>
+                <button
+                  type="button"
+                  onClick={dismissIncidentPrompt}
+                  className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={goToIncident}
+                  className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
+                >
+                  Report as incident
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={dismissIncidentPrompt}
+                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
+              >
+                Got it
+              </button>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="record-administration-form"
+                disabled={isPending}
+                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all"
+              >
+                {isPending ? 'Saving...' : (isAmend ? 'Save amendment' : SUBMIT_LABEL[status])}
+              </button>
+            </>
+          )
         }
       >
+        {savedTriggerAdministration ? (
+          // INC-03: the MAR record above is already saved (this prompt is purely an offer to
+          // also open a pre-populated incident report) — dismissing here leaves the record as-is
+          // and files nothing. A support-role account without incident access is told to notify
+          // their coordinator instead of getting a dead-end "navigate" button (see permissions.ts
+          // canCreateIncidents — every role that can record administrations currently also has
+          // incident access, but this stays honest if that ever changes).
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--color-error-container)]/40 border border-[var(--color-error-container)]">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-[var(--color-on-error-container)]" aria-hidden="true" />
+            <div className="space-y-1.5 text-sm text-[var(--color-on-error-container)]">
+              <p className="font-medium">
+                {ADMIN_STATUS_LABELS[savedTriggerAdministration.status]} recorded for {savedTriggerAdministration.participantName} — {savedTriggerAdministration.medicationName}.
+              </p>
+              <p>
+                {canCreateIncidents
+                  ? 'This is incident-reportable. Report it now with the details already filled in, or come back to it later — nothing is filed until you submit the incident form.'
+                  : "This is incident-reportable. Let your coordinator know so they can file an incident report — support workers don't file incident reports directly."}
+              </p>
+            </div>
+          </div>
+        ) : (
         <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
@@ -294,7 +405,12 @@ export function RecordAdministrationModal({
           </FormField>
 
           <AnimatedField show={requiresReason}>
-            <FormField label="Reason" required error={fieldErrors.reason} hint={!fieldErrors.reason ? 'Required — e.g. participant declined after prompting' : undefined}>
+            <FormField
+              label="Reason"
+              required
+              error={fieldErrors.reason}
+              hint={!fieldErrors.reason ? (requiresWrongMedNote ? 'What led to the wrong medication being given' : 'Required — e.g. participant declined after prompting') : undefined}
+            >
               <textarea rows={2} value={reason} onChange={e => { setReason(e.target.value); clearFieldError('reason') }} />
             </FormField>
           </AnimatedField>
@@ -323,10 +439,21 @@ export function RecordAdministrationModal({
             )}
           </AnimatedField>
 
-          <FormField label="Notes">
-            <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+          <FormField
+            label={requiresWrongMedNote ? 'What was given instead' : 'Notes'}
+            required={requiresWrongMedNote}
+            error={fieldErrors.notes}
+            hint={requiresWrongMedNote && !fieldErrors.notes ? 'Required — describe the medication and dose actually given' : undefined}
+          >
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={e => { setNotes(e.target.value); clearFieldError('notes') }}
+              placeholder={requiresWrongMedNote ? 'e.g. Paracetamol 500mg, 1 tablet' : 'Optional'}
+            />
           </FormField>
         </form>
+        )}
       </Modal>
 
       <ConfirmDialog

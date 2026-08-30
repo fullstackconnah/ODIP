@@ -1,14 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import type { StaffListDto, AdministrationDto } from '@/api/types'
 
-const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff } = vi.hoisted(() => ({
+const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
   mockRecordMutateAsync: vi.fn(),
   mockAmendMutateAsync: vi.fn(),
   mockUseStaff: vi.fn(),
+  mockNavigate: vi.fn(),
+  // INC-03: null means "use the real usePermissions()" (most tests exercise the genuine
+  // localStorage-driven role logic) — a single test overrides just canCreateIncidents to cover
+  // the "notify your coordinator instead" fallback for a role without incident access.
+  permissionsOverride: { canCreateIncidents: null as boolean | null },
 }))
+
+vi.mock('@/lib/permissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/permissions')>()
+  return {
+    ...actual,
+    usePermissions: () => {
+      const real = actual.usePermissions()
+      return permissionsOverride.canCreateIncidents === null
+        ? real
+        : { ...real, canCreateIncidents: permissionsOverride.canCreateIncidents }
+    },
+  }
+})
 
 // Only the API layer is mocked — Modal, FormField, ToggleGroup, Dropdown, ConfirmDialog are the
 // real components, so this exercises the actual witness-picker requiredness wiring.
@@ -17,6 +36,18 @@ vi.mock('@/api/hooks', () => ({
   useAmendAdministration: () => ({ mutateAsync: mockAmendMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
 }))
+
+// The modal navigates (INC-03) rather than persisting anything server-side, so only the
+// navigation call itself needs mocking — everything else about react-router stays real.
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return { ...actual, useNavigate: () => mockNavigate }
+})
+
+// RecordAdministrationModal calls useNavigate (INC-03), which requires a Router ancestor.
+function renderModal(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 function makeStaff(overrides: Partial<StaffListDto> = {}): StaffListDto {
   return {
@@ -47,6 +78,8 @@ function makeAdministration(overrides: Partial<AdministrationDto> = {}): Adminis
 beforeEach(() => {
   mockRecordMutateAsync.mockReset()
   mockAmendMutateAsync.mockReset()
+  mockNavigate.mockReset()
+  permissionsOverride.canCreateIncidents = null
   mockUseStaff.mockReturnValue({
     data: [makeStaff(), makeStaff({ id: 'staff-2', firstName: 'Jordan', lastName: 'Lee', fullName: 'Jordan Lee' })],
   })
@@ -69,7 +102,7 @@ describe('RecordAdministrationModal witness picker', () => {
     // submitting without picking one succeeds rather than being blocked by validation.
     const user = userEvent.setup()
     mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     await user.click(screen.getByRole('button', { name: /^record dose$/i }))
 
@@ -80,7 +113,7 @@ describe('RecordAdministrationModal witness picker', () => {
   })
 
   it('shows a staff picker (not a free-text input) for a high-risk medication being newly recorded', () => {
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     expect(screen.getByRole('button', { name: /witness/i })).toBeInTheDocument()
     // The legacy free-text witness input must not appear on the create flow.
@@ -89,7 +122,7 @@ describe('RecordAdministrationModal witness picker', () => {
 
   it('blocks submission with a validation error when no witness is selected', async () => {
     const user = userEvent.setup()
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     await user.click(screen.getByRole('button', { name: /^record dose$/i }))
 
@@ -100,7 +133,7 @@ describe('RecordAdministrationModal witness picker', () => {
   it('submits with the selected witnessStaffId once a witness is chosen', async () => {
     const user = userEvent.setup()
     mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     await user.click(screen.getByRole('button', { name: /witness/i }))
     await user.click(await screen.findByRole('option', { name: 'Jordan Lee' }))
@@ -115,7 +148,7 @@ describe('RecordAdministrationModal witness picker', () => {
   it('excludes the signed-in user from the witness picker when their own id matches a picker entry', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1' }))
     const user = userEvent.setup()
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     await user.click(screen.getByRole('button', { name: /witness/i }))
 
@@ -126,7 +159,7 @@ describe('RecordAdministrationModal witness picker', () => {
   it('leaves the witness picker unchanged when the signed-in user has no resolvable id', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: null }))
     const user = userEvent.setup()
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     await user.click(screen.getByRole('button', { name: /witness/i }))
 
@@ -137,7 +170,7 @@ describe('RecordAdministrationModal witness picker', () => {
   it('tolerates a stale odip_user blob from before this field existed (no `id` key at all) — degrades to no self-exclusion rather than crashing', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     const user = userEvent.setup()
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     await user.click(screen.getByRole('button', { name: /witness/i }))
 
@@ -152,14 +185,14 @@ describe('RecordAdministrationModal AnimatedField tab order', () => {
   // field that isn't visible — this asserts that wrapper attribute directly, since jsdom doesn't
   // model inert's actual focus-blocking behaviour.
   it('marks the collapsed witness field inert so it is out of the tab order', () => {
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     const witnessTrigger = screen.getByRole('button', { name: /witness/i })
     expect(witnessTrigger.closest('[inert]')).not.toBeNull()
   })
 
   it('removes inert from the witness field once it becomes visible', () => {
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
     const witnessTrigger = screen.getByRole('button', { name: /witness/i })
     expect(witnessTrigger.closest('[inert]')).toBeNull()
@@ -173,7 +206,7 @@ describe('RecordAdministrationModal AnimatedField tab order', () => {
 describe('RecordAdministrationModal administered-by display', () => {
   it('shows the signed-in user as who will be recorded, for a new administration', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', fullName: 'Rachel Thompson' }))
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     expect(screen.getByText('Administered by')).toBeInTheDocument()
     expect(screen.getByText('Rachel Thompson')).toBeInTheDocument()
@@ -181,14 +214,14 @@ describe('RecordAdministrationModal administered-by display', () => {
 
   it('degrades to a generic label rather than blank when no signed-in name is resolvable', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1' }))
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     expect(screen.getByText(/you \(signed in\)/i)).toBeInTheDocument()
   })
 
   it('shows the original recorder, not the signed-in user, when amending', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', fullName: 'Rachel Thompson' }))
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={makeAdministration({ recordedByName: 'Jordan Lee' })} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={makeAdministration({ recordedByName: 'Jordan Lee' })} />)
 
     expect(screen.getByText('Jordan Lee')).toBeInTheDocument()
     expect(screen.queryByText('Rachel Thompson')).not.toBeInTheDocument()
@@ -199,7 +232,7 @@ describe('RecordAdministrationModal client-local timestamp', () => {
   it('sends the client local timestamp and its IANA time zone when recording a new administration', async () => {
     const user = userEvent.setup()
     mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     await user.click(screen.getByRole('button', { name: /^record dose$/i }))
 
@@ -217,7 +250,7 @@ describe('RecordAdministrationModal client-local timestamp', () => {
   it('omits administeredAt/administeredAtTimeZone entirely for a non-Administered status (no-JS-timestamp-shaped fallback path)', async () => {
     const user = userEvent.setup()
     mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
     await user.click(screen.getByRole('radio', { name: /^refused$/i }))
     await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
@@ -232,7 +265,7 @@ describe('RecordAdministrationModal client-local timestamp', () => {
     const user = userEvent.setup()
     mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
     const existing = makeAdministration({ administeredAt: '2026-08-01T01:00:00Z', administeredAtTimeZone: 'Pacific/Auckland' })
-    render(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing} />)
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing} />)
 
     await user.click(screen.getByRole('button', { name: /save amendment/i }))
 
@@ -243,5 +276,184 @@ describe('RecordAdministrationModal client-local timestamp', () => {
         administeredAtTimeZone: 'Pacific/Auckland',
       }),
     }))
+  })
+})
+
+// MED-03: the wrong-medication outcome. It's just another non-Administered status for the
+// generic Reason requirement, but additionally requires its own "what was given instead" note.
+describe('RecordAdministrationModal MED-03 wrong medication', () => {
+  it('offers Wrong medication given as a status option', () => {
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    expect(screen.getByRole('radio', { name: /wrong medication given/i })).toBeInTheDocument()
+  })
+
+  it('blocks submission without a note on what was given instead', async () => {
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    await user.click(screen.getByRole('radio', { name: /wrong medication given/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Grabbed the wrong blister pack')
+    await user.click(screen.getByRole('button', { name: /record wrong medication/i }))
+
+    expect(screen.getByText(/required — what was actually given instead/i)).toBeInTheDocument()
+    expect(mockRecordMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('blocks submission without a reason even when the note is filled in', async () => {
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    await user.click(screen.getByRole('radio', { name: /wrong medication given/i }))
+    await user.type(screen.getByLabelText(/what was given instead/i), 'Gave Paracetamol 500mg instead')
+    await user.click(screen.getByRole('button', { name: /record wrong medication/i }))
+
+    expect(screen.getByText(/required — what led to the wrong medication being given/i)).toBeInTheDocument()
+    expect(mockRecordMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('submits with the reason and note once both are filled in', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Administered' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    await user.click(screen.getByRole('radio', { name: /wrong medication given/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Grabbed the wrong blister pack')
+    await user.type(screen.getByLabelText(/what was given instead/i), 'Gave Paracetamol 500mg instead')
+    await user.click(screen.getByRole('button', { name: /record wrong medication/i }))
+
+    expect(mockRecordMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      medicationId: 'med-1',
+      data: expect.objectContaining({
+        status: 'WrongMedication',
+        reason: 'Grabbed the wrong blister pack',
+        notes: 'Gave Paracetamol 500mg instead',
+      }),
+    }))
+  })
+})
+
+// INC-03: recording a trigger outcome (refused/withheld/missed/wrong medication) offers to drop
+// into a pre-populated draft incident, without ever filing anything automatically.
+describe('RecordAdministrationModal INC-03 drop into draft incident', () => {
+  it('keeps the modal open on a "report as incident?" prompt after a trigger outcome saves, instead of closing immediately', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockRecordMutateAsync.mockResolvedValue({
+      success: true,
+      data: makeAdministration({ status: 'Refused', reason: 'Participant declined' }),
+    })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /record refusal/i }))
+
+    expect(await screen.findByRole('heading', { name: /report as incident\?/i })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /^report as incident$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^not now$/i })).toBeInTheDocument()
+  })
+
+  it('closes immediately with no prompt for a plain Administered outcome (not a trigger)', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Administered' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await user.click(screen.getByRole('button', { name: /^record dose$/i }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('heading', { name: /report as incident\?/i })).not.toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('"Not now" dismisses the prompt and closes without navigating — the MAR record stays as saved', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Missed', reason: 'No stock available' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await user.click(screen.getByRole('radio', { name: /^missed$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'No stock available')
+    await user.click(screen.getByRole('button', { name: /record missed dose/i }))
+    await user.click(await screen.findByRole('button', { name: /^not now$/i }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('"Report as incident" navigates to the incident form with the MAR record pre-filled as router state', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockRecordMutateAsync.mockResolvedValue({
+      success: true,
+      data: makeAdministration({
+        status: 'WrongMedication', reason: 'Grabbed the wrong pack', notes: 'Gave Paracetamol 500mg instead',
+        participantId: 'participant-9', participantName: 'Sophie Brown', medicationName: 'Insulin',
+        scheduledAt: '2026-08-01T00:30:00Z', administeredAt: '2026-08-01T01:00:00Z', administeredAtTimeZone: 'Australia/Sydney',
+        recordedByName: 'Jordan Lee', recordedByUserId: 'staff-2',
+      }),
+    })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await user.click(screen.getByRole('radio', { name: /wrong medication given/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Grabbed the wrong pack')
+    await user.type(screen.getByLabelText(/what was given instead/i), 'Gave Paracetamol 500mg instead')
+    await user.click(screen.getByRole('button', { name: /record wrong medication/i }))
+    await user.click(await screen.findByRole('button', { name: /^report as incident$/i }))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
+      state: expect.objectContaining({
+        source: 'mar-administration',
+        outcome: 'WrongMedication',
+        participantId: 'participant-9',
+        participantName: 'Sophie Brown',
+        medicationName: 'Insulin',
+        reason: 'Grabbed the wrong pack',
+        notes: 'Gave Paracetamol 500mg instead',
+        recordedByName: 'Jordan Lee',
+        recordedByUserId: 'staff-2',
+      }),
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the wrong-medication note from the prefill for a Refused/Withheld/Missed outcome', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({
+      success: true,
+      data: makeAdministration({ status: 'Refused', reason: 'Participant declined', notes: 'unrelated free-text note' }),
+    })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /record refusal/i }))
+    await user.click(await screen.findByRole('button', { name: /^report as incident$/i }))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
+      state: expect.objectContaining({ outcome: 'Refused', notes: null }),
+    })
+  })
+
+  it('tells a role without incident access to notify their coordinator instead of offering to navigate', async () => {
+    permissionsOverride.canCreateIncidents = false
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Refused', reason: 'Participant declined' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /record refusal/i }))
+
+    expect(await screen.findByText(/let your coordinator know/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^report as incident$/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^got it$/i }))
+
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

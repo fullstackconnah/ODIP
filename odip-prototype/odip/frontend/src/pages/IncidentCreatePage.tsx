@@ -1,10 +1,10 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
-import { useEffect } from 'react'
+import { ArrowLeft, Info } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
@@ -12,6 +12,14 @@ import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus
 import { SERVICE_STREAMS } from '@/api/types/enums'
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import {
+  isMarIncidentPrefillState,
+  buildIncidentDescriptionSkeleton,
+  buildIncidentTitleSkeleton,
+  buildIncidentDateTime,
+  suggestedIncidentSeverity,
+} from '@/lib/incidentPrefill'
+import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -76,6 +84,7 @@ const incidentResolver: Resolver<IncidentFormData> = (values) => {
 
 export default function IncidentCreatePage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
   const isEdit = !!id
   const createIncident = useCreateIncident()
@@ -85,6 +94,13 @@ export default function IncidentCreatePage() {
   const { data: staff = [] } = useStaff()
   const { data: participants = [] } = useParticipants()
   const { data: existingIncident } = useIncident(id)
+
+  // INC-03: router-state prefill dropped in by RecordAdministrationModal after a
+  // refused/withheld/missed/wrong-medication outcome is recorded. Purely informational client
+  // state — nothing was persisted to make this incident exist, and nothing is until this form
+  // is submitted like any other.
+  const marPrefill = !isEdit && isMarIncidentPrefillState(location.state) ? location.state : null
+  const appliedMarPrefillRef = useRef(false)
 
   const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<IncidentFormData>({
     resolver: incidentResolver,
@@ -142,6 +158,42 @@ export default function IncidentCreatePage() {
       })
     }
   }, [id, isEdit, existingIncident, reset])
+
+  // INC-03: apply the MAR drop-into-draft prefill once, on mount — a `useRef` "applied once"
+  // guard means a coordinator who's already started editing the pre-filled form never has their
+  // in-progress edits silently overwritten by a later run of this effect.
+  //
+  // reportedByStaffId uses marPrefill.recordedByUserId directly. Staff/User unification (PR #39)
+  // and MED-04 (PR #40) are both merged into this branch's base — staff records ARE user
+  // accounts, so `staff[].id` and `recordedByUserId` are the same id space, and the incident
+  // API's `reportedByStaffId` wire field validates against `_db.Users` server-side. No id-match
+  // against the loaded `staff` list is needed (the native <select> shows the right option once
+  // `staff` finishes loading, purely via value equality, regardless of load timing) — and
+  // critically, no name-based fallback: `fullName` has no uniqueness constraint, so matching by
+  // name risked silently attributing "Reported By" to a different same-named staff member,
+  // which is an audit-trail integrity defect on an NDIS incident report. If recordedByUserId
+  // doesn't correspond to any current staff member (e.g. a deactivated account), the field is
+  // simply left showing that raw id with no matching option — never a name-guessed wrong person.
+  useEffect(() => {
+    if (!marPrefill || appliedMarPrefillRef.current) return
+    appliedMarPrefillRef.current = true
+    reset({
+      serviceType: marPrefill.tripInstanceId ? 'Trip' : 'None',
+      tripInstanceId: marPrefill.tripInstanceId ?? '',
+      incidentType: 'MedicationError',
+      severity: suggestedIncidentSeverity(marPrefill.outcome),
+      title: buildIncidentTitleSkeleton(marPrefill),
+      description: buildIncidentDescriptionSkeleton(marPrefill),
+      involvedParticipantId: marPrefill.participantId,
+      reportedByStaffId: marPrefill.recordedByUserId ?? '',
+      incidentDateTime: buildIncidentDateTime(marPrefill),
+      status: 'Draft',
+      qscReportingStatus: 'NotRequired',
+      wereEmergencyServicesCalled: false,
+      familyNotified: false,
+      supportCoordinatorNotified: false,
+    })
+  }, [marPrefill, reset])
 
   const onSubmit = async (data: IncidentFormData) => {
     const base: CreateIncidentDto = {
@@ -209,6 +261,17 @@ export default function IncidentCreatePage() {
         </Link>
         <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Incident Report' : 'Report New Incident'}</h1>
       </div>
+
+      {marPrefill && (
+        <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-[var(--color-foreground)]">
+              <strong className="font-medium">Pre-filled from the medication record:</strong> {ADMIN_STATUS_LABELS[marPrefill.outcome]} — {marPrefill.medicationName} for {marPrefill.participantName}. Review and complete the details below — nothing is filed until you submit this report.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {mutation.isError && (
         <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
