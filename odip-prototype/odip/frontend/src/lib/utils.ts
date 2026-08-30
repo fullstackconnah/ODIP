@@ -22,6 +22,45 @@ export function parseApiDate(iso: string): Date {
   return new Date(hasTimezone ? iso : `${iso}Z`)
 }
 
+/**
+ * Reads the browser's IANA time zone (e.g. "Australia/Sydney") to attach to a client-captured
+ * timestamp — see MED-04 (RecordAdministrationModal). Returns undefined rather than throwing in
+ * environments where `Intl` support is missing/unusual (very old browsers, some jsdom/test
+ * configs); callers omitting the field is exactly the documented no-JS-timestamp fallback shape
+ * the backend already handles gracefully.
+ */
+export function getClientTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Formats an API timestamp using the time zone it was actually recorded in, when known — so the
+ * MAR, administration report, and witness-approvals queue show a dose time the way it looked to
+ * the person who gave it, rather than reinterpreting the same UTC instant in whichever zone the
+ * *viewing* browser happens to be in right now. Falls back to the viewer's local zone when
+ * `timeZone` is null/undefined (no client-supplied timestamp was captured — the no-JS fallback —
+ * or the record predates this field) or when it's a string `Intl` doesn't recognise (defensive:
+ * never let a bad/legacy zone value blank out a timestamp).
+ */
+export function formatWithTimeZone(
+  iso: string | null | undefined,
+  timeZone: string | null | undefined,
+  options: Intl.DateTimeFormatOptions,
+  locale: string | undefined = 'en-AU',
+): string {
+  if (!iso) return '—'
+  const date = parseApiDate(iso)
+  try {
+    return date.toLocaleString(locale, timeZone ? { ...options, timeZone } : options)
+  } catch {
+    return date.toLocaleString(locale, options)
+  }
+}
+
 export function formatDateAu(date: string | null | undefined): string {
   if (!date) return '—'
   const d = new Date(date)

@@ -25,13 +25,41 @@ public class MedicationAdministration : ITenantEntity
 
     /// <summary>Null for PRN doses, which have no fixed schedule.</summary>
     public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>Always stored as UTC. The client supplies its own local-clock instant (which
+    /// already resolves to the correct UTC instant regardless of zone) via
+    /// <see cref="Odip.Application.DTOs.CreateAdministrationDto.AdministeredAt"/>; when that's
+    /// absent (no-JS-timestamp fallback) the server stamps <see cref="DateTime.UtcNow"/> instead.
+    /// See <see cref="AdministeredAtTimeZone"/> for the zone that instant should be *displayed*
+    /// in.</summary>
     public DateTime? AdministeredAt { get; set; }
+
+    /// <summary>
+    /// The IANA time zone (e.g. "Australia/Sydney") the client was in when it captured
+    /// <see cref="AdministeredAt"/>, so the MAR/report/witness-queue UIs can render the dose time
+    /// faithfully as it looked to the person who gave it — rather than reinterpreting the UTC
+    /// instant in whichever zone the *viewing* browser happens to be in. Null for records with no
+    /// client-supplied timestamp (no-JS fallback) or from before this field existed; UI falls back
+    /// to the viewer's local zone in that case.
+    /// </summary>
+    public string? AdministeredAtTimeZone { get; set; }
 
     public MedicationAdministrationStatus Status { get; set; }
     public string? DoseGiven { get; set; }
 
-    /// <summary>Set server-side from the recording user's JWT claims — never client-supplied.</summary>
+    /// <summary>Set server-side from the recording user's resolved identity — never
+    /// client-supplied. Resolved the same way as <see cref="WitnessUserId"/>'s self-witness check:
+    /// <c>ICurrentTenant.ViewAsUserId</c> takes priority (SuperAdmin "view as" switching), falling
+    /// back to the JWT's own subject claim. Falls back to raw JWT claims
+    /// (<c>fullName</c>/<c>ClaimTypes.Name</c>) only when no user row can be resolved at all (e.g.
+    /// a test constructing the controller with no HTTP context).</summary>
     public string RecordedByName { get; set; } = string.Empty;
+
+    /// <summary>The resolved user who recorded this administration, when resolvable. Nullable
+    /// because a small number of legacy/edge-case callers (see <see cref="RecordedByName"/> remarks)
+    /// have no resolvable user id — <see cref="RecordedByName"/> is always populated regardless.</summary>
+    public Guid? RecordedByUserId { get; set; }
+    public User? RecordedByUser { get; set; }
 
     /// <summary>
     /// Kept populated for backward compatibility with existing reads/reports — mirrors

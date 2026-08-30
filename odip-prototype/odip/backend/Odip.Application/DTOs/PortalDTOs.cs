@@ -131,6 +131,7 @@ public record PortalWitnessRequestDto(
     string? DoseGiven,
     string RecordedByName,
     DateTime? AdministeredAt,
+    string? AdministeredAtTimeZone,
     WitnessStatus WitnessStatus,
     DateTime? WitnessRespondedAt,
     DateTime CreatedAt);

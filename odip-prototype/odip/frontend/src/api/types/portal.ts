@@ -119,6 +119,7 @@ export interface PortalWitnessRequestDto {
   doseGiven: string | null
   recordedByName: string
   administeredAt: string | null
+  administeredAtTimeZone: string | null
   witnessStatus: WitnessStatus
   witnessRespondedAt: string | null
   createdAt: string

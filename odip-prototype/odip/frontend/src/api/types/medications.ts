@@ -219,9 +219,14 @@ export interface AdministrationDto {
   tripInstanceId: string | null
   scheduledAt: string | null
   administeredAt: string | null
+  /** The IANA time zone (e.g. "Australia/Sydney") the client was in when it captured
+   * administeredAt — null when there's no client-supplied timestamp to anchor (no-JS fallback)
+   * or for records predating this field; display falls back to the viewer's local zone. */
+  administeredAtTimeZone: string | null
   status: MedicationAdministrationStatus
   doseGiven: string | null
   recordedByName: string | null
+  recordedByUserId: string | null
   witnessName: string | null
   witnessStaffId: string | null
   witnessStatus: WitnessStatus
@@ -239,6 +244,9 @@ export interface AdministrationDto {
 export interface CreateAdministrationDto {
   scheduledAt?: string
   administeredAt?: string
+  /** IANA time zone the client's clock was set to when it captured administeredAt — omitted for
+   * the no-JS-timestamp fallback (server stamps its own UTC time with no zone recorded). */
+  administeredAtTimeZone?: string
   status: MedicationAdministrationStatus
   doseGiven?: string
   /** Legacy free-text witness — kept for back-compat; new callers should set witnessStaffId instead. */
@@ -255,6 +263,9 @@ export interface CreateAdministrationDto {
 export interface UpdateAdministrationDto {
   status: MedicationAdministrationStatus
   administeredAt?: string
+  /** See CreateAdministrationDto.administeredAtTimeZone. Omit to preserve the previously-recorded
+   * zone (e.g. an amend that doesn't change administeredAt). */
+  administeredAtTimeZone?: string
   doseGiven?: string
   witnessName?: string
   reason?: string

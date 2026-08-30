@@ -3,10 +3,11 @@ import type { AxiosError } from 'axios'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { FormField } from '@/components/FormField'
+import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
+import { getClientTimeZone } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
@@ -74,7 +75,16 @@ export function RecordAdministrationModal({
   const amendAdministration = useAmendAdministration()
   const isPending = isAmend ? amendAdministration.isPending : recordAdministration.isPending
   const { data: staffList } = useStaff()
-  const { id: currentUserId } = usePermissions()
+  const { id: currentUserId, fullName: currentUserFullName } = usePermissions()
+  // Who this record will be attributed to — always server-derived (see
+  // MedicationsController.RecordAdministration's ResolveCurrentStaffIdAsync), never editable
+  // here. For a new record that's the signed-in (or, under SuperAdmin "view as", viewed-as) user;
+  // for an amendment the administering identity doesn't change, so show who originally recorded
+  // it instead. Falls back to a generic label when no name is resolvable (e.g. a stale odip_user
+  // blob) rather than showing nothing.
+  const administeredByDisplayName = isAmend
+    ? (existingAdministration?.recordedByName || 'Unknown')
+    : (currentUserFullName || 'You (signed in)')
   // Excludes the signed-in user from the witness picker outright — a staff member can't witness
   // their own administration (enforced server-side too; see MedicationsController.RecordAdministration).
   // When the account has no resolvable id (currentUserId is null — e.g. a stale odip_user blob
@@ -148,8 +158,14 @@ export function RecordAdministrationModal({
   }
 
   function buildCommonFields() {
+    const isAdministered = status === 'Administered'
     return {
-      administeredAt: status === 'Administered' ? (existingAdministration?.administeredAt ?? new Date().toISOString()) : undefined,
+      // A fresh record captures the client's own local instant (an ISO string already encodes
+      // the correct UTC instant regardless of zone) and the zone it was captured in; amending an
+      // administration that isn't changing its recorded time reuses both from the existing
+      // record instead of overwriting them with "now"/the amending device's zone.
+      administeredAt: isAdministered ? (existingAdministration?.administeredAt ?? new Date().toISOString()) : undefined,
+      administeredAtTimeZone: isAdministered ? (existingAdministration?.administeredAtTimeZone ?? getClientTimeZone()) : undefined,
       status,
       doseGiven: doseGiven || undefined,
       reason: requiresReason ? reason : undefined,
@@ -264,6 +280,14 @@ export function RecordAdministrationModal({
           <FormField label="Status" required>
             <ToggleGroup options={STATUS_OPTIONS.map(o => ({ key: o.key, label: o.label }))} value={status} onChange={v => setStatus(v as MedicationAdministrationStatus)} />
           </FormField>
+
+          {/* Read-only — the administering identity is always derived server-side from the
+              authenticated caller (never client-supplied); this just tells the person what will
+              be recorded rather than asking them to pick or type it. */}
+          <div>
+            <p className={labelClass}>Administered by</p>
+            <p className="text-sm text-[var(--color-foreground)]">{administeredByDisplayName}</p>
+          </div>
 
           <FormField label="Dose given">
             <input value={doseGiven} onChange={e => setDoseGiven(e.target.value)} placeholder="e.g. 1 tablet" />

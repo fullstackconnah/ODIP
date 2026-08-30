@@ -258,5 +258,5 @@ public class PortalController : ControllerBase
         a.Id, a.ParticipantId, a.Participant?.FullName ?? string.Empty,
         a.ParticipantMedicationId, a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.Strength,
         a.ParticipantMedication?.DoseDescription ?? string.Empty, a.DoseGiven, a.RecordedByName, a.AdministeredAt,
-        a.WitnessStatus, a.WitnessRespondedAt, a.CreatedAt);
+        a.AdministeredAtTimeZone, a.WitnessStatus, a.WitnessRespondedAt, a.CreatedAt);
 }

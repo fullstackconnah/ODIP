@@ -49,6 +49,12 @@ export function usePermissions() {
   // regardless of what the client filters out.
   const id = (user.id ?? null) as string | null;
 
+  // The signed-in (or, under SuperAdmin "view as", the viewed-as) user's display name —
+  // AuthResponseDto.fullName, overwritten by UserSwitcher.selectUser on a view-as switch so this
+  // always matches who the server will actually attribute a new record to. Used for read-only
+  // "administered by" style displays (see RecordAdministrationModal) rather than any write path.
+  const fullName = (user.fullName ?? null) as string | null;
+
   const isSuperAdmin = role === 'SuperAdmin';
   const isAdmin = role === 'Admin';
   const isCoordinator = role === 'Coordinator';
@@ -58,6 +64,7 @@ export function usePermissions() {
   return {
     role,
     id,
+    fullName,
     isSuperAdmin,
     isAdmin,
     isCoordinator,

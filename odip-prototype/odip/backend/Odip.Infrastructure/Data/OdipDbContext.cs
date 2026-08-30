@@ -933,6 +933,7 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.DoseGiven).HasMaxLength(200);
+            entity.Property(e => e.AdministeredAtTimeZone).HasMaxLength(100);
             entity.Property(e => e.RecordedByName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.WitnessName).HasMaxLength(200);
             entity.Property(e => e.Reason).HasMaxLength(1000);
@@ -962,6 +963,13 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.WitnessUser)
                 .WithMany()
                 .HasForeignKey(e => e.WitnessUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Restrict: same compliance-record idiom — the recording user's row must not be
+            // silently cascade-deleted out from under the MAR.
+            entity.HasOne(e => e.RecordedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.RecordedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.ParticipantId);

@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { AdministrationDto } from '@/api/types/medications'
+import { formatWithTimeZone } from '@/lib/utils'
 
 const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
   administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
@@ -20,11 +21,6 @@ const WITNESS_STATUS_COLOR_MAP: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   declined: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('en-AU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 /**
@@ -71,7 +67,7 @@ export default function ReportTab() {
       key: 'administeredAt',
       header: 'When Given',
       sortable: true,
-      render: a => formatDateTime(a.administeredAt ?? a.scheduledAt),
+      render: a => formatWithTimeZone(a.administeredAt ?? a.scheduledAt, a.administeredAtTimeZone, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
     },
     { key: 'recordedByName', header: 'Staff', render: a => a.recordedByName || '—' },
     {
