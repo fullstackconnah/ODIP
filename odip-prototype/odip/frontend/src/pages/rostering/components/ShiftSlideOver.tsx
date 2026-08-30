@@ -5,6 +5,7 @@ import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
 import type { DropdownItem } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
@@ -244,13 +245,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                   : undefined
               }
             >
-              <Dropdown
-                variant="form"
+              <SearchableSelect
                 value={staffId ?? ''}
                 onChange={v => setStaffId(v || null)}
                 disabled={!canWrite}
-                searchable
-                label="Unassigned"
+                placeholder="Unassigned"
                 items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
               />
             </FormField>

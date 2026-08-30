@@ -3,6 +3,7 @@ import { X, Trash2 } from 'lucide-react'
 import type { ShiftPatternDto, CreateShiftPatternDto, SupportRatio, SleepoverType } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern } from '@/api/hooks'
@@ -145,13 +146,11 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </FormField>
 
           <FormField label="Default staff" hint="Pre-fills every shift this pattern generates. Leave unassigned to generate unfilled shifts.">
-            <Dropdown
-              variant="form"
+            <SearchableSelect
               value={defaultStaffId ?? ''}
               onChange={v => setDefaultStaffId(v || null)}
               disabled={!canWrite}
-              searchable
-              label="Unassigned"
+              placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
             />
           </FormField>

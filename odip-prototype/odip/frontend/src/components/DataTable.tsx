@@ -54,6 +54,10 @@ export type DataTableProps<T> = {
   selectable?: boolean
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
+  /** Adds a vertical border between every column (header + body cells), for tables dense enough
+   * that scanning across a row benefits from a rule to track against. Off by default — most
+   * tables read fine with only the horizontal row dividers already in place. */
+  verticalDividers?: boolean
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -122,6 +126,7 @@ export function DataTable<T>({
   selectable = false,
   selectedRows,
   onSelectionChange,
+  verticalDividers = false,
 }: DataTableProps<T>) {
   const [internalSort, setInternalSort] = useState<SortState | null>(defaultSort ?? null)
   const isControlled = controlledSort !== undefined
@@ -176,6 +181,7 @@ export function DataTable<T>({
   }
 
   const cellPadding = compact ? 'px-2 py-1.5' : 'p-3'
+  const dividerClass = verticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
     <div className={className ?? 'relative bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-x-auto'}>
@@ -186,7 +192,7 @@ export function DataTable<T>({
       )}
       <table className="w-full text-sm">
         <thead className="bg-[var(--color-accent)]">
-          <tr>
+          <tr className={dividerClass}>
             {selectable && (
               <th className={`${cellPadding} w-10`}>
                 <input
@@ -280,7 +286,7 @@ export function DataTable<T>({
             return (
               <tr
                 key={rowKey}
-                className={`hover:bg-[var(--color-accent)]/50 transition-colors ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
+                className={`hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
                 onClick={isClickable ? () => onRowClick(row) : undefined}
                 onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
                 tabIndex={isClickable ? 0 : undefined}

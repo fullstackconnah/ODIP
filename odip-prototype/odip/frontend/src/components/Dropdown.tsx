@@ -171,6 +171,10 @@ export function Dropdown({
     }
     setOpen(false)
     setFocusedIndex(-1)
+    // Belt-and-suspenders alongside the option rows' onMouseDown preventDefault below: a mouse
+    // click on an option would otherwise blur the trigger button (the browser blurs on
+    // mousedown, before the click that commits the selection fires) and strand focus nowhere.
+    triggerRef.current?.focus()
   }
 
   const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -317,6 +321,11 @@ export function Dropdown({
               id={`dd-opt-${item.value}`}
               aria-selected={variant !== 'menu' ? item.value === value : undefined}
               aria-disabled={item.disabled ? 'true' : undefined}
+              // Prevents the browser's default mousedown-blur: without this, clicking an option
+              // blurs the trigger button before the click event that commits the selection ever
+              // fires, stranding DOM focus outside the component. See handleSelect's re-focus
+              // for the belt-and-suspenders half of this (W3C APG / Downshift combobox pattern).
+              onMouseDown={e => e.preventDefault()}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--color-foreground)] text-left transition-colors ${
