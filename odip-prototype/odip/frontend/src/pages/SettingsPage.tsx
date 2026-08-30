@@ -296,6 +296,14 @@ function ProviderSettingsTab() {
         </div>
       )}
       <div>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Manager Contact</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">The primary manager contact shown first when staff need guidance on a missed medication.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div><label className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
+          <div><label className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
+        </div>
+      </div>
+      <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
         <textarea {...f('invoiceFooterNotes')} rows={3} className={inputClass + ' resize-none'} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
