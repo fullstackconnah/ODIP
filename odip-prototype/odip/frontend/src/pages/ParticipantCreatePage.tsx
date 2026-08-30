@@ -448,7 +448,7 @@ export default function ParticipantCreatePage() {
                   aria-current={isCurrent ? 'step' : undefined}
                   disabled={!isClickable}
                   onClick={() => goToStep(idx)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors ${
                     isCurrent
                       ? 'bg-[var(--color-primary)] text-white'
                       : isCompleted
@@ -463,7 +463,11 @@ export default function ParticipantCreatePage() {
                   >
                     {isCompleted ? <Check className="w-3 h-3" /> : idx + 1}
                   </span>
-                  <span className="hidden sm:inline">{step.label}</span>
+                  {/* Visually hidden below sm rather than removed from the DOM (a plain
+                      `hidden` utility would strip it from the accessible name too, leaving
+                      screen reader users with only a bare digit like "2" for the button) —
+                      the full step label stays available to assistive tech at every width. */}
+                  <span className="sr-only sm:not-sr-only sm:inline">{step.label}</span>
                 </button>
                 {idx < WIZARD_STEPS.length - 1 && (
                   <span className="w-4 md:w-8 h-px bg-[var(--color-border)]" aria-hidden="true" />
@@ -774,7 +778,8 @@ export default function ParticipantCreatePage() {
                   <button
                     type="button"
                     onClick={() => goToStep(group.step)}
-                    className="text-sm font-medium text-[var(--color-primary)] hover:underline"
+                    aria-label={`Edit ${WIZARD_STEPS[group.step].label}`}
+                    className="min-h-[44px] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline"
                   >
                     Edit
                   </button>
@@ -785,7 +790,7 @@ export default function ParticipantCreatePage() {
                   {group.rows.map((row) => (
                     <div key={row.label} className="flex justify-between gap-4">
                       <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
-                      <dd className="font-medium text-right">{row.value}</dd>
+                      <dd className="font-medium text-right min-w-0 break-words">{row.value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -801,7 +806,7 @@ export default function ParticipantCreatePage() {
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors"
+                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors"
               >
                 Back
               </button>
@@ -812,18 +817,18 @@ export default function ParticipantCreatePage() {
               <button
                 type="button"
                 onClick={handleNext}
-                className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
+                className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
               >
                 Next
               </button>
             )}
             {stepIndex === REVIEW_STEP_INDEX && (
               <>
-                <Link to="/participants" className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
+                <Link to="/participants" className="px-6 py-2.5 min-h-[44px] flex items-center rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
                   Cancel
                 </Link>
                 <button type="submit" disabled={mutation.isPending}
-                  className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+                  className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
                   {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Participant')}
                 </button>
               </>
