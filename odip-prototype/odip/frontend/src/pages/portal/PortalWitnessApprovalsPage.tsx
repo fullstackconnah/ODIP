@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Check, X } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
 import { usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest } from '@/api/hooks'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
@@ -12,8 +12,24 @@ function formatDateTime(value: string | null) {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+/** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */
+function SkeletonCard() {
+  return (
+    <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4 animate-pulse">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-4 w-40 bg-[var(--color-muted)] rounded" />
+          <div className="h-3 w-56 bg-[var(--color-muted)] rounded" />
+          <div className="h-3 w-32 bg-[var(--color-muted)] rounded" />
+        </div>
+        <div className="h-9 w-40 bg-[var(--color-muted)] rounded-lg shrink-0" />
+      </div>
+    </div>
+  )
+}
+
 export default function PortalWitnessApprovalsPage() {
-  const { data: requests, isLoading } = usePendingWitnessRequests()
+  const { data: requests, isLoading, isError, refetch } = usePendingWitnessRequests()
   const approve = useApproveWitnessRequest()
   const decline = useDeclineWitnessRequest()
   const [declining, setDeclining] = useState<PortalWitnessRequestDto | null>(null)
@@ -58,7 +74,20 @@ export default function PortalWitnessApprovalsPage() {
         </div>
       )}
 
-      {!isLoading && list.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading witness requests…</span>
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      ) : isError ? (
+        <EmptyState
+          icon={ShieldAlert}
+          title="Couldn't load witness requests"
+          description="Check your connection and try again."
+          action={{ label: 'Try again', onClick: () => refetch() }}
+        />
+      ) : list.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}
           title="No witness requests waiting"
@@ -85,7 +114,7 @@ export default function PortalWitnessApprovalsPage() {
                     type="button"
                     onClick={() => setDeclining(request)}
                     disabled={approve.isPending || decline.isPending}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors disabled:opacity-50"
+                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
                   >
                     <X className="w-4 h-4" /> Decline
                   </button>
@@ -93,9 +122,9 @@ export default function PortalWitnessApprovalsPage() {
                     type="button"
                     onClick={() => handleApprove(request.id)}
                     disabled={approve.isPending || decline.isPending}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50"
+                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
                   >
-                    <Check className="w-4 h-4" /> Approve
+                    <Check className="w-4 h-4" /> {approve.isPending && approve.variables === request.id ? 'Approving…' : 'Approve'}
                   </button>
                 </div>
               </div>

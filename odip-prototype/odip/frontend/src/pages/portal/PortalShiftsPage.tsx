@@ -43,8 +43,11 @@ export default function PortalShiftsPage() {
             <ShieldCheck className="w-4 h-4" />
             Witness approvals
             {pendingWitnessCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium">
-                {pendingWitnessCount}
+              <span
+                className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
+                aria-label={`${pendingWitnessCount} pending`}
+              >
+                {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
               </span>
             )}
           </Link>
