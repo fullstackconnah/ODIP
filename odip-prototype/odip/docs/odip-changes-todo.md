@@ -43,6 +43,204 @@ Ticked items are shipped and verified against the deployed stack at
   - [ ] Should see all the information required for their shift, the requirements required for their participant and any details required for them
 - [ ] Evaluate how each of these features should integrate and talk to each other
 
+## Categorised Changes Backlog (2026-08-30)
+
+The 2026-08-30 changes list, broken into atomic items with stable IDs, categorised, and
+fleshed out. Items marked `[research needed]` need investigation before design; items
+marked `[needs clarification]` are ambiguous or incomplete in the source and need an
+owner decision (collected under Open Flags at the end).
+
+### A. Design System / UI Foundations
+
+- [ ] **DS-01 — Unified design components (shared tables & fields).** Build a shared
+  component library for the platform's recurring UI primitives — data tables, form
+  fields, pickers — so every feature uses the same implementations rather than
+  page-local variants. Partial building blocks exist (`DataTable.tsx`, `FormField.tsx`,
+  `ToggleGroup.tsx`); this consolidates them into a deliberate, documented set and
+  migrates existing pages onto them. Foundation item: contact tables, the RP bulk-add
+  table, and searchable dropdowns should all consume these rather than invent their own.
+- [ ] **DS-02 — Table option: vertical cell separation toggle.** Add a display option to
+  the shared table component toggling vertical borders between cells, likely a per-table
+  prop and possibly a user-facing toggle. Depends on DS-01 as its natural home.
+
+### B. Participant Intake & Profile (wizard structure)
+
+- [ ] **INTAKE-01 — Wizard driven by Intake Form + Participant Profile.** Rework the
+  multi-step participant wizard so its data model comes from two defined source
+  documents: the Intake Form (initial data captured at intake) and the Participant
+  Profile (deeper service-related information). Both forms should trace back to the
+  Master Data Dictionary via the field registry/forms engine.
+- [ ] **INTAKE-02 — Split the participant form into Intake vs Profile.** Split the
+  single participant form into the two documents above, mapping which fields are shared
+  and which are required by each, based on the actual source forms. Includes ensuring
+  users have access to both. Feeds DOC-01 — the split defines what each PDF contains.
+- [ ] **INTAKE-03 — Service-specific fields injected inline.** When services are
+  selected, each pulls in its service-specific questions — not as a new tab/step per
+  service, but as extra fields appearing inline within the relevant existing wizard
+  tabs.
+- [ ] **INTAKE-04 — De-duplicate overlapping service fields.** Where two selected
+  services ask for the same information, the field appears once and satisfies both — a
+  field-level identity rule, a natural fit for the field-registry engine (same
+  dictionary field referenced by multiple service forms).
+- [ ] **INTAKE-05 — Gender field.** Add gender to participant identity (wizard + detail
+  display). Small, but touches DTOs, entity, seeder, and the intake PDF.
+- [ ] **INTAKE-06 — Address field.** Add a structured address field for the participant.
+  Relates to living arrangements (LIVING-01) and the intake document.
+- [ ] **INTAKE-07 — Dynamic/conditional form behaviour.** The wizard must be
+  answer-driven end to end: funding type, plan type, diagnoses, living arrangement, and
+  selected services all gate later questions, and irrelevant fields are never shown.
+  Umbrella capability that FUND-02, CONTACT-02, DIAG-02, LIVING-01, and INTAKE-03 rely
+  on — build once as a conditional-visibility capability rather than per-field hacks.
+- [ ] **INTAKE-08 — Save as draft.** Save a partially-completed participant as a draft
+  with a clear indicator (list + detail) and resume-later. Implies a participant status
+  flag plus rules on where drafts appear (e.g. excluded from rosters/claims).
+- [ ] **INTAKE-09 — Risks & hazards section (intake).** Capture potential risks in
+  supporting the individual, categorised by who is at risk — the participant, other
+  participants, the public, or staff. Likely a repeatable row structure, and a candidate
+  for surfacing in portal shift detail later.
+
+### C. Contacts Model
+
+- [ ] **CONTACT-01 — Split Identity and Contacts; contacts become a typed table.**
+  `[research needed]` Separate identity from contacts; contacts become a table of
+  people, each with a type carrying its own field set. Research required into
+  NDIS/disability-practice contact types (next of kin, guardian, GP, support
+  coordinator, plan manager, plan nominee, emergency contact, …) and per-type fields.
+  Uses the DS-01 shared table.
+- [ ] **CONTACT-02 — Plan-type-dependent contact types; Contacts tab after
+  NDIS/Funding.** Contacts tab moves after NDIS & Funding because available contact
+  types depend on funding answers: NDIS-funded participants can add Support Coordinator,
+  Plan Manager, and Plan Nominee, with availability governed by the selected plan
+  management type. Depends on FUND-02 and INTAKE-07.
+- [ ] **CONTACT-03 — Contacts hold multiple roles with role-dependent fields.** One
+  contact may hold several roles at once — family/other, administrator, authorised
+  signatory, next of kin — selected when adding the contact, with different fields per
+  role. Roles are a multi-select on top of the CONTACT-01 type model.
+
+### D. Diagnoses & Health
+
+- [ ] **DIAG-01 — Diagnoses fields (primary + other).** One primary diagnosis plus any
+  number of others, selected from a curated dropdown of common diagnoses with an "add
+  other" escape hatch. The curated list belongs in the Data Dictionary. Drives DIAG-02.
+- [ ] **DIAG-02 — HIDPA field, with epilepsy auto-default.** `[needs clarification]`
+  Add the HIDPA (High Intensity Daily Personal Activities) field. Defined rule: an
+  Epilepsy diagnosis pre-selects "epilepsy management" by default. The full HIDPA option
+  list and placement aren't specified — needs a definition pass (the NDIS high-intensity
+  support items list is the likely basis). Depends on DIAG-01.
+
+### E. Funding & NDIS
+
+- [ ] **FUND-01 — NDIS plan dates.** Plan start/end dates on the participant's NDIS
+  info; also underpins future claim-validity and review-reminder logic.
+- [ ] **FUND-02 — Funding source: NDIS or Other (replaces Funding Organisation).**
+  Replace funding-organisation with a funding-source selection: NDIS plan information,
+  or "Other" revealing a specify field — with subsequent form content changing per
+  source. Gates CONTACT-02 and is a core INTAKE-07 conditional.
+
+### F. Living Arrangements
+
+- [ ] **LIVING-01 — Living arrangements model.** Three arrangement types — Family,
+  Independent, Supported Accommodation — with some fields shared across arrangements
+  (model fields once, map to arrangements — mirrors INTAKE-04's principle). Conditional
+  display per INTAKE-07; relates to INTAKE-06.
+- [ ] **LIVING-02 — Family arrangement fields.** Main support person, their relationship
+  to the participant, other people living in the accommodation, residential information.
+  The main support person plausibly links to a CONTACT-01 contact rather than free
+  text — decide during design.
+- [ ] **LIVING-03 — Independent arrangement fields.** Whether they live with others
+  (e.g. housemates), and presumably who. Small field set.
+- [ ] **LIVING-04 — Supported Accommodation fields.** `[needs clarification]` The source
+  bullet was empty — no fields specified. Likely candidates: SIL provider details,
+  accommodation type, on-site support hours — confirm before building.
+
+### G. Incident Reporting
+
+- [ ] **INC-01 — Incident service type, with trip linkage.** Service-type selection on
+  the incident report; selecting "Trip" enables a trip-select dropdown linking the
+  incident to a specific trip.
+- [ ] **INC-02 — "Other" incident type specify field.** Selecting incident type "Other"
+  reveals a free-text field to specify what it was.
+- [ ] **INC-03 — Auto-create incidents from refused/withheld/missed medications.** A MAR
+  record of refused, withheld, or missed automatically creates an incident pre-populated
+  with everything known about the event (participant, medication, dose, time, recorder).
+  Should probably drop the user into the draft incident rather than silently filing —
+  confirm during design. Interacts with MED-01/MED-03.
+- [ ] **INC-04 — RP incidents validated against the participant's register.** When a
+  restrictive-practice incident is reported, compare it against the involved
+  participant's authorised restrictive practices to determine authorised vs unauthorised
+  use, reusing the same RP-type dropdown
+  (Seclusion/Chemical/Mechanical/Physical/Environmental/Unclassified) as the participant
+  page. Unauthorised use is reportable-incident territory, so the outcome matters.
+- [ ] **INC-05 — Prepopulate RP incident from authorised practices.** Selecting the
+  involved participant surfaces their authorised RPs as selectable items — a selector
+  per RP type with a dropdown of that type's authorised entries — prepopulating the
+  incident fields. Depends on INC-04 and the register (including RP-01's bulk entries).
+
+### H. Medications
+
+- [ ] **MED-01 — Missed-medication guidance & contacts.** `[research needed]` On a
+  missed medication, surface who to contact and what to do next: manager as primary
+  instruction, plus Nurse-on-Call, Poisons Information Centre, the pharmacy, and a
+  prompt to check the medication packaging for pharmacy details. Research needed into
+  clinically/NDIS-appropriate guidance. Depends on MED-02, optionally ROSTER-01.
+- [ ] **MED-02 — Manager primary-contact setting.** Tenant setting defining the primary
+  manager contact (name/phone) that MED-01 displays first. Lives in existing Settings.
+- [ ] **MED-03 — "Wrong medication administered" outcome.** New recordable
+  administration outcome in the MAR flow. Serious-incident territory — should probably
+  feed the same auto-incident pipeline as INC-03 (confirm: the source lists only
+  refused/withheld/missed as triggers).
+- [ ] **MED-04 — Administered-by from signed-in user; client-local timestamps.** Record
+  the administering user automatically from the signed-in account (straightforward once
+  the Staff→User unification lands) and capture administration time from the client's
+  local time/timezone where possible instead of server time.
+
+### I. Participant Details & Documents
+
+- [ ] **PDETAIL-01 — More comprehensive participant details tab.** Expand the Details
+  tab to present the fuller picture this backlog adds (gender, address, diagnoses,
+  living arrangements, funding, contacts, risks). Best done after the intake/profile
+  data model settles.
+- [ ] **RP-01 — Restrictive practice bulk-add via editable table.** Rework the RP add
+  modal: pick an RP type and enter how many practices of that type, producing an
+  editable table with that many rows — columns: description, authorised by,
+  authorisation date, review date — plus an add-row control. On save each row becomes
+  its own register entry. Uses DS-01's shared table; feeds INC-05.
+- [ ] **DOC-01 — PDF export of Intake Form and Participant Profile.** Separately
+  selectable PDF downloads per participant. QuestPDF already handles trip itineraries,
+  so this extends an existing capability. Depends on INTAKE-02's field split.
+
+### J. Rostering / On-call
+
+- [ ] **ROSTER-01 — On-call roster and contact integration.** `[research needed —
+  flagged "look into"]` Extend the rostering page with on-call nurse/manager slots, and
+  surface the currently-rostered on-call person as a live contact point in MED-01's
+  guidance. Treat as a spike before building, per the exploratory source phrasing.
+
+### K. Cross-cutting UX
+
+- [ ] **UX-01 — Searchable dropdowns for large lists.** Convert large-list dropdowns to
+  searchable/typeahead selects — involved participant and involved staff were named; the
+  medication witness picker, preferred-staff picker, and diagnosis dropdown are the same
+  class. Belongs in DS-01's shared field set so it applies platform-wide.
+
+### L. Shift Notes (potential feature — not yet committed)
+
+- [ ] **NOTES-01 — Shift notes at shift completion.** Support workers add shift notes
+  when completing a shift, presumably in the portal's My Shifts flow. Explicitly a
+  potential feature — scope/commit decision pending.
+- [ ] **NOTES-02 — Keyword flagging for incidents in shift notes.** Scan shift notes for
+  incident-suggestive keywords (falls, medication, injury, behaviours) and prompt toward
+  filing an incident report. Depends on NOTES-01; same potential status.
+
+### Open Flags (owner decisions needed)
+
+- **LIVING-04**: what fields should Supported Accommodation capture? (Source bullet was
+  empty.)
+- **DIAG-02**: what is the full HIDPA option list and where does it live in the wizard,
+  beyond the epilepsy→epilepsy-management default rule?
+- **MED-03**: should "wrong medication administered" also auto-create an incident, like
+  refused/withheld/missed do in INC-03?
+
 ## Backlog
 
 ### Microsoft 365 SSO
