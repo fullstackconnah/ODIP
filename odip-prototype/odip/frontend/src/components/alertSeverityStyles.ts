@@ -8,6 +8,6 @@ import type { AlertSeverity } from '@/api/types'
  */
 export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; text: string; bg: string; label: string }> = {
   Critical: { icon: AlertTriangle, text: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/30', label: 'Critical' },
-  Warning: { icon: AlertCircle, text: 'text-amber-700', bg: 'bg-amber-50', label: 'Warning' },
+  Warning: { icon: AlertCircle, text: 'text-[var(--color-on-warning-container)]', bg: 'bg-[var(--color-warning-container)]', label: 'Warning' },
   Info: { icon: Info, text: 'text-[var(--color-info)]', bg: 'bg-[var(--color-surface-container-low)]', label: 'Info' },
 }

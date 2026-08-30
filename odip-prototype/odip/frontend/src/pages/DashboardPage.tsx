@@ -118,7 +118,7 @@ export default function DashboardPage() {
     d.tripsMissingAccommodation > 0 && { label: 'Missing Accomm.', value: d.tripsMissingAccommodation, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
     d.tripsMissingVehicles > 0 && { label: 'Missing Vehicles', value: d.tripsMissingVehicles, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
     d.tripsMissingStaff > 0 && { label: 'Missing Staff', value: d.tripsMissingStaff, color: 'text-[var(--color-foreground)]', bg: 'bg-[var(--color-surface-container)]' },
-    d.openIncidentCount > 0 && { label: 'Open Incidents', value: d.openIncidentCount, color: 'text-amber-700', bg: 'bg-amber-50' },
+    d.openIncidentCount > 0 && { label: 'Open Incidents', value: d.openIncidentCount, color: 'text-[var(--color-on-warning-container)]', bg: 'bg-[var(--color-warning-container)]' },
     d.qscOverdueCount > 0 && { label: 'QSC Overdue', value: d.qscOverdueCount, color: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/20' },
   ].filter(Boolean) as Array<{ label: string; value: number; color: string; bg: string }>
 

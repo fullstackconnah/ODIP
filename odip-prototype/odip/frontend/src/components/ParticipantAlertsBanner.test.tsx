@@ -28,6 +28,27 @@ describe('ParticipantAlertsBanner', () => {
     expect(rows[1]).toHaveTextContent('Warning')
   })
 
+  it('gives Critical rows assertive live-region semantics and Warning/Info rows polite semantics', () => {
+    const infoAlert: ParticipantAlertDto = {
+      type: 'consent-review-due', severity: 'Info', message: 'Consent form review is due', deepLinkTab: 'consents',
+    }
+    render(<ParticipantAlertsBanner alerts={[criticalAlert, warningAlert, infoAlert]} />)
+
+    // Critical interrupts (assertive) — Warning/Info are announced politely so they don't talk
+    // over the screen reader for non-urgent content.
+    const alertRegion = screen.getByRole('alert')
+    expect(alertRegion).toHaveTextContent('NDIS plan end date has passed')
+
+    const statusRegions = screen.getAllByRole('status')
+    expect(statusRegions).toHaveLength(2)
+    expect(statusRegions[0]).toHaveTextContent('No active routines recorded')
+    expect(statusRegions[1]).toHaveTextContent('Consent form review is due')
+
+    // The role lives on a wrapper, not the interactive row itself — each row is still reachable
+    // and announced as a button.
+    expect(screen.getAllByRole('button')).toHaveLength(3)
+  })
+
   it('calls onSelectTab with the alert\'s deepLinkTab when clicked', async () => {
     const user = userEvent.setup()
     const onSelectTab = vi.fn()
