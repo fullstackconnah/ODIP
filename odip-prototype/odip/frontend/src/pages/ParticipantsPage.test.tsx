@@ -118,12 +118,12 @@ describe('ParticipantsPage — alerts badge column', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({
       data: [
         {
-          participantId: 'p1', participantName: 'Jamie Smith',
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'Plan expired', deepLinkTab: 'details' }],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
-          participantId: 'p2', participantName: 'Alex Rivera',
+          participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [],
           criticalCount: 0, warningCount: 0, infoCount: 0,
         },

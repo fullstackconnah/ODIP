@@ -48,11 +48,11 @@ public class ParticipantAlertsServiceTests
     private static Participant SeedParticipant(
         OdipDbContext db, string firstName = "Sophie", string lastName = "Brown",
         bool isHighSupport = false, OvernightSupportType overnightSupport = OvernightSupportType.None,
-        DateOnly? planEndDate = null)
+        DateOnly? planEndDate = null, bool isActive = true)
     {
         var participant = new Participant
         {
-            Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true,
+            Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = isActive,
             IsHighSupport = isHighSupport, OvernightSupport = overnightSupport, PlanEndDate = planEndDate,
         };
         db.Participants.Add(participant);
@@ -456,6 +456,68 @@ public class ParticipantAlertsServiceTests
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
         Assert.Equal("Sunny Name", result.Single().ParticipantName);
+    }
+
+    // ── activeOnly (fix round 1 — review finding: aggregate must exclude inactive participants) ──
+
+    [Fact]
+    public async Task GetAlertsAsync_ActiveOnlyTrue_ExcludesInactiveParticipants()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var active = SeedParticipant(db, "Active", "Client", isActive: true,
+            planEndDate: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)); // Critical plan-expired
+        var churned = SeedParticipant(db, "Churned", "Client", isActive: false,
+            planEndDate: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-100)); // would also be Critical
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participantId: null, activeOnly: true);
+
+        var dto = Assert.Single(result);
+        Assert.Equal(active.Id, dto.ParticipantId);
+        Assert.DoesNotContain(result, r => r.ParticipantId == churned.Id);
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_ActiveOnlyFalseDefault_IncludesInactiveParticipants()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        SeedParticipant(db, "Active", "Client", isActive: true);
+        var churned = SeedParticipant(db, "Churned", "Client", isActive: false,
+            planEndDate: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-100));
+
+        // No activeOnly argument — matches what ParticipantAlertsController.GetForParticipant passes.
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participantId: null);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, r => r.ParticipantId == churned.Id);
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_DirectLookupOfInactiveParticipant_StillReturnsAlerts()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var churned = SeedParticipant(db, "Churned", "Client", isActive: false,
+            planEndDate: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-100));
+
+        // Single-participant lookup: activeOnly left at its default (false) — matches the
+        // controller's GetForParticipant, which intentionally keeps computing alerts for an
+        // archived participant's own detail page.
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(churned.Id);
+
+        var dto = Assert.Single(result);
+        Assert.Equal(churned.Id, dto.ParticipantId);
+        Assert.Contains(dto.Alerts, a => a.Type == "plan-expired");
+        Assert.False(dto.IsActive);
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_IsActiveField_ReflectsParticipantStatus()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var active = SeedParticipant(db, "Active", "Client", isActive: true);
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(active.Id);
+
+        Assert.True(result.Single().IsActive);
     }
 
     // ── Tenant scoping ────────────────────────────────────────────────────────

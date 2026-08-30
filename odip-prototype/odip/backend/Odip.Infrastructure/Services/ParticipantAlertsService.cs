@@ -53,8 +53,19 @@ public class ParticipantAlertsService
     /// <see cref="ParticipantAlertsDto"/> per matching participant, even with an empty
     /// <see cref="ParticipantAlertsDto.Alerts"/> list, so callers can look a participant up by id
     /// without a separate existence check.
+    ///
+    /// <paramref name="activeOnly"/> (fix round 1, review finding): when true, excludes archived
+    /// (<c>IsActive == false</c>) participants from the result entirely — a churned participant's
+    /// stale data (e.g. a <c>PlanEndDate</c> from before they left) would otherwise generate a
+    /// permanent, undismissable alert. Defaults to false so a direct single-participant lookup
+    /// (<see cref="Odip.Api.Controllers.ParticipantAlertsController.GetForParticipant"/>) keeps
+    /// computing alerts regardless of active status — a coordinator looking at an archived
+    /// participant's own detail page still wants to see them. The aggregate endpoint
+    /// (<see cref="Odip.Api.Controllers.ParticipantAlertsController.GetAggregate"/>) passes
+    /// <c>true</c> explicitly, since every current aggregate consumer (participants table,
+    /// dashboard) only cares about active participants.
     /// </summary>
-    public async Task<List<ParticipantAlertsDto>> GetAlertsAsync(Guid? participantId, CancellationToken ct = default)
+    public async Task<List<ParticipantAlertsDto>> GetAlertsAsync(Guid? participantId, bool activeOnly = false, CancellationToken ct = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var planWarningCutoff = today.AddDays(PlanExpiryWarningDays);
@@ -62,6 +73,7 @@ public class ParticipantAlertsService
 
         var participantsQuery = _db.Participants.AsQueryable();
         if (participantId.HasValue) participantsQuery = participantsQuery.Where(p => p.Id == participantId.Value);
+        if (activeOnly) participantsQuery = participantsQuery.Where(p => p.IsActive);
 
         var participants = await participantsQuery
             .Select(p => new
@@ -70,6 +82,7 @@ public class ParticipantAlertsService
                 p.FirstName,
                 p.LastName,
                 p.PreferredName,
+                p.IsActive,
                 p.IsHighSupport,
                 p.OvernightSupport,
                 p.PlanEndDate,
@@ -195,6 +208,7 @@ public class ParticipantAlertsService
             {
                 ParticipantId = p.Id,
                 ParticipantName = string.IsNullOrEmpty(p.PreferredName) ? $"{p.FirstName} {p.LastName}" : $"{p.PreferredName} {p.LastName}",
+                IsActive = p.IsActive,
                 Alerts = alerts,
                 CriticalCount = alerts.Count(a => a.Severity == AlertSeverity.Critical),
                 WarningCount = alerts.Count(a => a.Severity == AlertSeverity.Warning),

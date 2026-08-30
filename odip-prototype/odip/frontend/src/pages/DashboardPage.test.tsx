@@ -35,14 +35,14 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({
       data: [
         {
-          participantId: 'p1', participantName: 'Jamie Smith',
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
             { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
-          participantId: 'p2', participantName: 'Alex Rivera',
+          participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [
             { type: 'routine-coverage-gap', severity: 'Warning', message: 'No active routines recorded', deepLinkTab: 'routines' },
           ],
@@ -80,5 +80,38 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     renderPage()
 
     expect(screen.queryByText('Critical Participant Alerts')).not.toBeInTheDocument()
+  })
+
+  it('excludes an inactive participant\'s Critical alert from the tile count and list, even if the aggregate mock includes one (fix round 1 — review finding)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        {
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
+          alerts: [
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+        {
+          // Simulates a churned/archived participant whose stale PlanEndDate would otherwise
+          // generate a permanent, undismissable Critical alert.
+          participantId: 'p2', participantName: 'Churned Client', isActive: false,
+          alerts: [
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Jamie Smith')).toBeInTheDocument()
+    expect(screen.queryByText('Churned Client')).not.toBeInTheDocument()
+
+    // Tile count reflects only the active participant's Critical alert (1), not both (2).
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.queryByText('2')).not.toBeInTheDocument()
   })
 })

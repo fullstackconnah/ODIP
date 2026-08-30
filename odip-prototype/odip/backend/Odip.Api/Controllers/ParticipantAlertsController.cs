@@ -31,23 +31,30 @@ public class ParticipantAlertsController : ControllerBase
     /// <summary>
     /// Aggregate alerts across every participant visible to the current tenant — used by the
     /// participants table badge column and the dashboard's Critical-alerts card, so both can avoid
-    /// N+1 per-participant requests.
+    /// N+1 per-participant requests. <c>activeOnly: true</c> (fix round 1, review finding) — an
+    /// archived participant's stale data (e.g. a <c>PlanEndDate</c> from before they left) would
+    /// otherwise generate a permanent, undismissable alert on every aggregate consumer.
     /// </summary>
     [HttpGet("alerts")]
     public async Task<ActionResult<ApiResponse<List<ParticipantAlertsDto>>>> GetAggregate(CancellationToken ct)
     {
-        var result = await _alertsService.GetAlertsAsync(participantId: null, ct);
+        var result = await _alertsService.GetAlertsAsync(participantId: null, activeOnly: true, ct);
         return Ok(ApiResponse<List<ParticipantAlertsDto>>.Ok(result));
     }
 
-    /// <summary>Alerts for a single participant — feeds the alert banner on the detail header.</summary>
+    /// <summary>
+    /// Alerts for a single participant — feeds the alert banner on the detail header.
+    /// <c>activeOnly: false</c> (default) is intentional here — a coordinator viewing an archived
+    /// participant's own detail page still wants to see their alerts; only the aggregate excludes
+    /// inactive participants.
+    /// </summary>
     [HttpGet("{participantId:guid}/alerts")]
     public async Task<ActionResult<ApiResponse<ParticipantAlertsDto>>> GetForParticipant(Guid participantId, CancellationToken ct)
     {
         var exists = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
         if (!exists) return NotFound(ApiResponse<ParticipantAlertsDto>.Fail("Participant not found"));
 
-        var result = await _alertsService.GetAlertsAsync(participantId, ct);
+        var result = await _alertsService.GetAlertsAsync(participantId, activeOnly: false, ct);
         return Ok(ApiResponse<ParticipantAlertsDto>.Ok(result.Single()));
     }
 }

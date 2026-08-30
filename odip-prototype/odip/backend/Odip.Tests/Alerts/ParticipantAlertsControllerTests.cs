@@ -32,11 +32,11 @@ public class ParticipantAlertsControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, bool isHighSupport = false)
+    private static Participant SeedParticipant(OdipDbContext db, bool isHighSupport = false, bool isActive = true)
     {
         var participant = new Participant
         {
-            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true,
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = isActive,
             IsHighSupport = isHighSupport,
         };
         db.Participants.Add(participant);
@@ -88,5 +88,38 @@ public class ParticipantAlertsControllerTests
         Assert.Equal(2, body.Data!.Count);
         Assert.Contains(body.Data, d => d.WarningCount == 1);
         Assert.Contains(body.Data, d => d.WarningCount == 0 && d.Alerts.Count == 0);
+    }
+
+    // ── activeOnly wiring (fix round 1 — review finding) ────────────────────
+
+    [Fact]
+    public async Task GetAggregate_ExcludesInactiveParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var active = SeedParticipant(db, isHighSupport: true, isActive: true);
+        var churned = SeedParticipant(db, isHighSupport: true, isActive: false);
+        var controller = new ParticipantAlertsController(new ParticipantAlertsService(db), db);
+
+        var result = await controller.GetAggregate(CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ParticipantAlertsDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var dto = Assert.Single(body.Data!);
+        Assert.Equal(active.Id, dto.ParticipantId);
+        Assert.DoesNotContain(body.Data!, d => d.ParticipantId == churned.Id);
+    }
+
+    [Fact]
+    public async Task GetForParticipant_InactiveParticipant_StillReturnsAlerts()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var churned = SeedParticipant(db, isHighSupport: true, isActive: false);
+        var controller = new ParticipantAlertsController(new ParticipantAlertsService(db), db);
+
+        var result = await controller.GetForParticipant(churned.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantAlertsDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(churned.Id, body.Data!.ParticipantId);
+        Assert.Single(body.Data.Alerts);
+        Assert.False(body.Data.IsActive);
     }
 }

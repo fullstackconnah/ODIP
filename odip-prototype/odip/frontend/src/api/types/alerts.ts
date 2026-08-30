@@ -17,6 +17,15 @@ export interface ParticipantAlertDto {
 export interface ParticipantAlertsDto {
   participantId: string
   participantName: string
+  /**
+   * Fix round 1 (review finding): the aggregate endpoint (`GET /participants/alerts`) excludes
+   * inactive/archived participants server-side by default, but consumers of the aggregate should
+   * still filter on this defensively rather than trusting it unconditionally — see DashboardPage,
+   * which filters on `isActive` before deriving its Critical-alerts card. The single-participant
+   * endpoint (`GET /participants/{id}/alerts`) intentionally returns alerts for an inactive
+   * participant too (this field will be `false` there), so it must not be filtered out.
+   */
+  isActive: boolean
   alerts: ParticipantAlertDto[]
   criticalCount: number
   warningCount: number

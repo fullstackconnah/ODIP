@@ -101,11 +101,17 @@ export default function DashboardPage() {
     }).length
   }, 0)
 
-  const criticalAlertItems = alertsAggregate.flatMap((p) =>
-    p.alerts
-      .filter((a) => a.severity === 'Critical')
-      .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
-  )
+  // Defensive filter (fix round 1 — review finding): the aggregate endpoint already excludes
+  // inactive/archived participants server-side, but an archived participant's stale data (e.g. a
+  // PlanEndDate from before they left) must never surface as a permanent, undismissable Critical
+  // alert here even if this hook is ever reused without that server-side default.
+  const criticalAlertItems = alertsAggregate
+    .filter((p) => p.isActive)
+    .flatMap((p) =>
+      p.alerts
+        .filter((a) => a.severity === 'Critical')
+        .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
+    )
 
   const smallStats = [
     d.overdueTaskCount > 0 && { label: 'Overdue', value: d.overdueTaskCount, color: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/20' },
