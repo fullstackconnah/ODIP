@@ -1,13 +1,14 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft, Check } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource } from '@/api/types/enums'
 import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
@@ -375,11 +376,61 @@ export default function ParticipantCreatePage() {
   useUnregisterHiddenFields(unregister, hiddenFields)
   useFocusFallbackOnHide(CONDITIONAL_FIELDS, hiddenFields)
 
+  // FUND-02 review-round fix: the server unconditionally clears FundingOrganisation on save
+  // whenever FundingSource != Other (defence in depth against a stale value lingering — see
+  // ParticipantsController.ValidateFundingSource's neighbouring assignment). That means a
+  // same-session Other -> Ndis switch silently loses whatever the user typed into "Funding
+  // Organisation" the moment they save, with no warning. Guarded here: switching AWAY from
+  // Other while the specify field holds non-blank text is intercepted before it commits to the
+  // form (see the Funding Source <select>'s onChange below) and held as a pending value until
+  // the user confirms via the dialog below Cancel reverts the select to Other with the text
+  // untouched; Confirm applies the switch (the field then hides/unregisters as normal, and the
+  // text is what the server clears on save).
+  const [pendingFundingSourceValue, setPendingFundingSourceValue] = useState<string | null>(null)
+  const fundingSourceRegistration = register('fundingSource')
+  const handleFundingSourceChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = e.target.value
+    const previousValue = watchedValues.fundingSource // still the pre-change value at this point
+    const specify = getValues('fundingOrganisation')
+    const leavingOtherWithText = previousValue === 'Other' && nextValue !== 'Other' && !!specify?.trim()
+    if (leavingOtherWithText) {
+      // The browser already applied the user's pick to the native <select> before this event
+      // fires (this field is registered uncontrolled, no `value` prop) — revert that immediately
+      // so the control visibly stays on "Other" while the dialog is open. RHF's own state was
+      // never touched (its onChange isn't invoked on this path), so it's still in sync.
+      e.target.value = 'Other'
+      setPendingFundingSourceValue(nextValue)
+      return
+    }
+    fundingSourceRegistration.onChange(e)
+  }
+  const confirmFundingSourceChange = () => {
+    if (pendingFundingSourceValue) {
+      setValue('fundingSource', pendingFundingSourceValue, { shouldDirty: true, shouldValidate: true })
+    }
+    setPendingFundingSourceValue(null)
+  }
+  const cancelFundingSourceChange = () => setPendingFundingSourceValue(null)
+
   useEffect(() => {
     if (overnightSupportValue === 'None') {
       setValue('overnightRatio', 'OneToOne')
     }
   }, [overnightSupportValue, setValue])
+
+  // Round-trip fix: planType is unregistered (its value dropped entirely, by design — see
+  // useUnregisterHiddenFields) whenever fundingSource is Other, since it's hidden then. Nothing
+  // restores that value when the field reappears on a later switch back to Ndis (unregister vs.
+  // register isn't a save/restore pair) — left alone, a user who tries Other and switches back to
+  // Ndis would find Plan Type silently blank and Next blocked by fundingSourceRefine's "Ndis
+  // requires planType" rule, with no field visibly showing why. Same pattern as the
+  // overnightRatio effect above: re-apply the schema default the moment Ndis is selected with no
+  // planType value, whatever caused it to be missing.
+  useEffect(() => {
+    if (watchedValues.fundingSource === 'Ndis' && !watchedValues.planType) {
+      setValue('planType', 'SelfManaged')
+    }
+  }, [watchedValues.fundingSource, watchedValues.planType, setValue])
 
   useEffect(() => {
     if (existing) {
@@ -548,6 +599,15 @@ export default function ParticipantCreatePage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {unsavedChangesDialog}
+      <ConfirmDialog
+        open={pendingFundingSourceValue !== null}
+        onCancel={cancelFundingSourceChange}
+        onConfirm={confirmFundingSourceChange}
+        title="Switch away from Other funding source?"
+        message="The funding organisation you specified will be cleared when you save this participant. Switching back to Other later won't bring it back."
+        confirmLabel="Switch and clear"
+        variant="danger"
+      />
       <div className="flex items-center gap-4">
         <Link to={isEdit ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -679,7 +739,7 @@ export default function ParticipantCreatePage() {
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="NDIS & Funding" className="space-y-4">
               <FormField label="Funding Source" required error={errors.fundingSource?.message}>
-                <select id="fundingSource" {...register('fundingSource')}>
+                <select id="fundingSource" {...fundingSourceRegistration} onChange={handleFundingSourceChange}>
                   {FUNDING_SOURCES.map((s) => (
                     <option key={s} value={s}>{FUNDING_SOURCE_LABELS[s]}</option>
                   ))}

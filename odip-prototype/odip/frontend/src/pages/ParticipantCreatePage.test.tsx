@@ -442,6 +442,80 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
   })
 })
 
+describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before losing Funding Organisation text', () => {
+  // Controller ruling (review round 1): the server unconditionally clears FundingOrganisation on
+  // save whenever FundingSource != Other, so a same-session Other -> Ndis switch would silently
+  // lose typed specify text with no warning unless the frontend guards it.
+  async function goToNdisStepWithOtherAndText(user: ReturnType<typeof userEvent.setup>, text = 'Self-funded') {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+    await user.type(screen.getByLabelText(/Funding Organisation/i), text)
+  }
+
+  it('does not prompt when switching away from Other while the specify field is blank', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+    // Funding Organisation left blank — nothing to lose.
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Ndis')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument() // switch applied immediately
+  })
+
+  it('prompts when switching away from Other with non-blank text, and Cancel reverts the select with the text intact', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStepWithOtherAndText(user)
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Ndis')
+
+    const dialog = screen.getByRole('dialog', { name: /switch away from other funding source/i })
+    expect(dialog).toBeInTheDocument()
+    // The switch has NOT applied yet — still on Other underneath the dialog, text untouched.
+    expect(screen.getByLabelText(/Funding Organisation/i)).toHaveValue('Self-funded')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Funding Organisation/i)).toHaveValue('Self-funded')
+    expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument() // still Other, nothing lost
+  })
+
+  it('Confirm applies the switch, hiding/excluding Funding Organisation from the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStepWithOtherAndText(user)
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Ndis')
+    const dialog = screen.getByRole('dialog', { name: /switch away from other funding source/i })
+    await user.click(within(dialog).getByRole('button', { name: 'Switch and clear' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument() // now Ndis
+    expect(screen.queryByLabelText(/Funding Organisation/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.fundingSource).toBe('Ndis')
+    // INTAKE-07 exclusion still applies — the abandoned text never reaches the wire at all
+    // (the server-side clear this guard warns about is a defence-in-depth backstop, not the
+    // frontend's own path to loss).
+    expect('fundingOrganisation' in payload).toBe(false)
+  })
+})
+
 describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exact key sets per scenario)', () => {
   // Each scenario asserts its OWN exact key set rather than one shared global list — per the
   // ticket's note that the pre-existing single-list exact-keys test needed a conditional-aware,

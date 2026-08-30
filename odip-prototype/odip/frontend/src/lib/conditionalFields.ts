@@ -49,11 +49,35 @@ import type { UseFormUnregister } from 'react-hook-form'
  *
  * A `ConditionalFieldDef` may list several field names together when one answer gates a whole
  * mini-section (e.g. FUND-02 hides `ndisNumber`/`planStartDate`/`planEndDate`/`planType` together
- * when `fundingSource === 'Other'`) — they're shown/hidden/unregistered as one unit. This is also
- * the intended extension point for the later waves INTAKE-07 is the umbrella for: diagnoses
- * gating (DIAG-02's epilepsy -> HIDPA default), living-arrangement fields (LIVING-01/02/03), and
- * service-specific inline fields (INTAKE-03) are all just more `ConditionalFieldDef` entries
- * against whatever values shape that step's form uses — no engine changes needed.
+ * when `fundingSource === 'Other'`) — they're shown/hidden/unregistered as one unit.
+ *
+ * EXTENSION POINT for later waves, and a KNOWN GAP: LIVING-01/02/03 (living arrangements) and
+ * INTAKE-03 (service-specific inline fields) are pure visibility questions — just more
+ * `ConditionalFieldDef` entries against whatever values shape that step's form uses, no engine
+ * changes needed. DIAG-02 is NOT a drop-in fit: its defined rule ("an Epilepsy diagnosis
+ * pre-selects the epilepsy-management HIDPA option by default") is VALUE DERIVATION — setting a
+ * field's value as a side effect of another field's value — which the
+ * `{ fields, visibleWhen, focusFallback }` shape has no way to express; visibility alone doesn't
+ * cover it, and this module does not implement it today. Wave 3 needs to add a derivation
+ * mechanism alongside this one — the intended shape is an optional per-def callback, e.g.
+ * `onBecomeVisible?: (values: Partial<V>, setValue: UseFormSetValue<V>) => void`, invoked (from a
+ * new `useDeriveFieldValues` hook mirroring `useUnregisterHiddenFields`'s effect-on-change
+ * pattern) when the *source* field's value changes, not when DIAG-02's own field becomes visible
+ * — documented here as the intended extension point only; not implemented, and DIAG-02 should not
+ * be treated as already covered by `ConditionalFieldDef` alone.
+ *
+ * PITFALL — the same field name listed in more than one `ConditionalFieldDef`: hidden fields
+ * accumulate into a single `Set` (see `computeHiddenFields`'s `hidden.add(field)` loop over every
+ * def, not just the first matching one), so a field hidden by ANY def stays hidden even if another
+ * def listing that same field says visible. In other words this is AND-visibility across defs
+ * mentioning a field (every one of them must say visible), NOT OR-visibility ("visible if any def
+ * shows it") — the opposite of what "listing it in another def" might suggest. LIVING-01's "some
+ * fields shared across arrangement types" (Family/Independent/Supported Accommodation) is exactly
+ * the shape this bites: do not list one shared field in three separate per-arrangement-type defs
+ * expecting it to show whenever ANY arrangement is selected — that field would only ever show when
+ * every arrangement type happened to be selected simultaneously (never, for a single-select). Union
+ * the arrangement types into ONE def's `visibleWhen` instead, e.g.
+ * `visibleWhen: v => v.arrangementType === 'Family' || v.arrangementType === 'Independent'`.
  *
  * Deliberately NOT covered here: the equipment-notes gating (`equipmentRequirements` disabled
  * until an equipment checkbox is ticked) is a visible-but-disabled pattern, not a hide — the field
