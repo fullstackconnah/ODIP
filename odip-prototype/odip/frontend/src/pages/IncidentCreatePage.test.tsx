@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
+import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
 
 const {
   mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync,
@@ -26,13 +27,14 @@ vi.mock('@/api/hooks', () => ({
 // IncidentCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker —
 // that throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router
 // (same requirement ParticipantCreatePage.test.tsx documents).
-function renderCreatePage() {
+function renderCreatePage(initialEntry: string | { pathname: string; state?: unknown } = '/incidents/new') {
   const router = createMemoryRouter(
     [
       { path: '/incidents/new', element: <IncidentCreatePage /> },
+      { path: '/incidents/:id/edit', element: <IncidentCreatePage /> },
       { path: '/incidents', element: <div>Incidents list</div> },
     ],
-    { initialEntries: ['/incidents/new'] },
+    { initialEntries: [initialEntry] },
   )
   return render(<RouterProvider router={router} />)
 }
@@ -152,5 +154,116 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
       incidentType: 'Other',
       otherTypeSpecify: 'Lost property',
     })
+  })
+})
+
+// INC-03: RecordAdministrationModal's "Report as incident" navigates here with router state —
+// this page reads it into the form. Nothing was persisted to create this state; it's purely
+// client-side hand-off, so a page refresh (state lost) is equivalent to landing here fresh.
+describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
+  const marPrefill: MarIncidentPrefillState = {
+    source: 'mar-administration',
+    outcome: 'WrongMedication',
+    participantId: 'participant-1',
+    participantName: 'Sophie Brown',
+    medicationName: 'Insulin',
+    strength: '18 units',
+    doseDescription: null,
+    scheduledAt: '2026-08-01T00:30:00Z',
+    administeredAt: '2026-08-01T01:00:00Z',
+    administeredAtTimeZone: 'Australia/Brisbane',
+    recordedByName: 'Alex Rivera',
+    recordedByUserId: 'staff-1',
+    reason: 'Grabbed the wrong blister pack',
+    notes: 'Gave Paracetamol 500mg instead',
+    tripInstanceId: null,
+  }
+
+  it('shows the pre-fill banner and populates title/description/incident type/severity/participant from the MAR record', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
+
+    expect(screen.getByText(/pre-filled from the medication record/i)).toBeInTheDocument()
+
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
+      .toContain('Insulin')
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
+      .toContain('Sophie Brown')
+    expect((screen.getByLabelText('Incident Type *') as HTMLSelectElement).value).toBe('MedicationError')
+    expect((screen.getByLabelText('Severity *') as HTMLSelectElement).value).toBe('High')
+    expect((screen.getByLabelText('Involved Participant') as HTMLSelectElement).value).toBe('participant-1')
+  })
+
+  it('matches Reported By to the staff member the MAR record was recorded by (by id)', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
+
+    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('staff-1')
+  })
+
+  it('falls back to matching Reported By by name when the recorder id has no match in the staff list', () => {
+    renderCreatePage({
+      pathname: '/incidents/new',
+      state: { ...marPrefill, recordedByUserId: 'no-such-staff-id', recordedByName: 'Alex Rivera' },
+    })
+
+    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('staff-1')
+  })
+
+  it('leaves Reported By blank (not a wrong guess) when neither id nor name matches any staff member', () => {
+    renderCreatePage({
+      pathname: '/incidents/new',
+      state: { ...marPrefill, recordedByUserId: 'no-such-id', recordedByName: 'Nobody Known' },
+    })
+
+    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('')
+  })
+
+  it('sets serviceType to Trip and reveals the trip dropdown when the MAR record carries a tripInstanceId', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: { ...marPrefill, tripInstanceId: 'trip-1' } })
+
+    expect((screen.getByLabelText(/Service Type/i) as HTMLSelectElement).value).toBe('Trip')
+    expect((screen.getByLabelText(/^Trip/) as HTMLSelectElement).value).toBe('trip-1')
+  })
+
+  it('submits the pre-filled values through to the create payload unchanged if the coordinator submits as-is', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      incidentType: 'MedicationError',
+      severity: 'High',
+      involvedParticipantId: 'participant-1',
+      reportedByStaffId: 'staff-1',
+    })
+  })
+
+  it('does not show the banner or prefill anything on a plain "Report New Incident" visit (no router state)', () => {
+    renderCreatePage('/incidents/new')
+
+    expect(screen.queryByText(/pre-filled from the medication record/i)).not.toBeInTheDocument()
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('')
+  })
+
+  it('ignores MAR prefill state when editing an existing incident', () => {
+    mockUseIncident.mockReturnValue({
+      data: {
+        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Injury', otherTypeSpecify: null,
+        severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+        location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+        involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+        participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
+        immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+        witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+        reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+        resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+        supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+      },
+    })
+    renderCreatePage({ pathname: '/incidents/incident-1/edit', state: marPrefill })
+
+    expect(screen.queryByText(/pre-filled from the medication record/i)).not.toBeInTheDocument()
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('Existing incident')
   })
 })

@@ -91,7 +91,12 @@ export const ADMIN_STATUS_LABELS: Record<MedicationAdministrationStatus, string>
   Refused: 'Refused',
   Withheld: 'Withheld',
   Missed: 'Missed',
+  WrongMedication: 'Wrong medication given',
 }
+
+/** MED-03/INC-03: MAR outcomes that are auto-incident triggers — recording one of these offers
+ * the drop-into-draft-incident prompt (RecordAdministrationModal / IncidentCreatePage prefill). */
+export const INCIDENT_TRIGGER_OUTCOMES: readonly MedicationAdministrationStatus[] = ['Refused', 'Withheld', 'Missed', 'WrongMedication']
 
 export const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
   Daily: 'Every day',

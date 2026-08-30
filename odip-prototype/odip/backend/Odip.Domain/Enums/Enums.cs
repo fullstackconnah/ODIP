@@ -432,7 +432,13 @@ public enum MedicationAdministrationStatus
     Administered,
     Refused,
     Withheld,
-    Missed
+    Missed,
+    /// <summary>MED-03: the wrong medication was administered. Serious-incident territory —
+    /// alongside Refused/Withheld/Missed this is one of the MAR outcomes INC-03's frontend
+    /// prompt offers to drop into a pre-populated draft incident for. Stored as the 5th int
+    /// value (column is a plain `integer`, no string conversion) — purely additive, no
+    /// migration required.</summary>
+    WrongMedication
 }
 
 /// <summary>How a medication is physically packaged for administration.</summary>

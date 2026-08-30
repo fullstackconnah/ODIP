@@ -326,7 +326,13 @@ public class MedicationsController : ControllerBase
         if (med == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Medication not found"));
 
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld or missed."));
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
+
+        // MED-03: wrong-medication recording additionally requires a note on what was actually
+        // given instead of the prescribed medication — required on both ends (see
+        // RecordAdministrationModal's requiresWrongMedNote).
+        if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("A note describing what was given instead is required when recording a wrong medication administration."));
 
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
@@ -432,7 +438,10 @@ public class MedicationsController : ControllerBase
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld or missed."));
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
+
+        if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("A note describing what was given instead is required when recording a wrong medication administration."));
 
         admin.Status = dto.Status;
         admin.AdministeredAt = dto.AdministeredAt;

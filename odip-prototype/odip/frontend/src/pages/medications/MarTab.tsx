@@ -40,6 +40,7 @@ const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
   refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   withheld: 'bg-amber-100 text-amber-800',
   missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  wrongmedication: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 function SkeletonRow() {

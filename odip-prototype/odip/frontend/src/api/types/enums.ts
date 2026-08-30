@@ -185,7 +185,10 @@ export const MEDICATION_STATUSES = ['Active', 'OnHold', 'Ceased'] as const
 export type MedicationStatus = typeof MEDICATION_STATUSES[number]
 
 // ── Medication Administration Status ─────────────────────
-export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed'] as const
+// MED-03: WrongMedication appended last (backend enum is a plain int column) — alongside
+// Refused/Withheld/Missed it's one of the outcomes INC-03's MAR flow offers to drop into a
+// pre-populated draft incident for.
+export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed', 'WrongMedication'] as const
 export type MedicationAdministrationStatus = typeof MEDICATION_ADMINISTRATION_STATUSES[number]
 
 // ── Medication Frequency ──────────────────────────────────
