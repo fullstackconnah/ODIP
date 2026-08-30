@@ -5,6 +5,14 @@ export type FormFieldProps = {
   required?: boolean
   error?: string
   hint?: string
+  /**
+   * Id of an externally-rendered description (e.g. a conditional inline notice a caller renders
+   * itself, right below this field, with its own styling/role) to fold into the field control's
+   * aria-describedby alongside the built-in hint/error — opt in when the caller needs custom
+   * markup for the description but still wants it linked to the control for AT users. The
+   * caller owns rendering the element at this id; FormField only wires the association.
+   */
+  descriptionId?: string
   layout?: 'default' | 'checkbox'
   className?: string
   children: ReactNode
@@ -36,7 +44,7 @@ type LabelledFieldProps = {
   'aria-describedby'?: string
 }
 
-export function FormField({ label, required, error, hint, layout = 'default', className, children }: FormFieldProps) {
+export function FormField({ label, required, error, hint, descriptionId, layout = 'default', className, children }: FormFieldProps) {
   const generatedId = useId()
   const existingId = isValidElement(children) ? (children.props as { id?: string }).id : undefined
   const fieldId = existingId ?? generatedId
@@ -58,7 +66,10 @@ export function FormField({ label, required, error, hint, layout = 'default', cl
       : children
     return (
       <div className={className}>
-        <label className="flex items-center gap-3 py-1">
+        {/* min-h-[44px] gives the label — checkbox + text as one target — a WCAG 2.5.5-sized
+            hit area without inflating the visual checkbox (still w-4 h-4 via checkboxChild's own
+            className); the label wraps the input so the whole row remains one click/tap target. */}
+        <label className="flex items-center gap-3 py-1 min-h-[44px]">
           {checkboxChild}
           <span className="text-sm text-[var(--color-foreground)]">
             {label}{required && ' *'}
@@ -73,7 +84,7 @@ export function FormField({ label, required, error, hint, layout = 'default', cl
   const errorId = `${fieldId}-error`
   const showHint = !!hint && !error
   const showError = !!error
-  const describedBy = [showHint && hintId, showError && errorId].filter(Boolean).join(' ') || undefined
+  const describedBy = [showHint && hintId, showError && errorId, descriptionId].filter(Boolean).join(' ') || undefined
 
   const isNativeInput = isValidElement(children)
     && typeof children.type === 'string'

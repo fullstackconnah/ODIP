@@ -458,7 +458,7 @@ export default function ParticipantCreatePage() {
                   aria-current={isCurrent ? 'step' : undefined}
                   disabled={!isClickable}
                   onClick={() => goToStep(idx)}
-                  className={`flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
                     isCurrent
                       ? 'bg-[var(--color-primary)] text-white'
                       : isCompleted
@@ -597,7 +597,7 @@ export default function ParticipantCreatePage() {
                         const selected = field.value ?? []
                         const checked = selected.includes(stream)
                         return (
-                          <label key={stream} className="flex items-center gap-3 py-1">
+                          <label key={stream} className="flex items-center gap-3 py-1 min-h-[44px]">
                             <input
                               type="checkbox"
                               checked={checked}
@@ -824,7 +824,7 @@ export default function ParticipantCreatePage() {
                     type="button"
                     onClick={() => goToStep(group.step)}
                     aria-label={`Edit ${WIZARD_STEPS[group.step].label}`}
-                    className="min-h-[44px] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline"
+                    className="min-h-[44px] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
                   >
                     Edit
                   </button>
@@ -851,7 +851,7 @@ export default function ParticipantCreatePage() {
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors"
+                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
               >
                 Back
               </button>
@@ -862,18 +862,18 @@ export default function ParticipantCreatePage() {
               <button
                 type="button"
                 onClick={handleNext}
-                className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
+                className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
               >
                 Next
               </button>
             )}
             {stepIndex === REVIEW_STEP_INDEX && (
               <>
-                <Link to="/participants" className="px-6 py-2.5 min-h-[44px] flex items-center rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
+                <Link to="/participants" className="px-6 py-2.5 min-h-[44px] flex items-center rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
                   Cancel
                 </Link>
                 <button type="submit" disabled={mutation.isPending}
-                  className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+                  className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
                   {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Participant')}
                 </button>
               </>

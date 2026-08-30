@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { X } from 'lucide-react'
 import {
   useAdminTenantsSummary,
@@ -42,6 +42,13 @@ export default function UserFormPanel({
   defaultTenantId,
 }: UserFormPanelProps) {
   const isEdit = !!user
+
+  // Dropdown's trigger is a <button>, not a native <select> — a plain adjacent <label> with no
+  // htmlFor/for isn't programmatically associated with it, so screen reader users landing on the
+  // trigger hear nothing. aria-labelledby wires each label to its dropdown explicitly.
+  const tenantLabelId = useId()
+  const roleLabelId = useId()
+  const staffLabelId = useId()
 
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: staffList = [] } = useStaff()
@@ -170,7 +177,7 @@ export default function UserFormPanel({
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* Tenant */}
           <div>
-            <label className={labelClass}>Tenant *</label>
+            <label id={tenantLabelId} className={labelClass}>Tenant *</label>
             <Dropdown
               variant="form"
               value={tenantId}
@@ -178,6 +185,8 @@ export default function UserFormPanel({
               items={tenants.map(t => ({ value: t.id, label: t.name }))}
               label="Select tenant"
               disabled={isEdit}
+              aria-labelledby={tenantLabelId}
+              aria-required="true"
             />
           </div>
 
@@ -240,19 +249,21 @@ export default function UserFormPanel({
 
           {/* Role */}
           <div>
-            <label className={labelClass}>Role *</label>
+            <label id={roleLabelId} className={labelClass}>Role *</label>
             <Dropdown
               variant="form"
               value={role}
               onChange={setRole}
               items={ROLE_OPTIONS}
               label="Select role"
+              aria-labelledby={roleLabelId}
+              aria-required="true"
             />
           </div>
 
           {/* Linked staff record — drives the "My Shifts" portal (User.StaffId) */}
           <div>
-            <label className={labelClass}>Linked Staff Record</label>
+            <label id={staffLabelId} className={labelClass}>Linked Staff Record</label>
             <Dropdown
               variant="form"
               value={staffId}
@@ -262,6 +273,7 @@ export default function UserFormPanel({
                 ...staffList.map(s => ({ value: s.id, label: s.fullName })),
               ]}
               label="None"
+              aria-labelledby={staffLabelId}
             />
             <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
               Links this login to a staff member so they see their rostered shifts in the My Shifts portal.

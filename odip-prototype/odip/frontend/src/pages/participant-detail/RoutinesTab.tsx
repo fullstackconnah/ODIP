@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock } from 'lucide-react'
 import type { AxiosError } from 'axios'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
+import { formatShiftTime } from '@/lib/utils'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
@@ -31,15 +32,11 @@ function toApiTime(time: string): string {
   return time.length === 5 ? `${time}:00` : time
 }
 
+/** Same "h:mma–h:mma" formatting as the rostering board's shift times, plus an "Untimed" fallback
+ * for routines with no start/end — delegates to the shared formatShiftTime instead of duplicating it. */
 function formatRoutineTime(startTime: string | null, endTime: string | null): string {
   if (!startTime || !endTime) return 'Untimed'
-  const fmt = (t: string) => {
-    const [h, m] = t.split(':').map(Number)
-    const period = h >= 12 ? 'pm' : 'am'
-    const hour12 = h % 12 === 0 ? 12 : h % 12
-    return m === 0 ? `${hour12}${period}` : `${hour12}:${String(m).padStart(2, '0')}${period}`
-  }
-  return `${fmt(startTime)}–${fmt(endTime)}`
+  return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}`
 }
 
 /** Groups active routines into "Every day" plus one bucket per weekday that has entries, each sorted critical-first then by time (untimed last). */

@@ -46,6 +46,7 @@ const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
 export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant' }: ShiftSlideOverProps) {
   const titleId = useId()
+  const staffCompatibilityNoticeId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const open = target !== null
   useSlideOverA11y(open, onClose, panelRef)
@@ -231,6 +232,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <FormField
               label="Staff"
               hint={groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
+              // Links the Preferred/Excluded compatibility notice below (rendered outside this
+              // FormField so it can carry its own role/styling) into the Staff control's
+              // aria-describedby, so AT users focused on the field hear it — not just sighted users.
+              descriptionId={selectedStaffCompatibility ? staffCompatibilityNoticeId : undefined}
             >
               <Dropdown
                 variant="form"
@@ -246,14 +251,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               // status, not alert: this is informational and non-blocking (save still works), so an
               // assertive interruption would overstate it — polite matches the Blocking-finding alert
               // below it in severity terms while still surfacing on selection without needing focus.
-              <p role="status" className="mt-1.5 text-xs font-medium text-destructive">
+              <p id={staffCompatibilityNoticeId} role="status" className="mt-1.5 text-xs font-medium text-destructive">
                 {selectedStaffLabel} is marked not compatible with this participant
                 {selectedStaffCompatibility.reason ? `: ${selectedStaffCompatibility.reason}.` : '.'}
                 {' '}You can still save this shift — it just won't be suggested as a match.
               </p>
             )}
             {selectedStaffCompatibility?.level === 'Preferred' && (
-              <p className="mt-1.5 text-xs text-primary">
+              <p id={staffCompatibilityNoticeId} className="mt-1.5 text-xs text-primary">
                 {selectedStaffLabel} is a preferred staff member for this participant.
               </p>
             )}

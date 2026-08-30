@@ -1,4 +1,12 @@
 import { addDays, addWeeks, format, parseISO, startOfWeek } from 'date-fns'
+import { formatShiftTime } from '@/lib/utils'
+
+// Re-exported so existing `from '../lib/roster'` imports across the rostering feature keep
+// working unchanged — the implementation itself now lives in the shared lib alongside
+// formatDateAu/formatCurrency, since participant-detail's RoutinesTab needs the same algorithm
+// and importing it from here (a rostering-feature module) into an unrelated feature would be
+// backwards, not just semantically off.
+export { formatShiftTime }
 
 /**
  * Sticky first-column width. Sized so the longest name in the fixture ("Marcus Papadopoulos",
@@ -61,14 +69,6 @@ export function formatDayAccessibleName(iso: string): string {
 
 export function isToday(iso: string): boolean {
   return iso === format(new Date(), 'yyyy-MM-dd')
-}
-
-/** Formats "HH:mm:ss" or "HH:mm" as "h:mma" (lowercase, no space) for compact tabular display. */
-export function formatShiftTime(time: string): string {
-  const [h, m] = time.split(':').map(Number)
-  const period = h >= 12 ? 'pm' : 'am'
-  const hour12 = h % 12 === 0 ? 12 : h % 12
-  return m === 0 ? `${hour12}${period}` : `${hour12}:${String(m).padStart(2, '0')}${period}`
 }
 
 export function formatShiftRange(startTime: string, endTime: string, endsNextDay: boolean): string {

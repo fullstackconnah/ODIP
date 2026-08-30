@@ -41,10 +41,19 @@ const SUBMIT_LABEL: Record<MedicationAdministrationStatus, string> = {
 }
 
 /** Animates a conditional field in/out using the same grid-template-rows collapse
- * trick used for AppLayout's nav groups — respects prefers-reduced-motion globally. */
+ * trick used for AppLayout's nav groups — respects prefers-reduced-motion globally.
+ * `grid-rows-[0fr]` only hides the content visually (overflow-hidden clips it to 0 height);
+ * the fields inside stay in the DOM and, without more, stay in the tab order — a keyboard user
+ * could Tab into an invisible textarea. `inert` while collapsed removes the subtree from both
+ * the tab order and the accessibility tree without touching the grid-rows animation itself, and
+ * is dropped the instant `show` flips so focus/tabbing work normally once the field is visible. */
 function AnimatedField({ show, children }: { show: boolean; children: React.ReactNode }) {
   return (
-    <div className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${show ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+    <div
+      className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${show ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      // React 19 forwards `inert` as the native DOM boolean attribute.
+      inert={!show}
+    >
       <div className="min-h-0">{children}</div>
     </div>
   )
