@@ -232,7 +232,7 @@ export default function AppLayout() {
                     className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
                     aria-label={`${pendingWitnessCount} witness approval${pendingWitnessCount === 1 ? '' : 's'} pending`}
                   >
-                    {pendingWitnessCount}
+                    {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
                   </span>
                 )}
               </NavLink>

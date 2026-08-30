@@ -14,6 +14,7 @@ import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
+import { formatDateAu } from '@/lib/utils'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -150,6 +151,8 @@ export default function MedicationFormPage() {
 
   const typeValue = useWatch({ control, name: 'type' })
   const frequencyValue = useWatch({ control, name: 'frequency' })
+  const intervalDaysValue = useWatch({ control, name: 'intervalDays' })
+  const anchorDateValue = useWatch({ control, name: 'anchorDate' })
   const routeValue = useWatch({ control, name: 'route' })
   const formValue = useWatch({ control, name: 'form' })
   const isPsychotropic = useWatch({ control, name: 'isPsychotropic' })
@@ -449,7 +452,7 @@ export default function MedicationFormPage() {
                               type="button"
                               onClick={() => field.onChange(active ? selected.filter(d => d !== day) : [...selected, day])}
                               aria-pressed={active}
-                              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                              className={`min-h-[44px] min-w-[44px] flex items-center justify-center px-3 py-2 rounded-lg text-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ${
                                 active
                                   ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                   : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
@@ -467,13 +470,20 @@ export default function MedicationFormPage() {
             )}
 
             {frequencyValue === 'EveryNDays' && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Every N days" required error={errors.intervalDays?.message}>
-                  <input type="number" min="1" {...register('intervalDays')} placeholder="e.g. 2" />
-                </FormField>
-                <FormField label="Starting from" required error={errors.anchorDate?.message}>
-                  <input type="date" {...register('anchorDate')} />
-                </FormField>
+              <div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <FormField label="Every N days" required error={errors.intervalDays?.message}>
+                    <input type="number" min="1" step="1" {...register('intervalDays')} placeholder="e.g. 2" />
+                  </FormField>
+                  <FormField label="Starting from" required error={errors.anchorDate?.message}>
+                    <input type="date" {...register('anchorDate')} />
+                  </FormField>
+                </div>
+                {intervalDaysValue && Number(intervalDaysValue) > 0 && anchorDateValue && (
+                  <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
+                    Due every {intervalDaysValue} day{Number(intervalDaysValue) === 1 ? '' : 's'}, starting {formatDateAu(anchorDateValue)}.
+                  </p>
+                )}
               </div>
             )}
             </>
