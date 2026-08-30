@@ -1,8 +1,10 @@
-import { useDashboard, useSettings, useStaff } from '@/api/hooks'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
+import { usePermissions } from '@/lib/permissions'
+import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import { Link } from 'react-router-dom'
 import {
-  Map, Users, ListChecks, ChevronRight, CalendarDays, MapPin
+  Map, Users, ListChecks, ChevronRight, CalendarDays, MapPin, ShieldAlert
 } from 'lucide-react'
 
 // ── Helpers ──
@@ -52,9 +54,11 @@ const statusBadge: Record<string, string> = {
 }
 
 export default function DashboardPage() {
+  const { canViewAlerts } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
   const { data: allStaff = [] } = useStaff({ isActive: 'true' })
+  const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
 
   if (isLoading) {
     return (
@@ -96,6 +100,18 @@ export default function DashboardPage() {
       return diff <= warningDays
     }).length
   }, 0)
+
+  // Defensive filter (fix round 1 — review finding): the aggregate endpoint already excludes
+  // inactive/archived participants server-side, but an archived participant's stale data (e.g. a
+  // PlanEndDate from before they left) must never surface as a permanent, undismissable Critical
+  // alert here even if this hook is ever reused without that server-side default.
+  const criticalAlertItems = alertsAggregate
+    .filter((p) => p.isActive)
+    .flatMap((p) =>
+      p.alerts
+        .filter((a) => a.severity === 'Critical')
+        .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
+    )
 
   const smallStats = [
     d.overdueTaskCount > 0 && { label: 'Overdue', value: d.overdueTaskCount, color: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/20' },
@@ -157,6 +173,37 @@ export default function DashboardPage() {
             <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All clear</p>
           )}
         </Link>
+
+        {/* Critical Participant Alerts */}
+        {canViewAlerts && (
+          <Link
+            to="/participants"
+            className={`col-span-2 lg:col-span-3 p-6 rounded-[2rem] flex flex-col justify-between hover:opacity-90 transition-opacity ${
+              criticalAlertItems.length > 0
+                ? 'bg-[var(--color-error-container)]/30 border border-[var(--color-destructive)]/20'
+                : 'bg-[var(--color-surface-container-low)]'
+            }`}
+          >
+            <p className={`text-sm mb-1 font-medium ${criticalAlertItems.length > 0 ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>
+              Critical Participant Alerts
+            </p>
+            <p className={`text-3xl font-display font-bold ${criticalAlertItems.length > 0 ? 'text-[var(--color-destructive)]' : 'text-[var(--color-primary)]'}`}>
+              {alertsLoading ? (
+                <span className="inline-block h-7 w-7 rounded-full bg-[var(--color-muted)] animate-pulse" />
+              ) : criticalAlertItems.length > 0 ? (
+                criticalAlertItems.length
+              ) : (
+                <span className="material-symbols-outlined text-3xl leading-none" aria-hidden="true">check_circle</span>
+              )}
+            </p>
+            {/* Don't claim "All clear" while the alerts request is still in flight — a false
+                negative here is worse than a brief blank line, since coordinators rely on this
+                tile to know whether any participant needs urgent attention. */}
+            {!alertsLoading && criticalAlertItems.length === 0 && (
+              <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All clear</p>
+            )}
+          </Link>
+        )}
 
         {/* Small alert cards */}
         {smallStats.map(s => (
@@ -279,6 +326,47 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Critical Participant Alerts — coordinator/admin-facing (task 6c) */}
+      {canViewAlerts && criticalAlertItems.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl md:text-2xl font-display font-bold text-[var(--color-foreground)]">Critical Participant Alerts</h3>
+            <Link to="/participants" className="text-[var(--color-primary)] font-bold text-sm hover:underline">
+              View All
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {criticalAlertItems.slice(0, 6).map(({ participantId, participantName, alert }) => {
+              const style = ALERT_SEVERITY_STYLES.Critical
+              const Icon = style.icon
+              return (
+                <Link
+                  key={`${participantId}:${alert.type}:${alert.message}`}
+                  to={`/participants/${participantId}?tab=${alert.deepLinkTab}`}
+                  className={`p-5 rounded-[1.5rem] ${style.bg} border border-[var(--color-destructive)]/10 hover:opacity-90 transition-opacity`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-widest ${style.text}`}>
+                      <Icon className="w-3 h-3" /> {style.label}
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-[var(--color-foreground)] mb-1 text-sm flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 opacity-60" /> {participantName}
+                  </h5>
+                  <p className="text-xs text-[var(--color-muted-foreground)] mb-4">{alert.message}</p>
+                  <div className="flex items-center justify-end">
+                    <span className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1">
+                      Resolve <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

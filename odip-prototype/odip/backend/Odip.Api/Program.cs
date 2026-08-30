@@ -162,6 +162,9 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>();
 
+// ── Participant Risk Alerts (task 6c) — computed, not persisted ──
+builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();
+
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.Infrastructure.Services.NagerHolidayProvider>();

@@ -1,4 +1,4 @@
-import { useParticipants, useDeleteParticipant, useUpdateParticipant } from '@/api/hooks'
+import { useParticipants, useDeleteParticipant, useUpdateParticipant, useParticipantAlertsAggregate } from '@/api/hooks'
 import { maskNdisNumber } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
@@ -6,10 +6,12 @@ import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
+import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
 const ACTIVE_STATUS_ITEMS = [
@@ -23,11 +25,16 @@ const ACTIVE_STATUS_COLORS: Record<string, string> = {
 }
 
 export default function ParticipantsPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canViewAlerts } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const deleteParticipant = useDeleteParticipant()
   const updateParticipant = useUpdateParticipant()
+  const { data: alertsAggregate, isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
+  const alertsByParticipant = useMemo(
+    () => new Map((alertsAggregate ?? []).map((a) => [a.participantId, a])),
+    [alertsAggregate],
+  )
 
   const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteParticipant,
@@ -81,6 +88,41 @@ export default function ParticipantsPage() {
         )
       },
     },
+    ...(canViewAlerts ? [{
+      key: 'alerts',
+      header: 'Alerts',
+      align: 'center' as const,
+      render: (p: ParticipantListDto) => {
+        if (alertsLoading) {
+          return <span className="inline-block h-4 w-9 rounded-full bg-[var(--color-muted)] animate-pulse" />
+        }
+        const entry = alertsByParticipant.get(p.id)
+        const total = entry ? entry.criticalCount + entry.warningCount + entry.infoCount : 0
+        if (total === 0) return <span className="text-[var(--color-muted-foreground)]">—</span>
+        return (
+          <span className="inline-flex items-center gap-1" title={entry!.alerts.map((a) => a.message).join('; ')}>
+            {entry!.criticalCount > 0 && (
+              <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Critical.bg} ${ALERT_SEVERITY_STYLES.Critical.text}`}>
+                <ALERT_SEVERITY_STYLES.Critical.icon className="w-3 h-3" /> {entry!.criticalCount}
+              </span>
+            )}
+            {entry!.warningCount > 0 && (
+              <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Warning.bg} ${ALERT_SEVERITY_STYLES.Warning.text}`}>
+                <ALERT_SEVERITY_STYLES.Warning.icon className="w-3 h-3" /> {entry!.warningCount}
+              </span>
+            )}
+            {/* Previously missing: an Info-only entry (critical/warning both 0) fell through to
+                an empty span here — the cell looked identical to "no alerts" even though `total`
+                was non-zero, silently hiding Info-severity alerts from the at-a-glance column. */}
+            {entry!.infoCount > 0 && (
+              <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Info.bg} ${ALERT_SEVERITY_STYLES.Info.text}`}>
+                <ALERT_SEVERITY_STYLES.Info.icon className="w-3 h-3" /> {entry!.infoCount}
+              </span>
+            )}
+          </span>
+        )
+      },
+    }] : []),
     {
       key: 'actions',
       header: '',
