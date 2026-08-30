@@ -409,17 +409,97 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
 
-    // aria-labelledby (wired by FormField for the custom Dropdown control) makes the field's
-    // accessible name the "Staff" label text, not the dropdown's placeholder/selected value.
+    // aria-labelledby (wired by FormField for the custom SearchableSelect control) makes the
+    // field's accessible name the "Staff" label text, not the combobox's placeholder/typed value.
     // The field still carries the built-in "Leave unassigned..." hint's id (that's independent
     // of compatibility level) — the bug this guards against is every id in aria-describedby
     // resolving to a real element, i.e. no id referencing the Excluded/Preferred notice
     // paragraph when neither is rendered.
-    const field = screen.getByRole('button', { name: 'Staff' })
+    const field = screen.getByRole('combobox', { name: 'Staff' })
     const describedBy = field.getAttribute('aria-describedby')
     expect(describedBy).toBeTruthy()
     for (const id of describedBy!.split(' ')) {
       expect(document.getElementById(id)).not.toBeNull()
     }
+  })
+})
+
+describe('ShiftSlideOver Staff field — SearchableSelect (DS-01/UX-01 migration)', () => {
+  const threeStaffOptions = [
+    { value: 'staff-1', label: 'Alex Rivera' },
+    { value: 'staff-2', label: 'Jordan Smith' },
+    { value: 'staff-3', label: 'Bianca Novak' },
+  ]
+
+  it('renders the Staff field as a combobox and narrows the option list as the user types', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ staffId: null, findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={threeStaffOptions}
+      />,
+    )
+
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    await user.click(field)
+    expect(screen.getAllByRole('option')).toHaveLength(4) // Unassigned + 3 staff
+
+    await user.type(field, 'jordan')
+
+    const options = screen.getAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('Jordan Smith')
+  })
+
+  it('selects a staff member via keyboard (arrow down + enter)', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ staffId: null, findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={threeStaffOptions}
+      />,
+    )
+
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    await user.click(field)
+    // Unassigned, Alex Rivera, Jordan Smith, Bianca Novak — two ArrowDowns lands on Alex Rivera.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+
+    expect(field).toHaveValue('Alex Rivera')
+    expect(field).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes on Escape without changing the current selection', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ staffId: 'staff-1', findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={threeStaffOptions}
+      />,
+    )
+
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    expect(field).toHaveValue('Alex Rivera')
+
+    await user.click(field)
+    await user.type(field, 'zzz')
+    expect(screen.getByText('No results found')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(field).toHaveAttribute('aria-expanded', 'false')
+    expect(field).toHaveValue('Alex Rivera')
   })
 })

@@ -1,0 +1,475 @@
+# Shared components
+
+This is ODIP's shared primitive set — the recurring UI building blocks (tables, form
+fields, pickers, dialogs, status/empty states) that every feature should build on rather
+than inventing page-local variants. This document is the DS-01 "documented set"
+deliverable: for each primitive below it covers props, visual/interaction states, the
+accessibility contract, when to reach for it (and when not to), and a short usage
+snippet.
+
+Anything not listed here (`AddActivityModal`, `AddVehicleModal`, `GenerateClaimModal`,
+`NoShowModal`, `TemplateFormPanel`, `AuditHistoryTab`, `ItineraryTab`, `ItineraryPdf`,
+`ParticipantAlertsBanner`, `ServiceStreamBadges`, …) is a feature-specific composed
+component, not a generic primitive — it's fine for those to live outside this contract,
+but if a second feature needs the same shape, extract the shared part in here instead of
+copying it.
+
+## Contents
+
+- [DataTable](#datatable)
+- [FormField](#formfield)
+- [Dropdown](#dropdown)
+- [SearchableSelect](#searchableselect)
+- [ToggleGroup](#togglegroup)
+- [EmptyState](#emptystate)
+- [Modal](#modal) / [ConfirmDialog](#confirmdialog)
+- [SearchInput](#searchinput)
+- [StatusBadge](#statusbadge)
+- [Card](#card) / [StatCard](#statcard)
+- [PageHeader](#pageheader)
+- [TabNav](#tabnav)
+- [ActionButtons](#actionbuttons)
+- [ErrorBoundary](#errorboundary)
+- [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
+
+---
+
+## DataTable
+
+`DataTable.tsx` — the shared table for any row/column dataset: participant lists, claims,
+audit history, compatibility matrices, restrictive-practice registers.
+
+**Props** (generic over row type `T`):
+
+| Prop | Type | Notes |
+|---|---|---|
+| `data` | `T[]` | Rows to render. |
+| `columns` | `Column<T>[]` | See column shape below. |
+| `keyField` | `keyof T & string` | Field used as React key and row identity. |
+| `sortable` | `boolean` | Table-level switch; a column also needs its own `sortable: true`. |
+| `defaultSort` / `sort` / `onSortChange` | | Uncontrolled (`defaultSort`) or controlled (`sort` + `onSortChange`) sort state — same pattern as `DropdownProps.value`. |
+| `onRowClick` | `(row: T) => void` | Makes the row a keyboard-operable button (`role="button"`, `tabIndex=0`, Enter/Space). |
+| `rowClassName` | `(row: T) => string` | Per-row extra classes (e.g. highlighting a flagged row). |
+| `emptyMessage` | `string` | Shown when `data` is empty and not loading. Default `'No data'`. |
+| `loading` | `boolean` | See States below. |
+| `editingRow` | `string \| number \| null` | Row whose `editable` columns render their edit control instead of the display cell. |
+| `onEditChange` | `(row: T, key: string, value: unknown) => void` | Fired by an editable column's `onChange`. |
+| `selectable` / `selectedRows` / `onSelectionChange` | | Adds a checkbox column with select-all in the header. |
+| `compact` | `boolean` | Tighter cell padding. |
+| `verticalDividers` | `boolean` | **DS-02.** Adds a vertical rule between every column (header + body). Off by default — most tables read fine with only the horizontal row dividers already in place; turn it on for dense, many-column tables where tracking a column by eye benefits from a rule (e.g. a wide compatibility matrix). |
+| `footer` | `ReactNode` | Rendered in a `<tfoot>` below the body. |
+| `className` | `string` | Overrides the default card/border wrapper entirely. |
+
+Column shape (`Column<T>`):
+
+```ts
+{
+  key: keyof T & string   // or a synthetic string key for a computed column
+  header: string | ReactNode
+  type?: 'text' | 'date' | 'currency' | 'boolean' | 'badge' | 'custom'  // built-in cell renderer
+  render?: (row: T, rowIndex: number) => ReactNode                      // overrides `type`
+  sortable?: boolean
+  sortFn?: (a: T, b: T) => number   // overrides the default type-aware comparator
+  align?: 'left' | 'center' | 'right'
+  hidden?: boolean
+  editable?: { render: (row: T, onChange: (value: unknown) => void) => ReactNode }
+  bulkEditable?: { items: DropdownItem[]; onBulkChange: (selectedIds: string[], value: string) => void }
+  className?: string
+}
+```
+
+**States**
+
+- **Loading, no data yet**: a centred spinner row with "Loading...", `colSpan`ned across
+  every visible column.
+- **Loading, stale data still visible**: a translucent overlay + spinner on top of the
+  existing rows, so a re-fetch doesn't flash the table empty.
+- **Empty**: `emptyMessage`, `aria-live="polite"` so a filter that empties the table is
+  announced.
+- **Editable cell**: swaps a specific row's cell(s) to the column's `editable.render`
+  control while `editingRow` matches that row's key — the rest of the row (and every other
+  row) stays read-only. This is the affordance for a *row-at-a-time* inline edit (e.g. a
+  claims table's amount field). It is **not** an editable-grid/spreadsheet mode — for the
+  RP bulk-add table's "N freeform rows, all editable at once" need, build that as its own
+  small component composed from plain `<input>`s inside a table, or extend this contract
+  with a `editingRows: Set<string>` variant if a second consumer needs the same shape.
+  Documented here as a deliberate scope line, not an oversight.
+- **Selectable**: header checkbox is `indeterminate` when some-but-not-all visible rows
+  are selected.
+
+**Accessibility**
+
+- Sortable headers are `role="button"`, keyboard-operable (Enter/Space), and carry
+  `aria-sort` (`ascending` / `descending` / `none`).
+- Clickable rows (`onRowClick`) are `role="button"`, `tabIndex=0`, with a visible
+  `focus-visible` ring and Enter/Space activation.
+- Select-all and per-row checkboxes carry `aria-label`s (`"Select all rows"` /
+  `"Select row {id}"`).
+
+**When to use**: any tabular list of records. **When not to**: a small, fixed 2-3 row
+summary — reach for `Card`/`StatCard` instead.
+
+```tsx
+<DataTable
+  data={participants}
+  columns={[
+    { key: 'name', header: 'Name', sortable: true },
+    { key: 'status', header: 'Status', type: 'badge' },
+    { key: 'startDate', header: 'Started', type: 'date', sortable: true },
+  ]}
+  keyField="id"
+  sortable
+  onRowClick={p => navigate(`/participants/${p.id}`)}
+  emptyMessage="No participants match these filters."
+  loading={isLoading}
+  verticalDividers
+/>
+```
+
+---
+
+## FormField
+
+`FormField.tsx` — the label/hint/error/required wrapper every form control sits inside.
+Handles the native-vs-custom-control id/label/aria wiring so individual forms never have
+to hand-roll `aria-describedby` plumbing.
+
+**Props**
+
+| Prop | Type | Notes |
+|---|---|---|
+| `label` | `ReactNode` | Required. |
+| `required` | `boolean` | Appends `*` to the label and sets `aria-required` on the control. |
+| `error` | `string` | Shown instead of `hint` when present; sets `aria-invalid`. |
+| `hint` | `string` | Helper text below the control. |
+| `descriptionId` | `string` | Folds an *externally-rendered* description (e.g. a conditional inline notice the caller renders itself) into the control's `aria-describedby` alongside the built-in hint/error. |
+| `layout` | `'default' \| 'checkbox'` | `'checkbox'` renders label-wraps-input with a 44px tall row instead of label-above-control. |
+| `className` | `string` | On the wrapping `<div>`. |
+| `children` | one element | The control — a native `input`/`select`/`textarea`, or a custom component (`Dropdown`, `SearchableSelect`, an RHF `<Controller>` render). |
+
+**States**: default / error (replaces hint) / required (marked on both label and control).
+No loading/disabled state of its own — that's the child control's job (FormField only
+forwards whatever `disabled` etc. the child already had).
+
+**Accessibility contract** — this is the a11y pass's core deliverable:
+
+- **Native input/select/textarea** children: get `inputClass` styling merged in, an
+  auto-generated `id` (unless the child already sets one) with a real `<label htmlFor>`,
+  plus `aria-required`/`aria-invalid`/`aria-describedby` as needed.
+- **Custom component** children (Dropdown, SearchableSelect, an RHF Controller): get `id`
+  + `aria-labelledby` (pointing at the `<label>`) instead of relying on `htmlFor`/`id`
+  association alone, since that's not reliably announced for non-native ARIA-widget
+  triggers — plus the same `aria-required`/`aria-invalid`/`aria-describedby` wiring.
+  Components that don't read these props (e.g. RHF's `<Controller>` render prop) simply
+  ignore them — no crash, no warning.
+- **Checkbox/radio inputs** are detected and excluded from the `inputClass` treatment (its
+  `w-full` would blow a checkbox up to the field's width) and get the `layout="checkbox"`
+  44px-tall label-as-hit-area treatment.
+- `aria-describedby` is *composed*, not overwritten: built-in hint id + built-in error id +
+  caller's `descriptionId` all fold into one space-separated list, and only the ids that
+  actually render are included (no dangling references).
+
+**When to use**: wrapping any labelled form control. **When not to**: a checkbox/toggle
+that isn't part of a labelled field-with-hint shape — a bare `<label>` is fine for that.
+
+```tsx
+<FormField label="Staff" hint="Leave unassigned to add this shift to the Unfilled lane.">
+  <SearchableSelect value={staffId ?? ''} onChange={setStaffId} items={staffOptions} />
+</FormField>
+
+<FormField label="Ends the next day" layout="checkbox">
+  <input type="checkbox" checked={endsNextDay} onChange={e => setEndsNextDay(e.target.checked)} />
+</FormField>
+```
+
+---
+
+## Dropdown
+
+`Dropdown.tsx` — a portal-based select/menu with four trigger appearances sharing one
+keyboard/positioning engine.
+
+**Props**: `variant: 'pill' | 'form' | 'menu' | 'icon'`, `items: DropdownItem[]`
+(`{ value, label, icon?, description?, disabled? }`), `value`/`onChange` (pill/form),
+`onSelect` (menu, no tracked value), `onBlur`, `label`, `icon`, `colorClass`, `disabled`,
+`loading`, `align`, `searchable` (adds a filter `<input>` *inside* the open panel — see
+[Picking a picker](#picking-a-picker) for how this differs from SearchableSelect), plus
+the `id`/`aria-labelledby`/`aria-required`/`aria-invalid`/`aria-describedby` labelling
+contract that mirrors FormField's custom-component clone.
+
+**States**: closed / open / disabled / loading (spinner in place of the chevron) / empty
+panel (`"No options available"` or, when `searchable` and a query is active, `"No results
+found"`).
+
+**Accessibility**: trigger is a real `<button>` with `aria-haspopup="listbox"`,
+`aria-expanded`, `aria-activedescendant`; panel is `role="listbox"` of `role="option"`
+rows. Full arrow-key/Home/End/Enter/Escape support, click-outside-to-close.
+
+**When to use**: a *bounded* option set (a handful up to maybe a couple dozen) presented
+as a button trigger — status pills, filter menus, kebab action menus, small selects.
+**When not to**: a list large enough that scanning beats clicking — see SearchableSelect.
+
+```tsx
+<Dropdown variant="form" value={ratio} onChange={setRatio} items={SUPPORT_RATIOS.map(r => ({ value: r, label: RATIO_LABELS[r] }))} />
+```
+
+---
+
+## SearchableSelect
+
+`SearchableSelect.tsx` — a typeahead single-select for large option lists, built on the
+WAI-ARIA 1.2 "combobox with list autocomplete" pattern (UX-01). This is the primitive to
+reach for once a Dropdown's list is long enough that finding an entry by scrolling is
+worse than typing a few letters — participant/staff pickers, diagnosis lists, anything
+with dozens-plus entries.
+
+**Props**
+
+| Prop | Type | Notes |
+|---|---|---|
+| `items` | `SearchableSelectItem[]` | Same shape as `DropdownItem` (`{ value, label, icon?, description?, disabled? }`) — re-exported under this component's name. |
+| `value` / `onChange` | `string` / `(value: string) => void` | Controlled, like `Dropdown`'s `value`/`onChange`. |
+| `onBlur` | `() => void` | Forward an RHF `Controller`'s `field.onBlur`. Fires on selection and on every close-without-a-selection (outside click, Escape, Tab-away). |
+| `placeholder` | `string` | Default `'Search…'`. |
+| `disabled` | `boolean` | |
+| `loading` | `boolean` | Options are still arriving — see States. The field stays typeable while loading. |
+| `emptyMessage` | `string` | Default `'No options available'` — shown when `items` is empty. |
+| `noMatchMessage` | `string` | Default `'No results found'` — shown when a typed query matches nothing. |
+| `id` / `aria-labelledby` / `aria-required` / `aria-invalid` / `aria-describedby` | | Same FormField labelling contract as Dropdown — a drop-in swap under a `FormField`. |
+
+**Behaviour model** (worth reading before reaching for this over Dropdown): the input's
+displayed text is *derived*, not stored — while closed it's always the current
+selection's label, recomputed straight from `value`/`items`, so it can never drift out of
+sync with a controlling parent. Opening the field (focus or click) clears it to an empty
+query so the **full option list is immediately arrow-key-browsable without typing a
+single character**; typing narrows from there. Selecting an option commits `onChange` and
+closes; Escape or an outside click close *without* committing anything, snapping the
+field straight back to the unchanged selection's label.
+
+**States**: closed (shows selection or blank) / open-browsing (full list, arrow-key
+navigable) / open-filtered (narrowed by typed query) / no-match (`noMatchMessage`) /
+empty (`emptyMessage`, no items at all) / loading (spinner in the field + a "Loading
+options…" row while `items` is still empty) / disabled.
+
+**Accessibility contract**:
+
+- The input carries `role="combobox"`, `aria-expanded`, `aria-controls` (pointing at the
+  listbox), `aria-autocomplete="list"`, and `aria-activedescendant` — the "virtual focus"
+  moves via that attribute while real DOM focus stays on the input, per the APG combobox
+  pattern. The popup is `role="listbox"` of `role="option"` rows with `aria-selected`.
+- Full keyboard support: **ArrowDown/ArrowUp** move the active option (wrapping, skipping
+  `disabled` items); **Home/End** jump to the first/last enabled option; **Enter** selects
+  the active option (or the sole filtered match, if none is explicitly active yet);
+  **Escape** closes and discards the query; **Tab** closes and moves focus on, same as a
+  native `<select>`.
+- 44px-tall input and option rows (touch-target guardrail).
+
+**When to use**: participant/staff/contact pickers, diagnosis/medication-style lookup
+lists, anything where the option count makes "just click through a Dropdown panel"
+impractical. **When not to**: a short, bounded option set — use `Dropdown`, whose click-a
+trigger-then-pick model is one interaction step simpler for a dozen items.
+
+```tsx
+<FormField label="Staff" hint="Leave unassigned — the shift shows as unfilled.">
+  <SearchableSelect
+    value={staffId ?? ''}
+    onChange={v => setStaffId(v || null)}
+    placeholder="Unassigned"
+    items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
+  />
+</FormField>
+```
+
+---
+
+## ToggleGroup
+
+`ToggleGroup.tsx` — single-select-from-a-small-set rendered as adjacent buttons, e.g. a
+medication administration status picker (Administered/Refused/Withheld/Missed).
+
+**Props**: `options: { key: string; label: string }[]`, `value: string`,
+`onChange: (key: string) => void`, `className`.
+
+**States**: each option is selected/unselected; no disabled-per-option support today (add
+it if a consumer needs it rather than working around its absence).
+
+**Accessibility**: this is a *radio group*, not independent toggle buttons — every caller
+tracks one selected value from a fixed set, which is exactly `role="radiogroup"` +
+`role="radio"` + `aria-checked` semantics (not `aria-pressed`, which implies independent
+on/off toggles). Roving tabindex: only the checked option (or the first, if none matches)
+is a Tab stop; Arrow keys (all four directions) plus Home/End move *and select* within the
+group, per the ARIA APG radio pattern.
+
+**When to use**: 2-5 mutually-exclusive, always-visible options where showing every
+choice at once beats hiding them behind a Dropdown trigger. **When not to**: more than
+~5 options (cognitive load / horizontal space), or when the options aren't all equally
+relevant at once — that's a Dropdown or SearchableSelect job.
+
+```tsx
+<ToggleGroup
+  options={STATUS_OPTIONS.map(o => ({ key: o.key, label: o.label }))}
+  value={status}
+  onChange={v => setStatus(v as MedicationAdministrationStatus)}
+/>
+```
+
+---
+
+## EmptyState
+
+`EmptyState.tsx` — the "nothing here yet" placeholder for an empty list/table page (not
+DataTable's own inline empty *row* — this is a full-page/full-section empty state with an
+icon, explanation, and a next action).
+
+**Props**: `icon: ComponentType`, `title: string`, `description?: string`,
+`action?: { label, to } | { label, onClick }`, `className`.
+
+**States**: with/without a description, with/without an action.
+
+**Accessibility**: the action renders as a real `<Link>` or `<button>` (never a `<div
+onClick>`), 44px min-height tap target, visible focus ring.
+
+**When to use**: a page/section whose primary content list is empty — pair the copy with
+*why* it's empty and what to do next ("teaches", per the product register), not just "No
+data". **When not to**: a table that's merely *filtered* to zero rows — that's
+`DataTable`'s `emptyMessage`, phrased as "no matches" rather than "nothing exists yet".
+
+```tsx
+<EmptyState
+  icon={Users}
+  title="No participants yet"
+  description="Add your first participant to start scheduling shifts and tracking their plan."
+  action={{ label: 'Add participant', to: '/participants/new' }}
+/>
+```
+
+---
+
+## Modal / ConfirmDialog
+
+`Modal.tsx` is the base dialog shell: focus trap, Escape-to-close, background scroll
+lock, focus returns to the trigger on close, `role="dialog"` + `aria-modal` +
+`aria-labelledby`. Props: `open`, `onClose`, `title`, `size` (`sm`/`md`/`lg`/`xl`),
+`footer`, `children`, `className`.
+
+`ConfirmDialog.tsx` is `Modal` pre-wired for the confirm/cancel shape: `title`, `message`,
+`confirmLabel`, `variant` (`'default' | 'danger'`), `loading` (button reads
+"Processing…" and disables), or a fully custom `footer` for flows with more than one
+destructive choice.
+
+**When to use Modal directly** vs building a page: any transient, focused task that
+doesn't need its own URL/route. **When to use ConfirmDialog** vs a bespoke Modal footer:
+any destructive or consequential confirm/cancel decision — don't hand-roll another
+confirm footer.
+
+```tsx
+<ConfirmDialog
+  open={confirmDelete}
+  onConfirm={handleDelete}
+  onCancel={() => setConfirmDelete(false)}
+  title="Delete shift"
+  message="This permanently removes the shift from the roster. This can't be undone."
+  confirmLabel="Delete"
+  variant="danger"
+  loading={deleteShift.isPending}
+/>
+```
+
+---
+
+## SearchInput
+
+`SearchInput.tsx` — a plain labelled text filter box (leading search icon, no
+suggestions/popup). Props: `value`, `onChange`, `placeholder`, `label` (falls back to
+`placeholder` for `aria-label`), `className`.
+
+**When to use**: filtering an already-rendered list/table client-side, or driving a
+server-side text filter. **When not to**: picking *one* item from a list of options —
+that's SearchableSelect, which adds the listbox/keyboard/selection machinery this
+component deliberately doesn't have.
+
+---
+
+## StatusBadge
+
+`StatusBadge.tsx` — a small coloured pill for an enum-like status value. Props: `status`
+(matched case/whitespace-insensitively against a large built-in colour map spanning
+booking, severity, claims, QSC and plan-type vocabularies), `label` (override the
+displayed text without changing the colour lookup), `colorMap` (per-call overrides/
+additions), `pulse`, `className`. Unrecognised statuses fall back to an amber "pending"
+colour rather than an unstyled default.
+
+**When to use**: rendering any of the app's status/severity/plan-type enums. Check the
+built-in `STATUS_COLORS` map before adding a one-off inline badge — a new status value is
+usually a one-line addition there, not a reason to bypass this component.
+
+---
+
+## Card / StatCard
+
+`Card.tsx` is the generic bordered/padded content container (`title`, `action`,
+`compact`, `children`). `StatCard.tsx` is `Card` pre-wired for a single label/value KPI
+tile. **When to use StatCard vs a hand-rolled metric block**: any single-number summary
+stat — keeps the "hero-metric template" tendency the design guardrails ban confined to
+one real, reused component instead of copy-pasted markup per page.
+
+---
+
+## PageHeader
+
+`PageHeader.tsx` — the title/subtitle/primary-action row every page starts with, plus an
+optional row of filter/toolbar children below it. Props: `title`, `subtitle`, `action`,
+`children`.
+
+---
+
+## TabNav
+
+`TabNav.tsx` — an underlined tab strip. Props: `tabs: { key, label, icon? }[]`, `active`,
+`onChange`, `className`.
+
+> Note for a future pass: this renders plain `<button>`s with manual active-state styling
+> rather than `role="tablist"`/`role="tab"`/`aria-selected` + roving tabindex (the pattern
+> `ToggleGroup` already implements correctly for its own radio-group case). Flagged here,
+> not fixed in this PR — it's an existing-page-owned surface, not a DS-01/UX-01 primitive
+> change.
+
+---
+
+## ActionButtons
+
+`ActionButtons.tsx` — the compact icon-button row for a table row's Edit/Delete/Restore
+actions. Props: `editTo` (renders a `<Link>`), `onEdit`, `onDelete`, `onRestore`,
+`showArchived` (swaps Delete for Restore). Every button stops click propagation, so it's
+safe to drop into a `DataTable` row that also has `onRowClick`.
+
+---
+
+## ErrorBoundary
+
+`ErrorBoundary.tsx` — app-shell-level React error boundary (class component; React has no
+hook equivalent). Catches render errors, shows a "Something went wrong" fallback (or a
+custom `fallback`) with a retry button, and specifically detects stale-chunk errors after
+a deploy (`Failed to fetch dynamically imported module`, etc.) to force a one-time reload
+so users aren't stuck on an old JS bundle referencing chunks that no longer exist.
+
+---
+
+## Picking a picker
+
+Three components answer "let the user choose one thing from a set" — pick by set size and
+shape, not habit:
+
+| | Set size | Interaction | Reach for it when |
+|---|---|---|---|
+| **ToggleGroup** | 2-5, always relevant | All options visible at once, one click | Status/mode pickers where seeing every choice up front matters (medication administration status) |
+| **Dropdown** (`searchable`) | Up to a couple dozen | Click trigger → optional filter *inside* the open panel → click option | Bounded selects — ratios, day-of-week, sleepover type, small reference lists |
+| **SearchableSelect** | Dozens+ | Type-to-filter *in the trigger itself*, full combobox keyboard model | Participant/staff/contact-scale pickers |
+
+Dropdown's `searchable` prop and SearchableSelect look similar but solve different
+problems: Dropdown's search box is a filter *inside an already-open button-triggered
+panel* (`role="listbox"` behind a `<button>`); SearchableSelect *is* the trigger — a real
+`role="combobox"` text input — which is what the WAI-ARIA combobox pattern and platform
+autocomplete conventions expect once a list is genuinely large. Migrate a Dropdown
+`searchable` picker to SearchableSelect when its backing list is participant/staff/contact
+scale; leave it as Dropdown `searchable` for anything smaller.
