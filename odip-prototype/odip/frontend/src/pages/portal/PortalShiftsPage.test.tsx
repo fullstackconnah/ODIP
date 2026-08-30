@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
 import type { PortalShiftsResponseDto } from '@/api/types'
@@ -57,6 +57,14 @@ beforeEach(() => {
 })
 
 describe('PortalShiftsPage', () => {
+  it('announces a loading state instead of rendering a blank page while shifts are fetching', () => {
+    mockUseMyShifts.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderPage()
+
+    expect(screen.getByRole('status')).toHaveTextContent(/loading your shifts/i)
+    expect(screen.queryByText(/nothing rostered this week/i)).not.toBeInTheDocument()
+  })
+
   it('shows guidance when the account is not linked to a staff record', () => {
     mockUseMyShifts.mockReturnValue({ data: NOT_LINKED, isLoading: false })
     renderPage()
@@ -79,6 +87,18 @@ describe('PortalShiftsPage', () => {
     renderPage()
 
     expect(screen.getByText(/nothing rostered this week/i)).toBeInTheDocument()
+  })
+
+  it('shows an error state with a retry action when the shifts request fails, not the empty-week message', () => {
+    const refetch = vi.fn()
+    mockUseMyShifts.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+
+    expect(screen.getByText(/couldn't load your shifts/i)).toBeInTheDocument()
+    expect(screen.queryByText(/nothing rostered this week/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
   it('renders trip assignments alongside shifts', () => {
