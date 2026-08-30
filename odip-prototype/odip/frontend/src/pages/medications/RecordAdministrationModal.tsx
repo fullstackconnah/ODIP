@@ -6,6 +6,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
+import { usePermissions } from '@/lib/permissions'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
@@ -64,7 +65,12 @@ export function RecordAdministrationModal({
   const amendAdministration = useAmendAdministration()
   const isPending = isAmend ? amendAdministration.isPending : recordAdministration.isPending
   const { data: staffList } = useStaff()
-  const activeStaff = (staffList ?? []).filter(s => s.isActive)
+  const { staffId: currentStaffId } = usePermissions()
+  // Excludes the signed-in user from the witness picker outright — a staff member can't witness
+  // their own administration (enforced server-side too; see MedicationsController.RecordAdministration).
+  // When the account has no linked StaffId (currentStaffId is null), this filter is a no-op and
+  // behaviour is unchanged from before this exclusion existed.
+  const activeStaff = (staffList ?? []).filter(s => s.isActive && s.id !== currentStaffId)
 
   const [status, setStatus] = useState<MedicationAdministrationStatus>(existingAdministration?.status ?? 'Administered')
   const [doseGiven, setDoseGiven] = useState(existingAdministration?.doseGiven ?? doseDescription ?? '')
@@ -120,6 +126,12 @@ export function RecordAdministrationModal({
     if (requiresWitness) {
       if (isAmend && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
       if (!isAmend && !witnessStaffId) errs.witnessStaffId = 'Select the staff member who witnessed this dose'
+      // Belt-and-suspenders: the picker already excludes the signed-in user (see activeStaff
+      // above), but catch it here too rather than letting a self-selection reach the backend's
+      // 400 (MedicationsController.RecordAdministration) as the first sign anything's wrong.
+      else if (!isAmend && currentStaffId && witnessStaffId === currentStaffId) {
+        errs.witnessStaffId = "You can't witness your own administration"
+      }
     }
     setFieldErrors(errs)
     return Object.keys(errs).length === 0

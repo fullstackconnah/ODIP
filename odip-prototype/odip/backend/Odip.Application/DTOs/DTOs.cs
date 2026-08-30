@@ -1077,6 +1077,15 @@ public record AuthResponseDto
     public string Role { get; init; } = string.Empty;
     public string? TenantName { get; init; }
     public Guid? TenantId { get; init; }
+
+    /// <summary>
+    /// The caller's own linked Staff id (User.StaffId), resolved via StaffIdResolver — null when
+    /// the account isn't linked to a Staff record (most SuperAdmins, and any tenant user who
+    /// hasn't been linked). Lets the frontend exclude the signed-in user from pickers where
+    /// selecting yourself is invalid (e.g. medication witness selection) before the request ever
+    /// reaches the server, rather than only learning via a rejected submission.
+    /// </summary>
+    public Guid? StaffId { get; init; }
 }
 
 // NOTE: ExchangeTokenDto (the Firebase-token-exchange request DTO this record sits next to per

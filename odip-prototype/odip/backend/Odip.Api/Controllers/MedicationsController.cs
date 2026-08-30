@@ -532,18 +532,11 @@ public class MedicationsController : ControllerBase
     /// constructing this controller directly with no ControllerContext), the user isn't found, or
     /// the user has no linked Staff record — any of which just means "skip the self-witness check".
     /// </summary>
-    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        var userId = _currentTenant.ViewAsUserId;
-        if (userId is null)
-        {
-            var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!Guid.TryParse(claim, out var parsed)) return null;
-            userId = parsed;
-        }
-
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
-        return user?.StaffId;
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        return StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, ownUserId, ct);
     }
 
     private static Weekdays? ParseDaysOfWeek(List<string>? days)

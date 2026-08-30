@@ -41,6 +41,11 @@ function getCurrentUser(): Record<string, unknown> {
 export function usePermissions() {
   const user = getCurrentUser();
   const role = (user.role ?? null) as UserRole | null;
+  // The signed-in user's own linked Staff id (AuthResponseDto.staffId, stored wholesale into
+  // odip_user at login — see LoginPage.applyLoginSuccess). Null/undefined alike collapse to
+  // null: an unlinked account and a stale odip_user payload from before this field existed both
+  // just mean "no self-witness exclusion to apply".
+  const staffId = (user.staffId ?? null) as string | null;
 
   const isSuperAdmin = role === 'SuperAdmin';
   const isAdmin = role === 'Admin';
@@ -50,6 +55,7 @@ export function usePermissions() {
 
   return {
     role,
+    staffId,
     isSuperAdmin,
     isAdmin,
     isCoordinator,

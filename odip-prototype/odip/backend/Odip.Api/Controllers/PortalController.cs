@@ -211,18 +211,11 @@ public class PortalController : ControllerBase
     /// linked" case uniformly: no resolvable user id on the token, the user row not found (or
     /// tenant-filtered out), or a resolved user whose <see cref="User.StaffId"/> is null.
     /// </summary>
-    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        var userId = _currentTenant.ViewAsUserId;
-        if (userId is null)
-        {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!Guid.TryParse(claim, out var parsed)) return null;
-            userId = parsed;
-        }
-
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
-        return user?.StaffId;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        return StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, ownUserId, ct);
     }
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
