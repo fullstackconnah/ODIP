@@ -66,8 +66,8 @@ public class Participant : ITenantEntity
     public DateOnly? PlanEndDate { get; set; }
     public Guid? PlanManagerContactId { get; set; }
     public Contact? PlanManagerContact { get; set; }
-    public Guid? PreferredStaffId { get; set; }
-    public Staff? PreferredStaff { get; set; }
+    public Guid? PreferredUserId { get; set; }
+    public User? PreferredUser { get; set; }
 
     /// <summary>
     /// Business-stream tags (STA/BSP/In-Home Support/Trip/HIDPA/Community Access & Daily

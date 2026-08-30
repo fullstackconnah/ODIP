@@ -15,10 +15,12 @@ using Xunit;
 namespace Odip.Tests.Portal;
 
 /// <summary>
-/// Coverage for PortalController's witness-approval endpoints: only the named witness staff
-/// member (resolved the same way as GetMyShifts/GetShiftDetail — via User.StaffId, ViewAsUserId
-/// taking priority) can list/approve/decline their own pending requests; a foreign or
-/// already-responded request 404s/400s rather than ever leaking another staff member's data.
+/// Coverage for PortalController's witness-approval endpoints: only the named witness user
+/// (resolved the same way as GetMyShifts/GetShiftDetail — via the caller's own resolved User.Id,
+/// ViewAsUserId taking priority) can list/approve/decline their own pending requests; a foreign
+/// or already-responded request 404s/400s rather than ever leaking another user's data. Post
+/// staff/user unification a witness IS a User account directly; the "unlinked" state is only
+/// reachable when the caller's identity can't be resolved to any User row at all.
 /// Same EF InMemory + Moq&lt;ICurrentTenant&gt; + ClaimsPrincipal pattern as PortalControllerTests.
 /// </summary>
 public class PortalWitnessRequestsTests
@@ -51,12 +53,16 @@ public class PortalWitnessRequestsTests
         return controller;
     }
 
-    private static Staff SeedStaff(OdipDbContext db, string firstName, string lastName)
+    private static User SeedUser(OdipDbContext db, string firstName, string lastName)
     {
-        var staff = new Staff { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
+        var user = new User
+        {
+            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
+            FirstName = firstName, LastName = lastName, Role = UserRole.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(user);
         db.SaveChanges();
-        return staff;
+        return user;
     }
 
     private static Participant SeedParticipant(OdipDbContext db)
@@ -65,18 +71,6 @@ public class PortalWitnessRequestsTests
         db.Participants.Add(participant);
         db.SaveChanges();
         return participant;
-    }
-
-    private static User SeedUser(OdipDbContext db, Guid? staffId)
-    {
-        var user = new User
-        {
-            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
-            FirstName = "Test", LastName = "User", Role = UserRole.SupportWorker, StaffId = staffId, IsActive = true,
-        };
-        db.Users.Add(user);
-        db.SaveChanges();
-        return user;
     }
 
     private static ParticipantMedication SeedMedication(OdipDbContext db, Guid participantId)
@@ -92,13 +86,13 @@ public class PortalWitnessRequestsTests
         return med;
     }
 
-    private static MedicationAdministration SeedPendingWitnessRequest(OdipDbContext db, Guid participantId, Guid medicationId, Guid witnessStaffId)
+    private static MedicationAdministration SeedPendingWitnessRequest(OdipDbContext db, Guid participantId, Guid medicationId, Guid witnessUserId)
     {
         var admin = new MedicationAdministration
         {
             Id = Guid.NewGuid(), ParticipantMedicationId = medicationId, ParticipantId = participantId,
             Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow,
-            RecordedByName = "Jordan Lee", WitnessStaffId = witnessStaffId, WitnessName = "Placeholder",
+            RecordedByName = "Jordan Lee", WitnessUserId = witnessUserId, WitnessName = "Placeholder",
             WitnessStatus = WitnessStatus.Pending, WitnessRequestedAt = DateTime.UtcNow,
         };
         db.MedicationAdministrations.Add(admin);
@@ -112,11 +106,10 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var otherStaff = SeedStaff(db, "Someone", "Else");
-        var witnessUser = SeedUser(db, witness.Id);
-        SeedPendingWitnessRequest(db, participant.Id, med.Id, witness.Id);
-        SeedPendingWitnessRequest(db, participant.Id, med.Id, otherStaff.Id); // not the caller's
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var otherUser = SeedUser(db, "Someone", "Else");
+        SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
+        SeedPendingWitnessRequest(db, participant.Id, med.Id, otherUser.Id); // not the caller's
 
         var controller = MakeController(db, tenant.Object, witnessUser.Id);
         var result = await controller.GetWitnessRequests(CancellationToken.None);
@@ -131,9 +124,8 @@ public class PortalWitnessRequestsTests
     public async Task GetWitnessRequests_UnlinkedAccount_ReturnsEmptyList()
     {
         var (db, tenant) = CreateDb();
-        var unlinkedUser = SeedUser(db, staffId: null);
-
-        var controller = MakeController(db, tenant.Object, unlinkedUser.Id);
+        // Caller identity resolves to a user id that was never seeded.
+        var controller = MakeController(db, tenant.Object, Guid.NewGuid());
         var result = await controller.GetWitnessRequests(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -147,9 +139,8 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var witnessUser = SeedUser(db, witness.Id);
-        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witness.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
 
         var controller = MakeController(db, tenant.Object, witnessUser.Id);
         var result = await controller.ApproveWitnessRequest(admin.Id, CancellationToken.None);
@@ -169,9 +160,8 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var witnessUser = SeedUser(db, witness.Id);
-        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witness.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
 
         var controller = MakeController(db, tenant.Object, witnessUser.Id);
         var result = await controller.DeclineWitnessRequest(admin.Id, CancellationToken.None);
@@ -187,12 +177,11 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var actualWitness = SeedStaff(db, "Rachel", "Thompson");
-        var impersonator = SeedStaff(db, "Someone", "Else");
-        var impersonatorUser = SeedUser(db, impersonator.Id);
+        var actualWitness = SeedUser(db, "Rachel", "Thompson");
+        var impersonator = SeedUser(db, "Someone", "Else");
         var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, actualWitness.Id);
 
-        var controller = MakeController(db, tenant.Object, impersonatorUser.Id);
+        var controller = MakeController(db, tenant.Object, impersonator.Id);
         var result = await controller.ApproveWitnessRequest(admin.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -204,8 +193,7 @@ public class PortalWitnessRequestsTests
     public async Task ApproveWitnessRequest_UnknownId_ReturnsNotFound()
     {
         var (db, tenant) = CreateDb();
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var witnessUser = SeedUser(db, witness.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
 
         var controller = MakeController(db, tenant.Object, witnessUser.Id);
         var result = await controller.ApproveWitnessRequest(Guid.NewGuid(), CancellationToken.None);
@@ -219,11 +207,11 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witness.Id);
-        var unlinkedUser = SeedUser(db, staffId: null);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
 
-        var controller = MakeController(db, tenant.Object, unlinkedUser.Id);
+        // Caller identity resolves to a user id that was never seeded.
+        var controller = MakeController(db, tenant.Object, Guid.NewGuid());
         var result = await controller.ApproveWitnessRequest(admin.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -235,9 +223,8 @@ public class PortalWitnessRequestsTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMedication(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
-        var witnessUser = SeedUser(db, witness.Id);
-        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witness.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
         admin.WitnessStatus = WitnessStatus.Approved;
         admin.WitnessRespondedAt = DateTime.UtcNow;
         db.SaveChanges();

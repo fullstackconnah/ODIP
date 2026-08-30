@@ -39,10 +39,12 @@ export interface PortalTripAssignmentSummaryDto {
   status: AssignmentStatus
 }
 
+/**
+ * Post staff/user unification there is no separate "not linked" state — every User IS its own
+ * staff identity — so a caller with no shifts simply gets empty lists here, with no special
+ * messaging payload.
+ */
 export interface PortalShiftsResponseDto {
-  /** False when the caller's account has no linked Staff record — shifts/tripAssignments are always empty in that case. */
-  isLinked: boolean
-  staffId: string | null
   shifts: PortalShiftSummaryDto[]
   tripAssignments: PortalTripAssignmentSummaryDto[]
 }

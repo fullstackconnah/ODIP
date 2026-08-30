@@ -57,26 +57,32 @@ public static class DbSeeder
         }
 
         // Seed fixed-ID users — guard each individually so this is safe on redeploy.
-        // Use IgnoreQueryFilters() so global tenant filters don't cause a false-negative.
-        var existingStaff = await context.Staff.IgnoreQueryFilters().ToListAsync(ct);
+        // These 5 demo users carry the profile/qualification fields absorbed from the former
+        // Staff entity directly (staff/user-unification design spec §3.4 "absorb" case) — every
+        // staff member IS a user account now, so there is no separate Staff row to link.
+        var sarahUser = new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "sarah.mitchell", Email = "sarah.mitchell@demo.odip.com.au", FirstName = "Sarah", LastName = "Mitchell", Role = UserRole.Coordinator, Position = Position.Coordinator, Mobile = "0412345001", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var jamesUser = new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "james.obrien", Email = "james.obrien@demo.odip.com.au", FirstName = "James", LastName = "O'Brien", Role = UserRole.SupportWorker, Position = Position.SeniorSupportWorker, Mobile = "0412345002", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var emilyUser = new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "emily.nguyen", Email = "emily.nguyen@demo.odip.com.au", FirstName = "Emily", LastName = "Nguyen", Role = UserRole.SupportWorker, Position = Position.SupportWorker, Mobile = "0412345003", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var danielUser = new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "daniel.williams", Email = "daniel.williams@demo.odip.com.au", FirstName = "Daniel", LastName = "Williams", Role = UserRole.SupportWorker, Position = Position.SupportWorker, Mobile = "0412345004", Region = "South East QLD", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = false, IsOvernightEligible = false };
+        var rachelUser = new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, Username = "rachel.thompson", Email = "rachel.thompson@demo.odip.com.au", FirstName = "Rachel", LastName = "Thompson", Role = UserRole.Coordinator, Position = Position.TeamLeader, Mobile = "0412345005", Region = "Melbourne Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
 
         var seedUsers = new[]
         {
             // Real SuperAdmin — stays on Odip tenant
-            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000001"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000001"), TenantId = tenantId, Username = "admin", Email = "admin@odip.com.au", FirstName = "System", LastName = "Admin", Role = UserRole.SuperAdmin }),
+            new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000001"), TenantId = tenantId, Username = "admin", Email = "admin@odip.com.au", FirstName = "System", LastName = "Admin", Role = UserRole.SuperAdmin },
             // Demo users — assigned to the Demo tenant
-            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000002"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "sarah.mitchell", Email = "sarah.mitchell@demo.odip.com.au", FirstName = "Sarah", LastName = "Mitchell", Role = UserRole.Coordinator, StaffId = existingStaff.Count > 0 ? existingStaff[0].Id : (Guid?)null }),
-            (Id: Guid.Parse("b1000000-0000-0000-0000-000000000003"), User: new User { Id = Guid.Parse("b1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "james.obrien", Email = "james.obrien@demo.odip.com.au", FirstName = "James", LastName = "O'Brien", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 1 ? existingStaff[1].Id : (Guid?)null }),
-            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000001"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, Username = "rachel.thompson", Email = "rachel.thompson@demo.odip.com.au", FirstName = "Rachel", LastName = "Thompson", Role = UserRole.Coordinator, StaffId = existingStaff.Count > 4 ? existingStaff[4].Id : (Guid?)null }),
-            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000002"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "emily.nguyen", Email = "emily.nguyen@demo.odip.com.au", FirstName = "Emily", LastName = "Nguyen", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 2 ? existingStaff[2].Id : (Guid?)null }),
-            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000003"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "daniel.williams", Email = "daniel.williams@demo.odip.com.au", FirstName = "Daniel", LastName = "Williams", Role = UserRole.SupportWorker, StaffId = existingStaff.Count > 3 ? existingStaff[3].Id : (Guid?)null }),
-            (Id: Guid.Parse("b2000000-0000-0000-0000-000000000004"), User: new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, Username = "coordinator.read", Email = "readonly@demo.odip.com.au", FirstName = "Read", LastName = "Only", Role = UserRole.ReadOnly }),
+            sarahUser,
+            jamesUser,
+            rachelUser,
+            emilyUser,
+            danielUser,
+            new User { Id = Guid.Parse("b2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, Username = "coordinator.read", Email = "readonly@demo.odip.com.au", FirstName = "Read", LastName = "Only", Role = UserRole.ReadOnly },
         };
 
         var usersAdded = false;
-        foreach (var (id, user) in seedUsers)
+        foreach (var user in seedUsers)
         {
-            var exists = await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == id, ct);
+            var exists = await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id, ct);
             if (!exists)
             {
                 context.Users.Add(user);
@@ -127,6 +133,12 @@ public static class DbSeeder
             Guid.Parse("b2000000-0000-0000-0000-000000000002"),
             Guid.Parse("b2000000-0000-0000-0000-000000000003"),
             Guid.Parse("b2000000-0000-0000-0000-000000000004"),
+            // The 5 new SupportWorker users replacing the former orphaned Staff rows.
+            Guid.Parse("a2000000-0000-0000-0000-000000000001"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000002"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000003"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000004"),
+            Guid.Parse("a2000000-0000-0000-0000-000000000005"),
         };
         var misplacedDemoUsers = await context.Users
             .IgnoreQueryFilters()
@@ -148,27 +160,10 @@ public static class DbSeeder
             await context.SaveChangesAsync(ct);
         }
 
-        // Fixup: reassign existing demo entities (Staff, Participants, EventTemplates,
+        // Fixup: reassign existing demo entities (Participants, EventTemplates,
         // AccommodationProperties, Vehicles, TripInstances) to the Demo tenant if they
-        // were previously seeded under the Odip tenant.
-        var demoStaffIds = new[]
-        {
-            Guid.Parse("a1000000-0000-0000-0000-000000000001"), Guid.Parse("a1000000-0000-0000-0000-000000000002"),
-            Guid.Parse("a1000000-0000-0000-0000-000000000003"), Guid.Parse("a1000000-0000-0000-0000-000000000004"),
-            Guid.Parse("a1000000-0000-0000-0000-000000000005"), Guid.Parse("a2000000-0000-0000-0000-000000000001"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000002"), Guid.Parse("a2000000-0000-0000-0000-000000000003"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000004"), Guid.Parse("a2000000-0000-0000-0000-000000000005"),
-        };
-        var misplacedStaff = await context.Staff
-            .IgnoreQueryFilters()
-            .Where(s => demoStaffIds.Contains(s.Id) && s.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedStaff.Count > 0)
-        {
-            foreach (var s in misplacedStaff) s.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
+        // were previously seeded under the Odip tenant. The 10 staff/user accounts are covered
+        // by the demoUserIds fixup above (Staff no longer exists as a separate entity).
         var demoTemplateIds = new[]
         {
             Guid.Parse("c1000000-0000-0000-0000-000000000001"), Guid.Parse("c1000000-0000-0000-0000-000000000002"),
@@ -266,35 +261,22 @@ public static class DbSeeder
             return;
         }
 
-        // ── Staff (10) ───────────────────────────────────────────
-        var staff = new List<Staff>
-        {
-            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Sarah", LastName = "Mitchell", Role = StaffRole.Coordinator, Email = "sarah.mitchell@demo.odip.com.au", Mobile = "0412345001", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "James", LastName = "O'Brien", Role = StaffRole.SeniorSupportWorker, Email = "james.obrien@demo.odip.com.au", Mobile = "0412345002", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Emily", LastName = "Nguyen", Role = StaffRole.SupportWorker, Email = "emily.nguyen@demo.odip.com.au", Mobile = "0412345003", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Daniel", LastName = "Williams", Role = StaffRole.SupportWorker, Email = "daniel.williams@demo.odip.com.au", Mobile = "0412345004", Region = "South East QLD", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = false, IsOvernightEligible = false },
-            new() { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Rachel", LastName = "Thompson", Role = StaffRole.TeamLeader, Email = "rachel.thompson@demo.odip.com.au", Mobile = "0412345005", Region = "Melbourne Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            // New staff
-            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Marcus", LastName = "Papadopoulos", Role = StaffRole.SeniorSupportWorker, Email = "marcus.papadopoulos@demo.odip.com.au", Mobile = "0412345006", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "Priya", LastName = "Sharma", Role = StaffRole.SupportWorker, Email = "priya.sharma@demo.odip.com.au", Mobile = "0412345007", Region = "Melbourne Metro", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Lachlan", LastName = "Robertson", Role = StaffRole.SupportWorker, Email = "lachlan.robertson@demo.odip.com.au", Mobile = "0412345008", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = false, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = false, Notes = "Currently completing First Aid renewal." },
-            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Jade", LastName = "Watkins", Role = StaffRole.Coordinator, Email = "jade.watkins@demo.odip.com.au", Mobile = "0412345009", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-            new() { Id = Guid.Parse("a2000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Brendan", LastName = "Nguyen", Role = StaffRole.TeamLeader, Email = "brendan.nguyen@demo.odip.com.au", Mobile = "0412345010", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true },
-        };
-        context.Staff.AddRange(staff);
+        // ── New SupportWorker Users (5) ───────────────────────────
+        // Per the staff/user-unification design spec §3.4: the 5 previously-orphaned Staff rows
+        // are replaced by 5 new SupportWorker users. Position preserves what would have been
+        // their StaffRole title (display-only); UserRole (access) is SupportWorker per the
+        // migration's auto-create rule.
+        var marcusUser = new User { Id = Guid.Parse("a2000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, Username = "marcus.papadopoulos", Email = "marcus.papadopoulos@demo.odip.com.au", FirstName = "Marcus", LastName = "Papadopoulos", Role = UserRole.SupportWorker, Position = Position.SeniorSupportWorker, Mobile = "0412345006", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var priyaUser = new User { Id = Guid.Parse("a2000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, Username = "priya.sharma", Email = "priya.sharma@demo.odip.com.au", FirstName = "Priya", LastName = "Sharma", Role = UserRole.SupportWorker, Position = Position.SupportWorker, Mobile = "0412345007", Region = "Melbourne Metro", IsDriverEligible = false, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var lachlanUser = new User { Id = Guid.Parse("a2000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, Username = "lachlan.robertson", Email = "lachlan.robertson@demo.odip.com.au", FirstName = "Lachlan", LastName = "Robertson", Role = UserRole.SupportWorker, Position = Position.SupportWorker, Mobile = "0412345008", Region = "South East QLD", IsDriverEligible = true, IsFirstAidQualified = false, IsMedicationCompetent = false, IsManualHandlingCompetent = true, IsOvernightEligible = false, Notes = "Currently completing First Aid renewal." };
+        var jadeUser = new User { Id = Guid.Parse("a2000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, Username = "jade.watkins", Email = "jade.watkins@demo.odip.com.au", FirstName = "Jade", LastName = "Watkins", Role = UserRole.SupportWorker, Position = Position.Coordinator, Mobile = "0412345009", Region = "Greater Sydney", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        var brendanUser = new User { Id = Guid.Parse("a2000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, Username = "brendan.nguyen", Email = "brendan.nguyen@demo.odip.com.au", FirstName = "Brendan", LastName = "Nguyen", Role = UserRole.SupportWorker, Position = Position.TeamLeader, Mobile = "0412345010", Region = "Brisbane Metro", IsDriverEligible = true, IsFirstAidQualified = true, IsMedicationCompetent = true, IsManualHandlingCompetent = true, IsOvernightEligible = true };
+        context.Users.AddRange(marcusUser, priyaUser, lachlanUser, jadeUser, brendanUser);
 
-        // Link existing users to staff
-        var existingUsers = await context.Users.IgnoreQueryFilters().ToListAsync(ct);
-        void LinkUser(string username, Guid staffId)
-        {
-            var u = existingUsers.FirstOrDefault(x => x.Username == username);
-            if (u != null && u.StaffId == null) u.StaffId = staffId;
-        }
-        LinkUser("sarah.mitchell", staff[0].Id);
-        LinkUser("james.obrien", staff[1].Id);
-        LinkUser("emily.nguyen", staff[2].Id);
-        LinkUser("daniel.williams", staff[3].Id);
-        LinkUser("rachel.thompson", staff[4].Id);
+        // Index-aligned with the former Staff seed list: users[0]=Sarah .. users[9]=Brendan —
+        // every later reference (trips/vehicle assignments/staff assignments/availability/tasks)
+        // below uses this same ordering.
+        var users = new List<User> { sarahUser, jamesUser, emilyUser, danielUser, rachelUser, marcusUser, priyaUser, lachlanUser, jadeUser, brendanUser };
 
         // ── Event Templates (4) ──────────────────────────────────
         var templates = new List<EventTemplate>
@@ -413,17 +395,17 @@ public static class DbSeeder
         var trips = new List<TripInstance>
         {
             // Original 5
-            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Autumn 2026", TripCode = "GCBB-2026A", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(45), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = staff[0].Id, MinParticipants = 4, MaxParticipants = 6, RequiredWheelchairCapacity = 2, RequiredBeds = 6, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Main autumn trip. Focus on beach and water activities." },
-            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Spring 2026", TripCode = "BMA-2026S", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(90), DurationDays = 4, Status = TripStatus.Planning, LeadCoordinatorId = staff[0].Id, MinParticipants = 3, MaxParticipants = 5, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Nature and adventure focus." },
-            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — June 2026", TripCode = "MAW-2026J", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(120), DurationDays = 3, Status = TripStatus.Draft, LeadCoordinatorId = staff[4].Id, MinParticipants = 2, MaxParticipants = 4, RequiredWheelchairCapacity = 1, RequiredBeds = 4, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Arts and culture experience." },
-            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Summer 2025/26", TripCode = "GCBB-2025S", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(-30), DurationDays = 5, Status = TripStatus.Completed, LeadCoordinatorId = staff[0].Id, MaxParticipants = 6, MinStaffRequired = 3, Notes = "Successfully completed." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Autumn 2026", TripCode = "GCBB-2026A", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(45), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = users[0].Id, MinParticipants = 4, MaxParticipants = 6, RequiredWheelchairCapacity = 2, RequiredBeds = 6, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Main autumn trip. Focus on beach and water activities." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Spring 2026", TripCode = "BMA-2026S", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(90), DurationDays = 4, Status = TripStatus.Planning, LeadCoordinatorId = users[0].Id, MinParticipants = 3, MaxParticipants = 5, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Nature and adventure focus." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — June 2026", TripCode = "MAW-2026J", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(120), DurationDays = 3, Status = TripStatus.Draft, LeadCoordinatorId = users[4].Id, MinParticipants = 2, MaxParticipants = 4, RequiredWheelchairCapacity = 1, RequiredBeds = 4, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "Arts and culture experience." },
+            new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Summer 2025/26", TripCode = "GCBB-2025S", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(-30), DurationDays = 5, Status = TripStatus.Completed, LeadCoordinatorId = users[0].Id, MaxParticipants = 6, MinStaffRequired = 3, Notes = "Successfully completed." },
             new() { Id = Guid.Parse("01000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, TripName = "Adelaide Food & Wine", TripCode = "AFW-2026", Destination = "Adelaide, SA", Region = "Adelaide", StartDate = today.AddDays(60), DurationDays = 3, Status = TripStatus.Cancelled, Notes = "Cancelled due to insufficient bookings." },
             // New 5
-            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Cairns Tropical Getaway — July 2026", TripCode = "CAIRNS-2026J", EventTemplateId = templates[3].Id, Destination = "Cairns, QLD", Region = "North QLD", StartDate = today.AddDays(150), DurationDays = 7, Status = TripStatus.Planning, LeadCoordinatorId = staff[9].Id, MinParticipants = 4, MaxParticipants = 8, RequiredWheelchairCapacity = 2, RequiredBeds = 8, RequiredBedrooms = 5, MinStaffRequired = 3, Notes = "First Cairns trip. Reef and rainforest focus. Confirm wheelchair access for reef pontoon." },
-            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Winter 2026", TripCode = "GCBB-2026W", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(200), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = staff[0].Id, MinParticipants = 4, MaxParticipants = 7, RequiredWheelchairCapacity = 2, RequiredBeds = 7, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Winter break — mild weather ideal for outdoor activities." },
-            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Autumn 2026", TripCode = "BMA-2026A", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(-90), DurationDays = 4, Status = TripStatus.Completed, LeadCoordinatorId = staff[3].Id, MaxParticipants = 5, MinStaffRequired = 2, Notes = "Autumn colours trip. Completed successfully." },
-            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — March 2026", TripCode = "MAW-2026M", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(-1), DurationDays = 3, Status = TripStatus.InProgress, LeadCoordinatorId = staff[4].Id, MinParticipants = 2, MaxParticipants = 5, RequiredWheelchairCapacity = 1, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "In progress. Day 2 of 3." },
-            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, TripName = "Brisbane Day Trips — April 2026", TripCode = "BDT-2026", Destination = "Brisbane, QLD", Region = "Brisbane Metro", StartDate = today.AddDays(30), DurationDays = 2, Status = TripStatus.Cancelled, LeadCoordinatorId = staff[5].Id, Notes = "Cancelled — lead coordinator unavailable. Rescheduling for later in year." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, TripName = "Cairns Tropical Getaway — July 2026", TripCode = "CAIRNS-2026J", EventTemplateId = templates[3].Id, Destination = "Cairns, QLD", Region = "North QLD", StartDate = today.AddDays(150), DurationDays = 7, Status = TripStatus.Planning, LeadCoordinatorId = users[9].Id, MinParticipants = 4, MaxParticipants = 8, RequiredWheelchairCapacity = 2, RequiredBeds = 8, RequiredBedrooms = 5, MinStaffRequired = 3, Notes = "First Cairns trip. Reef and rainforest focus. Confirm wheelchair access for reef pontoon." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, TripName = "Gold Coast Beach Break — Winter 2026", TripCode = "GCBB-2026W", EventTemplateId = templates[0].Id, Destination = "Gold Coast, QLD", Region = "South East QLD", StartDate = today.AddDays(200), DurationDays = 5, Status = TripStatus.OpenForBookings, LeadCoordinatorId = users[0].Id, MinParticipants = 4, MaxParticipants = 7, RequiredWheelchairCapacity = 2, RequiredBeds = 7, RequiredBedrooms = 4, MinStaffRequired = 3, Notes = "Winter break — mild weather ideal for outdoor activities." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, TripName = "Blue Mountains Adventure — Autumn 2026", TripCode = "BMA-2026A", EventTemplateId = templates[1].Id, Destination = "Katoomba, NSW", Region = "Greater Sydney", StartDate = today.AddDays(-90), DurationDays = 4, Status = TripStatus.Completed, LeadCoordinatorId = users[3].Id, MaxParticipants = 5, MinStaffRequired = 2, Notes = "Autumn colours trip. Completed successfully." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, TripName = "Melbourne Arts Weekend — March 2026", TripCode = "MAW-2026M", EventTemplateId = templates[2].Id, Destination = "Melbourne, VIC", Region = "Melbourne Metro", StartDate = today.AddDays(-1), DurationDays = 3, Status = TripStatus.InProgress, LeadCoordinatorId = users[4].Id, MinParticipants = 2, MaxParticipants = 5, RequiredWheelchairCapacity = 1, RequiredBeds = 5, RequiredBedrooms = 3, MinStaffRequired = 2, Notes = "In progress. Day 2 of 3." },
+            new() { Id = Guid.Parse("09000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, TripName = "Brisbane Day Trips — April 2026", TripCode = "BDT-2026", Destination = "Brisbane, QLD", Region = "Brisbane Metro", StartDate = today.AddDays(30), DurationDays = 2, Status = TripStatus.Cancelled, LeadCoordinatorId = users[5].Id, Notes = "Cancelled — lead coordinator unavailable. Rescheduling for later in year." },
         };
         context.TripInstances.AddRange(trips);
 
@@ -489,46 +471,46 @@ public static class DbSeeder
         // ── Vehicle Assignments (6) ──────────────────────────────
         var vehicleAssignments = new List<VehicleAssignment>
         {
-            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-10), DriverStaffId = staff[1].Id, SeatRequirement = 6, WheelchairPositionRequirement = 1, PickupTravelNotes = "Pickup from Coorparoo 7:00 AM, then Toowong 7:30 AM" },
-            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Requested, DriverStaffId = staff[2].Id, SeatRequirement = 4 },
+            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-10), DriverUserId = users[1].Id, SeatRequirement = 6, WheelchairPositionRequirement = 1, PickupTravelNotes = "Pickup from Coorparoo 7:00 AM, then Toowong 7:30 AM" },
+            new() { Id = Guid.Parse("04000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Requested, DriverUserId = users[2].Id, SeatRequirement = 4 },
             // New vehicle assignments
-            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Requested, DriverStaffId = staff[9].Id, SeatRequirement = 8, WheelchairPositionRequirement = 2, PickupTravelNotes = "Airport transfers required. Confirm flight times 2 weeks prior." },
-            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000002"), TripInstanceId = trips[6].Id, VehicleId = vehicles[2].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-2), DriverStaffId = staff[5].Id, SeatRequirement = 7, WheelchairPositionRequirement = 2 },
-            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000003"), TripInstanceId = trips[8].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-30), DriverStaffId = staff[4].Id, SeatRequirement = 5, PickupTravelNotes = "Depart Melbourne CBD. Southern Cross Station pickup." },
-            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000004"), TripInstanceId = trips[7].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-100), DriverStaffId = staff[3].Id, SeatRequirement = 5, WheelchairPositionRequirement = 1, Comments = "Completed. No issues." },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, VehicleId = vehicles[0].Id, Status = VehicleAssignmentStatus.Requested, DriverUserId = users[9].Id, SeatRequirement = 8, WheelchairPositionRequirement = 2, PickupTravelNotes = "Airport transfers required. Confirm flight times 2 weeks prior." },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000002"), TripInstanceId = trips[6].Id, VehicleId = vehicles[2].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-2), DriverUserId = users[5].Id, SeatRequirement = 7, WheelchairPositionRequirement = 2 },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000003"), TripInstanceId = trips[8].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-30), DriverUserId = users[4].Id, SeatRequirement = 5, PickupTravelNotes = "Depart Melbourne CBD. Southern Cross Station pickup." },
+            new() { Id = Guid.Parse("0c000000-0000-0000-0000-000000000004"), TripInstanceId = trips[7].Id, VehicleId = vehicles[1].Id, Status = VehicleAssignmentStatus.Confirmed, ConfirmedDate = today.AddDays(-100), DriverUserId = users[3].Id, SeatRequirement = 5, WheelchairPositionRequirement = 1, Comments = "Completed. No issues." },
         };
         context.VehicleAssignments.AddRange(vehicleAssignments);
 
         // ── Staff Assignments (10) ───────────────────────────────
         var staffAssignments = new List<StaffAssignment>
         {
-            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, StaffId = staff[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
-            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, StaffId = staff[1].Id, AssignmentRole = "Senior Support / Driver", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
-            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, StaffId = staff[2].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, UserId = users[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, UserId = users[1].Id, AssignmentRole = "Senior Support / Driver", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("05000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, UserId = users[2].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[0].StartDate, AssignmentEnd = trips[0].StartDate.AddDays(trips[0].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.Sleepover },
             // New staff assignments
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, StaffId = staff[9].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, StaffId = staff[5].Id, AssignmentRole = "Senior Support", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, StaffId = staff[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.PassiveNight },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000004"), TripInstanceId = trips[6].Id, StaffId = staff[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, StaffId = staff[5].Id, AssignmentRole = "Support Worker / Driver", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000006"), TripInstanceId = trips[8].Id, StaffId = staff[4].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
-            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, StaffId = staff[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, UserId = users[9].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, UserId = users[5].Id, AssignmentRole = "Senior Support", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, UserId = users[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[5].StartDate, AssignmentEnd = trips[5].StartDate.AddDays(trips[5].DurationDays - 1), Status = AssignmentStatus.Proposed, SleepoverType = SleepoverType.PassiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000004"), TripInstanceId = trips[6].Id, UserId = users[0].Id, AssignmentRole = "Lead Coordinator", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, UserId = users[5].Id, AssignmentRole = "Support Worker / Driver", AssignmentStart = trips[6].StartDate, AssignmentEnd = trips[6].StartDate.AddDays(trips[6].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.Sleepover },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000006"), TripInstanceId = trips[8].Id, UserId = users[4].Id, AssignmentRole = "Lead Coordinator / Driver", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, IsDriver = true, SleepoverType = SleepoverType.ActiveNight },
+            new() { Id = Guid.Parse("0d000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, UserId = users[6].Id, AssignmentRole = "Support Worker", AssignmentStart = trips[8].StartDate, AssignmentEnd = trips[8].StartDate.AddDays(trips[8].DurationDays - 1), Status = AssignmentStatus.Confirmed, SleepoverType = SleepoverType.Sleepover },
         };
         context.StaffAssignments.AddRange(staffAssignments);
 
         // ── Staff Availability ───────────────────────────────────
         var staffAvailability = new List<StaffAvailability>
         {
-            new() { Id = Guid.NewGuid(), StaffId = staff[0].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for GC Autumn trip" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[1].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
-            new() { Id = Guid.NewGuid(), StaffId = staff[3].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(3).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Leave, Notes = "Annual leave" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[4].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Melbourne trip in progress" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[6].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
-            new() { Id = Guid.NewGuid(), StaffId = staff[2].Id, StartDateTime = today.AddDays(10).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(17).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Training, Notes = "Manual handling refresher course" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[5].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for Cairns trip" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[9].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Lead for Cairns trip" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[7].Id, StartDateTime = today.AddDays(20).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(27).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Unavailable, Notes = "Personal leave — approved" },
-            new() { Id = Guid.NewGuid(), StaffId = staff[8].Id, StartDateTime = today.ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(60).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Preferred, Notes = "Available for all Sydney-region trips" },
+            new() { Id = Guid.NewGuid(), UserId = users[0].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for GC Autumn trip" },
+            new() { Id = Guid.NewGuid(), UserId = users[1].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(trips[0].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
+            new() { Id = Guid.NewGuid(), UserId = users[3].Id, StartDateTime = trips[0].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[0].StartDate.AddDays(3).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Leave, Notes = "Annual leave" },
+            new() { Id = Guid.NewGuid(), UserId = users[4].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Melbourne trip in progress" },
+            new() { Id = Guid.NewGuid(), UserId = users[6].Id, StartDateTime = trips[8].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[8].StartDate.AddDays(trips[8].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available },
+            new() { Id = Guid.NewGuid(), UserId = users[2].Id, StartDateTime = today.AddDays(10).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(17).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Training, Notes = "Manual handling refresher course" },
+            new() { Id = Guid.NewGuid(), UserId = users[5].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Booked for Cairns trip" },
+            new() { Id = Guid.NewGuid(), UserId = users[9].Id, StartDateTime = trips[5].StartDate.ToDateTime(TimeOnly.MinValue), EndDateTime = trips[5].StartDate.AddDays(trips[5].DurationDays).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Available, Notes = "Lead for Cairns trip" },
+            new() { Id = Guid.NewGuid(), UserId = users[7].Id, StartDateTime = today.AddDays(20).ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(27).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Unavailable, Notes = "Personal leave — approved" },
+            new() { Id = Guid.NewGuid(), UserId = users[8].Id, StartDateTime = today.ToDateTime(TimeOnly.MinValue), EndDateTime = today.AddDays(60).ToDateTime(TimeOnly.MinValue), AvailabilityType = AvailabilityType.Preferred, Notes = "Available for all Sydney-region trips" },
         };
         context.StaffAvailabilities.AddRange(staffAvailability);
 
@@ -695,27 +677,27 @@ public static class DbSeeder
         var tasks = new List<BookingTask>
         {
             // Original tasks — Trip 1
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm accommodation booking — Mermaid Waters Villas", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-6) },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[1].Id, TaskType = TaskType.RiskReview, Title = "Review BSP and seizure protocol — Sophie Brown", OwnerId = staff[0].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[3].Id, TaskType = TaskType.InvoiceOop, Title = "Chase OOC payment — Mia Anderson", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000004"), TripInstanceId = trips[0].Id, TaskType = TaskType.VehicleConfirmation, Title = "Confirm second vehicle — Kia Carnival", OwnerId = staff[1].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000005"), TripInstanceId = trips[0].Id, TaskType = TaskType.StaffingAllocation, Title = "Confirm third staff member for GC trip", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000006"), TripInstanceId = trips[0].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart updated — all confirmed participants", OwnerId = staff[1].Id, Priority = TaskPriority.High, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000007"), TripInstanceId = trips[0].Id, TaskType = TaskType.PreDeparture, Title = "Send pre-trip info packs to families", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(35), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000008"), TripInstanceId = trips[1].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Mountain Heritage Lodge", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(10), Status = TaskItemStatus.InProgress },
-            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000009"), TripInstanceId = trips[0].Id, TaskType = TaskType.FamilyContact, Title = "Contact Sophie's guardian re: trip consent", OwnerId = staff[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-3), Status = TaskItemStatus.Overdue },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000001"), TripInstanceId = trips[0].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm accommodation booking — Mermaid Waters Villas", OwnerId = users[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-6) },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000002"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[1].Id, TaskType = TaskType.RiskReview, Title = "Review BSP and seizure protocol — Sophie Brown", OwnerId = users[0].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000003"), TripInstanceId = trips[0].Id, ParticipantBookingId = bookings[3].Id, TaskType = TaskType.InvoiceOop, Title = "Chase OOC payment — Mia Anderson", OwnerId = users[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000004"), TripInstanceId = trips[0].Id, TaskType = TaskType.VehicleConfirmation, Title = "Confirm second vehicle — Kia Carnival", OwnerId = users[1].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000005"), TripInstanceId = trips[0].Id, TaskType = TaskType.StaffingAllocation, Title = "Confirm third staff member for GC trip", OwnerId = users[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000006"), TripInstanceId = trips[0].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart updated — all confirmed participants", OwnerId = users[1].Id, Priority = TaskPriority.High, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000007"), TripInstanceId = trips[0].Id, TaskType = TaskType.PreDeparture, Title = "Send pre-trip info packs to families", OwnerId = users[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(35), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000008"), TripInstanceId = trips[1].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Mountain Heritage Lodge", OwnerId = users[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(10), Status = TaskItemStatus.InProgress },
+            new() { Id = Guid.Parse("08000000-0000-0000-0000-000000000009"), TripInstanceId = trips[0].Id, TaskType = TaskType.FamilyContact, Title = "Contact Sophie's guardian re: trip consent", OwnerId = users[0].Id, Priority = TaskPriority.High, DueDate = today.AddDays(-3), Status = TaskItemStatus.Overdue },
             // New tasks
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Cairns Esplanade Apartments", OwnerId = staff[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.RiskReview, Title = "Review support profile — Harrison Lee (Cairns)", OwnerId = staff[9].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress, Notes = "Manual handling assessment required for reef tour. Two-person assist confirmed?" },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, TaskType = TaskType.InsuranceConfirmation, Title = "Confirm travel insurance — all Cairns participants", OwnerId = staff[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000004"), TripInstanceId = trips[5].Id, TaskType = TaskType.VehicleRequest, Title = "Request accessible transport — Cairns airport transfers", OwnerId = staff[9].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm Mermaid Waters booking — GC Winter", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-1) },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000006"), TripInstanceId = trips[6].Id, TaskType = TaskType.ParticipantConfirmation, Title = "Confirm all bookings and send info pack — GC Winter", OwnerId = staff[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, TaskType = TaskType.PostTrip, Title = "Post-trip report — Melbourne Arts March 2026", OwnerId = staff[4].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.InProgress, Notes = "Trip in progress. Complete within 48hrs of return." },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000008"), TripInstanceId = trips[8].Id, ParticipantBookingId = bookings[25].Id, TaskType = TaskType.FamilyContact, Title = "Contact Ryan Murphy's next of kin — post-trip update", OwnerId = staff[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(4), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000009"), TripInstanceId = trips[1].Id, TaskType = TaskType.StaffingAllocation, Title = "Allocate second staff for Blue Mountains trip", OwnerId = staff[3].Id, Priority = TaskPriority.High, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000010"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart review — Harrison Lee pre-Cairns", OwnerId = staff[5].Id, Priority = TaskPriority.High, DueDate = today.AddDays(45), Status = TaskItemStatus.NotStarted },
-            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000011"), TripInstanceId = trips[2].Id, TaskType = TaskType.AccommodationRequest, Title = "Research accessible accommodation options — Melbourne June", OwnerId = staff[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(40), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000001"), TripInstanceId = trips[5].Id, TaskType = TaskType.AccommodationRequest, Title = "Send accommodation request — Cairns Esplanade Apartments", OwnerId = users[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(14), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000002"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.RiskReview, Title = "Review support profile — Harrison Lee (Cairns)", OwnerId = users[9].Id, Priority = TaskPriority.Urgent, DueDate = today.AddDays(7), Status = TaskItemStatus.InProgress, Notes = "Manual handling assessment required for reef tour. Two-person assist confirmed?" },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000003"), TripInstanceId = trips[5].Id, TaskType = TaskType.InsuranceConfirmation, Title = "Confirm travel insurance — all Cairns participants", OwnerId = users[9].Id, Priority = TaskPriority.High, DueDate = today.AddDays(21), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000004"), TripInstanceId = trips[5].Id, TaskType = TaskType.VehicleRequest, Title = "Request accessible transport — Cairns airport transfers", OwnerId = users[9].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(30), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000005"), TripInstanceId = trips[6].Id, TaskType = TaskType.AccommodationConfirmation, Title = "Confirm Mermaid Waters booking — GC Winter", OwnerId = users[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.Completed, CompletedDate = today.AddDays(-1) },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000006"), TripInstanceId = trips[6].Id, TaskType = TaskType.ParticipantConfirmation, Title = "Confirm all bookings and send info pack — GC Winter", OwnerId = users[0].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000007"), TripInstanceId = trips[8].Id, TaskType = TaskType.PostTrip, Title = "Post-trip report — Melbourne Arts March 2026", OwnerId = users[4].Id, Priority = TaskPriority.Medium, DueDate = today.AddDays(5), Status = TaskItemStatus.InProgress, Notes = "Trip in progress. Complete within 48hrs of return." },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000008"), TripInstanceId = trips[8].Id, ParticipantBookingId = bookings[25].Id, TaskType = TaskType.FamilyContact, Title = "Contact Ryan Murphy's next of kin — post-trip update", OwnerId = users[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(4), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000009"), TripInstanceId = trips[1].Id, TaskType = TaskType.StaffingAllocation, Title = "Allocate second staff for Blue Mountains trip", OwnerId = users[3].Id, Priority = TaskPriority.High, DueDate = today.AddDays(20), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000010"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart review — Harrison Lee pre-Cairns", OwnerId = users[5].Id, Priority = TaskPriority.High, DueDate = today.AddDays(45), Status = TaskItemStatus.NotStarted },
+            new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000011"), TripInstanceId = trips[2].Id, TaskType = TaskType.AccommodationRequest, Title = "Research accessible accommodation options — Melbourne June", OwnerId = users[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(40), Status = TaskItemStatus.NotStarted },
         };
         context.BookingTasks.AddRange(tasks);
 
@@ -725,19 +707,22 @@ public static class DbSeeder
     /// <summary>
     /// Checks whether ANY of the tables that <see cref="SeedAsync"/> populates via
     /// AddRange-with-fixed-GUIDs already contain rows. SeedAsync seeds one atomic,
-    /// cross-referencing batch (Participants reference Staff, TripInstances reference
-    /// Vehicles/Staff, etc.), so it must be all-or-nothing: if any table in the batch
+    /// cross-referencing batch (Participants reference Users, TripInstances reference
+    /// Vehicles/Users, etc.), so it must be all-or-nothing: if any table in the batch
     /// already has data — e.g. because Participants alone were cleared out via manual
-    /// DB cleanup while Staff/Vehicles/etc. were left in place — re-running the seed
+    /// DB cleanup while Vehicles/etc. were left in place — re-running the seed
     /// would call AddRange with the same hardcoded IDs as existing rows and crash with
     /// an EF Core "already being tracked" / duplicate-key error. Treating any non-empty
-    /// table as "already seeded" keeps this safe.
+    /// table as "already seeded" keeps this safe. The Marcus user id below stands in for the
+    /// old Staff-table check — like Staff before it, this fixed-id user is only ever created by
+    /// this atomic batch (the other 9 users in the batch are guarded individually and may
+    /// already exist from an earlier partial run).
     /// Uses IgnoreQueryFilters() throughout so the tenant query filter can't cause a
     /// false negative (mirrors the pattern already used elsewhere in this file).
     /// </summary>
     private static async Task<bool> HasExistingSeedDataAsync(OdipDbContext context, CancellationToken ct)
     {
-        return await context.Staff.IgnoreQueryFilters().AnyAsync(ct)
+        return await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == Guid.Parse("a2000000-0000-0000-0000-000000000001"), ct)
             || await context.EventTemplates.IgnoreQueryFilters().AnyAsync(ct)
             || await context.Participants.IgnoreQueryFilters().AnyAsync(ct)
             || await context.Contacts.IgnoreQueryFilters().AnyAsync(ct)
@@ -1403,7 +1388,6 @@ public static class DbSeeder
         context.Vehicles.RemoveRange(context.Vehicles);
         context.StaffAvailabilities.RemoveRange(context.StaffAvailabilities);
         context.Users.RemoveRange(context.Users);
-        context.Staff.RemoveRange(context.Staff);
 
         await context.SaveChangesAsync(ct);
         await SeedAsync(context, ct);

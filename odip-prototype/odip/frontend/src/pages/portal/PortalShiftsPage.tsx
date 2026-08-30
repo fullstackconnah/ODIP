@@ -59,7 +59,6 @@ export default function PortalShiftsPage() {
   const weekEnd = useMemo(() => daysOfWeek(weekStart)[6], [weekStart])
 
   const { data, isLoading, isError, refetch } = useMyShifts(weekStart, weekEnd)
-  const isLinked = data?.isLinked ?? true // don't flash the "not linked" empty state before the first response lands
   const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
   const byDay = useMemo(() => groupByDay(shifts), [shifts])
@@ -129,12 +128,6 @@ export default function PortalShiftsPage() {
             Try again
           </button>
         </div>
-      ) : !isLinked ? (
-        <EmptyState
-          icon={CalendarCheck2}
-          title="Your account isn't linked to a staff record"
-          description="My Shifts shows the roster for a linked staff member. Ask an admin to link your account to your staff record in Settings › Users."
-        />
       ) : shifts.length === 0 && tripAssignments.length === 0 ? (
         <EmptyState
           icon={CalendarCheck2}

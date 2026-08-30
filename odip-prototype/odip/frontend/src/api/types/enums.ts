@@ -30,9 +30,9 @@ export type VehicleType = typeof VEHICLE_TYPES[number]
 export const VEHICLE_ASSIGNMENT_STATUSES = ['Requested', 'Confirmed', 'Unavailable', 'Cancelled'] as const
 export type VehicleAssignmentStatus = typeof VEHICLE_ASSIGNMENT_STATUSES[number]
 
-// ── Staff Role ──────────────────────────────────────────
-export const STAFF_ROLES = ['SupportWorker', 'SeniorSupportWorker', 'Coordinator', 'TeamLeader', 'Other'] as const
-export type StaffRole = typeof STAFF_ROLES[number]
+// ── Position (display-only staff title — separate from the access-control UserRole below) ──
+export const POSITIONS = ['SupportWorker', 'SeniorSupportWorker', 'Coordinator', 'TeamLeader', 'Other'] as const
+export type Position = typeof POSITIONS[number]
 
 // ── Availability Type ───────────────────────────────────
 export const AVAILABILITY_TYPES = ['Available', 'Unavailable', 'Leave', 'Training', 'Preferred', 'Tentative'] as const

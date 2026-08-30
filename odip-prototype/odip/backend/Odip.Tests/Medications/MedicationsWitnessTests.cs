@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -14,9 +16,10 @@ namespace Odip.Tests.Medications;
 
 /// <summary>
 /// Coverage for the staff-witness workflow added to MedicationsController.RecordAdministration:
-/// selecting a witness staff member puts the record into WitnessStatus.Pending (instead of the
-/// legacy free-text-only path), a staff member can't witness their own administration, and the
-/// pre-existing "high-risk requires a witness" rule still holds either way. Same EF InMemory +
+/// selecting a witness user puts the record into WitnessStatus.Pending (instead of the legacy
+/// free-text-only path), a user can't witness their own administration, and the pre-existing
+/// "high-risk requires a witness" rule still holds either way. Post staff/user unification, the
+/// witness IS a User directly (no separate Staff row to link) — same EF InMemory +
 /// Moq&lt;ICurrentTenant&gt; pattern as MedicationsControllerTests/PortalControllerTests.
 /// </summary>
 public class MedicationsWitnessTests
@@ -56,20 +59,12 @@ public class MedicationsWitnessTests
         return med;
     }
 
-    private static Staff SeedStaff(OdipDbContext db, string firstName, string lastName)
-    {
-        var staff = new Staff { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true };
-        db.Staff.Add(staff);
-        db.SaveChanges();
-        return staff;
-    }
-
-    private static User SeedUser(OdipDbContext db, Guid? staffId)
+    private static User SeedUser(OdipDbContext db, string firstName, string lastName)
     {
         var user = new User
         {
             Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
-            FirstName = "Test", LastName = "User", Role = UserRole.SupportWorker, StaffId = staffId, IsActive = true,
+            FirstName = firstName, LastName = lastName, Role = UserRole.SupportWorker, IsActive = true,
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -82,7 +77,7 @@ public class MedicationsWitnessTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
-        var witness = SeedStaff(db, "Rachel", "Thompson");
+        var witness = SeedUser(db, "Rachel", "Thompson");
         var controller = new MedicationsController(db, tenant.Object);
 
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witness.Id };
@@ -139,6 +134,27 @@ public class MedicationsWitnessTests
     }
 
     [Fact]
+    public async Task RecordAdministration_WitnessStaffIdInactive_ReturnsBadRequest()
+    {
+        // §4.4: the witness ref must resolve to an ACTIVE user, not merely an existing one.
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var inactiveWitness = SeedUser(db, "Inactive", "Witness");
+        inactiveWitness.IsActive = false;
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = inactiveWitness.Id };
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
     public async Task RecordAdministration_WitnessStaffIdNotFound_ReturnsBadRequest()
     {
         var (db, tenant) = CreateDb();
@@ -161,14 +177,43 @@ public class MedicationsWitnessTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
-        var administeringStaff = SeedStaff(db, "Alex", "Field");
-        var administeringUser = SeedUser(db, administeringStaff.Id);
+        var administeringUser = SeedUser(db, "Alex", "Field");
         tenant.Setup(t => t.ViewAsUserId).Returns(administeringUser.Id);
         var controller = new MedicationsController(db, tenant.Object);
 
-        // The caller (resolved via tenant.ViewAsUserId -> administeringUser -> administeringStaff)
-        // tries to select themselves as the witness.
-        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = administeringStaff.Id };
+        // The caller (resolved via tenant.ViewAsUserId -> administeringUser) tries to select
+        // themselves as the witness.
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = administeringUser.Id };
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.Contains("cannot witness their own", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordAdministration_SelfWitness_ResolvedByNameIdentifierClaim_ReturnsBadRequest()
+    {
+        // Complements RecordAdministration_SelfWitness_ReturnsBadRequest (which resolves the
+        // caller via tenant.ViewAsUserId) by exercising the OTHER resolution path §4.3 describes:
+        // the caller's own identity from the JWT's NameIdentifier claim, with no ViewAsUserId
+        // override in play. Self-witnessing must be rejected by resolved user id either way.
+        var (db, tenant) = CreateDb(); // ViewAsUserId stays null
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var administeringUser = SeedUser(db, "Alex", "Field");
+
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, administeringUser.Id.ToString())], "Test");
+        var controller = new MedicationsController(db, tenant.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = administeringUser.Id };
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -183,13 +228,12 @@ public class MedicationsWitnessTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
-        var administeringStaff = SeedStaff(db, "Alex", "Field");
-        var witnessStaff = SeedStaff(db, "Rachel", "Thompson");
-        var administeringUser = SeedUser(db, administeringStaff.Id);
+        var administeringUser = SeedUser(db, "Alex", "Field");
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
         tenant.Setup(t => t.ViewAsUserId).Returns(administeringUser.Id);
         var controller = new MedicationsController(db, tenant.Object);
 
-        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witnessStaff.Id };
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witnessUser.Id };
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);

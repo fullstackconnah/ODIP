@@ -6,7 +6,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>
-/// Keeps <see cref="Participant.PreferredStaffId"/> (the single-pick field on the participant)
+/// Keeps <see cref="Participant.PreferredUserId"/> (the single-pick field on the participant)
 /// and the rostering <see cref="StaffParticipantCompatibility"/> matrix (many-cell
 /// Preferred/Allowed/Excluded) in sync — task 6d (see task-6-brief.md sub-task 6d /
 /// odip-domain-map.md §4-5 for why the two previously drifted independently).
@@ -36,39 +36,39 @@ public class StaffCompatibilityLinkService
     public StaffCompatibilityLinkService(OdipDbContext db) => _db = db;
 
     /// <summary>
-    /// Call whenever a participant's <see cref="Participant.PreferredStaffId"/> is set (create)
+    /// Call whenever a participant's <see cref="Participant.PreferredUserId"/> is set (create)
     /// or changes (update) — pass the value from before the assignment as
-    /// <paramref name="oldStaffId"/> and the new value as <paramref name="newStaffId"/>. Either
+    /// <paramref name="oldUserId"/> and the new value as <paramref name="newUserId"/>. Either
     /// may be null; equal values are a cheap no-op.
     /// </summary>
-    public async Task SyncFromParticipantPreferredStaffAsync(Guid participantId, Guid? oldStaffId, Guid? newStaffId, CancellationToken ct)
+    public async Task SyncFromParticipantPreferredStaffAsync(Guid participantId, Guid? oldUserId, Guid? newUserId, CancellationToken ct)
     {
-        if (oldStaffId == newStaffId) return;
+        if (oldUserId == newUserId) return;
 
-        if (oldStaffId.HasValue)
+        if (oldUserId.HasValue)
         {
             var oldRow = await _db.StaffParticipantCompatibilities
-                .FirstOrDefaultAsync(c => c.StaffId == oldStaffId.Value && c.ParticipantId == participantId, ct);
+                .FirstOrDefaultAsync(c => c.UserId == oldUserId.Value && c.ParticipantId == participantId, ct);
 
             // Only remove a row this service created/owns. A human-managed row for the staff
             // member who was just displaced (even one that happens to already read Preferred)
-            // is left exactly as they set it — clearing PreferredStaffId is not, by itself,
+            // is left exactly as they set it — clearing PreferredUserId is not, by itself,
             // evidence the compatibility judgement should change too.
             if (oldRow != null && oldRow.AutoLinked)
                 _db.StaffParticipantCompatibilities.Remove(oldRow);
         }
 
-        if (newStaffId.HasValue)
+        if (newUserId.HasValue)
         {
             var newRow = await _db.StaffParticipantCompatibilities
-                .FirstOrDefaultAsync(c => c.StaffId == newStaffId.Value && c.ParticipantId == participantId, ct);
+                .FirstOrDefaultAsync(c => c.UserId == newUserId.Value && c.ParticipantId == participantId, ct);
 
             if (newRow == null)
             {
                 _db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
                 {
                     Id = Guid.NewGuid(),
-                    StaffId = newStaffId.Value,
+                    UserId = newUserId.Value,
                     ParticipantId = participantId,
                     Level = CompatibilityLevel.Preferred,
                     Reason = AutoLinkReason,
@@ -102,23 +102,23 @@ public class StaffCompatibilityLinkService
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == row.ParticipantId, ct);
         if (participant == null) return;
 
-        if (row.Level == CompatibilityLevel.Preferred && participant.PreferredStaffId == null)
+        if (row.Level == CompatibilityLevel.Preferred && participant.PreferredUserId == null)
         {
             // Least-surprising direction: marking a pair Preferred fills an EMPTY preferred-staff
             // pick. It never overwrites an existing explicit choice — a participant can have
-            // several staff at Preferred in the matrix but only one PreferredStaffId, and
+            // several staff at Preferred in the matrix but only one PreferredUserId, and
             // silently swapping it out from the matrix side would fight whatever the participant
             // form itself last saved.
-            participant.PreferredStaffId = row.StaffId;
+            participant.PreferredUserId = row.UserId;
             participant.UpdatedAt = DateTime.UtcNow;
         }
         else if (previousLevel == CompatibilityLevel.Preferred && row.Level != CompatibilityLevel.Preferred
-                 && participant.PreferredStaffId == row.StaffId)
+                 && participant.PreferredUserId == row.UserId)
         {
             // Symmetric safety: a human just moved this exact pair OFF Preferred (most pointedly
-            // to Excluded). Leaving PreferredStaffId pointing at them would be actively
+            // to Excluded). Leaving PreferredUserId pointing at them would be actively
             // misleading, so clear it rather than leave a stale, now-contradicted pick.
-            participant.PreferredStaffId = null;
+            participant.PreferredUserId = null;
             participant.UpdatedAt = DateTime.UtcNow;
         }
     }

@@ -68,7 +68,7 @@ public record RosterStaffRowDto
 {
     public Guid StaffId { get; init; }
     public string FullName { get; init; } = string.Empty;
-    public StaffRole Role { get; init; }
+    public Position Role { get; init; }
     public RosterComplianceLevel Compliance { get; init; }
     public List<string> ComplianceNotes { get; init; } = new();
     public decimal RosteredHours { get; init; }

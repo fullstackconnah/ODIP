@@ -331,7 +331,7 @@ public class MedicationsController : ControllerBase
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
 
-        Staff? witnessStaff = null;
+        User? witnessStaff = null;
         if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
         {
             if (dto.WitnessStaffId is null && string.IsNullOrWhiteSpace(dto.WitnessName))
@@ -339,7 +339,10 @@ public class MedicationsController : ControllerBase
 
             if (dto.WitnessStaffId.HasValue)
             {
-                witnessStaff = await _db.Staff.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value, ct);
+                // Same-tenant scoping comes for free here: _db.Users is ambient-tenant-filtered
+                // by OdipDbContext for any non-SuperAdmin caller, so a cross-tenant witness id
+                // simply resolves to no row, same as "not found" (§4.4).
+                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive, ct);
                 if (witnessStaff == null)
                     return BadRequest(ApiResponse<AdministrationDto>.Fail("Selected witness staff member was not found."));
 
@@ -395,7 +398,7 @@ public class MedicationsController : ControllerBase
             DoseGiven = dto.DoseGiven,
             RecordedByName = GetRecordedByName(),
             WitnessName = witnessStaff?.FullName ?? dto.WitnessName,
-            WitnessStaffId = witnessStaff?.Id,
+            WitnessUserId = witnessStaff?.Id,
             WitnessStatus = witnessStaff != null ? WitnessStatus.Pending : WitnessStatus.NotRequired,
             WitnessRequestedAt = witnessStaff != null ? DateTime.UtcNow : null,
             Reason = dto.Reason,
@@ -526,17 +529,21 @@ public class MedicationsController : ControllerBase
         ?? "Unknown";
 
     /// <summary>
-    /// Resolves the caller's linked Staff id, the same way PortalController does — ViewAsUserId
+    /// Resolves the caller's own user id, the same way PortalController does — ViewAsUserId
     /// takes priority (SuperAdmin tenant/user switching), falling back to the JWT's own subject
     /// claim. Returns null (never throws) when there's no current HTTP context/claim (e.g. a test
-    /// constructing this controller directly with no ControllerContext), the user isn't found, or
-    /// the user has no linked Staff record — any of which just means "skip the self-witness check".
+    /// constructing this controller directly with no ControllerContext) or the user isn't
+    /// found — either of which just means "skip the self-witness check".
     /// </summary>
-    private Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
         var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
-        return StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, ownUserId, ct);
+        var userId = _currentTenant.ViewAsUserId ?? ownUserId;
+        if (userId is null) return null;
+
+        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
+        return exists ? userId : null;
     }
 
     private static Weekdays? ParseDaysOfWeek(List<string>? days)
@@ -722,7 +729,7 @@ public class MedicationsController : ControllerBase
         DoseGiven = a.DoseGiven,
         RecordedByName = a.RecordedByName,
         WitnessName = a.WitnessName,
-        WitnessStaffId = a.WitnessStaffId,
+        WitnessStaffId = a.WitnessUserId,
         WitnessStatus = a.WitnessStatus,
         WitnessRequestedAt = a.WitnessRequestedAt,
         WitnessRespondedAt = a.WitnessRespondedAt,

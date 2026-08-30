@@ -41,7 +41,6 @@ public class OdipDbContext : DbContext
     public DbSet<AccommodationReservation> AccommodationReservations => Set<AccommodationReservation>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<VehicleAssignment> VehicleAssignments => Set<VehicleAssignment>();
-    public DbSet<Staff> Staff => Set<Staff>();
     public DbSet<StaffAvailability> StaffAvailabilities => Set<StaffAvailability>();
     public DbSet<StaffAssignment> StaffAssignments => Set<StaffAssignment>();
     public DbSet<TripDay> TripDays => Set<TripDay>();
@@ -277,29 +276,12 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.VehicleId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.DriverStaff)
+            entity.HasOne(e => e.DriverUser)
                 .WithMany()
-                .HasForeignKey(e => e.DriverStaffId)
+                .HasForeignKey(e => e.DriverUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.Status);
-        });
-
-        // ── Staff ────────────────────────────────────────────────
-        modelBuilder.Entity<Staff>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.Email).HasMaxLength(200);
-            entity.Property(e => e.Mobile).HasMaxLength(20);
-            entity.Property(e => e.Region).HasMaxLength(100);
-            entity.Property(e => e.WorkerScreeningNumber).HasMaxLength(50);
-            entity.Ignore(e => e.FullName);
-
-            entity.HasIndex(e => e.IsActive);
-            entity.HasIndex(e => e.Role);
-            entity.HasIndex(e => e.Region);
         });
 
         // ── StaffAvailability ────────────────────────────────────
@@ -307,12 +289,12 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
 
-            entity.HasOne(e => e.Staff)
-                .WithMany(s => s.AvailabilityRecords)
-                .HasForeignKey(e => e.StaffId)
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.StaffId, e.StartDateTime, e.EndDateTime });
+            entity.HasIndex(e => new { e.UserId, e.StartDateTime, e.EndDateTime });
             entity.HasIndex(e => e.AvailabilityType);
         });
 
@@ -326,13 +308,13 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.TripInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.Staff)
-                .WithMany(s => s.Assignments)
-                .HasForeignKey(e => e.StaffId)
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.Status);
-            entity.HasIndex(e => new { e.StaffId, e.AssignmentStart, e.AssignmentEnd });
+            entity.HasIndex(e => new { e.UserId, e.AssignmentStart, e.AssignmentEnd });
         });
 
         // ── TripDay ──────────────────────────────────────────────
@@ -461,9 +443,9 @@ public class OdipDbContext : DbContext
 
             e.HasOne(i => i.TripInstance).WithMany(t => t.IncidentReports).HasForeignKey(i => i.TripInstanceId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(i => i.InvolvedParticipant).WithMany().HasForeignKey(i => i.InvolvedParticipantId);
-            e.HasOne(i => i.InvolvedStaff).WithMany().HasForeignKey(i => i.InvolvedStaffId);
-            e.HasOne(i => i.ReportedByStaff).WithMany().HasForeignKey(i => i.ReportedByStaffId);
-            e.HasOne(i => i.ReviewedByStaff).WithMany().HasForeignKey(i => i.ReviewedByStaffId);
+            e.HasOne(i => i.InvolvedUser).WithMany().HasForeignKey(i => i.InvolvedUserId);
+            e.HasOne(i => i.ReportedByUser).WithMany().HasForeignKey(i => i.ReportedByUserId);
+            e.HasOne(i => i.ReviewedByUser).WithMany().HasForeignKey(i => i.ReviewedByUserId);
             e.HasOne(i => i.ParticipantBooking).WithMany().HasForeignKey(i => i.ParticipantBookingId);
 
             e.HasIndex(i => i.Status);
@@ -480,12 +462,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(200).IsRequired();
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Mobile).HasMaxLength(20);
+            entity.Property(e => e.Region).HasMaxLength(100);
+            entity.Property(e => e.WorkerScreeningNumber).HasMaxLength(50);
             entity.Ignore(e => e.FullName);
-
-            entity.HasOne(e => e.Staff)
-                .WithMany()
-                .HasForeignKey(e => e.StaffId)
-                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.Email).IsUnique();
@@ -506,9 +486,9 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.TripInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.AuthorisedByStaff)
+            entity.HasOne(e => e.AuthorisedByUser)
                 .WithMany()
-                .HasForeignKey(e => e.AuthorisedByStaffId)
+                .HasForeignKey(e => e.AuthorisedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.ClaimReference).IsUnique();
@@ -643,11 +623,11 @@ public class OdipDbContext : DbContext
             .HasForeignKey(p => p.PlanManagerContactId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // ── Participant — new FK to Staff (PreferredStaff) ────────
+        // ── Participant — new FK to User (PreferredUser) ──────────
         modelBuilder.Entity<Participant>()
-            .HasOne(p => p.PreferredStaff)
+            .HasOne(p => p.PreferredUser)
             .WithMany()
-            .HasForeignKey(p => p.PreferredStaffId)
+            .HasForeignKey(p => p.PreferredUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
         // ── FundingSource ────────────────────────────────────────
@@ -857,20 +837,20 @@ public class OdipDbContext : DbContext
 
             // Restrict: a rostered participant or staff member must not be silently
             // cascade-deleted out from under their shifts (same idiom as FundingSource →
-            // Participant and StaffAssignment → Staff above).
+            // Participant and StaffAssignment → User above).
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.Staff)
+            entity.HasOne(e => e.User)
                 .WithMany()
-                .HasForeignKey(e => e.StaffId)
+                .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Board queries filter by day/week; the roster-check helper filters by staff+week.
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
-            entity.HasIndex(e => new { e.TenantId, e.StaffId, e.ServiceDate });
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.ServiceDate });
             // Pattern generation idempotency check: "does this pattern already have a shift on this date".
             entity.HasIndex(e => new { e.ShiftPatternId, e.ServiceDate });
         });
@@ -886,11 +866,11 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.ParticipantId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Optional pre-fill; unlike Shift.StaffId this is just a default, so losing the
+            // Optional pre-fill; unlike Shift.UserId this is just a default, so losing the
             // staff member should fall back to unfilled generation rather than block deletion.
-            entity.HasOne(e => e.DefaultStaff)
+            entity.HasOne(e => e.DefaultUser)
                 .WithMany()
-                .HasForeignKey(e => e.DefaultStaffId)
+                .HasForeignKey(e => e.DefaultUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
@@ -905,9 +885,9 @@ public class OdipDbContext : DbContext
 
             // Cascade: a compatibility cell has no meaning once either side of the pair is
             // gone — unlike Shift/ShiftPattern this isn't roster history, just a preference.
-            entity.HasOne(e => e.Staff)
+            entity.HasOne(e => e.User)
                 .WithMany()
-                .HasForeignKey(e => e.StaffId)
+                .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(e => e.Participant)
@@ -915,7 +895,7 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.ParticipantId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.TenantId, e.StaffId, e.ParticipantId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.ParticipantId }).IsUnique();
         });
 
         // ── ParticipantMedication ────────────────────────────────
@@ -978,15 +958,15 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             // Restrict: same compliance-record idiom as ParticipantMedication/Participant above —
-            // a witness's Staff row must not be silently cascade-deleted out from under the MAR.
-            entity.HasOne(e => e.WitnessStaff)
+            // a witness's User row must not be silently cascade-deleted out from under the MAR.
+            entity.HasOne(e => e.WitnessUser)
                 .WithMany()
-                .HasForeignKey(e => e.WitnessStaffId)
+                .HasForeignKey(e => e.WitnessUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
-            entity.HasIndex(e => new { e.WitnessStaffId, e.WitnessStatus });
+            entity.HasIndex(e => new { e.WitnessUserId, e.WitnessStatus });
         });
 
         // ── ParticipantNote ───────────────────────────────────────
@@ -1060,11 +1040,6 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<Participant>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Participant>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<Staff>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<Staff>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<Vehicle>()

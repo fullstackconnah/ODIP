@@ -91,7 +91,7 @@ public class ClaimsController : ControllerBase
     {
         var c = await _db.TripClaims
             .Include(x => x.TripInstance)
-            .Include(x => x.AuthorisedByStaff)
+            .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
                 .ThenInclude(l => l.ParticipantBooking)
                     .ThenInclude(b => b.Participant)
@@ -105,8 +105,8 @@ public class ClaimsController : ControllerBase
             Status = c.Status, ClaimReference = c.ClaimReference,
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
             CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate,
-            AuthorisedByStaffId = c.AuthorisedByStaffId,
-            AuthorisedByStaffName = c.AuthorisedByStaff != null ? $"{c.AuthorisedByStaff.FirstName} {c.AuthorisedByStaff.LastName}" : null,
+            AuthorisedByStaffId = c.AuthorisedByUserId,
+            AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
             Notes = c.Notes,
             LineItems = c.LineItems.Select(l => new ClaimLineItemDto
             {
@@ -131,7 +131,7 @@ public class ClaimsController : ControllerBase
         var c = await _db.TripClaims.FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
-        if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByStaffId = dto.AuthorisedByStaffId;
+        if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByUserId = dto.AuthorisedByStaffId;
         if (dto.Notes != null) c.Notes = dto.Notes;
         if (dto.Status.HasValue)
         {

@@ -41,11 +41,13 @@ function getCurrentUser(): Record<string, unknown> {
 export function usePermissions() {
   const user = getCurrentUser();
   const role = (user.role ?? null) as UserRole | null;
-  // The signed-in user's own linked Staff id (AuthResponseDto.staffId, stored wholesale into
-  // odip_user at login — see LoginPage.applyLoginSuccess). Null/undefined alike collapse to
-  // null: an unlinked account and a stale odip_user payload from before this field existed both
-  // just mean "no self-witness exclusion to apply".
-  const staffId = (user.staffId ?? null) as string | null;
+  // The signed-in user's own id (AuthResponseDto.id, stored wholesale into odip_user at login —
+  // see LoginPage.applyLoginSuccess). Post staff/user unification this is the self-exclusion
+  // source (e.g. excluding yourself from a witness picker). Null/undefined alike collapse to
+  // null: a stale odip_user payload from before this field existed (or any blob missing it)
+  // just means "no self-exclusion to apply" — never a crash. The server still enforces this
+  // regardless of what the client filters out.
+  const id = (user.id ?? null) as string | null;
 
   const isSuperAdmin = role === 'SuperAdmin';
   const isAdmin = role === 'Admin';
@@ -55,7 +57,7 @@ export function usePermissions() {
 
   return {
     role,
-    staffId,
+    id,
     isSuperAdmin,
     isAdmin,
     isCoordinator,

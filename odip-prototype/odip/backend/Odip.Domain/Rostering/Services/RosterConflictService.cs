@@ -21,7 +21,7 @@ public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, 
 /// <param name="Compatibility">The staff-participant compatibility level (Allowed when no matrix row exists).</param>
 /// <param name="WeeklyHoursThreshold">Weekly hours above which <c>OVER_HOURS</c> fires. See <see cref="RosterConflictService.DefaultWeeklyHoursThreshold"/>.</param>
 public sealed record RosterCheckContext(
-    Staff Staff,
+    User Staff,
     Participant Participant,
     IReadOnlyList<Shift> StaffShiftsInWeek,
     IReadOnlyList<Shift> ParticipantShiftsOnDate,
@@ -187,9 +187,9 @@ public sealed class RosterConflictService
     /// Fires when the shift's support need outstrips the candidate staff member's flagged
     /// competencies. Mapping per the M4 design brief, derived from fields that already exist
     /// on <see cref="Entities.Participant"/> and <see cref="Entities.Staff"/>:
-    /// overnight support requires <see cref="Staff.IsOvernightEligible"/>; hoist, standing
-    /// machine or wheelchair mobility requires <see cref="Staff.IsManualHandlingCompetent"/>;
-    /// high or intensive support requires <see cref="Staff.IsFirstAidQualified"/>.
+    /// overnight support requires <see cref="User.IsOvernightEligible"/>; hoist, standing
+    /// machine or wheelchair mobility requires <see cref="User.IsManualHandlingCompetent"/>;
+    /// high or intensive support requires <see cref="User.IsFirstAidQualified"/>.
     /// </summary>
     private static void CheckCompetencyMissing(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
@@ -218,7 +218,7 @@ public sealed class RosterConflictService
     }
 
     /// <summary>
-    /// A <see cref="Shift"/> row carries exactly one <see cref="Shift.StaffId"/>, so 2:1 coverage
+    /// A <see cref="Shift"/> row carries exactly one <see cref="Shift.UserId"/>, so 2:1 coverage
     /// is modelled as two overlapping Shift rows for the same participant and date, each with its
     /// own staff member — <see cref="RosterCheckContext.ParticipantShiftsOnDate"/> supplies the
     /// sibling shifts to look for. Fires whenever fewer than two distinct, non-null staff IDs
@@ -233,8 +233,8 @@ public sealed class RosterConflictService
 
         var covering = ctx.ParticipantShiftsOnDate
             .Where(s => Overlaps(window, ToWindow(s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay)))
-            .Select(s => s.StaffId)
-            .Append(candidate.StaffId)
+            .Select(s => s.UserId)
+            .Append(candidate.UserId)
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .Distinct()

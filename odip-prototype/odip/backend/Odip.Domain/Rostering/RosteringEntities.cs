@@ -51,8 +51,8 @@ public class Shift : ITenantEntity
     public Participant? Participant { get; set; }
 
     /// <summary>Null means the shift is unfilled.</summary>
-    public Guid? StaffId { get; set; }
-    public Staff? Staff { get; set; }
+    public Guid? UserId { get; set; }
+    public User? User { get; set; }
 
     /// <summary>The day column this shift belongs to on the roster board.</summary>
     public DateOnly ServiceDate { get; set; }
@@ -107,9 +107,9 @@ public class ShiftPattern : ITenantEntity
     public Guid ParticipantId { get; set; }
     public Participant? Participant { get; set; }
 
-    /// <summary>Staff pre-filled onto generated shifts. Null leaves generated shifts unfilled.</summary>
-    public Guid? DefaultStaffId { get; set; }
-    public Staff? DefaultStaff { get; set; }
+    /// <summary>User pre-filled onto generated shifts. Null leaves generated shifts unfilled.</summary>
+    public Guid? DefaultUserId { get; set; }
+    public User? DefaultUser { get; set; }
 
     public DayOfWeek DayOfWeek { get; set; }
     public TimeOnly StartTime { get; set; }
@@ -136,8 +136,8 @@ public class StaffParticipantCompatibility : ITenantEntity
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
 
-    public Guid StaffId { get; set; }
-    public Staff? Staff { get; set; }
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
 
     public Guid ParticipantId { get; set; }
     public Participant? Participant { get; set; }

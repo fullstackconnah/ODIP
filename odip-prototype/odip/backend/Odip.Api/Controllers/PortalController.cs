@@ -14,11 +14,10 @@ namespace Odip.Api.Controllers;
 
 /// <summary>
 /// The staff member portal ("My Shifts") — a self-service read surface scoped to the caller's
-/// own linked <see cref="Staff"/> record via <see cref="User.StaffId"/>. <see cref="User.StaffId"/>
-/// is nullable and nothing populates it at login, so every action here resolves it explicitly
-/// and returns a "not linked" payload/404 rather than ever 500ing on a null value.
+/// own account, resolved via <see cref="ResolveCurrentStaffIdAsync"/> (post staff/user
+/// unification this is simply the caller's own <see cref="User.Id"/>).
 ///
-/// Access rule: a caller can read ONLY their own shifts (matched on <c>Shift.StaffId</c>) and
+/// Access rule: a caller can read ONLY their own shifts (matched on <c>Shift.UserId</c>) and
 /// only the participant/medication/routine data attached to those shifts — a shift id
 /// belonging to another staff member 404s exactly the same as one that doesn't exist at all,
 /// so this surface can never be used to enumerate other staff's roster ids. Coordinator/admin
@@ -27,7 +26,7 @@ namespace Odip.Api.Controllers;
 /// purpose-built portal DTOs, never the coordinator-scoped ones. The one write surface is witness
 /// approve/decline (<see cref="ApproveWitnessRequest"/>/<see cref="DeclineWitnessRequest"/>), and
 /// the same "only your own, 404 otherwise" scoping applies — matched on
-/// <c>MedicationAdministration.WitnessStaffId</c> instead of <c>Shift.StaffId</c>. These POSTs
+/// <c>MedicationAdministration.WitnessUserId</c> instead of <c>Shift.UserId</c>. These POSTs
 /// still go through <c>ReadOnlyMiddleware</c> like every other write in the app — there is no
 /// portal-specific exemption from the ReadOnly role's 403.
 ///
@@ -54,9 +53,10 @@ public class PortalController : ControllerBase
 
     /// <summary>
     /// The caller's own upcoming shifts (and, if cheap, trip staffing assignments) in
-    /// [from, to]. Defaults to a 14-day window starting today when omitted. Always 200s —
-    /// an unlinked account gets <see cref="PortalShiftsResponseDto.IsLinked"/> false and empty
-    /// lists rather than an error, so the frontend can render guidance instead of a broken page.
+    /// [from, to]. Defaults to a 14-day window starting today when omitted. Always 200s — when
+    /// the caller's identity can't be resolved to a User row at all (should not normally happen
+    /// for an authenticated request), this simply returns empty lists rather than an error; there
+    /// is no separate "not linked" state any more; every User IS its own staff identity.
     /// </summary>
     [HttpGet("my-shifts")]
     public async Task<ActionResult<ApiResponse<PortalShiftsResponseDto>>> GetMyShifts(
@@ -66,7 +66,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
         {
             return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-                new PortalShiftsResponseDto(false, null, new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
+                new PortalShiftsResponseDto(new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
         }
 
         var start = from ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -74,7 +74,7 @@ public class PortalController : ControllerBase
 
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.StaffId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end)
+            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
         var shiftDtos = shifts.Select(ToSummaryDto).ToList();
@@ -83,7 +83,7 @@ public class PortalController : ControllerBase
         // query against the already-resolved staffId, scoped the same way the shifts are.
         var tripAssignments = await _db.StaffAssignments
             .Include(a => a.TripInstance)
-            .Where(a => a.StaffId == staffId.Value && a.Status != AssignmentStatus.Cancelled
+            .Where(a => a.UserId == staffId.Value && a.Status != AssignmentStatus.Cancelled
                         && a.AssignmentStart <= end && a.AssignmentEnd >= start)
             .OrderBy(a => a.AssignmentStart)
             .ToListAsync(ct);
@@ -92,7 +92,7 @@ public class PortalController : ControllerBase
             a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status)).ToList();
 
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-            new PortalShiftsResponseDto(true, staffId, shiftDtos, tripDtos)));
+            new PortalShiftsResponseDto(shiftDtos, tripDtos)));
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class PortalController : ControllerBase
 
         var shift = await _db.Shifts
             .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.StaffId == staffId.Value, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
         if (shift?.Participant is null)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
@@ -155,7 +155,7 @@ public class PortalController : ControllerBase
         var requests = await _db.MedicationAdministrations
             .Include(a => a.Participant)
             .Include(a => a.ParticipantMedication)
-            .Where(a => a.WitnessStaffId == staffId.Value && a.WitnessStatus == WitnessStatus.Pending)
+            .Where(a => a.WitnessUserId == staffId.Value && a.WitnessStatus == WitnessStatus.Pending)
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(ct);
 
@@ -186,7 +186,7 @@ public class PortalController : ControllerBase
         var admin = await _db.MedicationAdministrations
             .Include(a => a.Participant)
             .Include(a => a.ParticipantMedication)
-            .FirstOrDefaultAsync(a => a.Id == id && a.WitnessStaffId == staffId.Value, ct);
+            .FirstOrDefaultAsync(a => a.Id == id && a.WitnessUserId == staffId.Value, ct);
         if (admin == null)
             return NotFound(ApiResponse<PortalWitnessRequestDto>.Fail("Witness request not found."));
 
@@ -206,16 +206,21 @@ public class PortalController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Resolves the caller's linked Staff id. <see cref="ICurrentTenant.ViewAsUserId"/> takes
-    /// priority over the JWT's own subject claim (see class remarks). Null covers every "not
-    /// linked" case uniformly: no resolvable user id on the token, the user row not found (or
-    /// tenant-filtered out), or a resolved user whose <see cref="User.StaffId"/> is null.
+    /// Resolves the caller's own user id — post staff/user unification this IS the caller's
+    /// linked "staff" identity, there being no separate Staff record any more.
+    /// <see cref="ICurrentTenant.ViewAsUserId"/> takes priority over the JWT's own subject claim
+    /// (see class remarks). Null covers every "no resolvable identity" case uniformly: no
+    /// resolvable user id on the token, or the user row not found (or tenant-filtered out).
     /// </summary>
-    private Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
-        return StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, ownUserId, ct);
+        var userId = _currentTenant.ViewAsUserId ?? ownUserId;
+        if (userId is null) return null;
+
+        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
+        return exists ? userId : null;
     }
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(

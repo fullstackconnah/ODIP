@@ -37,13 +37,12 @@ public record PortalTripAssignmentSummaryDto(
     AssignmentStatus Status);
 
 /// <summary>
-/// Response of GET /api/v1/portal/my-shifts. <see cref="IsLinked"/> false means the caller's
-/// User row has a null StaffId — an explicit, never-500 "not linked" payload the frontend
-/// renders as guidance rather than an empty/broken shift list.
+/// Response of GET /api/v1/portal/my-shifts. Post staff/user unification there is no separate
+/// "not linked" state — every User IS its own staff identity — so a caller with no shifts (or
+/// whose identity somehow can't be resolved) simply gets empty lists here, with no special
+/// messaging payload.
 /// </summary>
 public record PortalShiftsResponseDto(
-    bool IsLinked,
-    Guid? StaffId,
     List<PortalShiftSummaryDto> Shifts,
     List<PortalTripAssignmentSummaryDto> TripAssignments);
 

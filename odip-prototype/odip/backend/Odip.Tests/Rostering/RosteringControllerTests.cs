@@ -61,15 +61,17 @@ public class RosteringControllerTests
     // null (the default when workerScreeningValid is false) means no screening recorded at all
     // (WSC_MISSING, Warning); a date before ServiceDate means a genuinely lapsed screening
     // (WSC_EXPIRED, Blocking) — callers that need the Blocking finding must pass one explicitly.
-    private static Staff SeedStaff(OdipDbContext db, bool workerScreeningValid = true, DateOnly? expiredScreeningDate = null, string firstName = "Ben", string lastName = "Turner")
+    private static User SeedStaff(OdipDbContext db, bool workerScreeningValid = true, DateOnly? expiredScreeningDate = null, string firstName = "Ben", string lastName = "Turner")
     {
-        var staff = new Staff
+        var staff = new User
         {
-            Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, Role = StaffRole.SupportWorker, IsActive = true,
+            Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName,
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true,
             WorkerScreeningNumber = workerScreeningValid ? "WSC-1" : null,
             WorkerScreeningExpiryDate = workerScreeningValid ? new DateOnly(2030, 1, 1) : expiredScreeningDate
         };
-        db.Staff.Add(staff);
+        db.Users.Add(staff);
         db.SaveChanges();
         return staff;
     }
@@ -123,7 +125,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded
         });
         db.SaveChanges();
 
@@ -148,7 +150,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded
         });
         db.SaveChanges();
 
@@ -249,13 +251,13 @@ public class RosteringControllerTests
 
         var filledShift = new Shift
         {
-            Id = Guid.NewGuid(), ParticipantId = filledParticipant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            Id = Guid.NewGuid(), ParticipantId = filledParticipant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
             StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
             NightType = SleepoverType.None, Status = ShiftStatus.Draft
         };
         var unfilledShift = new Shift
         {
-            Id = Guid.NewGuid(), ParticipantId = unfilledParticipant.Id, StaffId = null, ServiceDate = ServiceDate,
+            Id = Guid.NewGuid(), ParticipantId = unfilledParticipant.Id, UserId = null, ServiceDate = ServiceDate,
             StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(15, 0), Ratio = SupportRatio.OneToOne,
             NightType = SleepoverType.None, Status = ShiftStatus.Draft
         };
@@ -281,6 +283,47 @@ public class RosteringControllerTests
         var rowShift = Assert.Single(staffRow.Shifts);
         Assert.Equal(filledShift.Id, rowShift.Id);
         Assert.DoesNotContain(staffRow.Shifts, s => s.Id == unfilledShift.Id);
+    }
+
+    [Fact]
+    public async Task GetBoard_StaffMode_IncludesEveryActiveRole_NoRoleFilter()
+    {
+        // Design spec §4.2: the board shows every active tenant user, of any role — the old
+        // "approximates Staff-only listing" role filter (excluding SuperAdmin/ReadOnly) is gone.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var supportWorker = SeedStaff(db, firstName: "Support", lastName: "Worker");
+
+        User MakeActiveUser(UserRole role, string firstName) => new()
+        {
+            Id = Guid.NewGuid(), FirstName = firstName, LastName = "Person",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = role, IsActive = true,
+        };
+
+        var coordinator = MakeActiveUser(UserRole.Coordinator, "Coord");
+        var admin = MakeActiveUser(UserRole.Admin, "Adm");
+        var readOnly = MakeActiveUser(UserRole.ReadOnly, "Read");
+        var superAdmin = MakeActiveUser(UserRole.SuperAdmin, "Super");
+        var inactive = MakeActiveUser(UserRole.SupportWorker, "Inactive");
+        inactive.IsActive = false;
+        db.Users.AddRange(coordinator, admin, readOnly, superAdmin, inactive);
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var staffIds = body.Data!.StaffRows!.Select(r => r.StaffId).ToList();
+
+        Assert.Contains(supportWorker.Id, staffIds);
+        Assert.Contains(coordinator.Id, staffIds);
+        Assert.Contains(admin.Id, staffIds);
+        Assert.Contains(readOnly.Id, staffIds);
+        Assert.Contains(superAdmin.Id, staffIds);
+        // Only IsActive is filtered — role is not.
+        Assert.DoesNotContain(inactive.Id, staffIds);
     }
 
     [Fact]
@@ -328,7 +371,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db, "Cam", "Diaz");
         var unfilledShift = new Shift
         {
-            Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = null, ServiceDate = ServiceDate,
             StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(15, 0), Ratio = SupportRatio.OneToOne,
             NightType = SleepoverType.None, Status = ShiftStatus.Draft
         };
@@ -361,13 +404,13 @@ public class RosteringControllerTests
         db.Shifts.AddRange(
             new Shift
             {
-                Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = null, ServiceDate = ServiceDate,
                 StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
                 NightType = SleepoverType.None, Status = ShiftStatus.Draft
             },
             new Shift
             {
-                Id = Guid.NewGuid(), ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate.AddDays(1),
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = null, ServiceDate = ServiceDate.AddDays(1),
                 StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
                 NightType = SleepoverType.None, Status = ShiftStatus.Draft
             });
@@ -537,7 +580,7 @@ public class RosteringControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(staff.Id, reloaded.PreferredStaffId);
+        Assert.Equal(staff.Id, reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -547,7 +590,7 @@ public class RosteringControllerTests
         var existingPreferred = SeedStaff(db, firstName: "Existing", lastName: "Preferred");
         var newlyMarked = SeedStaff(db, firstName: "Newly", lastName: "Marked");
         var participant = SeedParticipant(db);
-        participant.PreferredStaffId = existingPreferred.Id;
+        participant.PreferredUserId = existingPreferred.Id;
         db.SaveChanges();
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
@@ -557,7 +600,7 @@ public class RosteringControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(existingPreferred.Id, reloaded.PreferredStaffId);
+        Assert.Equal(existingPreferred.Id, reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -566,10 +609,10 @@ public class RosteringControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
         var participant = SeedParticipant(db);
-        participant.PreferredStaffId = staff.Id;
+        participant.PreferredUserId = staff.Id;
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -581,7 +624,7 @@ public class RosteringControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Null(reloaded.PreferredStaffId);
+        Assert.Null(reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -593,7 +636,7 @@ public class RosteringControllerTests
         // Simulate a row the participant-preferred-staff auto-link created.
         db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
         {
-            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
             Level = CompatibilityLevel.Preferred, AutoLinked = true, UpdatedAt = DateTime.UtcNow,
         });
         db.SaveChanges();
@@ -604,7 +647,7 @@ public class RosteringControllerTests
             new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred, Reason = "Confirmed by coordinator" },
             CancellationToken.None);
 
-        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
         Assert.False(row.AutoLinked);
         Assert.Equal("Confirmed by coordinator", row.Reason);
     }

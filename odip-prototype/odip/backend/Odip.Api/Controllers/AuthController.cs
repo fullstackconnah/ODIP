@@ -24,7 +24,6 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
     private readonly ILoginAttemptTracker _loginAttempts;
-    private readonly ICurrentTenant _currentTenant;
 
     public AuthController(
         OdipDbContext db,
@@ -37,19 +36,11 @@ public class AuthController : ControllerBase
         _config = config;
         _logger = logger;
         _loginAttempts = loginAttempts;
-        _currentTenant = currentTenant;
+        // currentTenant is intentionally unused: AuthResponseDto.StaffId (the only thing that
+        // ever needed ICurrentTenant.ViewAsUserId here) was dropped per the staff/user
+        // unification design spec §4.3. The parameter is kept so DI resolution and existing test
+        // call sites that construct this controller with five arguments don't need to change.
     }
-
-    /// <summary>
-    /// Resolves the caller's linked Staff id via <see cref="StaffIdResolver"/>, the same
-    /// ViewAsUserId-takes-priority rule <see cref="Odip.Api.Controllers.PortalController"/> uses.
-    /// At this point in the login/dev-login flow there's no JWT yet to read a NameIdentifier claim
-    /// from, so <paramref name="resolvedUserId"/> — the User row this request already looked up by
-    /// email/username — stands in for "the caller's own identity" that ViewAsUserId can still
-    /// override.
-    /// </summary>
-    private Task<Guid?> ResolveStaffIdAsync(Guid resolvedUserId, CancellationToken ct) =>
-        StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, resolvedUserId, ct);
 
     /// <summary>
     /// Exchange a Firebase ID token for a Odip backend JWT with tenant and role claims.
@@ -131,18 +122,17 @@ public class AuthController : ControllerBase
             var superAdminToken = GenerateSuperAdminJwtToken(superAdmin);
             SetJwtCookie(superAdminToken);
             _loginAttempts.RecordSuccess(attemptKey);
-            var superAdminStaffId = await ResolveStaffIdAsync(superAdmin.Id, ct);
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
+                Id = superAdmin.Id,
                 Token = superAdminToken,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 Username = superAdmin.Username,
                 FullName = superAdmin.FullName,
                 Role = "SuperAdmin",
                 TenantName = null,
-                TenantId = null,
-                StaffId = superAdminStaffId
+                TenantId = null
             }));
         }
 
@@ -170,18 +160,17 @@ public class AuthController : ControllerBase
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
         _loginAttempts.RecordSuccess(attemptKey);
-        var staffId = await ResolveStaffIdAsync(user.Id, ct);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
+            Id = user.Id,
             Token = tenantToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(30),
             Username = user.Username,
             FullName = user.FullName,
             Role = user.Role.ToString(),
             TenantName = tenant.Name,
-            TenantId = tenant.Id,
-            StaffId = staffId
+            TenantId = tenant.Id
         }));
     }
 
@@ -224,18 +213,17 @@ public class AuthController : ControllerBase
         {
             var superAdminToken = GenerateSuperAdminJwtToken(user);
             SetJwtCookie(superAdminToken);
-            var superAdminStaffId = await ResolveStaffIdAsync(user.Id, ct);
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
+                Id = user.Id,
                 Token = superAdminToken,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 Username = user.Username,
                 FullName = user.FullName,
                 Role = "SuperAdmin",
                 TenantName = null,
-                TenantId = null,
-                StaffId = superAdminStaffId
+                TenantId = null
             }));
         }
 
@@ -251,18 +239,17 @@ public class AuthController : ControllerBase
         // Deliberately does NOT clear the /auth/exchange failure count. Dev login is a
         // bypass by design; letting it reset the lockout would hand an attacker a way to
         // clear their own on any instance running with DEV_AUTH_ENABLED.
-        var staffId = await ResolveStaffIdAsync(user.Id, ct);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
+            Id = user.Id,
             Token = tenantToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(30),
             Username = user.Username,
             FullName = user.FullName,
             Role = user.Role.ToString(),
             TenantName = tenant.Name,
-            TenantId = tenant.Id,
-            StaffId = staffId
+            TenantId = tenant.Id
         }));
     }
 

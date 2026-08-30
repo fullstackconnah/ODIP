@@ -21,7 +21,8 @@ vi.mock('@/api/hooks', () => ({
 function makeStaff(overrides: Partial<StaffListDto> = {}): StaffListDto {
   return {
     id: 'staff-1', firstName: 'Rachel', lastName: 'Thompson', fullName: 'Rachel Thompson',
-    role: 'SupportWorker', email: null, mobile: null, region: null, isDriverEligible: false,
+    username: 'rachel.thompson', role: 'SupportWorker', position: 'SupportWorker',
+    email: null, mobile: null, region: null, isDriverEligible: false,
     isFirstAidQualified: false, isMedicationCompetent: true, isManualHandlingCompetent: false,
     isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
     manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null,
@@ -98,8 +99,8 @@ describe('RecordAdministrationModal witness picker', () => {
     }))
   })
 
-  it('excludes the signed-in user from the witness picker when they have a linked StaffId', async () => {
-    localStorage.setItem('odip_user', JSON.stringify({ staffId: 'staff-1' }))
+  it('excludes the signed-in user from the witness picker when their own id matches a picker entry', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1' }))
     const user = userEvent.setup()
     render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
@@ -109,8 +110,19 @@ describe('RecordAdministrationModal witness picker', () => {
     expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
   })
 
-  it('leaves the witness picker unchanged when the signed-in user has no linked StaffId', async () => {
-    localStorage.setItem('odip_user', JSON.stringify({ staffId: null }))
+  it('leaves the witness picker unchanged when the signed-in user has no resolvable id', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: null }))
+    const user = userEvent.setup()
+    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+
+    await user.click(screen.getByRole('button', { name: /witness/i }))
+
+    expect(screen.getByRole('option', { name: 'Rachel Thompson' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
+  })
+
+  it('tolerates a stale odip_user blob from before this field existed (no `id` key at all) — degrades to no self-exclusion rather than crashing', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     const user = userEvent.setup()
     render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 

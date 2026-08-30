@@ -1,11 +1,17 @@
-import type { StaffRole, AvailabilityType, AssignmentStatus, SleepoverType } from './enums'
+import type { Position, UserRole, AvailabilityType, AssignmentStatus, SleepoverType } from './enums'
 
+// Post staff/user unification, a "staff" record IS a User account — see the design spec §5.
+// `role` is the access-control role (Admin/Coordinator/SupportWorker/ReadOnly/SuperAdmin);
+// `position` is the separate, display-only staff title. `username` is server-derived (see
+// StaffController.Create) and is never an input field on Create/Update.
 export interface StaffListDto {
   id: string
   firstName: string
   lastName: string
   fullName: string
-  role: StaffRole
+  username: string
+  role: UserRole
+  position: Position
   email: string | null
   mobile: string | null
   region: string | null
@@ -30,8 +36,10 @@ export type StaffDetailDto = StaffListDto
 export interface CreateStaffDto {
   firstName: string
   lastName: string
-  role: StaffRole
-  email?: string
+  /** Required — a staff record now IS a real login-capable account. */
+  email: string
+  role: UserRole
+  position: Position
   mobile?: string
   region?: string
   isDriverEligible: boolean

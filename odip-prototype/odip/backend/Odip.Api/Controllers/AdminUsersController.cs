@@ -82,20 +82,22 @@ public class AdminUsersController : ControllerBase
             .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(u => new AdminUserDto(
-                u.Id,
-                u.FirstName,
-                u.LastName,
-                u.FirstName + " " + u.LastName,
-                u.Email,
-                u.Username,
-                u.Role.ToString(),
-                u.TenantId,
-                u.Tenant != null ? u.Tenant.Name : "",
-                u.StaffId,
-                u.IsActive,
-                u.CreatedAt,
-                u.LastLoginAt))
+            .Select(u => new AdminUserDto
+            {
+                Id = u.Id, FirstName = u.FirstName, LastName = u.LastName,
+                FullName = u.FirstName + " " + u.LastName, Email = u.Email, Username = u.Username,
+                Role = u.Role.ToString(), TenantId = u.TenantId,
+                TenantName = u.Tenant != null ? u.Tenant.Name : "",
+                IsActive = u.IsActive, CreatedAt = u.CreatedAt, LastLoginAt = u.LastLoginAt,
+                Position = u.Position, Mobile = u.Mobile, Region = u.Region,
+                IsDriverEligible = u.IsDriverEligible, IsFirstAidQualified = u.IsFirstAidQualified,
+                IsMedicationCompetent = u.IsMedicationCompetent, IsManualHandlingCompetent = u.IsManualHandlingCompetent,
+                IsOvernightEligible = u.IsOvernightEligible,
+                FirstAidExpiryDate = u.FirstAidExpiryDate, DriverLicenceExpiryDate = u.DriverLicenceExpiryDate,
+                ManualHandlingExpiryDate = u.ManualHandlingExpiryDate, MedicationCompetencyExpiryDate = u.MedicationCompetencyExpiryDate,
+                WorkerScreeningNumber = u.WorkerScreeningNumber, WorkerScreeningExpiryDate = u.WorkerScreeningExpiryDate,
+                Notes = u.Notes
+            })
             .ToListAsync(ct);
 
         var result = new PagedResult<AdminUserDto>
@@ -121,23 +123,25 @@ public class AdminUsersController : ControllerBase
         if (user is null)
             return NotFound(ApiResponse<object>.Fail("User not found"));
 
-        var dto = new AdminUserDto(
-            user.Id,
-            user.FirstName,
-            user.LastName,
-            user.FullName,
-            user.Email,
-            user.Username,
-            user.Role.ToString(),
-            user.TenantId,
-            user.Tenant?.Name ?? "",
-            user.StaffId,
-            user.IsActive,
-            user.CreatedAt,
-            user.LastLoginAt);
-
-        return Ok(ApiResponse<AdminUserDto>.Ok(dto));
+        return Ok(ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, user.Tenant?.Name ?? "")));
     }
+
+    /// <summary>Maps a User (plus its resolved tenant name) onto the API DTO — shared by GetById/Create/Update so the §3.1 profile-field list lives in exactly one place.</summary>
+    private static AdminUserDto ToAdminUserDto(User user, string tenantName) => new()
+    {
+        Id = user.Id, FirstName = user.FirstName, LastName = user.LastName, FullName = user.FullName,
+        Email = user.Email, Username = user.Username, Role = user.Role.ToString(),
+        TenantId = user.TenantId, TenantName = tenantName,
+        IsActive = user.IsActive, CreatedAt = user.CreatedAt, LastLoginAt = user.LastLoginAt,
+        Position = user.Position, Mobile = user.Mobile, Region = user.Region,
+        IsDriverEligible = user.IsDriverEligible, IsFirstAidQualified = user.IsFirstAidQualified,
+        IsMedicationCompetent = user.IsMedicationCompetent, IsManualHandlingCompetent = user.IsManualHandlingCompetent,
+        IsOvernightEligible = user.IsOvernightEligible,
+        FirstAidExpiryDate = user.FirstAidExpiryDate, DriverLicenceExpiryDate = user.DriverLicenceExpiryDate,
+        ManualHandlingExpiryDate = user.ManualHandlingExpiryDate, MedicationCompetencyExpiryDate = user.MedicationCompetencyExpiryDate,
+        WorkerScreeningNumber = user.WorkerScreeningNumber, WorkerScreeningExpiryDate = user.WorkerScreeningExpiryDate,
+        Notes = user.Notes
+    };
 
     // POST api/v1/admin/users
     [HttpPost]
@@ -205,10 +209,24 @@ public class AdminUsersController : ControllerBase
             Email = dto.Email,
             Username = dto.Username,
             Role = role,
-            StaffId = dto.StaffId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
+            Position = dto.Position,
+            Mobile = dto.Mobile,
+            Region = dto.Region,
+            IsDriverEligible = dto.IsDriverEligible,
+            IsFirstAidQualified = dto.IsFirstAidQualified,
+            IsMedicationCompetent = dto.IsMedicationCompetent,
+            IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
+            IsOvernightEligible = dto.IsOvernightEligible,
+            FirstAidExpiryDate = dto.FirstAidExpiryDate,
+            DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate,
+            ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate,
+            MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate,
+            WorkerScreeningNumber = dto.WorkerScreeningNumber,
+            WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate,
+            Notes = dto.Notes,
         };
 
         _db.Users.Add(user);
@@ -232,22 +250,8 @@ public class AdminUsersController : ControllerBase
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
-        var result = new AdminUserDto(
-            user.Id,
-            user.FirstName,
-            user.LastName,
-            user.FullName,
-            user.Email,
-            user.Username,
-            user.Role.ToString(),
-            user.TenantId,
-            tenant.Name,
-            user.StaffId,
-            user.IsActive,
-            user.CreatedAt,
-            user.LastLoginAt);
-
-        return CreatedAtAction(nameof(GetById), new { id = user.Id }, ApiResponse<AdminUserDto>.Ok(result));
+        return CreatedAtAction(nameof(GetById), new { id = user.Id },
+            ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, tenant.Name)));
     }
 
     // PUT api/v1/admin/users/{id}
@@ -324,8 +328,22 @@ public class AdminUsersController : ControllerBase
         user.Email = dto.Email;
         user.Username = dto.Username;
         user.Role = role;
-        user.StaffId = dto.StaffId;
         user.IsActive = dto.IsActive;
+        user.Position = dto.Position;
+        user.Mobile = dto.Mobile;
+        user.Region = dto.Region;
+        user.IsDriverEligible = dto.IsDriverEligible;
+        user.IsFirstAidQualified = dto.IsFirstAidQualified;
+        user.IsMedicationCompetent = dto.IsMedicationCompetent;
+        user.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
+        user.IsOvernightEligible = dto.IsOvernightEligible;
+        user.FirstAidExpiryDate = dto.FirstAidExpiryDate;
+        user.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
+        user.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
+        user.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
+        user.WorkerScreeningNumber = dto.WorkerScreeningNumber;
+        user.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
+        user.Notes = dto.Notes;
         user.UpdatedAt = DateTime.UtcNow;
 
         try
@@ -357,21 +375,6 @@ public class AdminUsersController : ControllerBase
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
-        var result = new AdminUserDto(
-            user.Id,
-            user.FirstName,
-            user.LastName,
-            user.FullName,
-            user.Email,
-            user.Username,
-            user.Role.ToString(),
-            user.TenantId,
-            user.Tenant?.Name ?? "",
-            user.StaffId,
-            user.IsActive,
-            user.CreatedAt,
-            user.LastLoginAt);
-
-        return Ok(ApiResponse<AdminUserDto>.Ok(result));
+        return Ok(ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, user.Tenant?.Name ?? "")));
     }
 }

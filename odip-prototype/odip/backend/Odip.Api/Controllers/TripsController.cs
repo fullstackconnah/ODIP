@@ -25,6 +25,16 @@ public class TripsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the lead-coordinator picker: null is always fine,
+    /// otherwise the id must resolve to an active User — same-tenant scoping comes for free from
+    /// _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidLeadCoordinatorRefAsync(Guid? userId, CancellationToken ct) =>
+        userId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     /// <summary>List trips with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<TripListDto>>>> GetAll(
@@ -105,6 +115,9 @@ public class TripsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDetailDto>>> Create([FromBody] CreateTripDto dto, CancellationToken ct)
     {
+        if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+
         var trip = new TripInstance
         {
             Id = Guid.NewGuid(), TripName = dto.TripName, TripCode = dto.TripCode,
@@ -165,6 +178,9 @@ public class TripsController : ControllerBase
     {
         var t = await _db.TripInstances.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TripDetailDto>.Fail("Trip not found"));
+
+        if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
 
         t.TripName = dto.TripName; t.TripCode = dto.TripCode; t.EventTemplateId = dto.EventTemplateId;
         t.Destination = dto.Destination; t.Region = dto.Region; t.StartDate = dto.StartDate;
@@ -331,14 +347,14 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/vehicles")]
     public async Task<ActionResult<ApiResponse<List<VehicleAssignmentDto>>>> GetVehicles(Guid id, CancellationToken ct)
     {
-        var items = await _db.VehicleAssignments.Include(v => v.Vehicle).Include(v => v.DriverStaff)
+        var items = await _db.VehicleAssignments.Include(v => v.Vehicle).Include(v => v.DriverUser)
             .Where(v => v.TripInstanceId == id)
             .Select(v => new VehicleAssignmentDto
             {
                 Id = v.Id, TripInstanceId = v.TripInstanceId, VehicleId = v.VehicleId,
                 VehicleName = v.Vehicle.VehicleName, Registration = v.Vehicle.Registration,
                 Status = v.Status, RequestedDate = v.RequestedDate, ConfirmedDate = v.ConfirmedDate,
-                DriverStaffId = v.DriverStaffId, DriverName = v.DriverStaff != null ? v.DriverStaff.FirstName + " " + v.DriverStaff.LastName : null,
+                DriverStaffId = v.DriverUserId, DriverName = v.DriverUser != null ? v.DriverUser.FirstName + " " + v.DriverUser.LastName : null,
                 SeatRequirement = v.SeatRequirement, WheelchairPositionRequirement = v.WheelchairPositionRequirement,
                 PickupTravelNotes = v.PickupTravelNotes, Comments = v.Comments, HasOverlapConflict = v.HasOverlapConflict
             }).ToListAsync(ct);
@@ -349,12 +365,12 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/staff")]
     public async Task<ActionResult<ApiResponse<List<StaffAssignmentDto>>>> GetStaff(Guid id, CancellationToken ct)
     {
-        var items = await _db.StaffAssignments.Include(s => s.Staff)
+        var items = await _db.StaffAssignments.Include(s => s.User)
             .Where(s => s.TripInstanceId == id)
             .Select(s => new StaffAssignmentDto
             {
-                Id = s.Id, TripInstanceId = s.TripInstanceId, StaffId = s.StaffId,
-                StaffName = s.Staff.FirstName + " " + s.Staff.LastName, AssignmentRole = s.AssignmentRole,
+                Id = s.Id, TripInstanceId = s.TripInstanceId, StaffId = s.UserId,
+                StaffName = s.User.FirstName + " " + s.User.LastName, AssignmentRole = s.AssignmentRole,
                 AssignmentStart = s.AssignmentStart, AssignmentEnd = s.AssignmentEnd,
                 Status = s.Status, IsDriver = s.IsDriver, SleepoverType = s.SleepoverType,
                 ShiftNotes = s.ShiftNotes, HasConflict = s.HasConflict
@@ -527,12 +543,12 @@ public class TripsController : ControllerBase
 
         var vehicleAssignments = await _db.VehicleAssignments
             .Include(v => v.Vehicle)
-            .Include(v => v.DriverStaff)
+            .Include(v => v.DriverUser)
             .Where(v => v.TripInstanceId == id && v.Status != VehicleAssignmentStatus.Cancelled)
             .ToListAsync(ct);
 
         var staffAssignments = await _db.StaffAssignments
-            .Include(s => s.Staff)
+            .Include(s => s.User)
             .Where(s => s.TripInstanceId == id && s.Status != AssignmentStatus.Cancelled)
             .OrderBy(s => s.AssignmentStart)
             .ToListAsync(ct);
@@ -616,16 +632,16 @@ public class TripsController : ControllerBase
                 VehicleType = v.Vehicle.VehicleType,
                 TotalSeats = v.Vehicle.TotalSeats,
                 WheelchairPositions = v.Vehicle.WheelchairPositions,
-                DriverName = v.DriverStaff != null ? $"{v.DriverStaff.FirstName} {v.DriverStaff.LastName}" : null,
+                DriverName = v.DriverUser != null ? $"{v.DriverUser.FirstName} {v.DriverUser.LastName}" : null,
                 Status = v.Status,
                 PickupTravelNotes = v.PickupTravelNotes
             }).ToList(),
             Staff = staffAssignments.Select(s => new ItineraryStaffDto
             {
-                Name = $"{s.Staff.FirstName} {s.Staff.LastName}",
-                Role = s.AssignmentRole ?? s.Staff.Role.ToString(),
-                Email = s.Staff.Email,
-                Mobile = s.Staff.Mobile,
+                Name = $"{s.User.FirstName} {s.User.LastName}",
+                Role = s.AssignmentRole ?? (s.User.Position ?? Position.SupportWorker).ToString(),
+                Email = s.User.Email,
+                Mobile = s.User.Mobile,
                 AssignmentStart = s.AssignmentStart,
                 AssignmentEnd = s.AssignmentEnd,
                 IsDriver = s.IsDriver,
@@ -659,7 +675,7 @@ public class TripsController : ControllerBase
                     .ToList(),
                 StaffOnDuty = staffAssignments
                     .Where(s => s.AssignmentStart <= d.Date && s.AssignmentEnd >= d.Date)
-                    .Select(s => $"{s.Staff.FirstName} {s.Staff.LastName}")
+                    .Select(s => $"{s.User.FirstName} {s.User.LastName}")
                     .ToList()
             }).ToList()
         };

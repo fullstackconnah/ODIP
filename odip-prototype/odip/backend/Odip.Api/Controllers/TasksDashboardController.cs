@@ -17,6 +17,16 @@ public class TasksController : ControllerBase
     private readonly OdipDbContext _db;
     public TasksController(OdipDbContext db) => _db = db;
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the task-owner picker: null is always fine, otherwise the
+    /// id must resolve to an active User — same-tenant scoping comes for free from _db.Users'
+    /// ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidOwnerRefAsync(Guid? ownerId, CancellationToken ct) =>
+        ownerId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == ownerId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<TaskDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] TaskItemStatus? status,
@@ -51,6 +61,9 @@ public class TasksController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TaskDto>>> Create([FromBody] CreateTaskDto dto, CancellationToken ct)
     {
+        if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
+
         var task = new BookingTask
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId,
@@ -81,6 +94,9 @@ public class TasksController : ControllerBase
     {
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+
+        if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
 
         t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = dto.OwnerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
@@ -476,14 +492,14 @@ public class ConflictsController : ControllerBase
         foreach (var a in staffAssignments)
         {
             var hasConflict = staffAssignments.Any(other => other.Id != a.Id
-                && other.StaffId == a.StaffId
+                && other.UserId == a.UserId
                 && other.AssignmentStart <= a.AssignmentEnd && other.AssignmentEnd >= a.AssignmentStart);
 
             if (!hasConflict)
             {
                 var startDt = a.AssignmentStart.ToDateTime(TimeOnly.MinValue);
                 var endDt = a.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
-                hasConflict = unavailability.Any(ua => ua.StaffId == a.StaffId
+                hasConflict = unavailability.Any(ua => ua.UserId == a.UserId
                     && ua.StartDateTime < endDt && ua.EndDateTime > startDt);
             }
             if (a.HasConflict != hasConflict) { a.HasConflict = hasConflict; updated++; }

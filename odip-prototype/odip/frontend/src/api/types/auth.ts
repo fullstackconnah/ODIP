@@ -1,4 +1,8 @@
 export interface AuthResponseDto {
+  /** The signed-in user's own id. Post staff/user unification this is the frontend's
+   *  self-exclusion source (e.g. excluding yourself from a witness/picker) — see
+   *  usePermissions(). Stored in `odip_user` alongside the rest of this response. */
+  id: string
   token: string
   expiresAt: string
   username: string
@@ -6,9 +10,6 @@ export interface AuthResponseDto {
   role: string
   tenantName: string | null
   tenantId: string | null
-  /** The signed-in user's own linked Staff id, or null when the account isn't linked to a Staff
-   *  record. Stored in `odip_user` alongside the rest of this response — see usePermissions(). */
-  staffId: string | null
 }
 
 export interface DevUserDto {

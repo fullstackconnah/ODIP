@@ -19,12 +19,12 @@ public class IncidentReport
     public ParticipantBooking? ParticipantBooking { get; set; }
     public Guid? InvolvedParticipantId { get; set; }
     public Participant? InvolvedParticipant { get; set; }
-    public Guid? InvolvedStaffId { get; set; }
-    public Staff? InvolvedStaff { get; set; }
+    public Guid? InvolvedUserId { get; set; }
+    public User? InvolvedUser { get; set; }
 
-    // Reporting staff
-    public Guid ReportedByStaffId { get; set; }
-    public Staff ReportedByStaff { get; set; } = null!;
+    // Reporting user
+    public Guid ReportedByUserId { get; set; }
+    public User ReportedByUser { get; set; } = null!;
 
     // Incident details
     public IncidentType IncidentType { get; set; }
@@ -52,8 +52,8 @@ public class IncidentReport
     public string? QscReferenceNumber { get; set; }
 
     // Review/resolution
-    public Guid? ReviewedByStaffId { get; set; }
-    public Staff? ReviewedByStaff { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public User? ReviewedByUser { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewNotes { get; set; }
     public string? CorrectiveActions { get; set; }

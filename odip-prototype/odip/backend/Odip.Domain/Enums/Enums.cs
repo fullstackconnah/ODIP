@@ -79,7 +79,12 @@ public enum VehicleAssignmentStatus
     Cancelled
 }
 
-public enum StaffRole
+/// <summary>
+/// Display-only staff position/title on <see cref="Odip.Domain.Entities.User"/>. Replaces the
+/// old standalone <c>StaffRole</c> enum (see the staff/user-unification design spec) — this is
+/// separate from, and does not affect, the access-control <see cref="UserRole"/> enum.
+/// </summary>
+public enum Position
 {
     SupportWorker,
     SeniorSupportWorker,
