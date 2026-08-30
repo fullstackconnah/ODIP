@@ -19,28 +19,28 @@ Ticked items are shipped and verified against the deployed stack at
   - [x] Have the equipment notes field disabled until an equipment checkbox is enabled. A tooltip should tell the user that if they want to add a note they need to select an equipment option first
 
 ## New Feature Adjustments
-- [ ] Participant Schedule for Routines and Specifics required for shifts
-- [ ] Update restrictive practice to include type. Research into restrictive practice and how it applies to things like medications. We should have a separate input to adjust, edit and update different restrictive practice types.
-- [ ] Update the add participant form to be a tabbed wizard with fields that should be filled out as intake forms.
+- [x] Participant Schedule for Routines and Specifics required for shifts
+- [x] Update restrictive practice to include type. Research into restrictive practice and how it applies to things like medications. We should have a separate input to adjust, edit and update different restrictive practice types.
+- [x] Update the add participant form to be a tabbed wizard with fields that should be filled out as intake forms.
 - [x] Advanced notes field - each participant should have a detailed notes where we can add a title for the note and a description for it. This is for detailed information and specific information required for participants if they require a specific thing when on shift, i.e such as a specific haircut
 - [ ] Participant view of all information required. All the medications, participant schedules and rostering for the participant should be viewed in a full board outlining the entire day for a participant
 - [ ] Update medications
   - [x] Include how medication is packaged, i.e webster/blister pack, doesette, this should be pulled from the Prescriber and Supply section to the top
   - [x] If oral, is it a tablet, powder, liquid etc
-  - [ ] Medication may have schedules that aren't daily. Might need each other day etc
+  - [x] Medication may have schedules that aren't daily. Might need each other day etc
   - [ ] **NOT YET — do not implement:** Add the ability to pull medications from a medication library - So we can search and import basic information about medication from client to client
-  - [ ] Include witness when recording when the administering of the medication, the staff member then listed as the witness should receive a notification to approve the witness in their portal.
-- [ ] Evaluate Participant Table
-  - [ ] List where they fit in the business, i.e STA, BSP, In home support, trip, HIDPA, Community access/Daily living, community nursing
-  - [ ] Evaluate layout and what information is been shown in that table
-  - [ ] Add in a medication button dependant on the service provided to them
+  - [x] Include witness when recording when the administering of the medication, the staff member then listed as the witness should receive a notification to approve the witness in their portal.
+- [x] Evaluate Participant Table
+  - [x] List where they fit in the business, i.e STA, BSP, In home support, trip, HIDPA, Community access/Daily living, community nursing
+  - [x] Evaluate layout and what information is been shown in that table
+  - [x] Add in a medication button dependant on the service provided to them (shown when the participant has active medications)
   - [x] Make it more obvious that we can click on the row to view full client information
-  - [ ] The staff member assigned to the participant should see the medications for that specific participant
-  - [ ] Reports for all medication administered able to be selected by participant and ordered by when the medication was given
-- [ ] Update Staff preferences in participants so that they link between the compatibility table
-- [ ] Add participant risk notifications and alerts
-- [ ] Staff member portal
-  - [ ] Should see all the information required for their shift, the requirements required for their participant and any details required for them
+  - [x] The staff member assigned to the participant should see the medications for that specific participant (portal shift detail)
+  - [x] Reports for all medication administered able to be selected by participant and ordered by when the medication was given
+- [x] Update Staff preferences in participants so that they link between the compatibility table
+- [x] Add participant risk notifications and alerts
+- [x] Staff member portal
+  - [x] Should see all the information required for their shift, the requirements required for their participant and any details required for them
 - [ ] Evaluate how each of these features should integrate and talk to each other
 
 ## Categorised Changes Backlog (2026-08-30)
@@ -258,8 +258,9 @@ owner decision (collected under Open Flags at the end).
     interface; going direct would make an M365 account mandatory for every user.
 
 ### Harden the token exchange (do BEFORE Firebase goes live)
-- [ ] Require `email_verified` in `AuthController.Exchange`, and once SSO lands require
-      `sign_in_provider == "microsoft.com"` and disable the email/password provider.
+- [x] Require `email_verified` in `AuthController.Exchange` (shipped 2026-08-30, PR #25),
+      and once SSO lands require `sign_in_provider == "microsoft.com"` and disable the
+      email/password provider (that half still pending SSO).
   - `Odip.Api/Controllers/AuthController.cs:82` reads only the `email` claim today.
   - The Firebase API key ships in the client bundle, so with email/password enabled
     anyone can call `createUserWithEmailAndPassword` using a provisioned-but-not-yet-
