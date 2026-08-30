@@ -139,12 +139,25 @@ public class VehicleAssignmentsController : ControllerBase
     private readonly OdipDbContext _db;
     public VehicleAssignmentsController(OdipDbContext db) => _db = db;
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the driver picker: null is always fine (no driver
+    /// assigned yet), otherwise the id must resolve to an active User — same-tenant scoping comes
+    /// for free from _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidDriverRefAsync(Guid? driverUserId, CancellationToken ct) =>
+        driverUserId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == driverUserId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleAssignmentDto>>> Create([FromBody] CreateVehicleAssignmentDto dto, CancellationToken ct)
     {
         var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == dto.TripInstanceId, ct);
         if (trip == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Trip not found"));
+
+        if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
         var assignment = new VehicleAssignment
         {
@@ -187,6 +200,9 @@ public class VehicleAssignmentsController : ControllerBase
         var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
+        if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
+
         a.VehicleId = dto.VehicleId; a.DriverUserId = dto.DriverStaffId;
         a.SeatRequirement = dto.SeatRequirement; a.WheelchairPositionRequirement = dto.WheelchairPositionRequirement;
         a.PickupTravelNotes = dto.PickupTravelNotes; a.Comments = dto.Comments;
@@ -221,9 +237,14 @@ public class VehicleAssignmentsController : ControllerBase
 
 /// <summary>
 /// Staff CRUD, now backed by <see cref="User"/> post staff/user-unification — every staff member
-/// IS a user account. Route name (<c>api/v1/staff</c>) is kept deliberately (design spec §2). The
-/// role filter below (excluding SuperAdmin/ReadOnly) is a compile-time approximation of the old
-/// Staff-only listing; Task 2 removes it per the design spec §4.2 role guardrails/rewrite.
+/// IS a user account. Route name (<c>api/v1/staff</c>) is kept deliberately (design spec §2).
+/// Listings (<see cref="GetAll"/>/<see cref="GetById"/>/<see cref="GetAvailable"/>) show ALL
+/// active tenant users regardless of role, per design spec §4.2 — no role filter. Write endpoints
+/// enforce the §4.1 guardrails: own-tenant only (free via <c>OdipDbContext</c>'s ambient
+/// tenant query filter on every <c>_db.Users</c> read below — a non-SuperAdmin caller's queries
+/// are already scoped to their own tenant, so a cross-tenant target id simply resolves to no row,
+/// same as "not found"), cannot grant or edit a SuperAdmin account, and a Coordinator actor cannot
+/// assign the Admin role (see <see cref="ValidateRoleGuardrails"/>).
 /// </summary>
 [ApiController]
 [Authorize]
@@ -233,17 +254,34 @@ public class StaffController : ControllerBase
     private readonly OdipDbContext _db;
     public StaffController(OdipDbContext db) => _db = db;
 
-    private static IQueryable<User> StaffLike(IQueryable<User> users) =>
-        users.Where(u => u.Role != UserRole.SuperAdmin && u.Role != UserRole.ReadOnly);
+    /// <summary>
+    /// §4.1 role-change guardrails. SuperAdmin actors are unrestricted. Anyone else: cannot touch
+    /// (grant or edit) a SuperAdmin account, and cannot assign the Admin role unless they are
+    /// themselves an Admin. <paramref name="existingRole"/> is null on create (there is no prior
+    /// row to protect yet). Returns the rejection message, or null when the change is allowed.
+    /// </summary>
+    private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null)
+    {
+        // User?.IsInRole(...) (not User.IsInRole(...)): ControllerBase.User is null when no
+        // ControllerContext/HttpContext has been set (e.g. a unit test constructing this
+        // controller directly with no simulated request) — defensive null-conditional, same idiom
+        // MedicationsController/PortalController already use for the same reason. Treating an
+        // absent context as "no elevated role" is the conservative default and never wrongly
+        // allows a restricted write, since every real request IS authenticated ([Authorize]).
+        bool IsInRole(string role) => User?.IsInRole(role) ?? false;
 
-    private static string DeriveUsername(string firstName, string lastName) =>
-        $"{firstName}.{lastName}".Trim().ToLowerInvariant().Replace(" ", "");
+        if (IsInRole("SuperAdmin")) return null;
+        if (existingRole == UserRole.SuperAdmin) return "Cannot edit a SuperAdmin account.";
+        if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
+        if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
+        return null;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<StaffListDto>>>> GetAll(
         [FromQuery] bool? isActive, CancellationToken ct)
     {
-        var query = StaffLike(_db.Users).OrderBy(s => s.LastName).AsQueryable();
+        var query = _db.Users.OrderBy(s => s.LastName).AsQueryable();
         if (isActive.HasValue) query = query.Where(s => s.IsActive == isActive.Value);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -251,7 +289,8 @@ public class StaffController : ControllerBase
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
+                FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+                Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
                 Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
                 IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -275,13 +314,14 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
+            FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -300,12 +340,31 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
-        var username = DeriveUsername(dto.FirstName, dto.LastName);
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(ApiResponse<StaffDetailDto>.Fail("Email is required."));
+
+        var guardError = ValidateRoleGuardrails(dto.Role);
+        if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
+
+        // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
+        // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
+        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
+        if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
+
+        // Collision-safe username handling: reuses the migration's own algorithm (Task 1's
+        // StaffUserUnificationMapping.ResolveUsername) rather than duplicating a second,
+        // divergent suffixing implementation here.
+        var existingUsernamesList = await _db.Users.IgnoreQueryFilters()
+            .Select(u => u.Username.ToLower()).ToListAsync(ct);
+        var existingUsernames = existingUsernamesList.ToHashSet();
+        var username = StaffUserUnificationMapping.ResolveUsername(dto.FirstName, dto.LastName, existingUsernames);
+
         var s = new User
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
-            Username = username, Email = dto.Email ?? $"{username}@placeholder.local",
-            Role = UserRole.SupportWorker, Position = dto.Role,
+            Username = username, Email = dto.Email,
+            Role = dto.Role, Position = dto.Position,
             Mobile = dto.Mobile, Region = dto.Region,
             IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
             IsMedicationCompetent = dto.IsMedicationCompetent, IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
@@ -322,7 +381,8 @@ public class StaffController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FullName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
+            FullName = s.FullName, Username = s.Username,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -341,11 +401,22 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Update(Guid id, [FromBody] UpdateStaffDto dto, CancellationToken ct)
     {
-        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(ApiResponse<StaffDetailDto>.Fail("Email is required."));
+
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
-        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Role;
-        s.Email = dto.Email ?? s.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
+        var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
+
+        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        var emailTaken = await _db.Users.IgnoreQueryFilters()
+            .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
+        if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
+
+        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.Role = dto.Role;
+        s.Email = dto.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
@@ -362,7 +433,8 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FullName, Role = s.Position ?? Position.SupportWorker, Email = s.Email,
+            FullName = s.FullName, Username = s.Username,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -382,8 +454,12 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var s = await StaffLike(_db.Users).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
+
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
+
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
@@ -433,11 +509,12 @@ public class StaffController : ControllerBase
                 && a.StartDateTime < endDt && a.EndDateTime > startDt)
             .Select(a => a.UserId).Distinct().ToListAsync(ct);
 
-        var items = await StaffLike(_db.Users).Where(s => s.IsActive && !unavailableStaffIds.Contains(s.Id))
+        var items = await _db.Users.Where(s => s.IsActive && !unavailableStaffIds.Contains(s.Id))
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Role = s.Position ?? Position.SupportWorker,
+                FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+                Role = s.Role, Position = s.Position ?? Position.SupportWorker,
                 IsDriverEligible = s.IsDriverEligible, IsFirstAidQualified = s.IsFirstAidQualified,
                 IsMedicationCompetent = s.IsMedicationCompetent, IsManualHandlingCompetent = s.IsManualHandlingCompetent,
                 IsOvernightEligible = s.IsOvernightEligible, IsActive = s.IsActive

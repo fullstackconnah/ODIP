@@ -286,6 +286,47 @@ public class RosteringControllerTests
     }
 
     [Fact]
+    public async Task GetBoard_StaffMode_IncludesEveryActiveRole_NoRoleFilter()
+    {
+        // Design spec §4.2: the board shows every active tenant user, of any role — the old
+        // "approximates Staff-only listing" role filter (excluding SuperAdmin/ReadOnly) is gone.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var supportWorker = SeedStaff(db, firstName: "Support", lastName: "Worker");
+
+        User MakeActiveUser(UserRole role, string firstName) => new()
+        {
+            Id = Guid.NewGuid(), FirstName = firstName, LastName = "Person",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = role, IsActive = true,
+        };
+
+        var coordinator = MakeActiveUser(UserRole.Coordinator, "Coord");
+        var admin = MakeActiveUser(UserRole.Admin, "Adm");
+        var readOnly = MakeActiveUser(UserRole.ReadOnly, "Read");
+        var superAdmin = MakeActiveUser(UserRole.SuperAdmin, "Super");
+        var inactive = MakeActiveUser(UserRole.SupportWorker, "Inactive");
+        inactive.IsActive = false;
+        db.Users.AddRange(coordinator, admin, readOnly, superAdmin, inactive);
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var staffIds = body.Data!.StaffRows!.Select(r => r.StaffId).ToList();
+
+        Assert.Contains(supportWorker.Id, staffIds);
+        Assert.Contains(coordinator.Id, staffIds);
+        Assert.Contains(admin.Id, staffIds);
+        Assert.Contains(readOnly.Id, staffIds);
+        Assert.Contains(superAdmin.Id, staffIds);
+        // Only IsActive is filtered — role is not.
+        Assert.DoesNotContain(inactive.Id, staffIds);
+    }
+
+    [Fact]
     public async Task GetBoard_DefaultsToParticipantMode()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

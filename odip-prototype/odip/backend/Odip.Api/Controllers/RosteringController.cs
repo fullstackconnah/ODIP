@@ -80,11 +80,10 @@ public class RosteringController : ControllerBase
             .Where(s => s.ServiceDate >= start && s.ServiceDate <= end)
             .ToListAsync(ct);
 
-        // Approximates today's Staff-only board population now that Staff has merged into
-        // User (SuperAdmin/ReadOnly accounts never had a Staff row) — Task 2 removes this role
-        // filter entirely per the design spec §4.2 (board shows every active tenant user).
+        // Design spec §4.2: the board shows every active tenant user, of any role — no role
+        // filter (the old Staff-only listing is gone now that Staff has merged into User).
         var activeStaff = await _db.Users
-            .Where(s => s.IsActive && s.Role != UserRole.SuperAdmin && s.Role != UserRole.ReadOnly)
+            .Where(s => s.IsActive)
             .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
             .ToListAsync(ct);
         var staffIds = activeStaff.Select(s => s.Id).ToList();
@@ -389,7 +388,7 @@ public class RosteringController : ControllerBase
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
 
-        if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value, ct))
+        if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
 
         var candidate = new Shift
@@ -445,7 +444,7 @@ public class RosteringController : ControllerBase
     {
         if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
-        if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value, ct))
+        if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
 
         var pattern = new ShiftPattern
@@ -472,7 +471,7 @@ public class RosteringController : ControllerBase
 
         if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
-        if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value, ct))
+        if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
 
         pattern.ParticipantId = dto.ParticipantId; pattern.DefaultUserId = dto.DefaultStaffId;
@@ -559,7 +558,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<CompatibilityRowDto>>> UpsertCompatibility(
         [FromBody] UpsertCompatibilityDto dto, CancellationToken ct)
     {
-        if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId, ct))
+        if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
         if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Participant not found."));
@@ -675,12 +674,16 @@ public class RosteringController : ControllerBase
         };
     }
 
-    /// <summary>Participant must exist; staff, when supplied, must exist. Returns a user-facing error string, or null when both refs are valid.</summary>
+    /// <summary>
+    /// Participant must exist; staff, when supplied, must exist and be active (§4.4). Same-tenant
+    /// scoping comes for free from _db.Users' ambient OdipDbContext query filter. Returns a
+    /// user-facing error string, or null when both refs are valid.
+    /// </summary>
     private async Task<string?> ValidateRefsAsync(Guid participantId, Guid? staffId, CancellationToken ct)
     {
         if (!await _db.Participants.AnyAsync(p => p.Id == participantId, ct))
             return "Participant not found.";
-        if (staffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == staffId.Value, ct))
+        if (staffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == staffId.Value && s.IsActive, ct))
             return "Staff member not found.";
         return null;
     }

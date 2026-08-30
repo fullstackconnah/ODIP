@@ -25,6 +25,16 @@ public class TripsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the lead-coordinator picker: null is always fine,
+    /// otherwise the id must resolve to an active User — same-tenant scoping comes for free from
+    /// _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidLeadCoordinatorRefAsync(Guid? userId, CancellationToken ct) =>
+        userId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     /// <summary>List trips with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<TripListDto>>>> GetAll(
@@ -105,6 +115,9 @@ public class TripsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDetailDto>>> Create([FromBody] CreateTripDto dto, CancellationToken ct)
     {
+        if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+
         var trip = new TripInstance
         {
             Id = Guid.NewGuid(), TripName = dto.TripName, TripCode = dto.TripCode,
@@ -165,6 +178,9 @@ public class TripsController : ControllerBase
     {
         var t = await _db.TripInstances.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TripDetailDto>.Fail("Trip not found"));
+
+        if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
 
         t.TripName = dto.TripName; t.TripCode = dto.TripCode; t.EventTemplateId = dto.EventTemplateId;
         t.Destination = dto.Destination; t.Region = dto.Region; t.StartDate = dto.StartDate;

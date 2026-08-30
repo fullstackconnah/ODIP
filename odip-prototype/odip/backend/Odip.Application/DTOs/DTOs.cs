@@ -570,7 +570,11 @@ public record StaffListDto
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
-    public Position Role { get; init; }
+    public string Username { get; init; } = string.Empty;
+    /// <summary>The access-control role (Admin/Coordinator/SupportWorker/ReadOnly/SuperAdmin) — separate from <see cref="Position"/>.</summary>
+    public UserRole Role { get; init; }
+    /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>
+    public Position Position { get; init; }
     public string? Email { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -592,15 +596,27 @@ public record StaffListDto
 
 public record StaffDetailDto : StaffListDto { }
 
+/// <summary>
+/// Create request for a Staff/User row. Username and Email are required per the staff/user
+/// unification design spec §4.1 — a staff record now IS a real login-capable account, not a
+/// lightweight profile row. Username itself is not an input field here: it is derived from
+/// FirstName/LastName with collision-safe suffixing (see
+/// <see cref="Odip.Infrastructure.Data.StaffUserUnificationMapping.ResolveUsername"/>, reused
+/// by <see cref="Odip.Api.Controllers.StaffController.Create"/> rather than duplicated), the same
+/// algorithm the staff/user-unification migration uses. <see cref="Role"/> is the access-control
+/// role (subject to the §4.1 guardrails — own-tenant only, cannot grant/edit SuperAdmin, a
+/// Coordinator actor cannot assign Admin); <see cref="Position"/> is the separate display-only title.
+/// </summary>
 public record CreateStaffDto
 {
     [Required, StringLength(100, MinimumLength = 1)]
     public string FirstName { get; init; } = string.Empty;
     [Required, StringLength(100, MinimumLength = 1)]
     public string LastName { get; init; } = string.Empty;
-    public Position Role { get; init; }
-    [StringLength(200), EmailAddress]
-    public string? Email { get; init; }
+    [Required, StringLength(200), EmailAddress]
+    public string Email { get; init; } = string.Empty;
+    public UserRole Role { get; init; } = UserRole.SupportWorker;
+    public Position Position { get; init; }
     [StringLength(50)]
     public string? Mobile { get; init; }
     [StringLength(100)]
@@ -1077,15 +1093,6 @@ public record AuthResponseDto
     public string Role { get; init; } = string.Empty;
     public string? TenantName { get; init; }
     public Guid? TenantId { get; init; }
-
-    /// <summary>
-    /// The caller's own linked Staff id (User.StaffId), resolved via StaffIdResolver — null when
-    /// the account isn't linked to a Staff record (most SuperAdmins, and any tenant user who
-    /// hasn't been linked). Lets the frontend exclude the signed-in user from pickers where
-    /// selecting yourself is invalid (e.g. medication witness selection) before the request ever
-    /// reaches the server, rather than only learning via a rejected submission.
-    /// </summary>
-    public Guid? StaffId { get; init; }
 }
 
 // NOTE: ExchangeTokenDto (the Firebase-token-exchange request DTO this record sits next to per
@@ -1297,40 +1304,93 @@ public record TenantUserDto(
     bool IsActive);
 
 // ── Admin User DTOs ────────────────────────────────────────────────────────
+// Per staff/user unification design spec §4.5: the "linked Staff record" concept (StaffId) no
+// longer exists and is dropped entirely (not just always-null as it was mid-Task-1). These DTOs
+// gain the §3.1 profile/qualification fields as OPTIONAL fields instead — Settings → Users
+// remains SuperAdmin-only and unchanged in access scope; profile editing still primarily lives on
+// the /staff page (design spec §2 Decisions), these are here so a SuperAdmin can set them too.
 
-public record AdminUserDto(
-    Guid Id,
-    string FirstName,
-    string LastName,
-    string FullName,
-    string Email,
-    string Username,
-    string Role,
-    Guid TenantId,
-    string TenantName,
-    Guid? StaffId,
-    bool IsActive,
-    DateTime CreatedAt,
-    DateTime? LastLoginAt);
+public record AdminUserDto
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public Guid TenantId { get; init; }
+    public string TenantName { get; init; } = string.Empty;
+    public bool IsActive { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? LastLoginAt { get; init; }
+    public Position? Position { get; init; }
+    public string? Mobile { get; init; }
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? DriverLicenceExpiryDate { get; init; }
+    public DateOnly? ManualHandlingExpiryDate { get; init; }
+    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public string? WorkerScreeningNumber { get; init; }
+    public DateOnly? WorkerScreeningExpiryDate { get; init; }
+    public string? Notes { get; init; }
+}
 
-public record CreateAdminUserDto(
-    string FirstName,
-    string LastName,
-    string Email,
-    string Username,
-    string Role,
-    Guid TenantId,
-    Guid? StaffId,
-    string? Password);
+public record CreateAdminUserDto
+{
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public Guid TenantId { get; init; }
+    public string? Password { get; init; }
+    public Position? Position { get; init; }
+    public string? Mobile { get; init; }
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? DriverLicenceExpiryDate { get; init; }
+    public DateOnly? ManualHandlingExpiryDate { get; init; }
+    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public string? WorkerScreeningNumber { get; init; }
+    public DateOnly? WorkerScreeningExpiryDate { get; init; }
+    public string? Notes { get; init; }
+}
 
-public record UpdateAdminUserDto(
-    string FirstName,
-    string LastName,
-    string Email,
-    string Username,
-    string Role,
-    Guid? StaffId,
-    bool IsActive);
+public record UpdateAdminUserDto
+{
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Username { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public bool IsActive { get; init; }
+    public Position? Position { get; init; }
+    public string? Mobile { get; init; }
+    public string? Region { get; init; }
+    public bool IsDriverEligible { get; init; }
+    public bool IsFirstAidQualified { get; init; }
+    public bool IsMedicationCompetent { get; init; }
+    public bool IsManualHandlingCompetent { get; init; }
+    public bool IsOvernightEligible { get; init; }
+    public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? DriverLicenceExpiryDate { get; init; }
+    public DateOnly? ManualHandlingExpiryDate { get; init; }
+    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    public string? WorkerScreeningNumber { get; init; }
+    public DateOnly? WorkerScreeningExpiryDate { get; init; }
+    public string? Notes { get; init; }
+}
 
 // ── Tenant Summary DTO (includes user count) ──────────────────────────────
 

@@ -42,7 +42,8 @@ public class StaffControllerTests
         {
             FirstName = "Jane",
             LastName = "Doe",
-            Role = Position.SupportWorker,
+            Email = "jane.doe@example.com",
+            Position = Position.SupportWorker,
             IsActive = true,
             WorkerScreeningNumber = "WWCC1234567",
             WorkerScreeningExpiryDate = new DateOnly(2027, 6, 30),
@@ -72,7 +73,8 @@ public class StaffControllerTests
         {
             FirstName = "John",
             LastName = "Smith",
-            Role = Position.SupportWorker,
+            Email = "john.smith@example.com",
+            Position = Position.SupportWorker,
             IsActive = true,
         };
         var createResult = await controller.Create(createDto, CancellationToken.None);
@@ -84,7 +86,8 @@ public class StaffControllerTests
         {
             FirstName = "John",
             LastName = "Smith",
-            Role = Position.SupportWorker,
+            Email = "john.smith@example.com",
+            Position = Position.SupportWorker,
             IsActive = true,
             WorkerScreeningNumber = "WWCC9876543",
             WorkerScreeningExpiryDate = new DateOnly(2028, 1, 15),

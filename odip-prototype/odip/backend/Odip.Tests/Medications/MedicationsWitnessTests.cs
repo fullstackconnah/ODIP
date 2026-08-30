@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -132,6 +134,27 @@ public class MedicationsWitnessTests
     }
 
     [Fact]
+    public async Task RecordAdministration_WitnessStaffIdInactive_ReturnsBadRequest()
+    {
+        // §4.4: the witness ref must resolve to an ACTIVE user, not merely an existing one.
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var inactiveWitness = SeedUser(db, "Inactive", "Witness");
+        inactiveWitness.IsActive = false;
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = inactiveWitness.Id };
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
     public async Task RecordAdministration_WitnessStaffIdNotFound_ReturnsBadRequest()
     {
         var (db, tenant) = CreateDb();
@@ -160,6 +183,36 @@ public class MedicationsWitnessTests
 
         // The caller (resolved via tenant.ViewAsUserId -> administeringUser) tries to select
         // themselves as the witness.
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = administeringUser.Id };
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(badRequest.Value);
+        Assert.Contains("cannot witness their own", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordAdministration_SelfWitness_ResolvedByNameIdentifierClaim_ReturnsBadRequest()
+    {
+        // Complements RecordAdministration_SelfWitness_ReturnsBadRequest (which resolves the
+        // caller via tenant.ViewAsUserId) by exercising the OTHER resolution path §4.3 describes:
+        // the caller's own identity from the JWT's NameIdentifier claim, with no ViewAsUserId
+        // override in play. Self-witnessing must be rejected by resolved user id either way.
+        var (db, tenant) = CreateDb(); // ViewAsUserId stays null
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var administeringUser = SeedUser(db, "Alex", "Field");
+
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, administeringUser.Id.ToString())], "Test");
+        var controller = new MedicationsController(db, tenant.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = administeringUser.Id };
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
 

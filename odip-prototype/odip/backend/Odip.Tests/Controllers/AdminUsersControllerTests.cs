@@ -134,7 +134,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new CreateAdminUserDto("New", "User", "new.user@test.example.com", "newuser", "Coordinator", tenant.Id, null, "P@ssword1");
+        var dto = new CreateAdminUserDto
+        {
+            FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
+            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+        };
 
         var result = await controller.Create(dto, CancellationToken.None);
 
@@ -165,7 +169,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new CreateAdminUserDto("New", "User", "new.user@test.example.com", "newuser", "Coordinator", tenant.Id, null, "P@ssword1");
+        var dto = new CreateAdminUserDto
+        {
+            FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
+            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+        };
 
         var result = await controller.Create(dto, CancellationToken.None);
 
@@ -208,7 +216,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new CreateAdminUserDto("New", "User", "race.user@test.example.com", "newuser-noconflict", "Coordinator", tenant.Id, null, "P@ssword1");
+        var dto = new CreateAdminUserDto
+        {
+            FirstName = "New", LastName = "User", Email = "race.user@test.example.com",
+            Username = "newuser-noconflict", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+        };
 
         await Assert.ThrowsAsync<DbUpdateException>(() => controller.Create(dto, CancellationToken.None));
 
@@ -236,7 +248,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new UpdateAdminUserDto("Updated", "Name", "existing@test.example.com", "existinguser", "Coordinator", null, true);
+        var dto = new UpdateAdminUserDto
+        {
+            FirstName = "Updated", LastName = "Name", Email = "existing@test.example.com",
+            Username = "existinguser", Role = "Coordinator", IsActive = true,
+        };
 
         var result = await controller.Update(user.Id, dto, CancellationToken.None);
 
@@ -266,7 +282,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new UpdateAdminUserDto("Updated", "Name", "existing@test.example.com", "existinguser", "Coordinator", null, true);
+        var dto = new UpdateAdminUserDto
+        {
+            FirstName = "Updated", LastName = "Name", Email = "existing@test.example.com",
+            Username = "existinguser", Role = "Coordinator", IsActive = true,
+        };
 
         var result = await controller.Update(user.Id, dto, CancellationToken.None);
 
@@ -306,7 +326,11 @@ public class AdminUsersControllerTests
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
 
-        var dto = new UpdateAdminUserDto("New", "Name", "target@test.example.com", "targetuser-renamed", "Coordinator", null, true);
+        var dto = new UpdateAdminUserDto
+        {
+            FirstName = "New", LastName = "Name", Email = "target@test.example.com",
+            Username = "targetuser-renamed", Role = "Coordinator", IsActive = true,
+        };
 
         await Assert.ThrowsAsync<DbUpdateException>(() => controller.Update(user.Id, dto, CancellationToken.None));
 

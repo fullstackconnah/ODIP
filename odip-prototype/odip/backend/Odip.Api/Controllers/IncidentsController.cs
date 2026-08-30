@@ -23,6 +23,16 @@ public class IncidentsController : ControllerBase
         IncidentType.RestrictivePracticeUse, IncidentType.MissingPerson
     };
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the three user pickers below: null is always fine,
+    /// otherwise the id must resolve to an active User — same-tenant scoping comes for free from
+    /// _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidUserRefAsync(Guid? userId, CancellationToken ct) =>
+        userId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
@@ -137,6 +147,11 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Create([FromBody] CreateIncidentDto dto, CancellationToken ct)
     {
+        if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
+        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
+
         var incident = new IncidentReport
         {
             Id = Guid.NewGuid(),
@@ -200,6 +215,13 @@ public class IncidentsController : ControllerBase
     {
         var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
+
+        if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
+        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
+        if (!await IsValidUserRefAsync(dto.ReviewedByStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reviewed-by staff member not found."));
 
         i.TripInstanceId = dto.TripInstanceId;
         i.ParticipantBookingId = dto.ParticipantBookingId;

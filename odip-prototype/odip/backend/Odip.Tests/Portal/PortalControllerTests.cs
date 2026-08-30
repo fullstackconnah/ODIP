@@ -98,11 +98,12 @@ public class PortalControllerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task GetMyShifts_CallerUserRowNotFound_ReturnsNotLinkedPayload_Never500()
+    public async Task GetMyShifts_CallerUserRowNotFound_ReturnsEmptyShiftList_Never500()
     {
         var (db, tenant) = CreateDb();
         // Caller identity resolves to a user id that was never seeded — mirrors the old
-        // "unlinked" state, since every seeded User now IS its own staff identity.
+        // "unlinked" state, since every seeded User now IS its own staff identity. There is no
+        // longer a separate "not linked" payload — this simply degrades to empty lists.
         var controller = MakeController(db, tenant.Object, Guid.NewGuid());
 
         var result = await controller.GetMyShifts(null, null, CancellationToken.None);
@@ -110,9 +111,7 @@ public class PortalControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
         Assert.True(body.Success);
-        Assert.False(body.Data!.IsLinked);
-        Assert.Null(body.Data.StaffId);
-        Assert.Empty(body.Data.Shifts);
+        Assert.Empty(body.Data!.Shifts);
         Assert.Empty(body.Data.TripAssignments);
     }
 
@@ -128,10 +127,10 @@ public class PortalControllerTests
     }
 
     [Fact]
-    public async Task GetMyShifts_UnresolvableCallerIdentity_ReturnsNotLinkedPayload_Never500()
+    public async Task GetMyShifts_UnresolvableCallerIdentity_ReturnsEmptyShiftList_Never500()
     {
         // No NameIdentifier claim at all (e.g. a malformed/unexpected token shape) — must still
-        // degrade to the "not linked" payload rather than throwing.
+        // degrade to empty lists rather than throwing.
         var (db, tenant) = CreateDb();
         var controller = new PortalController(db, tenant.Object)
         {
@@ -145,7 +144,7 @@ public class PortalControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
-        Assert.False(body.Data!.IsLinked);
+        Assert.Empty(body.Data!.Shifts);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -168,9 +167,27 @@ public class PortalControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
-        Assert.True(body.Data!.IsLinked);
-        var shift = Assert.Single(body.Data.Shifts);
+        var shift = Assert.Single(body.Data!.Shifts);
         Assert.Equal(myShift.Id, shift.Id);
+    }
+
+    [Fact]
+    public async Task GetMyShifts_ValidUserWithNoShifts_ReturnsEmptyListNotSpecialPayload()
+    {
+        // Post staff/user unification there is no "not linked" concept any more — a real,
+        // resolvable user who simply has no shifts scheduled gets an ordinary empty list, the
+        // same shape as every other result, not a distinguished empty-state payload.
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db, "No", "Shifts");
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetMyShifts(ServiceDate, ServiceDate, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
+        Assert.True(body.Success);
+        Assert.Empty(body.Data!.Shifts);
+        Assert.Empty(body.Data.TripAssignments);
     }
 
     [Fact]
@@ -295,9 +312,7 @@ public class PortalControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value);
-        Assert.True(body.Data!.IsLinked);
-        Assert.Equal(viewedUser.Id, body.Data.StaffId);
-        var shift = Assert.Single(body.Data.Shifts);
+        var shift = Assert.Single(body.Data!.Shifts);
         Assert.Equal(viewedShift.Id, shift.Id);
     }
 }

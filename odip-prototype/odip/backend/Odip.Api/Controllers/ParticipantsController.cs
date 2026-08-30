@@ -26,6 +26,16 @@ public class ParticipantsController : ControllerBase
         _compatLink = compatLink;
     }
 
+    /// <summary>
+    /// §4.4 same-tenant validation for the preferred-staff (now preferred-user) picker: null is
+    /// always fine, otherwise the id must resolve to an active User — same-tenant scoping comes
+    /// for free from _db.Users' ambient OdipDbContext query filter.
+    /// </summary>
+    private Task<bool> IsValidPreferredUserRefAsync(Guid? userId, CancellationToken ct) =>
+        userId.HasValue
+            ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
@@ -115,6 +125,9 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
                 $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
 
+        if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
+
         var participant = new Participant
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, PreferredName = dto.PreferredName,
@@ -154,6 +167,9 @@ public class ParticipantsController : ControllerBase
 
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
         var previousPreferredStaffId = p.PreferredUserId;
 

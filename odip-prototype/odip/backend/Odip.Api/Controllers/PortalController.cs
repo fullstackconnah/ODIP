@@ -53,9 +53,10 @@ public class PortalController : ControllerBase
 
     /// <summary>
     /// The caller's own upcoming shifts (and, if cheap, trip staffing assignments) in
-    /// [from, to]. Defaults to a 14-day window starting today when omitted. Always 200s —
-    /// an unlinked account gets <see cref="PortalShiftsResponseDto.IsLinked"/> false and empty
-    /// lists rather than an error, so the frontend can render guidance instead of a broken page.
+    /// [from, to]. Defaults to a 14-day window starting today when omitted. Always 200s — when
+    /// the caller's identity can't be resolved to a User row at all (should not normally happen
+    /// for an authenticated request), this simply returns empty lists rather than an error; there
+    /// is no separate "not linked" state any more; every User IS its own staff identity.
     /// </summary>
     [HttpGet("my-shifts")]
     public async Task<ActionResult<ApiResponse<PortalShiftsResponseDto>>> GetMyShifts(
@@ -65,7 +66,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
         {
             return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-                new PortalShiftsResponseDto(false, null, new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
+                new PortalShiftsResponseDto(new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
         }
 
         var start = from ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -91,7 +92,7 @@ public class PortalController : ControllerBase
             a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status)).ToList();
 
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-            new PortalShiftsResponseDto(true, staffId, shiftDtos, tripDtos)));
+            new PortalShiftsResponseDto(shiftDtos, tripDtos)));
     }
 
     /// <summary>
@@ -205,16 +206,21 @@ public class PortalController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Resolves the caller's linked Staff id. <see cref="ICurrentTenant.ViewAsUserId"/> takes
-    /// priority over the JWT's own subject claim (see class remarks). Null covers every "not
-    /// linked" case uniformly: no resolvable user id on the token, the user row not found (or
-    /// tenant-filtered out).
+    /// Resolves the caller's own user id — post staff/user unification this IS the caller's
+    /// linked "staff" identity, there being no separate Staff record any more.
+    /// <see cref="ICurrentTenant.ViewAsUserId"/> takes priority over the JWT's own subject claim
+    /// (see class remarks). Null covers every "no resolvable identity" case uniformly: no
+    /// resolvable user id on the token, or the user row not found (or tenant-filtered out).
     /// </summary>
-    private Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
-        return StaffIdResolver.ResolveAsync(_db.Users, _currentTenant.ViewAsUserId, ownUserId, ct);
+        var userId = _currentTenant.ViewAsUserId ?? ownUserId;
+        if (userId is null) return null;
+
+        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
+        return exists ? userId : null;
     }
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(

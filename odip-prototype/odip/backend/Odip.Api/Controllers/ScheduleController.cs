@@ -123,10 +123,10 @@ public class ScheduleController : ControllerBase
         }).ToList();
 
         // ── 2. Load all active staff with assignments & availability ──
-        // Approximates today's Staff-only listing now that Staff has merged into User — see the
-        // same filter/rationale in RosteringController.GetBoard.
+        // Design spec §4.2: every active tenant user, of any role — no role filter (matches the
+        // same removal in RosteringController.GetBoard).
         var allStaff = await _db.Users
-            .Where(s => s.IsActive && s.Role != UserRole.SuperAdmin && s.Role != UserRole.ReadOnly)
+            .Where(s => s.IsActive)
             .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
             .ToListAsync(ct);
 

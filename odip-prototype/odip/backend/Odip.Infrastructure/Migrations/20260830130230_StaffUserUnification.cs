@@ -82,6 +82,7 @@ namespace Odip.Infrastructure.Migrations
                     base_username TEXT;
                     candidate_username TEXT;
                     suffix INT;
+                    trimmed_email TEXT;
                     final_email TEXT;
                     new_user_id UUID;
                 BEGIN
@@ -101,10 +102,14 @@ namespace Odip.Infrastructure.Migrations
                             candidate_username := base_username || '-' || suffix;
                         END LOOP;
 
-                        IF staff_row."Email" IS NOT NULL
-                           AND NOT EXISTS (SELECT 1 FROM "Users" WHERE lower("Email") = lower(staff_row."Email"))
+                        -- Hardened per Task 2 review: a Staff.Email that is empty or
+                        -- whitespace-only must be treated exactly like NULL (fall through to the
+                        -- placeholder), not copied verbatim as a blank/invalid email address.
+                        trimmed_email := NULLIF(TRIM(staff_row."Email"), '');
+                        IF trimmed_email IS NOT NULL
+                           AND NOT EXISTS (SELECT 1 FROM "Users" WHERE lower("Email") = lower(trimmed_email))
                         THEN
-                            final_email := staff_row."Email";
+                            final_email := trimmed_email;
                         ELSE
                             final_email := candidate_username || '@placeholder.local';
                         END IF;
