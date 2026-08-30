@@ -51,6 +51,23 @@ beforeEach(() => {
 })
 
 describe('PortalWitnessApprovalsPage', () => {
+  it('shows a loading skeleton (not the empty state) while the request is in flight', () => {
+    mockUsePendingWitnessRequests.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderPage()
+
+    expect(screen.getByText(/loading witness requests/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no witness requests waiting/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a distinct error state (not the empty state) when the request fails', () => {
+    const refetch = vi.fn()
+    mockUsePendingWitnessRequests.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+
+    expect(screen.getByText(/couldn't load witness requests/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no witness requests waiting/i)).not.toBeInTheDocument()
+  })
+
   it('shows an empty state when there are no pending witness requests', () => {
     renderPage()
     expect(screen.getByText(/no witness requests waiting/i)).toBeInTheDocument()
