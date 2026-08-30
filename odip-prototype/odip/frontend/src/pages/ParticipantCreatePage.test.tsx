@@ -269,7 +269,7 @@ describe('ParticipantCreatePage Review step', () => {
     // the linkage this feeds (upsert/downgrade against the compatibility matrix) is a
     // server-side concern (StaffCompatibilityLinkService), but the form must carry the changed
     // value through to submit for that to have anything to act on.
-    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    await user.click(screen.getByRole('button', { name: /^Edit Identity/ }))
     await user.click(screen.getByRole('button', { name: 'Alex Rivera' }))
     await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
