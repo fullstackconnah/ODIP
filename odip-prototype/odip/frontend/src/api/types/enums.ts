@@ -6,6 +6,10 @@ export type PlanType = typeof PLAN_TYPES[number]
 export const GENDERS = ['Male', 'Female', 'NonBinary', 'PreferNotToSay', 'Other'] as const
 export type Gender = typeof GENDERS[number]
 
+// ── Funding Source (FUND-02 — replaces free-text-only Funding Organisation) ──
+export const FUNDING_SOURCES = ['Ndis', 'Other'] as const
+export type FundingSource = typeof FUNDING_SOURCES[number]
+
 // ── Support Ratio ───────────────────────────────────────
 export const SUPPORT_RATIOS = ['OneToOne', 'OneToTwo', 'TwoToOne', 'SharedSupport', 'Other', 'OneToThree', 'OneToFour', 'OneToFive'] as const
 export type SupportRatio = typeof SUPPORT_RATIOS[number]

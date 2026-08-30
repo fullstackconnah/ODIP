@@ -228,14 +228,20 @@ describe('ParticipantCreatePage Review step', () => {
       requiresStandingMachine: false,
       serviceStreams: 'None',
     })
-    // Same DTO shape as before the wizard, plus the intentional additions from this batch —
-    // 30 fields -> 34: gender + genderSelfDescription (INTAKE-05), planStartDate + planEndDate
-    // (FUND-01). No extraneous wizard-only keys leak into the payload, and the array the form
-    // holds internally is converted to the wire string before submit.
+    // INTAKE-07 made the exact key set answer-set-dependent (hidden fields are unregistered and
+    // excluded from the payload), so this is the BASELINE scenario's key set only — default
+    // wizard answers (gender not set, fundingSource defaults to Ndis): genderSelfDescription is
+    // excluded (gender isn't Other), fundingOrganisation is excluded (fundingSource is Ndis, not
+    // Other) and fundingSource itself is included. See the "INTAKE-07 conditional payload
+    // exclusion" describe block below for the Gender=Other and FundingSource=Other scenarios —
+    // each asserts its OWN exact key set rather than one shared global list, per the ticket's
+    // note that this test needed a conditional-aware, per-scenario update. No extraneous
+    // wizard-only keys leak into the payload, and the array the form holds internally is
+    // converted to the wire string before submit.
     expect(Object.keys(payload).sort()).toEqual(
       [
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingOrganisation', 'gender', 'genderSelfDescription', 'isHighSupport',
+        'fundingSource', 'gender', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
@@ -358,5 +364,148 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
       planStartDate: '2026-01-01',
       planEndDate: '2026-12-31',
     })
+  })
+})
+
+describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 engine)', () => {
+  async function goToNdisStep(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  }
+
+  it('defaults to Ndis: shows the NDIS plan fields, hides Funding Organisation', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStep(user)
+
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument()
+    expect(screen.getByLabelText('Plan Start Date')).toBeInTheDocument()
+    expect(screen.getByLabelText('Plan End Date')).toBeInTheDocument()
+    // Plan Type's control is a Dropdown wrapped in react-hook-form's <Controller>, which (like
+    // preferredStaffId elsewhere in this file) doesn't forward FormField's aria-labelledby clone
+    // — a pre-existing gap, not introduced here — so its presence is checked via the visible
+    // label text rather than getByLabelText.
+    expect(screen.getByText(/Plan Type/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Funding Organisation/i)).not.toBeInTheDocument()
+  })
+
+  it('switching to Other hides the NDIS plan fields and reveals Funding Organisation; switching back restores Ndis', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStep(user)
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+
+    expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Plan Start Date')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Plan End Date')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Plan Type/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Funding Organisation/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Ndis')
+
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Funding Organisation/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks Next on the NDIS & Funding step when funding source is Other but specify is empty', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStep(user)
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/please specify the funding organisation/i)
+    expect(screen.queryByRole('button', { name: 'Hi-Lo Bed' })).not.toBeInTheDocument() // still on NDIS step, not Support
+  })
+
+  it('submits fundingSource and fundingOrganisation when Other', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToNdisStep(user)
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+    await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      fundingSource: 'Other',
+      fundingOrganisation: 'Self-funded',
+    })
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exact key sets per scenario)', () => {
+  // Each scenario asserts its OWN exact key set rather than one shared global list — per the
+  // ticket's note that the pre-existing single-list exact-keys test needed a conditional-aware,
+  // per-scenario update once hidden fields became genuinely excluded from the payload.
+
+  it('Gender=Other: exact payload key set is the baseline plus genderSelfDescription', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
+    await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'fundingSource', 'gender', 'genderSelfDescription', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'supportRatio', 'transportRequirements',
+      ].sort()
+    )
+  })
+
+  it('FundingSource=Other: exact payload key set drops the NDIS plan fields and adds fundingOrganisation', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+
+    await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
+    await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'fundingOrganisation', 'fundingSource', 'gender', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes',
+        'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'region',
+        'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
+        'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
+      ].sort()
+    )
   })
 })

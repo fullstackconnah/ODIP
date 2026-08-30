@@ -314,6 +314,12 @@ public static class DbSeeder
             new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, Gender = Gender.Female, FirstName = "Natalie", LastName = "Walsh", DateOfBirth = new DateOnly(1994, 8, 22), NdisNumber = "430567909", PlanType = PlanType.PlanManaged, Region = "South East QLD", FundingOrganisation = "Maple Plan Management", IsRepeatClient = true, IsHighSupport = false, SupportRatio = SupportRatio.OneToThree, Notes = "Social butterfly. Gets on well with everyone." },
             new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, Gender = Gender.Male, FirstName = "Dylan", LastName = "Foster", DateOfBirth = new DateOnly(1997, 1, 9), NdisNumber = "430567910", PlanType = PlanType.PlanManaged, Region = "Brisbane Metro", FundingOrganisation = "My Plan Manager", IsRepeatClient = false, MobilityAidWheelchair = true, MobilitySupportOptions = new() { "Wheelchair in vehicle" }, IsHighSupport = false, SupportRatio = SupportRatio.OneToOne, MobilityNotes = "Manual wheelchair. Active pusher, independent outdoors on flat terrain.", TransportRequirements = "Accessible vehicle", Notes = "Loves the outdoors. Eager to try the reef." },
         };
+        // FUND-02: derive FundingSource from the pre-existing FundingOrganisation text using the
+        // exact same rule the AddParticipantFundingSource migration applies to real rows on
+        // backfill — non-empty FundingOrganisation implies "Other" (the pre-FUND-02 seed data
+        // never distinguished the two), empty/null defaults to "Ndis".
+        foreach (var p in participants)
+            p.FundingSource = string.IsNullOrWhiteSpace(p.FundingOrganisation) ? ParticipantFundingSource.Ndis : ParticipantFundingSource.Other;
         context.Participants.AddRange(participants);
 
         // ── Support Profiles (8) ─────────────────────────────────

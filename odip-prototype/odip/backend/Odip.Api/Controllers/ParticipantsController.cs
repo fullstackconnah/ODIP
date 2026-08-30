@@ -42,6 +42,17 @@ public class ParticipantsController : ControllerBase
             ? "Please provide a gender self-description."
             : null;
 
+    /// <summary>
+    /// FUND-02: FundingSource "Other" requires the (reused) FundingOrganisation free-text field,
+    /// both ends — mirrors ValidateGender's shape exactly. Ndis ignores whatever
+    /// FundingOrganisation carries (the frontend's INTAKE-07 engine excludes it from the payload
+    /// entirely in that case; this validator does not error on a stray/legacy value either way).
+    /// </summary>
+    private static string? ValidateFundingSource(CreateParticipantDto dto) =>
+        dto.FundingSource == ParticipantFundingSource.Other && string.IsNullOrWhiteSpace(dto.FundingOrganisation)
+            ? "Please specify the funding organisation."
+            : null;
+
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
@@ -100,7 +111,7 @@ public class ParticipantsController : ControllerBase
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
             PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region,
-            FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
+            FundingSource = p.FundingSource, FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
             MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
             MobilitySupportOptions = p.MobilitySupportOptions,
@@ -136,6 +147,10 @@ public class ParticipantsController : ControllerBase
         if (genderError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
 
+        var fundingError = ValidateFundingSource(dto);
+        if (fundingError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
@@ -145,7 +160,11 @@ public class ParticipantsController : ControllerBase
             DateOfBirth = dto.DateOfBirth, Gender = dto.Gender, GenderSelfDescription = dto.GenderSelfDescription,
             NdisNumber = dto.NdisNumber, PlanStartDate = dto.PlanStartDate, PlanEndDate = dto.PlanEndDate,
             PlanType = dto.PlanType, Region = dto.Region,
-            FundingOrganisation = dto.FundingOrganisation, IsRepeatClient = dto.IsRepeatClient,
+            FundingSource = dto.FundingSource,
+            // Ndis ignores whatever the client sent for the reused "Other — specify" field —
+            // stored as null rather than trusting the client's INTAKE-07 payload exclusion alone.
+            FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null,
+            IsRepeatClient = dto.IsRepeatClient,
             MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
             MobilitySupportOptions = dto.MobilitySupportOptions,
             IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
@@ -182,6 +201,10 @@ public class ParticipantsController : ControllerBase
         if (genderError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
 
+        var fundingError = ValidateFundingSource(dto);
+        if (fundingError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -194,7 +217,13 @@ public class ParticipantsController : ControllerBase
         p.DateOfBirth = dto.DateOfBirth; p.Gender = dto.Gender; p.GenderSelfDescription = dto.GenderSelfDescription;
         p.NdisNumber = dto.NdisNumber; p.PlanStartDate = dto.PlanStartDate; p.PlanEndDate = dto.PlanEndDate;
         p.PlanType = dto.PlanType;
-        p.Region = dto.Region; p.FundingOrganisation = dto.FundingOrganisation; p.IsRepeatClient = dto.IsRepeatClient;
+        p.Region = dto.Region;
+        p.FundingSource = dto.FundingSource;
+        // Ndis ignores whatever the client sent for the reused "Other — specify" field — same
+        // server-side clearing as Create, so flipping Other -> Ndis actually clears stale text
+        // rather than leaving it dormant on the row.
+        p.FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null;
+        p.IsRepeatClient = dto.IsRepeatClient;
         p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;
         p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;

@@ -27,6 +27,16 @@ public class Participant : ITenantEntity
     public string? NdisNumber { get; set; }
     public PlanType PlanType { get; set; }
     public string? Region { get; set; }
+
+    /// <summary>FUND-02: NDIS vs Other funding source. Defaults to Ndis (also the backfill default
+    /// for pre-existing rows with no FundingOrganisation text).</summary>
+    public ParticipantFundingSource FundingSource { get; set; } = ParticipantFundingSource.Ndis;
+
+    /// <summary>
+    /// Reused as the "Other — specify" free-text field (FUND-02): required when
+    /// <see cref="FundingSource"/> is <see cref="Enums.ParticipantFundingSource.Other"/>, hidden
+    /// and excluded from the wizard payload when <see cref="Enums.ParticipantFundingSource.Ndis"/>.
+    /// </summary>
     public string? FundingOrganisation { get; set; }
     public bool IsRepeatClient { get; set; }
     public bool IsActive { get; set; } = true;
