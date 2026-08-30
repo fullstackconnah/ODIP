@@ -31,6 +31,17 @@ const TYPE_BADGE_STYLES: Record<RestrictivePracticeType, string> = {
   Unclassified: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 }
 
+/** Plain-language explanations shown under each option in the Type picker so a coordinator
+ * unfamiliar with NDIS restrictive-practice terminology can tell the five categories apart. */
+const TYPE_DESCRIPTIONS: Record<RestrictivePracticeType, string> = {
+  Seclusion: 'Confining the person alone in a room or area they can’t freely leave',
+  ChemicalRestraint: 'Medication used to control behaviour, not to treat a diagnosed condition',
+  MechanicalRestraint: 'A device or equipment that restricts the person’s movement',
+  PhysicalRestraint: 'Holding or physically restraining part of the person’s body',
+  EnvironmentalRestraint: 'Restricting access to parts of the environment, e.g. locked doors or gates',
+  Unclassified: 'Type not yet recorded — reclassify this entry when you next review it',
+}
+
 type PracticeFormState = {
   type: RestrictivePracticeType
   description: string
@@ -76,6 +87,11 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${TYPE_BADGE_STYLES[practice.type]}`}>
             {RESTRICTIVE_PRACTICE_TYPE_LABELS[practice.type]}
           </span>
+          {practice.type === 'Unclassified' && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-100 text-amber-800">
+              <AlertTriangle className="w-3 h-3" /> Needs classification
+            </span>
+          )}
           {!practice.isActive && (
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
               Inactive
@@ -321,7 +337,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               variant="form"
               value={form.type}
               onChange={v => setForm(f => ({ ...f, type: v as RestrictivePracticeType, relatedMedicationId: v === 'ChemicalRestraint' ? f.relatedMedicationId : '' }))}
-              items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
+              items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: TYPE_DESCRIPTIONS[t] }))}
             />
           </FormField>
           <FormField label="Description" required error={errors.description}>
@@ -334,7 +350,14 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             />
           </FormField>
           {form.type === 'ChemicalRestraint' && (
-            <FormField label="Linked medication" hint="The prescribed medication this chemical restraint is based on">
+            <FormField
+              label="Linked medication"
+              hint={
+                medications.length === 0
+                  ? 'This participant has no active medications on record — add one on the Medications tab first, or leave this unlinked for now.'
+                  : 'The prescribed medication this chemical restraint is based on'
+              }
+            >
               <Dropdown
                 variant="form"
                 value={form.relatedMedicationId}
