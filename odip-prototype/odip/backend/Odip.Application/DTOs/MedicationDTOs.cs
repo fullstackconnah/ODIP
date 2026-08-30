@@ -149,9 +149,15 @@ public record AdministrationDto
     public Guid? TripInstanceId { get; init; }
     public DateTime? ScheduledAt { get; init; }
     public DateTime? AdministeredAt { get; init; }
+
+    /// <summary>The IANA time zone (e.g. "Australia/Sydney") the client was in when it captured
+    /// <see cref="AdministeredAt"/> — null when there's no client-supplied timestamp to anchor
+    /// (no-JS fallback) or for records predating this field.</summary>
+    public string? AdministeredAtTimeZone { get; init; }
     public MedicationAdministrationStatus Status { get; init; }
     public string? DoseGiven { get; init; }
     public string RecordedByName { get; init; } = string.Empty;
+    public Guid? RecordedByUserId { get; init; }
     public string? WitnessName { get; init; }
     public Guid? WitnessStaffId { get; init; }
     public WitnessStatus WitnessStatus { get; init; }
@@ -170,6 +176,13 @@ public record CreateAdministrationDto
 {
     public DateTime? ScheduledAt { get; init; }
     public DateTime? AdministeredAt { get; init; }
+
+    /// <summary>The IANA time zone (e.g. "Australia/Sydney") the client's clock was set to when
+    /// it captured <see cref="AdministeredAt"/> — optional; omit for the no-JS-timestamp fallback
+    /// (server stamps <see cref="MedicationAdministrationStatus"/>-appropriate UTC time with no
+    /// zone recorded).</summary>
+    [StringLength(100)]
+    public string? AdministeredAtTimeZone { get; init; }
     public MedicationAdministrationStatus Status { get; init; }
 
     [StringLength(200)]
@@ -200,6 +213,12 @@ public record UpdateAdministrationDto
 {
     public MedicationAdministrationStatus Status { get; init; }
     public DateTime? AdministeredAt { get; init; }
+
+    /// <summary>See <see cref="CreateAdministrationDto.AdministeredAtTimeZone"/>. Amending an
+    /// administration that didn't change its recorded time should pass through the existing
+    /// value rather than clearing it.</summary>
+    [StringLength(100)]
+    public string? AdministeredAtTimeZone { get; init; }
 
     [StringLength(200)]
     public string? DoseGiven { get; init; }

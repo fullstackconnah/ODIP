@@ -6,10 +6,10 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { PortalWitnessRequestDto } from '@/api/types'
+import { formatWithTimeZone } from '@/lib/utils'
 
-function formatDateTime(value: string | null) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+function formatDateTime(value: string | null, timeZone: string | null) {
+  return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
 }
 
 /** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */
@@ -106,7 +106,7 @@ export default function PortalWitnessApprovalsPage() {
                     {request.participantName} · {request.doseGiven || request.doseDescription}
                   </p>
                   <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-                    Recorded by {request.recordedByName} · {formatDateTime(request.administeredAt)}
+                    Recorded by {request.recordedByName} · {formatDateTime(request.administeredAt, request.administeredAtTimeZone)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

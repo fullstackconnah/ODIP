@@ -37,6 +37,7 @@ function makeRequest(overrides: Partial<PortalWitnessRequestDto> = {}): PortalWi
     doseGiven: '18 units',
     recordedByName: 'Jordan Lee',
     administeredAt: '2026-08-24T08:05:00Z',
+    administeredAtTimeZone: null,
     witnessStatus: 'Pending',
     witnessRespondedAt: null,
     createdAt: '2026-08-24T08:05:00Z',

@@ -6,7 +6,7 @@ import { Card } from '@/components/Card'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
@@ -192,7 +192,7 @@ export default function MarTab() {
                         <div className="text-right space-y-1">
                           <StatusBadge status={entry.administration.status} colorMap={ADMIN_STATUS_COLOR_MAP} />
                           <p className="text-xs text-[var(--color-muted-foreground)]">
-                            {entry.administration.administeredAt ? new Date(entry.administration.administeredAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {formatWithTimeZone(entry.administration.administeredAt, entry.administration.administeredAtTimeZone, { hour: '2-digit', minute: '2-digit' })}
                             {entry.administration.recordedByName ? ` · ${entry.administration.recordedByName}` : ''}
                           </p>
                           {canManageMedications && (

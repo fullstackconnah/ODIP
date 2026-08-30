@@ -5,7 +5,7 @@ import { useParticipantMedications, useParticipantAdministrations } from '@/api/
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { MedicationBadges, ComplianceFlagChips } from '../medications'
 import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
@@ -150,7 +150,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
                 <div className="min-w-0">
                   <p className="font-medium text-[var(--color-foreground)]">{a.medicationName}{a.doseGiven ? ` · ${a.doseGiven}` : ''}</p>
                   <p className="text-xs text-[var(--color-muted-foreground)]">
-                    {a.administeredAt ? new Date(a.administeredAt).toLocaleString('en-AU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    {formatWithTimeZone(a.administeredAt, a.administeredAtTimeZone, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     {a.recordedByName ? ` · ${a.recordedByName}` : ''}
                   </p>
                 </div>

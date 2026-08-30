@@ -331,6 +331,14 @@ public class MedicationsController : ControllerBase
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
 
+        // Resolved once and reused for both the self-witness check below and RecordedByName/
+        // RecordedByUserId on the saved record — the administering identity, honouring the
+        // SuperAdmin "view as" mechanism exactly like PortalController does (§4.3).
+        var administeringUserId = await ResolveCurrentStaffIdAsync(ct);
+        var administeringUser = administeringUserId.HasValue
+            ? await _db.Users.FirstOrDefaultAsync(u => u.Id == administeringUserId.Value, ct)
+            : null;
+
         User? witnessStaff = null;
         if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
         {
@@ -346,8 +354,7 @@ public class MedicationsController : ControllerBase
                 if (witnessStaff == null)
                     return BadRequest(ApiResponse<AdministrationDto>.Fail("Selected witness staff member was not found."));
 
-                var administeringStaffId = await ResolveCurrentStaffIdAsync(ct);
-                if (administeringStaffId.HasValue && administeringStaffId.Value == witnessStaff.Id)
+                if (administeringUserId.HasValue && administeringUserId.Value == witnessStaff.Id)
                     return BadRequest(ApiResponse<AdministrationDto>.Fail("A staff member cannot witness their own administration."));
             }
         }
@@ -394,9 +401,11 @@ public class MedicationsController : ControllerBase
             TripInstanceId = dto.TripInstanceId,
             ScheduledAt = dto.ScheduledAt,
             AdministeredAt = administeredAt,
+            AdministeredAtTimeZone = dto.AdministeredAtTimeZone,
             Status = dto.Status,
             DoseGiven = dto.DoseGiven,
-            RecordedByName = GetRecordedByName(),
+            RecordedByName = administeringUser?.FullName ?? GetRecordedByName(),
+            RecordedByUserId = administeringUser?.Id,
             WitnessName = witnessStaff?.FullName ?? dto.WitnessName,
             WitnessUserId = witnessStaff?.Id,
             WitnessStatus = witnessStaff != null ? WitnessStatus.Pending : WitnessStatus.NotRequired,
@@ -427,6 +436,10 @@ public class MedicationsController : ControllerBase
 
         admin.Status = dto.Status;
         admin.AdministeredAt = dto.AdministeredAt;
+        // Preserve the originally-recorded zone unless the caller supplies a new one — an amend
+        // that doesn't touch AdministeredAt (the common case; see RecordAdministrationModal's
+        // buildAmendFields) shouldn't wipe out how that original instant should be displayed.
+        admin.AdministeredAtTimeZone = dto.AdministeredAtTimeZone ?? admin.AdministeredAtTimeZone;
         admin.DoseGiven = dto.DoseGiven;
         admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
@@ -725,9 +738,11 @@ public class MedicationsController : ControllerBase
         TripInstanceId = a.TripInstanceId,
         ScheduledAt = a.ScheduledAt,
         AdministeredAt = a.AdministeredAt,
+        AdministeredAtTimeZone = a.AdministeredAtTimeZone,
         Status = a.Status,
         DoseGiven = a.DoseGiven,
         RecordedByName = a.RecordedByName,
+        RecordedByUserId = a.RecordedByUserId,
         WitnessName = a.WitnessName,
         WitnessStaffId = a.WitnessUserId,
         WitnessStatus = a.WitnessStatus,
