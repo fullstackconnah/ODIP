@@ -83,7 +83,10 @@ public record CreateParticipantDto
     public bool RequiresShowerChair { get; init; }
     public bool RequiresCommode { get; init; }
     public bool RequiresStandingMachine { get; init; }
-    public bool HasRestrictivePracticeFlag { get; init; }
+    // HasRestrictivePracticeFlag is intentionally NOT here — it is derived (true iff the
+    // participant has any active RestrictivePractice register row) and can no longer be set
+    // independently via create/update. See ParticipantListDto/ParticipantDetailDto for the
+    // read-only computed value.
     public SupportRatio SupportRatio { get; init; }
     [StringLength(2000)]
     public string? MobilityNotes { get; init; }
@@ -123,7 +126,10 @@ public record UpdateSupportProfileDto
 {
     public string? CommunicationNotes { get; init; }
     public string? BehaviourSupportNotes { get; init; }
-    public string? RestrictivePracticeDetails { get; init; }
+    // RestrictivePracticeDetails is intentionally NOT here — the restrictive practices register
+    // (RestrictivePracticeDto/RestrictivePracticesController) replaces it as the write path.
+    // Existing SupportProfile.RestrictivePracticeDetails data is left in place and still
+    // readable via SupportProfileDto below.
     public string? ManualHandlingNotes { get; init; }
     public string? MedicationHealthSummary { get; init; }
     public string? EmergencyConsiderations { get; init; }

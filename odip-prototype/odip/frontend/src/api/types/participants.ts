@@ -99,7 +99,10 @@ export interface CreateParticipantDto {
   requiresShowerChair: boolean
   requiresCommode: boolean
   requiresStandingMachine: boolean
-  hasRestrictivePracticeFlag: boolean
+  // hasRestrictivePracticeFlag is intentionally NOT here — it is derived (true iff the
+  // participant has any active RestrictivePractice register row) and can no longer be set
+  // independently via create/update. See ParticipantListDto/ParticipantDetailDto for the
+  // read-only computed value.
   supportRatio: SupportRatio
   mobilityNotes?: string
   equipmentRequirements?: string
@@ -130,7 +133,8 @@ export interface SupportProfileDto {
 export interface UpdateSupportProfileDto {
   communicationNotes?: string
   behaviourSupportNotes?: string
-  restrictivePracticeDetails?: string
+  // restrictivePracticeDetails is intentionally NOT here — the restrictive practices register
+  // replaces it as the write path. Existing legacy text stays readable via SupportProfileDto.
   manualHandlingNotes?: string
   medicationHealthSummary?: string
   emergencyConsiderations?: string
