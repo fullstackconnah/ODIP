@@ -11,7 +11,8 @@ import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, List
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
+import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS } from '@/api/types/participants'
+import type { Gender } from '@/api/types/enums'
 import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
@@ -101,6 +102,14 @@ export default function ParticipantDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">NDIS Number</span><span className="font-mono">{p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Date of Birth</span><span>{formatDateAu(p.dateOfBirth)}</span>
+              <span className="text-[var(--color-muted-foreground)]">Gender</span>
+              <span>
+                {p.gender
+                  ? GENDER_LABELS[p.gender as Gender] + (p.gender === 'Other' && p.genderSelfDescription ? ` (${p.genderSelfDescription})` : '')
+                  : '—'}
+              </span>
+              <span className="text-[var(--color-muted-foreground)]">Plan Start Date</span><span>{formatDateAu(p.planStartDate)}</span>
+              <span className="text-[var(--color-muted-foreground)]">Plan End Date</span><span>{formatDateAu(p.planEndDate)}</span>
               <span className="text-[var(--color-muted-foreground)]">Funding Org</span><span>{p.fundingOrganisation || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Preferred Staff</span><span>{p.preferredStaffName ?? '—'}</span>

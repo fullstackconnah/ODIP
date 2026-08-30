@@ -228,18 +228,20 @@ describe('ParticipantCreatePage Review step', () => {
       requiresStandingMachine: false,
       serviceStreams: 'None',
     })
-    // Same DTO shape as before the wizard (plus the intentional serviceStreams addition — 29
-    // fields -> 30): no extraneous wizard-only keys leak into the payload, and the array the
-    // form holds internally is converted to the wire string before submit.
+    // Same DTO shape as before the wizard, plus the intentional additions from this batch —
+    // 30 fields -> 34: gender + genderSelfDescription (INTAKE-05), planStartDate + planEndDate
+    // (FUND-01). No extraneous wizard-only keys leak into the payload, and the array the form
+    // holds internally is converted to the wire string before submit.
     expect(Object.keys(payload).sort()).toEqual(
       [
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingOrganisation', 'isHighSupport', 'isIntensiveSupport', 'isRepeatClient',
-        'lastName', 'medicalSummary', 'mobilityAidWalker', 'mobilityAidWheelchair',
-        'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'overnightRatio',
-        'overnightSupport', 'planType', 'preferredName', 'preferredStaffId', 'region',
-        'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
-        'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
+        'fundingOrganisation', 'gender', 'genderSelfDescription', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'supportRatio', 'transportRequirements',
       ].sort()
     )
   })
@@ -281,5 +283,80 @@ describe('ParticipantCreatePage Review step', () => {
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ preferredStaffId: 'staff-2' })
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', () => {
+  it('does not show the self-description field until Gender is set to Other', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    expect(screen.queryByLabelText(/Gender Self-Description/i)).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
+    expect(screen.getByLabelText(/Gender Self-Description/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Gender'), 'NonBinary')
+    expect(screen.queryByLabelText(/Gender Self-Description/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks Next on the Identity step when Gender is Other but self-description is empty', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/gender self-description/i)
+    expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
+  })
+
+  it('submits gender and genderSelfDescription in the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
+    await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      gender: 'Other',
+      genderSelfDescription: 'Genderfluid',
+    })
+  })
+})
+
+describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
+  it('submits planStartDate and planEndDate entered on the NDIS & Funding step', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+
+    await user.type(screen.getByLabelText('Plan Start Date'), '2026-01-01')
+    await user.type(screen.getByLabelText('Plan End Date'), '2026-12-31')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      planStartDate: '2026-01-01',
+      planEndDate: '2026-12-31',
+    })
   })
 })
