@@ -176,11 +176,27 @@ describe('RestrictivePracticesTab', () => {
 
     await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
     await user.click(screen.getByLabelText('Type'))
-    await user.click(screen.getByRole('option', { name: 'Chemical restraint' }))
+    // Each type option now carries a plain-language description alongside its label (jargon-barrier
+    // fix), which becomes part of the option's accessible name — match on the label prefix instead
+    // of an exact string.
+    await user.click(screen.getByRole('option', { name: /^chemical restraint/i }))
 
     expect(screen.getByText(/linked medication/i)).toBeInTheDocument()
     await user.click(screen.getByLabelText(/linked medication/i))
     expect(screen.getByRole('option', { name: 'Risperidone 1mg' })).toBeInTheDocument()
+  })
+
+  it('guides the user to the Medications tab when linking a chemical restraint and the participant has no medications on record', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
+    await user.click(screen.getByLabelText('Type'))
+    await user.click(screen.getByRole('option', { name: /^chemical restraint/i }))
+
+    expect(screen.getByText(/no active medications on record/i)).toBeInTheDocument()
   })
 
   it('creates a new register entry with the entered type and description', async () => {

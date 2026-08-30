@@ -5,7 +5,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { MedicationBadges } from '@/pages/medications/MedicationBadges'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { getRelevantRoutines } from '@/pages/rostering/lib/routines'
-import { formatShiftTimeRange, RATIO_LABELS } from '@/pages/rostering/lib/roster'
+import { formatShiftTimeRange, formatDayAccessibleName, RATIO_LABELS } from '@/pages/rostering/lib/roster'
 import { OVERNIGHT_SUPPORT_LABELS } from './lib/portal'
 
 function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'warning' }) {
@@ -17,21 +17,45 @@ function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
 
 export default function PortalShiftDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: shift, isLoading, isError } = usePortalShiftDetail(id)
+  const { data: shift, isLoading, isError, refetch } = usePortalShiftDetail(id)
 
   if (isLoading) {
-    return <div className="animate-fade-in text-sm text-[var(--color-muted-foreground)]">Loading shift…</div>
+    return (
+      <div className="space-y-6 animate-fade-in pb-8">
+        <span className="sr-only" role="status" aria-live="polite">Loading shift…</span>
+        <div aria-hidden="true" className="space-y-6">
+          <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
+          <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+            <div className="h-5 w-40 rounded bg-[var(--color-accent)] animate-pulse" />
+            <div className="h-4 w-56 rounded bg-[var(--color-accent)] animate-pulse" />
+          </div>
+          <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+            <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
+            <div className="h-4 w-full rounded bg-[var(--color-accent)] animate-pulse" />
+            <div className="h-4 w-2/3 rounded bg-[var(--color-accent)] animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (isError || !shift) {
     return (
       <div className="space-y-4 animate-fade-in">
-        <Link to="/portal" className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">
+        <Link to="/portal" className="inline-flex items-center gap-1 py-3 text-sm text-[var(--color-primary)] hover:underline">
           <ArrowLeft className="w-4 h-4" /> Back to My Shifts
         </Link>
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          This shift couldn't be found. It may not be yours, or it may have been removed from the roster.
+        <p className="text-sm text-[var(--color-muted-foreground)]" role="alert">
+          This shift couldn't be found. It may not be yours, it may have been removed from the roster, or the
+          request may have failed to load — check your connection and try again.
         </p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="inline-flex items-center justify-center h-11 px-4 rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-colors"
+        >
+          Try again
+        </button>
       </div>
     )
   }
@@ -58,7 +82,7 @@ export default function PortalShiftDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
-      <Link to="/portal" className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">
+      <Link to="/portal" className="inline-flex items-center gap-1 py-3 text-sm text-[var(--color-primary)] hover:underline">
         <ArrowLeft className="w-4 h-4" /> Back to My Shifts
       </Link>
 
@@ -68,7 +92,7 @@ export default function PortalShiftDetailPage() {
           <div>
             <h1 className="text-xl font-bold">{participant.fullName}</h1>
             <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-              {shift.serviceDate} · {formatShiftTimeRange(shift.startTime, shift.endTime)}
+              {formatDayAccessibleName(shift.serviceDate)} · {formatShiftTimeRange(shift.startTime, shift.endTime)}
               {shift.endsNextDay && ' (+1 day)'}
             </p>
           </div>
