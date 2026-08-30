@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -18,7 +19,12 @@ namespace Odip.Api.Controllers;
 public class ParticipantsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ParticipantsController(OdipDbContext db) => _db = db;
+    private readonly StaffCompatibilityLinkService _compatLink;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink)
+    {
+        _db = db;
+        _compatLink = compatLink;
+    }
 
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
@@ -128,6 +134,9 @@ public class ParticipantsController : ControllerBase
             ServiceStreams = dto.ServiceStreams,
         };
         _db.Participants.Add(participant);
+        // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
+        // rostering compatibility matrix, in the same transaction as the participant insert.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -146,6 +155,8 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        var previousPreferredStaffId = p.PreferredStaffId;
+
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
         p.DateOfBirth = dto.DateOfBirth; p.NdisNumber = dto.NdisNumber; p.PlanType = dto.PlanType;
         p.Region = dto.Region; p.FundingOrganisation = dto.FundingOrganisation; p.IsRepeatClient = dto.IsRepeatClient;
@@ -162,6 +173,9 @@ public class ParticipantsController : ControllerBase
         p.Notes = dto.Notes; p.PreferredStaffId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
         p.UpdatedAt = DateTime.UtcNow;
 
+        // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
+        // compatibility row, in the same transaction as the participant update.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, UpdatedAt = p.UpdatedAt }));
     }

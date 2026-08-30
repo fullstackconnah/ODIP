@@ -238,4 +238,43 @@ describe('ParticipantCreatePage Review step', () => {
       ].sort()
     )
   })
+
+  it('submits a selected preferred-staff member, including a later change made before final submit (task 6d)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+
+    // Preferred Staff Member lives on the Identity step, alongside First/Last Name. Its
+    // Dropdown trigger is wrapped in react-hook-form's <Controller>, which does not forward
+    // FormField's aria-labelledby clone to the render-prop Dropdown, so it isn't reachable via
+    // getByLabelText (a pre-existing gap, not introduced here) — query the trigger button by its
+    // own visible text instead.
+    await user.click(screen.getByRole('button', { name: 'None' }))
+    await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
+
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+
+    // Change the pick from the Review step (Edit link back to Identity) before ever submitting —
+    // the linkage this feeds (upsert/downgrade against the compatibility matrix) is a
+    // server-side concern (StaffCompatibilityLinkService), but the form must carry the changed
+    // value through to submit for that to have anything to act on.
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    await user.click(screen.getByRole('button', { name: 'Alex Rivera' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ preferredStaffId: 'staff-2' })
+  })
 })

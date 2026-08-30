@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Controllers;
@@ -60,7 +61,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -79,7 +80,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -98,7 +99,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -118,7 +119,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetAll(null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -130,7 +131,7 @@ public class ParticipantsControllerTests
     public async Task Create_ServiceStreamsFlags_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
 
         var dto = MinimalCreateDto() with { ServiceStreams = Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -154,7 +155,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -209,7 +210,7 @@ public class ParticipantsControllerTests
     public async Task Create_DefaultServiceStreams_IsNone()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
 
         var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
@@ -241,7 +242,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetAll(null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -257,12 +258,121 @@ public class ParticipantsControllerTests
         // HasRestrictivePracticeFlag — this test exists so a future re-add would need to touch
         // this file (and its accompanying comment) rather than slipping back in silently.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         var saved = await db.Participants.SingleAsync();
         Assert.False(saved.HasRestrictivePracticeFlag); // never set independently — stays at the type default
+    }
+
+    // ── Task 6d: preferred-staff <-> compatibility matrix linkage ─────────
+
+    [Fact]
+    public async Task Create_WithPreferredStaffId_UpsertsAutoLinkedPreferredCompatibilityRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        db.Staff.Add(staff);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = MinimalCreateDto() with { PreferredStaffId = staff.Id };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var row = await db.StaffParticipantCompatibilities
+            .SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, row.Level);
+        Assert.True(row.AutoLinked);
+    }
+
+    [Fact]
+    public async Task Update_ChangesPreferredStaffId_RemovesOldAutoLinkedRow_CreatesNewOne()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var oldStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        var newStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        db.Staff.AddRange(oldStaff, newStaff);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var createDto = MinimalCreateDto() with { PreferredStaffId = oldStaff.Id };
+        var created = await controller.Create(createDto, CancellationToken.None);
+        var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
+
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, PreferredStaffId = newStaff.Id,
+        };
+        var updateResult = await controller.Update(participantId, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participantId));
+        var newRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == newStaff.Id && c.ParticipantId == participantId);
+        Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, newRow.Level);
+        Assert.True(newRow.AutoLinked);
+    }
+
+    [Fact]
+    public async Task Update_ClearsPreferredStaffId_RemovesAutoLinkedCompatibilityRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Alex", LastName = "Rivera", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        db.Staff.Add(staff);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var createDto = MinimalCreateDto() with { PreferredStaffId = staff.Id };
+        var created = await controller.Create(createDto, CancellationToken.None);
+        var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
+        Assert.True(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participantId));
+
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, PreferredStaffId = null,
+        };
+        var updateResult = await controller.Update(participantId, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        Assert.False(await db.StaffParticipantCompatibilities.AnyAsync(c => c.StaffId == staff.Id && c.ParticipantId == participantId));
+    }
+
+    [Fact]
+    public async Task Update_ChangesPreferredStaffId_HumanManagedOldRow_IsNotDeleted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var oldStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        var newStaff = new Domain.Entities.Staff { Id = Guid.NewGuid(), FirstName = "New", LastName = "Staff", Role = Domain.Enums.StaffRole.SupportWorker, IsActive = true };
+        db.Staff.AddRange(oldStaff, newStaff);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, PreferredStaffId = oldStaff.Id };
+        db.Participants.Add(participant);
+        db.StaffParticipantCompatibilities.Add(new Domain.Rostering.StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), StaffId = oldStaff.Id, ParticipantId = participant.Id,
+            Level = Domain.Rostering.CompatibilityLevel.Preferred, AutoLinked = false, Reason = "Set by coordinator", UpdatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, PreferredStaffId = newStaff.Id,
+        };
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var oldRow = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == oldStaff.Id && c.ParticipantId == participant.Id);
+        Assert.Equal(Domain.Rostering.CompatibilityLevel.Preferred, oldRow.Level);
+        Assert.Equal("Set by coordinator", oldRow.Reason);
     }
 }

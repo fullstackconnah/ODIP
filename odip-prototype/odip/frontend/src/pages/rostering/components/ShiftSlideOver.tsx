@@ -1,13 +1,14 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
+import type { DropdownItem } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
-  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, getRosterFindings,
+  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, getRosterFindings,
 } from '@/api/hooks'
 import { FindingsList } from './FindingsList'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
@@ -39,6 +40,9 @@ export type ShiftSlideOverProps = {
 function toTimeInputValue(time: string | undefined): string {
   return (time ?? '09:00').slice(0, 5)
 }
+
+/** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
+const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
 export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant' }: ShiftSlideOverProps) {
   const titleId = useId()
@@ -83,6 +87,34 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Read-only: surfaces the participant's routines/specifics relevant to this shift window so
   // a support worker doesn't have to leave the roster board to check them.
   const { data: participantRoutines = [] } = useParticipantRoutines(participantId || undefined)
+
+  // Compatibility matrix (task 6d): the same POST /shifts/check dry-run below already surfaces
+  // an Excluded pairing as a Warning finding once staff + date/time are all filled in, but that
+  // only tells you AFTER picking someone. This gives the hint before/without a selection —
+  // Preferred staff sort to the top of the dropdown and carry a hint; Excluded staff carry a
+  // non-blocking warning both in the dropdown and inline once selected.
+  const { data: compatibilityRows = [] } = useCompatibility(participantId || undefined)
+  const compatibilityByStaffId = useMemo(() => {
+    const map = new Map<string, 'Preferred' | 'Allowed' | 'Excluded'>()
+    compatibilityRows.forEach(row => map.set(row.staffId, row.level))
+    return map
+  }, [compatibilityRows])
+  const sortedStaffOptions: DropdownItem[] = useMemo(() => {
+    return staffOptions
+      .map(option => {
+        const level = compatibilityByStaffId.get(option.value)
+        return {
+          ...option,
+          description: level === 'Preferred' ? 'Preferred for this participant'
+            : level === 'Excluded' ? 'Not compatible with this participant'
+            : undefined,
+        }
+      })
+      // Array.prototype.sort is stable — ties (Allowed/no row) keep the caller's original order.
+      .sort((a, b) => COMPATIBILITY_RANK[compatibilityByStaffId.get(a.value) ?? 'Allowed'] - COMPATIBILITY_RANK[compatibilityByStaffId.get(b.value) ?? 'Allowed'])
+  }, [staffOptions, compatibilityByStaffId])
+  const selectedStaffCompatibility = staffId ? compatibilityByStaffId.get(staffId) : undefined
+  const selectedStaffLabel = staffOptions.find(s => s.value === staffId)?.label ?? 'This staff member'
   const relevantRoutines = participantId && serviceDate && startTime && endTime
     ? getRelevantRoutines(participantRoutines, { serviceDate, startTime, endTime, endsNextDay })
     : []
@@ -207,9 +239,19 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                 disabled={!canWrite}
                 searchable
                 label="Unassigned"
-                items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
+                items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
               />
             </FormField>
+            {selectedStaffCompatibility === 'Excluded' && (
+              <p role="alert" className="mt-1.5 text-xs font-medium text-destructive">
+                {selectedStaffLabel} is marked not compatible with this participant.
+              </p>
+            )}
+            {selectedStaffCompatibility === 'Preferred' && (
+              <p className="mt-1.5 text-xs text-primary">
+                {selectedStaffLabel} is a preferred staff member for this participant.
+              </p>
+            )}
           </div>
 
           <FormField label="Service date" required>

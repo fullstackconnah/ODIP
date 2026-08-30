@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
-import type { ParticipantRoutineDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
-  mockUseParticipantRoutines,
+  mockUseParticipantRoutines, mockUseCompatibility,
 } = vi.hoisted(() => ({
   mockCheckMutate: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
@@ -15,6 +15,7 @@ const {
   mockDeleteMutateAsync: vi.fn(),
   mockGetRosterFindings: vi.fn(() => null),
   mockUseParticipantRoutines: vi.fn(() => ({ data: [] as ParticipantRoutineDto[] })),
+  mockUseCompatibility: vi.fn(() => ({ data: [] as CompatibilityRowDto[] })),
 }))
 
 // Only the API layer is mocked — every other collaborator (FindingsList, useSlideOverA11y,
@@ -25,6 +26,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateShift: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeleteShift: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
   useParticipantRoutines: mockUseParticipantRoutines,
+  useCompatibility: mockUseCompatibility,
   getRosterFindings: mockGetRosterFindings,
 }))
 
@@ -51,12 +53,26 @@ function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): Participan
 const participantOptions = [{ value: 'participant-1', label: 'Mia Chen' }]
 const staffOptions = [{ value: 'staff-1', label: 'Alex Rivera' }]
 
+function makeCompatibilityRow(overrides: Partial<CompatibilityRowDto> = {}): CompatibilityRowDto {
+  return {
+    staffId: 'staff-1',
+    staffName: 'Alex Rivera',
+    participantId: 'participant-1',
+    participantName: 'Mia Chen',
+    level: 'Preferred',
+    reason: null,
+    updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   mockCheckMutate.mockClear()
   mockCreateMutateAsync.mockClear()
   mockUpdateMutateAsync.mockClear()
   mockDeleteMutateAsync.mockClear()
   mockUseParticipantRoutines.mockReturnValue({ data: [] as ParticipantRoutineDto[] })
+  mockUseCompatibility.mockReturnValue({ data: [] as CompatibilityRowDto[] })
 })
 
 describe('ShiftSlideOver override gate', () => {
@@ -235,5 +251,118 @@ describe('ShiftSlideOver routines & specifics', () => {
     )
 
     expect(screen.queryByText('Routines & specifics')).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver staff compatibility (task 6d)', () => {
+  const twoStaffOptions = [
+    { value: 'staff-1', label: 'Alex Rivera' },
+    { value: 'staff-2', label: 'Jordan Smith' },
+  ]
+
+  it('sorts a Preferred staff member to the top of the Staff dropdown, with a hint', async () => {
+    const user = userEvent.setup()
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-2', staffName: 'Jordan Smith', level: 'Preferred' })],
+    })
+    const shift = makeShift({ staffId: null, findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={twoStaffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText('Staff'))
+
+    const options = screen.getAllByRole('option')
+    const labels = options.map(o => o.textContent)
+    // Jordan Smith (Preferred) sorts ahead of Alex Rivera (no compatibility row), after Unassigned.
+    expect(labels.findIndex(l => l?.includes('Jordan Smith'))).toBeLessThan(labels.findIndex(l => l?.includes('Alex Rivera')))
+    expect(screen.getByText('Preferred for this participant')).toBeInTheDocument()
+  })
+
+  it('sinks an Excluded staff member to the bottom of the Staff dropdown, with a warning label', async () => {
+    const user = userEvent.setup()
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded' })],
+    })
+    const shift = makeShift({ staffId: null, findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={twoStaffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText('Staff'))
+
+    const options = screen.getAllByRole('option')
+    const labels = options.map(o => o.textContent)
+    expect(labels.findIndex(l => l?.includes('Jordan Smith'))).toBeLessThan(labels.findIndex(l => l?.includes('Alex Rivera')))
+    expect(screen.getByText('Not compatible with this participant')).toBeInTheDocument()
+  })
+
+  it('shows a non-blocking warning when the currently selected staff member is marked Excluded', () => {
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded' })],
+    })
+    // Default makeShift() staffId is staff-1 (Alex Rivera).
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/alex rivera is marked not compatible with this participant/i)
+    // Non-blocking: no Blocking/Warning findings present, so Save stays enabled.
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  })
+
+  it('shows a preferred hint (not an alert) when the currently selected staff member is marked Preferred', () => {
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Preferred' })],
+    })
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText(/alex rivera is a preferred staff member for this participant/i)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows neither hint nor warning for a staff member with no compatibility row (Allowed default)', () => {
+    mockUseCompatibility.mockReturnValue({ data: [] as CompatibilityRowDto[] })
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
   })
 })

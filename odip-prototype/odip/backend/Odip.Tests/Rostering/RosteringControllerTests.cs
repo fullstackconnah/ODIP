@@ -14,6 +14,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Rostering;
@@ -97,7 +98,7 @@ public class RosteringControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db, workerScreeningValid: false, expiredScreeningDate: new DateOnly(2020, 1, 1)); // genuinely expired -> WSC_EXPIRED, Blocking
         var participant = SeedParticipant(db);
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var dto = CleanCreateDto(participant.Id, staff.Id, overrideReason: "I really need this covered today");
 
@@ -126,7 +127,7 @@ public class RosteringControllerTests
         });
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var dto = CleanCreateDto(participant.Id, staff.Id); // no overrideReason
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
@@ -151,7 +152,7 @@ public class RosteringControllerTests
         });
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var dto = CleanCreateDto(participant.Id, staff.Id,
             overrideReason: "Coordinator approved despite the exclusion flag",
             codes: new List<string> { RosterConflictService.CompatibilityExcluded });
@@ -177,7 +178,7 @@ public class RosteringControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
         var participant = SeedParticipant(db);
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var dto = CleanCreateDto(participant.Id, staff.Id);
 
@@ -212,7 +213,7 @@ public class RosteringControllerTests
         db.ShiftPatterns.Add(pattern);
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var from = new DateOnly(2026, 8, 1);
         var to = new DateOnly(2026, 8, 31);
 
@@ -261,7 +262,7 @@ public class RosteringControllerTests
         db.Shifts.AddRange(filledShift, unfilledShift);
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
 
@@ -286,7 +287,7 @@ public class RosteringControllerTests
     public async Task GetBoard_DefaultsToParticipantMode()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         // groupBy omitted entirely — the spec's default is participant, not staff.
         var result = await controller.GetBoard(ServiceDate, null, CancellationToken.None);
@@ -306,7 +307,7 @@ public class RosteringControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db, "Amy", "Ng");
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
 
@@ -334,7 +335,7 @@ public class RosteringControllerTests
         db.Shifts.Add(unfilledShift);
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -372,7 +373,7 @@ public class RosteringControllerTests
             });
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
 
         var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
@@ -401,7 +402,7 @@ public class RosteringControllerTests
         });
         db.SaveChanges();
 
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
         var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
 
         var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
@@ -419,7 +420,7 @@ public class RosteringControllerTests
     public async Task GetBoard_UnrecognisedGroupBy_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var result = await controller.GetBoard(ServiceDate, "bogus", CancellationToken.None);
 
@@ -436,7 +437,7 @@ public class RosteringControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db, workerScreeningValid: false, expiredScreeningDate: new DateOnly(2020, 1, 1)); // genuinely expired -> WSC_EXPIRED, Blocking
         var participant = SeedParticipant(db);
-        var controller = new RosteringController(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
 
         var dto = CleanCreateDto(participant.Id, staff.Id, overrideReason: "I really need this covered today");
 
@@ -518,5 +519,93 @@ public class RosteringControllerTests
         // through to every action, including writes. A SupportWorker must NOT be a member of
         // the roster-authorised set.
         Assert.DoesNotContain("SupportWorker", roles);
+    }
+
+    // ── Task 6d: compatibility matrix -> participant preferred-staff linkage ──
+
+    [Fact]
+    public async Task UpsertCompatibility_MarkPreferred_EmptyParticipantPreferredStaffId_IsPopulated()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.UpsertCompatibility(
+            new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred },
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Equal(staff.Id, reloaded.PreferredStaffId);
+    }
+
+    [Fact]
+    public async Task UpsertCompatibility_MarkPreferred_ParticipantAlreadyHasADifferentPreferredStaff_IsNotOverwritten()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var existingPreferred = SeedStaff(db, firstName: "Existing", lastName: "Preferred");
+        var newlyMarked = SeedStaff(db, firstName: "Newly", lastName: "Marked");
+        var participant = SeedParticipant(db);
+        participant.PreferredStaffId = existingPreferred.Id;
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.UpsertCompatibility(
+            new UpsertCompatibilityDto { StaffId = newlyMarked.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred },
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Equal(existingPreferred.Id, reloaded.PreferredStaffId);
+    }
+
+    [Fact]
+    public async Task UpsertCompatibility_MoveMatchingPairOffPreferred_ClearsParticipantsPreferredStaffId()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        participant.PreferredStaffId = staff.Id;
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Level = CompatibilityLevel.Preferred, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.UpsertCompatibility(
+            new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded, Reason = "New concern" },
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Null(reloaded.PreferredStaffId);
+    }
+
+    [Fact]
+    public async Task UpsertCompatibility_AlwaysStampsAutoLinkedFalse_TakingOwnershipFromTheParticipantLink()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        // Simulate a row the participant-preferred-staff auto-link created.
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), StaffId = staff.Id, ParticipantId = participant.Id,
+            Level = CompatibilityLevel.Preferred, AutoLinked = true, UpdatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        // A human edits the same cell via the matrix endpoint.
+        await controller.UpsertCompatibility(
+            new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred, Reason = "Confirmed by coordinator" },
+            CancellationToken.None);
+
+        var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.StaffId == staff.Id && c.ParticipantId == participant.Id);
+        Assert.False(row.AutoLinked);
+        Assert.Equal("Confirmed by coordinator", row.Reason);
     }
 }
