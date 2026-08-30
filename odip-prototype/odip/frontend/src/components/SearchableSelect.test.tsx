@@ -182,6 +182,17 @@ describe('SearchableSelect — selection', () => {
 
     expect(onBlur).toHaveBeenCalled()
   })
+
+  it('keeps DOM focus on the input after a mouse click commits a selection (mousedown-blur guard)', async () => {
+    const user = userEvent.setup()
+    render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+
+    const combobox = screen.getByRole('combobox')
+    await user.click(combobox)
+    await user.click(screen.getByRole('option', { name: 'Casey Wong' }))
+
+    expect(document.activeElement).toBe(combobox)
+  })
 })
 
 describe('SearchableSelect — keyboard support', () => {

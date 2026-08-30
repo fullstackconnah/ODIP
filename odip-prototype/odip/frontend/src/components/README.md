@@ -203,7 +203,11 @@ found"`).
 
 **Accessibility**: trigger is a real `<button>` with `aria-haspopup="listbox"`,
 `aria-expanded`, `aria-activedescendant`; panel is `role="listbox"` of `role="option"`
-rows. Full arrow-key/Home/End/Enter/Escape support, click-outside-to-close.
+rows. Full arrow-key/Home/End/Enter/Escape support, click-outside-to-close. Option rows
+carry `onMouseDown={e => e.preventDefault()}` and `handleSelect` re-focuses the trigger
+button after a selection commits — without this, the browser's default mousedown-blur
+would blur the trigger before the click that commits the selection ever fires, stranding
+DOM focus outside the component (W3C APG / Downshift combobox pattern).
 
 **When to use**: a *bounded* option set (a handful up to maybe a couple dozen) presented
 as a button trigger — status pills, filter menus, kebab action menus, small selects.
@@ -263,6 +267,12 @@ options…" row while `items` is still empty) / disabled.
   **Escape** closes and discards the query; **Tab** closes and moves focus on, same as a
   native `<select>`.
 - 44px-tall input and option rows (touch-target guardrail).
+- Option rows carry `onMouseDown={e => e.preventDefault()}` and `handleSelect`
+  re-focuses the input after a selection commits — the same mousedown-blur guard as
+  Dropdown, for the same reason: without it, a mouse/touch click on an option blurs the
+  input before the click that commits the selection fires, stranding DOM focus outside
+  the component and breaking the "focus never leaves the input" contract this primitive
+  is built on.
 
 **When to use**: participant/staff/contact pickers, diagnosis/medication-style lookup
 lists, anything where the option count makes "just click through a Dropdown panel"

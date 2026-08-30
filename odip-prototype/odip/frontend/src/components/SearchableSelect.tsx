@@ -158,6 +158,12 @@ export function SearchableSelect({
     setOpen(false)
     setActiveIndex(-1)
     onBlur?.()
+    // Belt-and-suspenders alongside the option rows' onMouseDown preventDefault below: a mouse
+    // click on an option would otherwise blur the input (the browser blurs on mousedown, before
+    // the click that commits the selection fires) and strand focus nowhere, breaking this
+    // component's "focus never leaves the input" contract. This re-focus also covers any
+    // selection path that isn't a mouse click at all (e.g. programmatic/touch).
+    inputRef.current?.focus()
   }
 
   function handleFocus() {
@@ -259,6 +265,11 @@ export function SearchableSelect({
             id={optionId(idx)}
             aria-selected={item.value === value}
             aria-disabled={item.disabled ? 'true' : undefined}
+            // Prevents the browser's default mousedown-blur: without this, clicking an option
+            // blurs the input before the click event that commits the selection ever fires,
+            // stranding DOM focus outside the component. See handleSelect's re-focus for the
+            // belt-and-suspenders half of this (W3C APG / Downshift combobox pattern).
+            onMouseDown={e => e.preventDefault()}
             onClick={() => handleSelect(item)}
             onMouseEnter={() => !item.disabled && setActiveIndex(idx)}
             className={`min-h-[44px] flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-foreground)] text-left transition-colors cursor-pointer ${
