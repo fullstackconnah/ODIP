@@ -159,18 +159,24 @@ export default function IncidentCreatePage() {
     }
   }, [id, isEdit, existingIncident, reset])
 
-  // INC-03: apply the MAR drop-into-draft prefill once, on mount — deliberately not re-run when
-  // `staff` finishes loading, so a coordinator who's already started editing the pre-filled form
-  // never has their in-progress edits silently overwritten. reportedByStaffId is matched
-  // best-effort against whatever staff data is available at that moment (by id, falling back to
-  // name) — Staff/User aren't unified yet (MED-04), so an id match isn't guaranteed; leaving it
-  // blank when no match is found is the honest fallback rather than guessing.
+  // INC-03: apply the MAR drop-into-draft prefill once, on mount — a `useRef` "applied once"
+  // guard means a coordinator who's already started editing the pre-filled form never has their
+  // in-progress edits silently overwritten by a later run of this effect.
+  //
+  // reportedByStaffId uses marPrefill.recordedByUserId directly. Staff/User unification (PR #39)
+  // and MED-04 (PR #40) are both merged into this branch's base — staff records ARE user
+  // accounts, so `staff[].id` and `recordedByUserId` are the same id space, and the incident
+  // API's `reportedByStaffId` wire field validates against `_db.Users` server-side. No id-match
+  // against the loaded `staff` list is needed (the native <select> shows the right option once
+  // `staff` finishes loading, purely via value equality, regardless of load timing) — and
+  // critically, no name-based fallback: `fullName` has no uniqueness constraint, so matching by
+  // name risked silently attributing "Reported By" to a different same-named staff member,
+  // which is an audit-trail integrity defect on an NDIS incident report. If recordedByUserId
+  // doesn't correspond to any current staff member (e.g. a deactivated account), the field is
+  // simply left showing that raw id with no matching option — never a name-guessed wrong person.
   useEffect(() => {
     if (!marPrefill || appliedMarPrefillRef.current) return
     appliedMarPrefillRef.current = true
-    const matchedStaffId = staff.find(s => s.id === marPrefill.recordedByUserId)?.id
-      ?? staff.find(s => s.fullName === marPrefill.recordedByName)?.id
-      ?? ''
     reset({
       serviceType: marPrefill.tripInstanceId ? 'Trip' : 'None',
       tripInstanceId: marPrefill.tripInstanceId ?? '',
@@ -179,7 +185,7 @@ export default function IncidentCreatePage() {
       title: buildIncidentTitleSkeleton(marPrefill),
       description: buildIncidentDescriptionSkeleton(marPrefill),
       involvedParticipantId: marPrefill.participantId,
-      reportedByStaffId: matchedStaffId,
+      reportedByStaffId: marPrefill.recordedByUserId ?? '',
       incidentDateTime: buildIncidentDateTime(marPrefill),
       status: 'Draft',
       qscReportingStatus: 'NotRequired',
@@ -187,7 +193,7 @@ export default function IncidentCreatePage() {
       familyNotified: false,
       supportCoordinatorNotified: false,
     })
-  }, [marPrefill, staff, reset])
+  }, [marPrefill, reset])
 
   const onSubmit = async (data: IncidentFormData) => {
     const base: CreateIncidentDto = {

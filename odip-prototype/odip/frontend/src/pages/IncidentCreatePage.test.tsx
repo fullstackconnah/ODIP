@@ -20,7 +20,12 @@ vi.mock('@/api/hooks', () => ({
   useUpdateIncident: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
   useIncident: mockUseIncident,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }, { id: 'trip-2', tripName: 'Blue Mountains Adventure' }] }),
-  useStaff: () => ({ data: [{ id: 'staff-1', fullName: 'Alex Rivera' }] }),
+  // 'staff-3' deliberately shares a fullName with 'staff-1' — a same-name-different-id fixture
+  // for the INC-03 Reported-By prefill: it must never resolve by name (see the test below).
+  useStaff: () => ({ data: [
+    { id: 'staff-1', fullName: 'Alex Rivera' },
+    { id: 'staff-3', fullName: 'Alex Rivera' },
+  ] }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
 }))
 
@@ -193,25 +198,32 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     expect((screen.getByLabelText('Involved Participant') as HTMLSelectElement).value).toBe('participant-1')
   })
 
-  it('matches Reported By to the staff member the MAR record was recorded by (by id)', () => {
+  it('sets Reported By directly from the MAR record\'s recordedByUserId (Staff/User are unified — same id space)', () => {
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
 
     expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('staff-1')
   })
 
-  it('falls back to matching Reported By by name when the recorder id has no match in the staff list', () => {
+  // Regression coverage for the audit-trail integrity fix: fullName has no uniqueness
+  // constraint (the staff mock above deliberately has two "Alex Rivera" entries, staff-1 and
+  // staff-3), so the prefill must never fall back to matching by name — doing so risked
+  // silently attributing "Reported By" on an NDIS incident report to the wrong person.
+  it('never resolves Reported By by name, even when the id has no match and a same-named staff member exists', () => {
     renderCreatePage({
       pathname: '/incidents/new',
       state: { ...marPrefill, recordedByUserId: 'no-such-staff-id', recordedByName: 'Alex Rivera' },
     })
 
-    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('staff-1')
+    const select = screen.getByLabelText('Reported By *') as HTMLSelectElement
+    expect(select.value).not.toBe('staff-1')
+    expect(select.value).not.toBe('staff-3')
+    expect(select.value).toBe('')
   })
 
-  it('leaves Reported By blank (not a wrong guess) when neither id nor name matches any staff member', () => {
+  it('leaves Reported By blank (never a wrong guess) when recordedByUserId is absent entirely', () => {
     renderCreatePage({
       pathname: '/incidents/new',
-      state: { ...marPrefill, recordedByUserId: 'no-such-id', recordedByName: 'Nobody Known' },
+      state: { ...marPrefill, recordedByUserId: null },
     })
 
     expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('')
