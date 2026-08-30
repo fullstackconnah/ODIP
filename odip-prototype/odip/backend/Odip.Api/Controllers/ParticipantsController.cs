@@ -49,7 +49,9 @@ public class ParticipantsController : ControllerBase
                 IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
                 OvernightSupport = p.OvernightSupport,
                 // Derived: true iff the participant has any active restrictive-practice register row.
-                HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive)
+                HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive),
+                ServiceStreams = p.ServiceStreams,
+                HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -66,6 +68,9 @@ public class ParticipantsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        var hasActiveMedications = await _db.ParticipantMedications
+            .AnyAsync(m => m.ParticipantId == id && m.Status != MedicationStatus.Ceased, ct);
+
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {
             Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName,
@@ -81,6 +86,8 @@ public class ParticipantsController : ControllerBase
             RequiresCommode = p.RequiresCommode, RequiresStandingMachine = p.RequiresStandingMachine,
             // Derived: true iff the participant has any active restrictive-practice register row.
             HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive),
+            ServiceStreams = p.ServiceStreams,
+            HasActiveMedications = hasActiveMedications,
             MobilityNotes = p.MobilityNotes, EquipmentRequirements = p.EquipmentRequirements,
             TransportRequirements = p.TransportRequirements, MedicalSummary = p.MedicalSummary,
             BehaviourRiskSummary = p.BehaviourRiskSummary, Notes = p.Notes,
@@ -118,6 +125,7 @@ public class ParticipantsController : ControllerBase
             EquipmentRequirements = dto.EquipmentRequirements, TransportRequirements = dto.TransportRequirements,
             MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
             PreferredStaffId = dto.PreferredStaffId,
+            ServiceStreams = dto.ServiceStreams,
         };
         _db.Participants.Add(participant);
         await _db.SaveChangesAsync(ct);
@@ -151,7 +159,8 @@ public class ParticipantsController : ControllerBase
         p.SupportRatio = dto.SupportRatio; p.MobilityNotes = dto.MobilityNotes;
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;
-        p.Notes = dto.Notes; p.PreferredStaffId = dto.PreferredStaffId; p.UpdatedAt = DateTime.UtcNow;
+        p.Notes = dto.Notes; p.PreferredStaffId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
+        p.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, UpdatedAt = p.UpdatedAt }));

@@ -28,6 +28,9 @@ public record ParticipantListDto
     public SupportRatio SupportRatio { get; init; }
     public OvernightSupportType OvernightSupport { get; init; }
     public bool HasRestrictivePracticeFlag { get; init; }
+    public ServiceStreams ServiceStreams { get; init; }
+    /// <summary>Derived: true iff the participant has any non-Ceased ParticipantMedication row.</summary>
+    public bool HasActiveMedications { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto
@@ -101,6 +104,7 @@ public record CreateParticipantDto
     [StringLength(4000)]
     public string? Notes { get; init; }
     public Guid? PreferredStaffId { get; init; }
+    public ServiceStreams ServiceStreams { get; init; } = ServiceStreams.None;
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

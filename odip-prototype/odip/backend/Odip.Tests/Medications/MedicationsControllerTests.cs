@@ -540,4 +540,155 @@ public class MedicationsControllerTests
         Assert.NotNull(entry.Administration);
         Assert.Equal(MedicationAdministrationStatus.Administered, entry.Administration!.Status);
     }
+
+    // ── Administration report (task 6b) ───────────────────────────────────
+
+    [Fact]
+    public async Task GetAdministrationReport_OrdersByAdministrationTimeDescending()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Paracetamol", DoseDescription = "2 tablets",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        var earliest = DateTime.UtcNow.AddDays(-2);
+        var middle = DateTime.UtcNow.AddDays(-1);
+        var latest = DateTime.UtcNow;
+        db.MedicationAdministrations.AddRange(
+            new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+                Status = MedicationAdministrationStatus.Administered, AdministeredAt = middle, RecordedByName = "Test",
+            },
+            new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+                Status = MedicationAdministrationStatus.Administered, AdministeredAt = latest, RecordedByName = "Test",
+            },
+            new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+                Status = MedicationAdministrationStatus.Administered, AdministeredAt = earliest, RecordedByName = "Test",
+            });
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetAdministrationReport(null, null, null, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<AdministrationDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(3, body.Data!.TotalCount);
+        Assert.Equal(
+            new[] { latest, middle, earliest },
+            body.Data.Items.Select(a => a.AdministeredAt!.Value).ToArray());
+    }
+
+    [Fact]
+    public async Task GetAdministrationReport_FiltersByParticipant()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participantA = SeedParticipant(db, "Sophie", "Brown");
+        var participantB = SeedParticipant(db, "Harrison", "Lee");
+        var medA = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantA.Id, Name = "Paracetamol",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        var medB = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantB.Id, Name = "Ibuprofen",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.AddRange(medA, medB);
+        db.MedicationAdministrations.AddRange(
+            new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), ParticipantMedicationId = medA.Id, ParticipantId = participantA.Id,
+                Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            },
+            new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), ParticipantMedicationId = medB.Id, ParticipantId = participantB.Id,
+                Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            });
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetAdministrationReport(participantA.Id, null, null, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<AdministrationDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(participantA.Id, item.ParticipantId);
+    }
+
+    [Fact]
+    public async Task GetAdministrationReport_TenantScoped_OnlyReturnsCallersTenant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        // Seed as SuperAdmin (bypasses the query filter) with explicit TenantId per row, using
+        // the sync SaveChanges (not overridden) so the explicit TenantId values aren't touched.
+        using (var seedDb = CreateDb(dbName).Db)
+        {
+            var participantA = new Participant { Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+            var participantB = new Participant { Id = Guid.NewGuid(), TenantId = tenantBId, FirstName = "Harrison", LastName = "Lee", IsActive = true };
+            seedDb.Participants.AddRange(participantA, participantB);
+            var medA = new ParticipantMedication
+            {
+                Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participantA.Id, Name = "Paracetamol",
+                Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+                Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            };
+            var medB = new ParticipantMedication
+            {
+                Id = Guid.NewGuid(), TenantId = tenantBId, ParticipantId = participantB.Id, Name = "Ibuprofen",
+                Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+                Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            };
+            seedDb.ParticipantMedications.AddRange(medA, medB);
+            seedDb.MedicationAdministrations.AddRange(
+                new MedicationAdministration
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantMedicationId = medA.Id, ParticipantId = participantA.Id,
+                    Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+                },
+                new MedicationAdministration
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantBId, ParticipantMedicationId = medB.Id, ParticipantId = participantB.Id,
+                    Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+                });
+            seedDb.SaveChanges();
+        }
+
+        // Query as a non-SuperAdmin user scoped to tenant A.
+        var tenantAMock = new Mock<ICurrentTenant>();
+        tenantAMock.Setup(t => t.TenantId).Returns(tenantAId);
+        tenantAMock.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        using var scopedDb = new OdipDbContext(options, tenantAMock.Object);
+
+        var controller = new MedicationsController(scopedDb, tenantAMock.Object);
+        var result = await controller.GetAdministrationReport(null, null, null, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<AdministrationDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(tenantAId, (await scopedDb.MedicationAdministrations.IgnoreQueryFilters().SingleAsync(a => a.Id == item.Id)).TenantId);
+    }
+
+    [Fact]
+    public void GetAdministrationReport_IsRoleGated_AdminCoordinatorSuperAdminOnly()
+    {
+        var method = typeof(MedicationsController).GetMethod(nameof(MedicationsController.GetAdministrationReport));
+        var authorizeAttr = method!.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Single();
+        Assert.Equal("Admin,Coordinator,SuperAdmin", authorizeAttr.Roles);
+    }
 }

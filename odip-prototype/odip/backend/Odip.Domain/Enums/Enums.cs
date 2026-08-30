@@ -495,3 +495,28 @@ public enum RestrictivePracticeType
     EnvironmentalRestraint,
     Unclassified
 }
+
+/// <summary>
+/// Business-stream tags for a participant — which service line(s) they engage with (task 6b).
+/// Stored as a bitmask int on <see cref="Odip.Domain.Entities.Participant.ServiceStreams"/>,
+/// default <see cref="None"/> — new/existing participants stay untagged until explicitly set;
+/// no migration backfill is performed. Program.cs registers a global
+/// <c>JsonStringEnumConverter</c>, which natively serialises a combined flags value as a
+/// comma-separated list of names (e.g. "STA, Trip") and parses that same format back on input
+/// (via <c>Enum.Parse</c>'s built-in flags support) — so DTOs expose this as the plain enum type
+/// with no extra list-conversion plumbing needed (contrast with <see cref="Weekdays"/>, which is
+/// hand-converted to/from <c>List&lt;string&gt;</c> because its DTOs are built by mapping already
+/// -materialised entities rather than via a translated IQueryable projection).
+/// </summary>
+[Flags]
+public enum ServiceStreams
+{
+    None = 0,
+    STA = 1,
+    BSP = 2,
+    InHomeSupport = 4,
+    Trip = 8,
+    HIDPA = 16,
+    CommunityAccessDailyLiving = 32,
+    CommunityNursing = 64,
+}

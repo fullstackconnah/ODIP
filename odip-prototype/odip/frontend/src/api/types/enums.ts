@@ -98,6 +98,12 @@ export type InsuranceStatus = typeof INSURANCE_STATUSES[number]
 export const PAYMENT_STATUSES = ['NotInvoiced', 'InvoiceSent', 'Partial', 'Paid', 'Overdue'] as const
 export type PaymentStatus = typeof PAYMENT_STATUSES[number]
 
+// ── Service Streams (participant business-stream tags) ──
+export const SERVICE_STREAMS = [
+  'STA', 'BSP', 'InHomeSupport', 'Trip', 'HIDPA', 'CommunityAccessDailyLiving', 'CommunityNursing',
+] as const
+export type ServiceStream = typeof SERVICE_STREAMS[number]
+
 // ── Contact Type ────────────────────────────────────────
 export const CONTACT_TYPES = ['General', 'Guardian', 'EmergencyContact', 'PlanManager', 'SupportCoordinator', 'Primary', 'Secondary', 'Other'] as const
 export type ContactType = typeof CONTACT_TYPES[number]

@@ -88,6 +88,14 @@ export function usePermissions() {
     canRecordAdministrations: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
+     * The cross-participant medication administration report endpoint
+     * (GET /medications/administrations/report) is role-gated server-side to
+     * Admin/Coordinator/SuperAdmin — narrower than canRecordAdministrations. Mirrors that gate
+     * so the Report tab isn't shown to a role whose request would just 403.
+     */
+    canViewAdministrationReport: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Participant notes are shift-facing (care preferences, routines) — any role that
      * works a shift can write one. Only ReadOnly is excluded.
      */

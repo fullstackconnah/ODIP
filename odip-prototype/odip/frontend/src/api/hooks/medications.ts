@@ -9,6 +9,7 @@ import type {
   CreateAdministrationDto,
   UpdateAdministrationDto,
   MarDayDto,
+  PagedResult,
 } from '../types'
 
 // Invalidates every cache that a medication/administration mutation can affect —
@@ -60,6 +61,14 @@ export function useParticipantAdministrations(participantId: string | undefined,
     queryKey: ['participant-administrations', participantId, from, to],
     queryFn: () => apiGet<AdministrationDto[]>(`/participants/${participantId}/administrations`, { from, to }),
     enabled: !!participantId,
+  })
+}
+
+/** Cross-participant medication administration report, ordered by administration time desc. */
+export function useAdministrationsReport(params: { participantId?: string; from?: string; to?: string; page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ['administrations-report', params],
+    queryFn: () => apiGet<PagedResult<AdministrationDto>>('/medications/administrations/report', params),
   })
 }
 

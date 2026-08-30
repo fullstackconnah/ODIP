@@ -1,4 +1,5 @@
-import type { PlanType, SupportRatio, OvernightSupportType } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream } from './enums'
+import { SERVICE_STREAMS } from './enums'
 
 export const MOBILITY_SUPPORT_OPTIONS = [
   'Wheelchair in vehicle',
@@ -33,6 +34,46 @@ export const OVERNIGHT_RATIO_LABELS: Record<SupportRatio, string> = {
   OneToFive: '1:5',
 }
 
+export const SERVICE_STREAM_LABELS: Record<ServiceStream, string> = {
+  STA: 'STA',
+  BSP: 'BSP',
+  InHomeSupport: 'In-Home Support',
+  Trip: 'Trip',
+  HIDPA: 'HIDPA',
+  CommunityAccessDailyLiving: 'Community Access / Daily Living',
+  CommunityNursing: 'Community Nursing',
+}
+
+/** Full expansions for the abbreviated stream labels — surfaced as a title tooltip on badges. */
+export const SERVICE_STREAM_TITLES: Record<ServiceStream, string> = {
+  STA: 'Short Term Accommodation',
+  BSP: 'Behaviour Support Plan',
+  InHomeSupport: 'In-Home Support',
+  Trip: 'Trip',
+  HIDPA: 'High Intensity Daily Personal Activities',
+  CommunityAccessDailyLiving: 'Community Access / Daily Living',
+  CommunityNursing: 'Community Nursing',
+}
+
+/**
+ * The backend exposes ServiceStreams as a plain [Flags] enum column. Program.cs registers a
+ * global JsonStringEnumConverter, which natively serialises a combined flags value as a
+ * comma-separated list of member names (e.g. "STA, Trip", or "None" when untagged) and parses
+ * that same format back on input (via Enum.Parse's built-in flags support) — so the wire value
+ * is just a string. These helpers translate that string to/from the string[] shape components
+ * actually want to work with (checkboxes, badges), matching how MobilitySupportOptions is
+ * already handled as a plain string array elsewhere in this file.
+ */
+export function parseServiceStreams(value: string | null | undefined): ServiceStream[] {
+  if (!value || value === 'None') return []
+  const known: readonly string[] = SERVICE_STREAMS
+  return value.split(',').map((s) => s.trim()).filter((s): s is ServiceStream => known.includes(s))
+}
+
+export function formatServiceStreams(streams: ServiceStream[] | undefined): string {
+  return streams && streams.length ? streams.join(', ') : 'None'
+}
+
 export interface ParticipantListDto {
   id: string
   firstName: string
@@ -58,6 +99,9 @@ export interface ParticipantListDto {
   requiresStandingMachine: boolean
   hasRestrictivePracticeFlag?: boolean
   supportRatio: SupportRatio
+  /** Wire format: comma-separated ServiceStreams flag names, or "None" — see parseServiceStreams. */
+  serviceStreams: string
+  hasActiveMedications: boolean
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
@@ -111,6 +155,8 @@ export interface CreateParticipantDto {
   behaviourRiskSummary?: string
   notes?: string
   preferredStaffId?: string | null
+  /** Wire format: comma-separated ServiceStreams flag names, or "None" — see formatServiceStreams. */
+  serviceStreams: string
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {
