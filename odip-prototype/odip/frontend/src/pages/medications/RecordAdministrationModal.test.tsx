@@ -36,6 +36,7 @@ beforeEach(() => {
   mockUseStaff.mockReturnValue({
     data: [makeStaff(), makeStaff({ id: 'staff-2', firstName: 'Jordan', lastName: 'Lee', fullName: 'Jordan Lee' })],
   })
+  localStorage.clear()
 })
 
 const baseProps = {
@@ -95,6 +96,28 @@ describe('RecordAdministrationModal witness picker', () => {
       medicationId: 'med-1',
       data: expect.objectContaining({ witnessStaffId: 'staff-2' }),
     }))
+  })
+
+  it('excludes the signed-in user from the witness picker when they have a linked StaffId', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ staffId: 'staff-1' }))
+    const user = userEvent.setup()
+    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+
+    await user.click(screen.getByRole('button', { name: /witness/i }))
+
+    expect(screen.queryByRole('option', { name: 'Rachel Thompson' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
+  })
+
+  it('leaves the witness picker unchanged when the signed-in user has no linked StaffId', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ staffId: null }))
+    const user = userEvent.setup()
+    render(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+
+    await user.click(screen.getByRole('button', { name: /witness/i }))
+
+    expect(screen.getByRole('option', { name: 'Rachel Thompson' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
   })
 })
 
