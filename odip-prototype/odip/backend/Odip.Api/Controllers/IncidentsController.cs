@@ -33,6 +33,30 @@ public class IncidentsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// INC-01 validation: null is always fine, otherwise the id must resolve to a TripInstance —
+    /// same-tenant scoping comes for free from _db.TripInstances' ambient OdipDbContext query
+    /// filter, same pattern as <see cref="IsValidUserRefAsync"/>.
+    /// </summary>
+    private Task<bool> IsValidTripRefAsync(Guid? tripId, CancellationToken ct) =>
+        tripId.HasValue
+            ? _db.TripInstances.AnyAsync(t => t.Id == tripId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// INC-01/INC-02 cross-field validation shared by Create and Update: a Trip-stream incident
+    /// must carry a valid trip link, and an "Other" incident type must carry its specify text.
+    /// Returns an error message, or null when the dto passes.
+    /// </summary>
+    private static string? ValidateServiceTypeAndIncidentType(CreateIncidentDto dto)
+    {
+        if (dto.ServiceType == ServiceStreams.Trip && dto.TripInstanceId == null)
+            return "A trip must be selected when the service type is Trip.";
+        if (dto.IncidentType == IncidentType.Other && string.IsNullOrWhiteSpace(dto.OtherTypeSpecify))
+            return "Please specify the incident type.";
+        return null;
+    }
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
@@ -60,9 +84,11 @@ public class IncidentsController : ControllerBase
             .Select(i => new IncidentListDto
             {
                 Id = i.Id,
+                ServiceType = i.ServiceType,
                 TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance.TripName,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
                 IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
                 Severity = i.Severity,
                 Status = i.Status,
                 Title = i.Title,
@@ -94,9 +120,11 @@ public class IncidentsController : ControllerBase
             .Select(i => new IncidentDetailDto
             {
                 Id = i.Id,
+                ServiceType = i.ServiceType,
                 TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance.TripName,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
                 IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
                 Severity = i.Severity,
                 Status = i.Status,
                 Title = i.Title,
@@ -147,6 +175,11 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Create([FromBody] CreateIncidentDto dto, CancellationToken ct)
     {
+        var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
+        if (crossFieldError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
+        if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -155,12 +188,14 @@ public class IncidentsController : ControllerBase
         var incident = new IncidentReport
         {
             Id = Guid.NewGuid(),
+            ServiceType = dto.ServiceType,
             TripInstanceId = dto.TripInstanceId,
             ParticipantBookingId = dto.ParticipantBookingId,
             InvolvedParticipantId = dto.InvolvedParticipantId,
             InvolvedUserId = dto.InvolvedStaffId,
             ReportedByUserId = dto.ReportedByStaffId,
             IncidentType = dto.IncidentType,
+            OtherTypeSpecify = dto.OtherTypeSpecify,
             Severity = dto.Severity,
             Title = dto.Title,
             Description = dto.Description,
@@ -190,9 +225,11 @@ public class IncidentsController : ControllerBase
         return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
         {
             Id = incident.Id,
+            ServiceType = incident.ServiceType,
             TripInstanceId = incident.TripInstanceId,
             TripName = incident.TripInstance?.TripName,
             IncidentType = incident.IncidentType,
+            OtherTypeSpecify = incident.OtherTypeSpecify,
             Severity = incident.Severity,
             Status = incident.Status,
             Title = incident.Title,
@@ -216,6 +253,11 @@ public class IncidentsController : ControllerBase
         var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
 
+        var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
+        if (crossFieldError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
+        if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -223,12 +265,14 @@ public class IncidentsController : ControllerBase
         if (!await IsValidUserRefAsync(dto.ReviewedByStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Reviewed-by staff member not found."));
 
+        i.ServiceType = dto.ServiceType;
         i.TripInstanceId = dto.TripInstanceId;
         i.ParticipantBookingId = dto.ParticipantBookingId;
         i.InvolvedParticipantId = dto.InvolvedParticipantId;
         i.InvolvedUserId = dto.InvolvedStaffId;
         i.ReportedByUserId = dto.ReportedByStaffId;
         i.IncidentType = dto.IncidentType;
+        i.OtherTypeSpecify = dto.OtherTypeSpecify;
         i.Severity = dto.Severity;
         i.Status = dto.Status;
         i.Title = dto.Title;
@@ -269,9 +313,11 @@ public class IncidentsController : ControllerBase
         return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
         {
             Id = i.Id,
+            ServiceType = i.ServiceType,
             TripInstanceId = i.TripInstanceId,
             TripName = i.TripInstance?.TripName,
             IncidentType = i.IncidentType,
+            OtherTypeSpecify = i.OtherTypeSpecify,
             Severity = i.Severity,
             Status = i.Status,
             Title = i.Title,
@@ -312,9 +358,11 @@ public class IncidentsController : ControllerBase
             .Select(i => new IncidentListDto
             {
                 Id = i.Id,
+                ServiceType = i.ServiceType,
                 TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance.TripName,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
                 IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
                 Severity = i.Severity,
                 Status = i.Status,
                 Title = i.Title,
@@ -349,9 +397,11 @@ public class IncidentsController : ControllerBase
             .Select(i => new IncidentListDto
             {
                 Id = i.Id,
+                ServiceType = i.ServiceType,
                 TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance.TripName,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
                 IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
                 Severity = i.Severity,
                 Status = i.Status,
                 Title = i.Title,

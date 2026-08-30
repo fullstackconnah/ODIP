@@ -36,6 +36,12 @@ public class ParticipantsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>INTAKE-05: Gender "Other" requires the self-description free-text field, both ends.</summary>
+    private static string? ValidateGender(CreateParticipantDto dto) =>
+        dto.Gender == Gender.Other && string.IsNullOrWhiteSpace(dto.GenderSelfDescription)
+            ? "Please provide a gender self-description."
+            : null;
+
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
@@ -92,7 +98,8 @@ public class ParticipantsController : ControllerBase
             Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName,
             FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
-            NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, PlanType = p.PlanType, Region = p.Region,
+            NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
+            PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region,
             FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
             MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
@@ -125,13 +132,19 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
                 $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
 
+        var genderError = ValidateGender(dto);
+        if (genderError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
         var participant = new Participant
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, PreferredName = dto.PreferredName,
-            DateOfBirth = dto.DateOfBirth, NdisNumber = dto.NdisNumber, PlanType = dto.PlanType, Region = dto.Region,
+            DateOfBirth = dto.DateOfBirth, Gender = dto.Gender, GenderSelfDescription = dto.GenderSelfDescription,
+            NdisNumber = dto.NdisNumber, PlanStartDate = dto.PlanStartDate, PlanEndDate = dto.PlanEndDate,
+            PlanType = dto.PlanType, Region = dto.Region,
             FundingOrganisation = dto.FundingOrganisation, IsRepeatClient = dto.IsRepeatClient,
             MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
             MobilitySupportOptions = dto.MobilitySupportOptions,
@@ -165,6 +178,10 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
                 $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
 
+        var genderError = ValidateGender(dto);
+        if (genderError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -174,7 +191,9 @@ public class ParticipantsController : ControllerBase
         var previousPreferredStaffId = p.PreferredUserId;
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
-        p.DateOfBirth = dto.DateOfBirth; p.NdisNumber = dto.NdisNumber; p.PlanType = dto.PlanType;
+        p.DateOfBirth = dto.DateOfBirth; p.Gender = dto.Gender; p.GenderSelfDescription = dto.GenderSelfDescription;
+        p.NdisNumber = dto.NdisNumber; p.PlanStartDate = dto.PlanStartDate; p.PlanEndDate = dto.PlanEndDate;
+        p.PlanType = dto.PlanType;
         p.Region = dto.Region; p.FundingOrganisation = dto.FundingOrganisation; p.IsRepeatClient = dto.IsRepeatClient;
         p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;

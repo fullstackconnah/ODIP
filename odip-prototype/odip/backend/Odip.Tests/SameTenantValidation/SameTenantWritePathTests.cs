@@ -115,7 +115,7 @@ public class SameTenantWritePathTests
         var dto = new CreateIncidentDto
         {
             TripInstanceId = trip.Id, InvolvedStaffId = foreignInvolved.Id, ReportedByStaffId = reporter.Id,
-            IncidentType = IncidentType.Other, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var result = await controller.Create(dto, CancellationToken.None);
 
@@ -135,7 +135,7 @@ public class SameTenantWritePathTests
         var dto = new CreateIncidentDto
         {
             TripInstanceId = trip.Id, ReportedByStaffId = foreignReporter.Id,
-            IncidentType = IncidentType.Other, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var result = await controller.Create(dto, CancellationToken.None);
 
@@ -156,7 +156,7 @@ public class SameTenantWritePathTests
         var createDto = new CreateIncidentDto
         {
             TripInstanceId = trip.Id, ReportedByStaffId = reporter.Id,
-            IncidentType = IncidentType.Other, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var created = await controller.Create(createDto, CancellationToken.None);
         var incidentId = Assert.IsType<ApiResponse<IncidentListDto>>(
@@ -165,13 +165,95 @@ public class SameTenantWritePathTests
         var updateDto = new UpdateIncidentDto
         {
             TripInstanceId = trip.Id, ReportedByStaffId = reporter.Id, ReviewedByStaffId = foreignReviewer.Id,
-            IncidentType = IncidentType.Other, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var result = await controller.Update(incidentId, updateDto, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<IncidentListDto>>(badRequest.Value);
         Assert.Contains("reviewed-by", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── Incidents: INC-01 trip linkage ──────────────────────────────────
+
+    [Fact]
+    public async Task Incidents_TripFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var reporter = SeedUserInTenant(db, tenantAId, "Own", "Reporter");
+        var foreignTrip = SeedTrip(db, tenantBId);
+        var controller = new IncidentsController(db);
+
+        var dto = new CreateIncidentDto
+        {
+            ServiceType = ServiceStreams.Trip, TripInstanceId = foreignTrip.Id, ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(badRequest.Value);
+        Assert.Contains("trip", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Incidents_ServiceTypeTripWithoutTripId_ReturnsBadRequest()
+    {
+        var (db, tenantAId, _) = CreateDbWithTwoTenants();
+        var reporter = SeedUserInTenant(db, tenantAId, "Own", "Reporter");
+        var controller = new IncidentsController(db);
+
+        var dto = new CreateIncidentDto
+        {
+            ServiceType = ServiceStreams.Trip, TripInstanceId = null, ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(badRequest.Value);
+        Assert.Contains("trip", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Incidents_OtherTypeWithoutSpecify_ReturnsBadRequest()
+    {
+        var (db, tenantAId, _) = CreateDbWithTwoTenants();
+        var reporter = SeedUserInTenant(db, tenantAId, "Own", "Reporter");
+        var controller = new IncidentsController(db);
+
+        var dto = new CreateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Other, OtherTypeSpecify = null, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(badRequest.Value);
+        Assert.Contains("specify", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Incidents_NoServiceType_DoesNotRequireTrip()
+    {
+        // A non-Trip incident (e.g. an STA/BSP service incident) must not be forced through the
+        // trip-required rule — TripInstanceId is optional whenever ServiceType != Trip.
+        var (db, tenantAId, _) = CreateDbWithTwoTenants();
+        var reporter = SeedUserInTenant(db, tenantAId, "Own", "Reporter");
+        var controller = new IncidentsController(db);
+
+        var dto = new CreateIncidentDto
+        {
+            ServiceType = ServiceStreams.STA, TripInstanceId = null, ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Null(body.Data!.TripInstanceId);
+        Assert.Equal(ServiceStreams.STA, body.Data!.ServiceType);
     }
 
     // ── Trips: lead coordinator + driver ────────────────────────────────

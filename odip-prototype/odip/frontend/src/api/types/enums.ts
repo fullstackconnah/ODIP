@@ -2,6 +2,10 @@
 export const PLAN_TYPES = ['SelfManaged', 'PlanManaged', 'AgencyManaged'] as const
 export type PlanType = typeof PLAN_TYPES[number]
 
+// ── Gender (participant identity, INTAKE-05) ────────────
+export const GENDERS = ['Male', 'Female', 'NonBinary', 'PreferNotToSay', 'Other'] as const
+export type Gender = typeof GENDERS[number]
+
 // ── Support Ratio ───────────────────────────────────────
 export const SUPPORT_RATIOS = ['OneToOne', 'OneToTwo', 'TwoToOne', 'SharedSupport', 'Other', 'OneToThree', 'OneToFour', 'OneToFive'] as const
 export type SupportRatio = typeof SUPPORT_RATIOS[number]

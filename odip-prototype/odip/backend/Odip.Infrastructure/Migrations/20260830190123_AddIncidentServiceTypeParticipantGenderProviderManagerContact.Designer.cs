@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830190123_AddIncidentServiceTypeParticipantGenderProviderManagerContact")]
+    partial class AddIncidentServiceTypeParticipantGenderProviderManagerContact
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1151,10 +1154,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("AdministeredAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("AdministeredAtTimeZone")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -1195,9 +1194,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<Guid?>("RecordedByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("ScheduledAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -1232,8 +1228,6 @@ namespace Odip.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParticipantId");
-
-                    b.HasIndex("RecordedByUserId");
 
                     b.HasIndex("TenantId");
 
@@ -3227,11 +3221,6 @@ namespace Odip.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Odip.Domain.Entities.User", "RecordedByUser")
-                        .WithMany()
-                        .HasForeignKey("RecordedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -3251,8 +3240,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
 
                     b.Navigation("ParticipantMedication");
-
-                    b.Navigation("RecordedByUser");
 
                     b.Navigation("Tenant");
 

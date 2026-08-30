@@ -18,6 +18,12 @@ public class Participant : ITenantEntity
         ? $"{FirstName} {LastName}"
         : $"{PreferredName} {LastName}";
     public DateOnly? DateOfBirth { get; set; }
+
+    /// <summary>Participant identity gender (INTAKE-05). Null = not specified.</summary>
+    public Gender? Gender { get; set; }
+
+    /// <summary>Optional free-text self-description, only meaningful when <see cref="Gender"/> is <see cref="Enums.Gender.Other"/>.</summary>
+    public string? GenderSelfDescription { get; set; }
     public string? NdisNumber { get; set; }
     public PlanType PlanType { get; set; }
     public string? Region { get; set; }

@@ -1,5 +1,13 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender } from './enums'
 import { SERVICE_STREAMS } from './enums'
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  Male: 'Male',
+  Female: 'Female',
+  NonBinary: 'Non-binary',
+  PreferNotToSay: 'Prefer not to say',
+  Other: 'Other',
+}
 
 export const MOBILITY_SUPPORT_OPTIONS = [
   'Wheelchair in vehicle',
@@ -106,7 +114,11 @@ export interface ParticipantListDto {
 
 export interface ParticipantDetailDto extends ParticipantListDto {
   dateOfBirth: string | null
+  gender: Gender | null
+  genderSelfDescription: string | null
   ndisNumber: string | null
+  planStartDate: string | null
+  planEndDate: string | null
   fundingOrganisation: string | null
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
@@ -126,7 +138,12 @@ export interface CreateParticipantDto {
   lastName: string
   preferredName?: string
   dateOfBirth?: string
+  gender?: Gender | null
+  /** Only meaningful (and validated server-side) when gender is "Other". */
+  genderSelfDescription?: string
   ndisNumber?: string
+  planStartDate?: string
+  planEndDate?: string
   planType: PlanType
   region?: string
   fundingOrganisation?: string

@@ -148,6 +148,60 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task Create_GenderAndPlanDates_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            Gender = Domain.Enums.Gender.NonBinary,
+            PlanStartDate = new DateOnly(2026, 1, 1),
+            PlanEndDate = new DateOnly(2026, 12, 31),
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal(Domain.Enums.Gender.NonBinary, body.Data!.Gender);
+        Assert.Equal(new DateOnly(2026, 1, 1), body.Data.PlanStartDate);
+        Assert.Equal(new DateOnly(2026, 12, 31), body.Data.PlanEndDate);
+    }
+
+    [Fact]
+    public async Task Create_GenderOtherWithoutSelfDescription_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Gender = Domain.Enums.Gender.Other, GenderSelfDescription = null };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("self-description", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_GenderOtherWithSelfDescription_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Gender = Domain.Enums.Gender.Other, GenderSelfDescription = "Genderfluid" };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal("Genderfluid", body.Data!.GenderSelfDescription);
+    }
+
+    [Fact]
     public async Task Update_ServiceStreamsFlags_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

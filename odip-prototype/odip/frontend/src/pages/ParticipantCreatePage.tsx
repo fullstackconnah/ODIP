@@ -8,9 +8,9 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream } from '@/api/types/enums'
-import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender } from '@/api/types/enums'
+import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const baseParticipantSchema = z.object({
@@ -18,7 +18,11 @@ const baseParticipantSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   preferredName: z.string().optional(),
   dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  genderSelfDescription: z.string().optional(),
   ndisNumber: z.string().optional(),
+  planStartDate: z.string().optional(),
+  planEndDate: z.string().optional(),
   planType: z.string().min(1),
   region: z.string().optional(),
   fundingOrganisation: z.string().optional(),
@@ -76,7 +80,21 @@ function equipmentRefine(data: EquipmentFields, ctx: z.RefinementCtx) {
   }
 }
 
-const participantSchema = baseParticipantSchema.superRefine(equipmentRefine)
+// INTAKE-05: Gender "Other" requires the self-description free-text field — same
+// standalone-function pattern as equipmentRefine, shared by the full schema and the Identity
+// step schema.
+type GenderFields = { gender?: string; genderSelfDescription?: string }
+function genderRefine(data: GenderFields, ctx: z.RefinementCtx) {
+  if (data.gender === 'Other' && !data.genderSelfDescription?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['genderSelfDescription'],
+      message: 'Please provide a gender self-description.',
+    })
+  }
+}
+
+const participantSchema = baseParticipantSchema.superRefine(equipmentRefine).superRefine(genderRefine)
 
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
 // favour of .issues), so it throws past react-hook-form instead of populating
@@ -102,8 +120,8 @@ function focusField(fieldName: string) {
   if (el instanceof HTMLElement) el.focus()
 }
 
-const STEP_IDENTITY_FIELDS = ['firstName', 'lastName', 'preferredName', 'dateOfBirth', 'preferredStaffId'] as const
-const STEP_NDIS_FIELDS = ['ndisNumber', 'planType', 'region', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
+const STEP_IDENTITY_FIELDS = ['firstName', 'lastName', 'preferredName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId'] as const
+const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -137,7 +155,7 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 // inputs of its own, so there is nothing to validate before landing on it besides the
 // preceding step.
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
-  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)),
+  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)),
@@ -165,6 +183,7 @@ export default function ParticipantCreatePage() {
   const { register, handleSubmit, reset, control, setValue, getValues, setError, clearErrors, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
     resolver: participantResolver,
     defaultValues: {
+      genderSelfDescription: '',
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
       isRepeatClient: false,
@@ -273,6 +292,7 @@ export default function ParticipantCreatePage() {
     requestFocus(firstField)
   }
 
+  const genderValue = useWatch({ control, name: 'gender' })
   const overnightSupportValue = useWatch({ control, name: 'overnightSupport' })
   const hasHiLoBed = useWatch({ control, name: 'requiresHiLoBed' })
   const hasHoist = useWatch({ control, name: 'requiresHoist' })
@@ -298,7 +318,11 @@ export default function ParticipantCreatePage() {
         lastName: existing.lastName ?? '',
         preferredName: existing.preferredName ?? '',
         dateOfBirth: existing.dateOfBirth ? existing.dateOfBirth.split('T')[0] : '',
+        gender: existing.gender ?? '',
+        genderSelfDescription: existing.genderSelfDescription ?? '',
         ndisNumber: existing.ndisNumber ?? '',
+        planStartDate: existing.planStartDate ? existing.planStartDate.split('T')[0] : '',
+        planEndDate: existing.planEndDate ? existing.planEndDate.split('T')[0] : '',
         planType: existing.planType ?? 'SelfManaged',
         region: existing.region ?? '',
         fundingOrganisation: existing.fundingOrganisation ?? '',
@@ -374,6 +398,13 @@ export default function ParticipantCreatePage() {
         { label: 'Last Name', value: watchedValues.lastName || '—' },
         { label: 'Preferred Name', value: watchedValues.preferredName || '—' },
         { label: 'Date of Birth', value: watchedValues.dateOfBirth || '—' },
+        {
+          label: 'Gender',
+          value: watchedValues.gender
+            ? (GENDER_LABELS[watchedValues.gender as Gender] ?? watchedValues.gender)
+              + (watchedValues.gender === 'Other' && watchedValues.genderSelfDescription ? ` (${watchedValues.genderSelfDescription})` : '')
+            : '—',
+        },
         { label: 'Preferred Staff Member', value: preferredStaffName },
       ],
     },
@@ -381,6 +412,8 @@ export default function ParticipantCreatePage() {
       step: 1,
       rows: [
         { label: 'NDIS Number', value: watchedValues.ndisNumber || '—' },
+        { label: 'Plan Start Date', value: watchedValues.planStartDate || '—' },
+        { label: 'Plan End Date', value: watchedValues.planEndDate || '—' },
         { label: 'Plan Type', value: PLAN_TYPE_LABELS[watchedValues.planType ?? ''] ?? '—' },
         { label: 'Region', value: watchedValues.region || '—' },
         { label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' },
@@ -516,6 +549,21 @@ export default function ParticipantCreatePage() {
               <FormField label="Date of Birth">
                 <input id="dateOfBirth" type="date" {...register('dateOfBirth')} />
               </FormField>
+
+              <FormField label="Gender">
+                <select id="gender" {...register('gender')}>
+                  <option value="">Not specified</option>
+                  {GENDERS.map((g) => (
+                    <option key={g} value={g}>{GENDER_LABELS[g]}</option>
+                  ))}
+                </select>
+              </FormField>
+
+              {genderValue === 'Other' && (
+                <FormField label="Gender Self-Description" required error={errors.genderSelfDescription?.message}>
+                  <input id="genderSelfDescription" {...register('genderSelfDescription')} placeholder="How the participant describes their gender" />
+                </FormField>
+              )}
             </Card>
 
             <Card title="Staff Preferences" className="space-y-4">
@@ -549,6 +597,14 @@ export default function ParticipantCreatePage() {
             <Card title="NDIS & Funding" className="space-y-4">
               <FormField label="NDIS Number">
                 <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
+              </FormField>
+
+              <FormField label="Plan Start Date">
+                <input id="planStartDate" type="date" {...register('planStartDate')} />
+              </FormField>
+
+              <FormField label="Plan End Date">
+                <input id="planEndDate" type="date" {...register('planEndDate')} />
               </FormField>
 
               <FormField label="Plan Type" required error={errors.planType?.message}>

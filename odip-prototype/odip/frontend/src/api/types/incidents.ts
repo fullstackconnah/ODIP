@@ -1,10 +1,17 @@
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from './enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream } from './enums'
+
+/** INC-01: same value set as ServiceStream, plus "None" — the untagged default (backend ServiceStreams.None). */
+export type IncidentServiceType = ServiceStream | 'None'
 
 export interface IncidentListDto {
   id: string
-  tripInstanceId: string
+  /** INC-01: business stream the incident occurred under. Selecting "Trip" is what makes tripInstanceId meaningful. */
+  serviceType: IncidentServiceType
+  tripInstanceId: string | null
   tripName: string | null
   incidentType: IncidentType
+  /** INC-02: required (server-validated) when incidentType is "Other". */
+  otherTypeSpecify: string | null
   severity: IncidentSeverity
   status: IncidentStatus
   title: string
@@ -45,12 +52,14 @@ export interface IncidentDetailDto extends IncidentListDto {
 }
 
 export interface CreateIncidentDto {
-  tripInstanceId: string
+  serviceType: IncidentServiceType
+  tripInstanceId?: string
   participantBookingId?: string
   involvedParticipantId?: string
   involvedStaffId?: string
   reportedByStaffId: string
   incidentType: IncidentType
+  otherTypeSpecify?: string
   severity: IncidentSeverity
   title: string
   description: string
