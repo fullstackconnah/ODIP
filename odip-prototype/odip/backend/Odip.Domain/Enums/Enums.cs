@@ -7,6 +7,22 @@ public enum PlanType
     AgencyManaged
 }
 
+/// <summary>
+/// Participant identity gender (INTAKE-05). Mirrors the Master Data Dictionary's PID-009
+/// convention ("M F NB Textbox" — a fixed set plus a free-text escape hatch): <see cref="Other"/>
+/// pairs with <see cref="Odip.Domain.Entities.Participant.GenderSelfDescription"/> for an
+/// optional self-described value. Nullable on the entity — existing/unspecified participants
+/// stay unset rather than being forced into a default.
+/// </summary>
+public enum Gender
+{
+    Male,
+    Female,
+    NonBinary,
+    PreferNotToSay,
+    Other
+}
+
 public enum SupportRatio
 {
     OneToOne,

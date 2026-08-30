@@ -10,9 +10,19 @@ public class IncidentReport
 {
     public Guid Id { get; set; }
 
-    // Trip context (required)
-    public Guid TripInstanceId { get; set; }
-    public TripInstance TripInstance { get; set; } = null!;
+    /// <summary>
+    /// Business-stream the incident occurred under (INC-01) — same value set as
+    /// <see cref="Participant.ServiceStreams"/>, single-selected rather than combined. Defaults
+    /// to <see cref="ServiceStreams.None"/> for incidents predating this field (no backfill).
+    /// Selecting <see cref="ServiceStreams.Trip"/> is what makes <see cref="TripInstanceId"/>
+    /// meaningful in the UI, but the two are independent at the data layer.
+    /// </summary>
+    public ServiceStreams ServiceType { get; set; } = ServiceStreams.None;
+
+    // Trip context — optional (INC-01): only incidents against the Trip service stream link to
+    // an actual TripInstance. Was a required FK before INC-01; existing rows keep their value.
+    public Guid? TripInstanceId { get; set; }
+    public TripInstance? TripInstance { get; set; }
 
     // Optional participant/staff links
     public Guid? ParticipantBookingId { get; set; }
@@ -28,6 +38,9 @@ public class IncidentReport
 
     // Incident details
     public IncidentType IncidentType { get; set; }
+
+    /// <summary>Required specify text when <see cref="IncidentType"/> is <see cref="Enums.IncidentType.Other"/> (INC-02).</summary>
+    public string? OtherTypeSpecify { get; set; }
     public IncidentSeverity Severity { get; set; }
     public IncidentStatus Status { get; set; } = IncidentStatus.Draft;
     public string Title { get; set; } = string.Empty;

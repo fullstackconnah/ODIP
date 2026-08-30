@@ -36,7 +36,11 @@ public record ParticipantListDto
 public record ParticipantDetailDto : ParticipantListDto
 {
     public DateOnly? DateOfBirth { get; init; }
+    public Gender? Gender { get; init; }
+    public string? GenderSelfDescription { get; init; }
     public string? NdisNumber { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
     public string? FundingOrganisation { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
     public SupportRatio OvernightRatio { get; init; }
@@ -66,8 +70,14 @@ public record CreateParticipantDto
     [StringLength(100)]
     public string? PreferredName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
+    public Gender? Gender { get; init; }
+    /// <summary>Only meaningful (and validated server-side) when Gender is "Other".</summary>
+    [StringLength(200)]
+    public string? GenderSelfDescription { get; init; }
     [StringLength(20)]
     public string? NdisNumber { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
     public PlanType PlanType { get; init; }
     [StringLength(100)]
     public string? Region { get; init; }
@@ -1198,9 +1208,12 @@ public record ScheduleVehicleTripStatusDto
 public record IncidentListDto
 {
     public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
+    public ServiceStreams ServiceType { get; init; }
+    public Guid? TripInstanceId { get; init; }
     public string? TripName { get; init; }
     public IncidentType IncidentType { get; init; }
+    /// <summary>Required (both ends) when <see cref="IncidentType"/> is <see cref="IncidentType.Other"/> (INC-02).</summary>
+    public string? OtherTypeSpecify { get; init; }
     public IncidentSeverity Severity { get; init; }
     public IncidentStatus Status { get; init; }
     public string Title { get; init; } = string.Empty;
@@ -1243,14 +1256,19 @@ public record IncidentDetailDto : IncidentListDto
 
 public record CreateIncidentDto
 {
-    [Required]
-    public Guid TripInstanceId { get; init; }
+    /// <summary>Business stream the incident occurred under (INC-01). Defaults to <see cref="ServiceStreams.None"/>.</summary>
+    public ServiceStreams ServiceType { get; init; } = ServiceStreams.None;
+    /// <summary>Only meaningful (and validated server-side) when <see cref="ServiceType"/> is <see cref="ServiceStreams.Trip"/>.</summary>
+    public Guid? TripInstanceId { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? InvolvedParticipantId { get; init; }
     public Guid? InvolvedStaffId { get; init; }
     [Required]
     public Guid ReportedByStaffId { get; init; }
     public IncidentType IncidentType { get; init; }
+    /// <summary>Required (server-validated) when <see cref="IncidentType"/> is <see cref="IncidentType.Other"/> (INC-02).</summary>
+    [StringLength(500)]
+    public string? OtherTypeSpecify { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;

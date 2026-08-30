@@ -138,6 +138,9 @@ public record ProviderSettingsDto
     public string? BSB { get; init; }
     public string? AccountNumber { get; init; }
     public string? InvoiceFooterNotes { get; init; }
+    /// <summary>MED-02: primary manager contact — shown first by the (future) MED-01 missed-medication guidance.</summary>
+    public string? ManagerName { get; init; }
+    public string? ManagerPhone { get; init; }
 }
 
 public record UpsertProviderSettingsDto
@@ -162,6 +165,10 @@ public record UpsertProviderSettingsDto
     public string? AccountNumber { get; init; }
     [StringLength(2000)]
     public string? InvoiceFooterNotes { get; init; }
+    [StringLength(200)]
+    public string? ManagerName { get; init; }
+    [StringLength(30)]
+    public string? ManagerPhone { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

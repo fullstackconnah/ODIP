@@ -19,4 +19,12 @@ public class ProviderSettings : ITenantEntity
     public string? BSB { get; set; }
     public string? AccountNumber { get; set; }
     public string? InvoiceFooterNotes { get; set; }
+
+    /// <summary>
+    /// MED-02: primary manager contact shown first in MED-01's missed-medication guidance (not
+    /// yet built — this is the setting CRUD/display only). Nullable — unset until an Admin fills
+    /// it in.
+    /// </summary>
+    public string? ManagerName { get; set; }
+    public string? ManagerPhone { get; set; }
 }
