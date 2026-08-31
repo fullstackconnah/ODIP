@@ -1,18 +1,20 @@
-// NOTES-02: frontend mirror of Odip.Domain.Rostering.ShiftNoteKeywordVocabulary
-// (backend/Odip.Domain/Rostering/ShiftNoteFlagging.cs). The actual scan happens server-side only
-// (see PortalController.CreateShiftNote/UpdateShiftNote) — the frontend never re-implements the
-// regex matching. This file exists purely for display: category labels for the portal's "this
-// note mentions X" banner and the coordinator's roster-slide-over badge, plus the same stem lists
-// kept alongside them for documentation/parity.
+// NOTES-02: frontend mirror of the CATEGORY TAXONOMY only from
+// Odip.Domain.Rostering.ShiftNoteKeywordVocabulary (backend/Odip.Domain/Rostering/ShiftNoteFlagging.cs).
+// The actual scan — and the keyword/stem lists it matches against — is backend-only by design
+// (see that file's remarks): the frontend never re-implements the regex matching, so it has no
+// load-bearing need for the word lists themselves. This file exists purely for display: category
+// labels for the portal's "this note mentions X" banner and the coordinator's roster-slide-over
+// badge, driven off the `flaggedCategories` names the server already returns.
 //
 // There is no shared codegen between the .NET backend and this Vite/TS frontend in this
-// prototype, so the two vocabularies are a manually-maintained parallel pair, not a single
-// generated source — a change to one is NOT automatically reflected in (or checked against) the
-// other. shiftNoteKeywords.test.ts checks this file's own internal completeness (every category
-// present, every list non-empty, no duplicates) the same way
-// Odip.Tests.Rostering.ShiftNoteKeywordVocabularyTests checks the backend's — same
+// prototype, so the two CATEGORY sets (not keyword lists — those don't exist here) are a
+// manually-maintained parallel pair, not a single generated source — a change to one is NOT
+// automatically reflected in (or checked against) the other. shiftNoteKeywords.test.ts checks
+// this file's own internal completeness (every category present, every category labelled) the
+// same way Odip.Tests.Rostering.ShiftNoteKeywordVocabularyTests checks the backend's — same
 // partition-completeness idiom as ChecklistItemTypeGroupsTests, applied per-side since the two
-// languages can't share one assertion. Keep the two lists' words identical when editing either.
+// languages can't share one assertion. Keep the category NAMES identical on both sides when
+// editing either; the backend's stem lists can change freely without touching this file at all.
 import type { IncidentType } from '@/api/types/enums'
 
 export type ShiftNoteFlagCategory = 'Falls' | 'Medication' | 'Injury' | 'BehaviourOfConcern'
@@ -25,14 +27,6 @@ export const SHIFT_NOTE_FLAG_LABELS: Record<ShiftNoteFlagCategory, string> = {
   Medication: 'medication',
   Injury: 'injury',
   BehaviourOfConcern: 'behaviours',
-}
-
-/** Word-for-word mirror of ShiftNoteKeywordVocabulary.Stems on the backend — see the file header. */
-export const SHIFT_NOTE_FLAG_KEYWORDS: Record<ShiftNoteFlagCategory, readonly string[]> = {
-  Falls: ['fall', 'fell', 'slip', 'stumble', 'collapse', 'tumble'],
-  Medication: ['medicat', 'dos', 'tablet', 'pill', 'prn', 'overdose', 'pharmacy'],
-  Injury: ['injur', 'wound', 'bruis', 'bleed', 'bled', 'lacerat', 'fracture', 'sprain', 'burn', 'scald'],
-  BehaviourOfConcern: ['aggress', 'agitat', 'meltdown', 'outburst', 'abscond', 'restrain', 'seclusion', 'distress', 'harm'],
 }
 
 /** Joins flagged category labels for the banner: "falls" / "falls and medication" / "falls, medication and injury". */

@@ -2,45 +2,26 @@ import { describe, it, expect } from 'vitest'
 import {
   SHIFT_NOTE_FLAG_CATEGORIES,
   SHIFT_NOTE_FLAG_LABELS,
-  SHIFT_NOTE_FLAG_KEYWORDS,
   formatFlaggedCategoryList,
   incidentTypeForFlaggedCategories,
-  type ShiftNoteFlagCategory,
 } from './shiftNoteKeywords'
 
 // NOTES-02 — partition-completeness style coverage for this file's own internal consistency
 // (same idiom as Odip.Tests.Rostering.ShiftNoteKeywordVocabularyTests on the backend; the two
-// sides can't cross-validate against each other — see this file's header comment for why).
+// sides can't cross-validate against each other — see this file's header comment for why). Only
+// the category taxonomy/labels are covered here — the keyword/stem lists the banner text is
+// ultimately driven by are backend-only (see ShiftNoteFlagging.cs), so this file carries no
+// keyword data to check.
 describe('SHIFT_NOTE_FLAG_CATEGORIES completeness', () => {
   it('has exactly the four documented categories', () => {
     expect(SHIFT_NOTE_FLAG_CATEGORIES).toEqual(['Falls', 'Medication', 'Injury', 'BehaviourOfConcern'])
   })
 
-  it('every category has a label', () => {
+  it('every category has a label, and no extra/missing labels exist', () => {
     for (const category of SHIFT_NOTE_FLAG_CATEGORIES) {
       expect(SHIFT_NOTE_FLAG_LABELS[category]).toBeTruthy()
     }
     expect(Object.keys(SHIFT_NOTE_FLAG_LABELS).sort()).toEqual([...SHIFT_NOTE_FLAG_CATEGORIES].sort())
-  })
-
-  it('every category has a non-empty keyword list with no duplicates', () => {
-    for (const category of SHIFT_NOTE_FLAG_CATEGORIES) {
-      const keywords = SHIFT_NOTE_FLAG_KEYWORDS[category]
-      expect(keywords.length).toBeGreaterThan(0)
-      expect(new Set(keywords.map(k => k.toLowerCase())).size).toBe(keywords.length)
-    }
-    expect(Object.keys(SHIFT_NOTE_FLAG_KEYWORDS).sort()).toEqual([...SHIFT_NOTE_FLAG_CATEGORIES].sort())
-  })
-
-  it('no stem is shared across two categories', () => {
-    const seen = new Map<string, ShiftNoteFlagCategory>()
-    for (const category of SHIFT_NOTE_FLAG_CATEGORIES) {
-      for (const stem of SHIFT_NOTE_FLAG_KEYWORDS[category]) {
-        const owner = seen.get(stem.toLowerCase())
-        expect(owner === undefined || owner === category).toBe(true)
-        seen.set(stem.toLowerCase(), category)
-      }
-    }
   })
 })
 

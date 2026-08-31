@@ -24,21 +24,33 @@ public enum ShiftNoteFlagCategory
 /// shift-note bodies against — one word/stem list per non-<see cref="ShiftNoteFlagCategory.None"/>
 /// category. This is a STARTING HEURISTIC, not a clinical or NLP-grade classifier: plain
 /// case-insensitive, word-boundary, prefix ("stem") matching only, deliberately simple and meant
-/// to be edited/extended as real usage shows gaps. Expect both false positives (a note saying "no
-/// harm done" trips BehaviourOfConcern via the "harm" stem) and false negatives (anything phrased
-/// without one of these words) — the product intent is a client-advisory nudge toward filing an
-/// incident report, never an authoritative determination, so both are an acceptable trade-off for
-/// staying simple and auditable.
+/// to be edited/extended as real usage shows gaps. Expect both false positives and false negatives
+/// (anything phrased without one of these words) — the product intent is a client-advisory nudge
+/// toward filing an incident report, never an authoritative determination, so both are an
+/// acceptable trade-off for staying simple and auditable. Verified false-positive examples worth
+/// knowing before editing this list further:
+/// <list type="bullet">
+/// <item><description>"no harm done" trips BehaviourOfConcern via the "harm" stem.</description></item>
+/// <item><description>"pillow"/"pillowcase" trip Medication via the "pill" stem.</description></item>
+/// <item><description>"tumble dryer" trips Falls via the "tumble" stem.</description></item>
+/// <item><description>"tablet" meaning the device (not medication) trips Medication via the "tablet" stem.</description></item>
+/// </list>
 ///
-/// Mirrored word-for-word on the frontend at frontend/src/lib/shiftNoteKeywords.ts (category
-/// labels + the same stem lists, for the portal banner text and its own display needs). There is
-/// no shared codegen between the two stacks in this prototype, so the two lists are a manually
-/// maintained parallel pair, not a single generated source — see that file's own header comment.
-/// Each side only checks its OWN internal completeness (every category present, every list
-/// non-empty, no duplicate stems): <see cref="Odip.Tests.Rostering.ShiftNoteKeywordVocabularyTests"/>
-/// here, shiftNoteKeywords.test.ts there. Neither test can see across the language boundary, so a
-/// change on one side that isn't mirrored on the other is NOT caught automatically — that's a
-/// known, documented limitation of not having shared codegen, not an oversight.
+/// The keyword/stem lists here are BACKEND-ONLY BY DESIGN — the frontend never re-implements this
+/// scan (see <see cref="ShiftNoteKeywordScanner"/>'s remarks) and only ever renders the category
+/// names the server already computed, so it has no load-bearing need for the words themselves.
+/// Only the CATEGORY TAXONOMY (the four <see cref="ShiftNoteFlagCategory"/> names + display
+/// labels) is mirrored on the frontend, at frontend/src/lib/shiftNoteKeywords.ts, for the portal
+/// banner text and the coordinator's roster-slide-over badge. There is no shared codegen between
+/// the two stacks in this prototype, so even that smaller taxonomy is a manually maintained
+/// parallel pair, not a single generated source — see that file's own header comment. Each side
+/// only checks its OWN internal completeness: <see cref="Odip.Tests.Rostering.ShiftNoteKeywordVocabularyTests"/>
+/// here (which does still cover this file's stem lists, since they're real here), shiftNoteKeywords.test.ts
+/// there (which only covers the category/label taxonomy, since that's all that file carries).
+/// Neither test can see across the language boundary, so a change on one side that isn't mirrored
+/// on the other is NOT caught automatically — that's a known, documented limitation of not having
+/// shared codegen, not an oversight. Editing a stem list here (adding/removing a word) needs no
+/// frontend change at all; only adding/removing/renaming a whole CATEGORY does.
 /// </summary>
 public static class ShiftNoteKeywordVocabulary
 {

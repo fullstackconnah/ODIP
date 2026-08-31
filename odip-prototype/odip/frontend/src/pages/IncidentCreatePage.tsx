@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { useForm, useWatch, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
+import { apiPost } from '@/api/client'
 import { ArrowLeft, Info, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { FormField } from '@/components/FormField'
@@ -334,6 +335,18 @@ export default function IncidentCreatePage() {
       } else {
         const res = await createIncident.mutateAsync(base)
         if (res.success) {
+          // NOTES-02: closing the loop on a shift-note-sourced filing — the note's flag prompt
+          // must not keep reappearing once the incident it prompted has actually been filed. The
+          // filer is the note's author by construction (this banner only ever renders on the
+          // portal author's own view of their own note), so the acknowledge endpoint's
+          // author-only ownership check holds. Fire-and-forget with error tolerance: the incident
+          // is already filed at this point, so a failure to acknowledge must never surface as a
+          // submission error — at most a console-level noop the worker never sees.
+          if (shiftNotePrefill) {
+            apiPost(`/portal/notes/${shiftNotePrefill.shiftNoteId}/acknowledge-flags`).catch(() => {
+              console.error('Failed to acknowledge shift note flags after filing an incident report.')
+            })
+          }
           flushSync(() => reset(data))
           navigate('/incidents')
         }
