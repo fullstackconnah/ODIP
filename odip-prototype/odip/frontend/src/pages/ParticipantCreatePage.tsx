@@ -13,11 +13,12 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
+import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
   GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams,
@@ -225,6 +226,39 @@ const baseParticipantSchema = z.object({
   receptiveSkills: z.string().optional(),
   readingAbility: z.string().optional(),
   communicationAids: z.string().optional(),
+  // INTAKE sub-wave C2 — the structured ADL rating grid (Daily Living step, research spec
+  // §4.9/§5). Fixed 20-row array (one per AdlType, never user-add/remove — same convention as
+  // healthConditions above), always all 20 rows, submitted on both create and edit saves. `level`
+  // is the tri... actually 5-state string ('Independent'|'Supervision'|'Assistance'|'FullSupport'|
+  // '' for not-assessed) rather than a bare enum, so ToggleGroup's "unmatched value" idiom covers
+  // the not-assessed state the same way the tri-state fields do.
+  adlAssessments: z.array(z.object({
+    adlType: z.string(),
+    level: z.string().optional(),
+    notes: z.string().optional(),
+  })).optional(),
+  // INTAKE sub-wave C2 — Meals & Diet (Daily Living step, research spec §4.9/§5, Master Data
+  // Dictionary MEAL-001..012 minus the allergies dedup onto allergiesDetail/isAnaphylaxisRisk on
+  // the Medical step — see this PR's report).
+  mealAssistanceDetail: z.string().optional(),
+  chokingRiskMealDetail: z.string().optional(),
+  modifiedDietDetail: z.string().optional(),
+  pegRegimeMealDetail: z.string().optional(),
+  specialUtensilsDetail: z.string().optional(),
+  specialDietaryNeedsDetail: z.string().optional(),
+  favouriteBreakfast: z.string().optional(),
+  favouriteLunch: z.string().optional(),
+  favouriteDinner: z.string().optional(),
+  medicationTricks: z.string().optional(),
+  foodsAlwaysEaten: z.string().optional(),
+  // INTAKE sub-wave C2 — About Me (Daily Living step, Master Data Dictionary GOAL-001..008 minus
+  // the Hobbies dedup onto personalInterests on the Cultural & Consent step — see this PR's report).
+  goals: z.string().optional(),
+  supportAreas: z.string().optional(),
+  strengthsFears: z.string().optional(),
+  thingsToKnow: z.string().optional(),
+  whoIsImportant: z.string().optional(),
+  likesDislikes: z.string().optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -514,6 +548,51 @@ function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
   )
 }
 
+// INTAKE sub-wave C2 — the ADL grid's 5-option I/S/A/F/not-assessed control. Same idiom as
+// YES_NO_UNANSWERED_OPTIONS: an explicit "Not assessed" option (not just an implicit "no match"
+// state) so the affordance is discoverable, matching every other tri/multi-state control on this
+// wizard.
+const ADL_LEVEL_OPTIONS = [
+  { key: 'Independent', label: 'I' },
+  { key: 'Supervision', label: 'S' },
+  { key: 'Assistance', label: 'A' },
+  { key: 'FullSupport', label: 'F' },
+  { key: '', label: 'Not assessed' },
+]
+
+/**
+ * INTAKE sub-wave C2 — the ADL grid's per-row Level control. Visible label is the generic "Level"
+ * (the row's own ADL-type name is already shown as that row's card heading, same layout idiom as
+ * the health-condition grid) — so, same review-round a11y fix as YesNoToggleField's ariaLabel
+ * param: with 20 rows all rendering an identically-labelled "Level" radiogroup, `ariaLabel` MUST
+ * carry the row-qualified name (e.g. "Level — Dressing") or a screen reader user navigating by
+ * role would hit twenty indistinguishable "Level" radiogroups with no way to tell which activity
+ * either belonged to — the C1 pattern (Plan Provided/Training Required), test-proven there with
+ * two rows, extended here across many more.
+ */
+function AdlLevelToggleField({ control, name, ariaLabel }: {
+  control: Control<ParticipantFormData>
+  name: FieldPath<ParticipantFormData>
+  ariaLabel: string
+}) {
+  return (
+    <FormField label="Level" className="mb-0">
+      <Controller
+        control={control}
+        name={name}
+        render={({ field }) => (
+          <ToggleGroup
+            options={ADL_LEVEL_OPTIONS}
+            value={(field.value as string) ?? ''}
+            onChange={field.onChange}
+            ariaLabel={ariaLabel}
+          />
+        )}
+      />
+    </FormField>
+  )
+}
+
 // Living arrangements (LIVING-01..04) and address (INTAKE-06) live on the Identity step rather
 // than a new wizard step or the Support Needs step: neither depends on funding/support-need
 // answers, and where/how a participant lives is core identity/intake context — putting them here
@@ -588,6 +667,18 @@ const STEP_BEHAVIOUR_COMMUNICATION_FIELDS = [
   'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
   'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
 ] as const
+// INTAKE sub-wave C2 — NEW step "Daily Living", placed between "Behaviour & Communication" and
+// "Risks & Hazards" per this PR's brief (research spec §4.9/§5's "Daily Living / ADLs" step):
+// the 20-row ADL rating grid (Personal + Community/Domestic, two grouped sections), Meals & Diet,
+// and About Me. All optional — draft-save must work with any subset filled, same doctrine as
+// every other wizard step.
+const STEP_DAILY_LIVING_FIELDS = [
+  'adlAssessments',
+  'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+  'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+  'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+  'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
+] as const
 const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const
 const STEP_REVIEW_FIELDS = [] as const
 
@@ -613,6 +704,8 @@ const WIZARD_STEPS: WizardStep[] = [
   { key: 'medical', label: 'Medical', fields: STEP_MEDICAL_FIELDS },
   // INTAKE sub-wave C1 — see STEP_BEHAVIOUR_COMMUNICATION_FIELDS' doc comment above for placement.
   { key: 'behaviourCommunication', label: 'Behaviour & Communication', fields: STEP_BEHAVIOUR_COMMUNICATION_FIELDS },
+  // INTAKE sub-wave C2 — see STEP_DAILY_LIVING_FIELDS' doc comment above for placement.
+  { key: 'dailyLiving', label: 'Daily Living', fields: STEP_DAILY_LIVING_FIELDS },
   // INTAKE sub-wave B: renamed from "Risks & Consents" — consent content now has its own step
   // (this one carried none to begin with: just Behaviour Risk Summary/General Notes/INTAKE-09
   // risk entries, nothing consent-shaped), so the two step names no longer overlap.
@@ -638,6 +731,8 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
   // INTAKE sub-wave C1 — every field optional, no cross-field requirement.
   baseParticipantSchema.pick(pickShape(STEP_BEHAVIOUR_COMMUNICATION_FIELDS)),
+  // INTAKE sub-wave C2 — every field optional, no cross-field requirement.
+  baseParticipantSchema.pick(pickShape(STEP_DAILY_LIVING_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
   null,
 ]
@@ -813,6 +908,8 @@ export default function ParticipantCreatePage() {
       memoryAids: '', impairedUnderstanding: '', impairedJudgementReasoning: '',
       behavioursOfConcernCurrent: '', behavioursOfConcernFiveYearHistory: '',
       ridsLogged: '', bspPlanProvided: '', bocChartProvided: '',
+      // INTAKE sub-wave C2 — fixed 20-row array, one per AdlType, all unassessed by default.
+      adlAssessments: ADL_TYPES.map((type) => ({ adlType: type, level: '' as const, notes: '' })),
     },
   })
   // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
@@ -1163,6 +1260,36 @@ export default function ParticipantCreatePage() {
         receptiveSkills: existing.receptiveSkills ?? '',
         readingAbility: existing.readingAbility ?? '',
         communicationAids: existing.communicationAids ?? '',
+        // INTAKE sub-wave C2 — the ADL rating grid. Same round-trip convention as
+        // healthConditions above: always all 20 ADL_TYPES rows, in that fixed order, regardless
+        // of what order the server returned them in.
+        adlAssessments: ADL_TYPES.map((type) => {
+          const a = existing.adlAssessments?.find((row) => row.adlType === type)
+          return {
+            adlType: type,
+            level: a?.level ?? '',
+            notes: a?.notes ?? '',
+          }
+        }),
+        // INTAKE sub-wave C2 — Meals & Diet.
+        mealAssistanceDetail: existing.mealAssistanceDetail ?? '',
+        chokingRiskMealDetail: existing.chokingRiskMealDetail ?? '',
+        modifiedDietDetail: existing.modifiedDietDetail ?? '',
+        pegRegimeMealDetail: existing.pegRegimeMealDetail ?? '',
+        specialUtensilsDetail: existing.specialUtensilsDetail ?? '',
+        specialDietaryNeedsDetail: existing.specialDietaryNeedsDetail ?? '',
+        favouriteBreakfast: existing.favouriteBreakfast ?? '',
+        favouriteLunch: existing.favouriteLunch ?? '',
+        favouriteDinner: existing.favouriteDinner ?? '',
+        medicationTricks: existing.medicationTricks ?? '',
+        foodsAlwaysEaten: existing.foodsAlwaysEaten ?? '',
+        // INTAKE sub-wave C2 — About Me.
+        goals: existing.goals ?? '',
+        supportAreas: existing.supportAreas ?? '',
+        strengthsFears: existing.strengthsFears ?? '',
+        thingsToKnow: existing.thingsToKnow ?? '',
+        whoIsImportant: existing.whoIsImportant ?? '',
+        likesDislikes: existing.likesDislikes ?? '',
       })
     }
   }, [existing, reset])
@@ -1260,6 +1387,15 @@ export default function ParticipantCreatePage() {
       planProvided: c.has === 'true' ? triStateToBool(c.planProvided) : null,
       trainingRequired: c.has === 'true' ? triStateToBool(c.trainingRequired) : null,
       notes: c.has === 'true' ? (c.notes || null) : null,
+    }))
+    // INTAKE sub-wave C2 — collapse the fixed 20-row ADL grid's ''-for-unassessed UI shape down
+    // to the backend's AdlLevel|null shape, same pattern as healthConditions above. Notes only
+    // travels with the payload once the row has an assessed level, mirroring healthConditions'
+    // severity/notes behaviour.
+    payload.adlAssessments = (data.adlAssessments ?? []).map((a) => ({
+      adlType: a.adlType,
+      level: a.level || null,
+      notes: a.level ? (a.notes || null) : null,
     }))
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
@@ -1569,7 +1705,37 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
+      // INTAKE sub-wave C2 — Daily Living step review summary. Only rows with a recorded level
+      // are worth summarising for the ADL grid (same "only answered rows" convention as the
+      // health-condition grid's review summary above); meals/about-me only show filled fields.
       step: 8,
+      rows: [
+        ...ADL_TYPES.map((type, index) => {
+          const row = watchedValues.adlAssessments?.[index]
+          if (!row?.level) return null
+          return { label: ADL_TYPE_LABELS[type], value: `${ADL_LEVEL_LABELS[row.level as AdlLevel]}${row.notes ? ` — ${row.notes}` : ''}` }
+        }).filter((row): row is { label: string; value: string } => row !== null),
+        { label: 'Meal Assistance', value: watchedValues.mealAssistanceDetail || '—' },
+        { label: 'Choking Risk — Meal Management', value: watchedValues.chokingRiskMealDetail || '—' },
+        { label: 'Modified Diet', value: watchedValues.modifiedDietDetail || '—' },
+        { label: 'PEG Regime', value: watchedValues.pegRegimeMealDetail || '—' },
+        { label: 'Special Utensils', value: watchedValues.specialUtensilsDetail || '—' },
+        { label: 'Special Dietary Needs', value: watchedValues.specialDietaryNeedsDetail || '—' },
+        { label: 'Favourite Breakfast', value: watchedValues.favouriteBreakfast || '—' },
+        { label: 'Favourite Lunch', value: watchedValues.favouriteLunch || '—' },
+        { label: 'Favourite Dinner', value: watchedValues.favouriteDinner || '—' },
+        { label: 'Medication Tricks', value: watchedValues.medicationTricks || '—' },
+        { label: 'Foods Always Eaten', value: watchedValues.foodsAlwaysEaten || '—' },
+        { label: 'Goals', value: watchedValues.goals || '—' },
+        { label: 'Support Areas', value: watchedValues.supportAreas || '—' },
+        { label: 'Strengths / Fears', value: watchedValues.strengthsFears || '—' },
+        { label: 'Things to Know', value: watchedValues.thingsToKnow || '—' },
+        { label: 'Who/What Is Important', value: watchedValues.whoIsImportant || '—' },
+        { label: 'Likes & Dislikes', value: watchedValues.likesDislikes || '—' },
+      ],
+    },
+    {
+      step: 9,
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -2737,7 +2903,145 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
+        {/* INTAKE sub-wave C2 — "Daily Living" step (research spec §4.9/§5), placed between
+            Behaviour & Communication and Risks & Hazards per this PR's brief: the 20-row ADL
+            rating grid rendered as two grouped sections (Personal / Community & Domestic — see
+            the backend AdlTypeGroups doc for why the grouping is derived from AdlType's fixed
+            declaration order rather than a stored column), Meals & Diet, and About Me. Fixed
+            20-row array, never user-add/remove — same local per-row conditional render as the
+            Cultural & Consent / Medical steps' grids above (not the INTAKE-07 conditionalFields
+            engine). RECONCILIATION: chokingRiskMealDetail is meal-management detail, distinct
+            from the health-condition grid's Dysphagia row (see the Meals & Diet card's hint) —
+            allergiesDetail/isAnaphylaxisRisk (Medical step) is NOT repeated here (dedup, see this
+            PR's report). Hobbies is likewise NOT repeated here — see personalInterests on the
+            Cultural & Consent step (dedup, this PR's report). */}
         {stepIndex === 8 && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Personal ADLs" className="space-y-4 md:col-span-2">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                I = Independent, S = Supervision, A = Assistance, F = Full Support. Levels sourced from
+                the Participant Profile's Personal Activities of Daily Living table.
+              </p>
+              <div className="space-y-3">
+                {PERSONAL_ADL_TYPES.map((type) => {
+                  const index = ADL_TYPES.indexOf(type)
+                  const level = watchedValues.adlAssessments?.[index]?.level
+                  const label = ADL_TYPE_LABELS[type as AdlType]
+                  return (
+                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                      <h4 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h4>
+                      <AdlLevelToggleField
+                        control={control}
+                        name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
+                        ariaLabel={`Level — ${label}`}
+                      />
+                      {level && (
+                        <FormField label="Notes" className="mb-0">
+                          <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                        </FormField>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+
+            <Card title="Community & Domestic ADLs" className="space-y-4 md:col-span-2">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Levels sourced from the Participant Profile's Community and Domestic ADL table.
+              </p>
+              <div className="space-y-3">
+                {COMMUNITY_DOMESTIC_ADL_TYPES.map((type) => {
+                  const index = ADL_TYPES.indexOf(type)
+                  const level = watchedValues.adlAssessments?.[index]?.level
+                  const label = ADL_TYPE_LABELS[type as AdlType]
+                  return (
+                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                      <h4 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h4>
+                      <AdlLevelToggleField
+                        control={control}
+                        name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
+                        ariaLabel={`Level — ${label}`}
+                      />
+                      {level && (
+                        <FormField label="Notes" className="mb-0">
+                          <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                        </FormField>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+
+            <Card title="Meals & Diet" className="space-y-4 md:col-span-2">
+              <FormField label="Meal Assistance">
+                <textarea id="mealAssistanceDetail" {...register('mealAssistanceDetail')} rows={2} placeholder="e.g. Independent, prompting only, full assistance..." />
+              </FormField>
+              <FormField
+                label="Choking Risk — Meal Management"
+                hint="Day-to-day mealtime detail. Whether Dysphagia is a diagnosed support need is recorded separately on the Medical step's health-condition grid."
+              >
+                <textarea id="chokingRiskMealDetail" {...register('chokingRiskMealDetail')} rows={2} placeholder="How choking/swallowing risk is managed at mealtimes..." />
+              </FormField>
+              <FormField label="Modified Diet">
+                <textarea id="modifiedDietDetail" {...register('modifiedDietDetail')} rows={2} placeholder="e.g. Soft, minced, pureed, cut small..." />
+              </FormField>
+              <FormField label="PEG Regime">
+                <textarea id="pegRegimeMealDetail" {...register('pegRegimeMealDetail')} rows={2} placeholder="PEG feeding regime detail..." />
+              </FormField>
+              <FormField label="Special Utensils">
+                <textarea id="specialUtensilsDetail" {...register('specialUtensilsDetail')} rows={2} placeholder="e.g. Built-up handle spoon..." />
+              </FormField>
+              <FormField label="Special Dietary Needs">
+                <textarea id="specialDietaryNeedsDetail" {...register('specialDietaryNeedsDetail')} rows={2} placeholder="e.g. Vegetarian, halal, low-sodium..." />
+              </FormField>
+              <div className="grid md:grid-cols-3 gap-4">
+                <FormField label="Favourite Breakfast" className="mb-0">
+                  <input id="favouriteBreakfast" {...register('favouriteBreakfast')} placeholder="Favourite breakfast" />
+                </FormField>
+                <FormField label="Favourite Lunch" className="mb-0">
+                  <input id="favouriteLunch" {...register('favouriteLunch')} placeholder="Favourite lunch" />
+                </FormField>
+                <FormField label="Favourite Dinner" className="mb-0">
+                  <input id="favouriteDinner" {...register('favouriteDinner')} placeholder="Favourite dinner" />
+                </FormField>
+              </div>
+              <FormField label="Medication Tricks" hint="Tricks for giving medication alongside food.">
+                <textarea id="medicationTricks" {...register('medicationTricks')} rows={2} placeholder="e.g. Takes tablets more easily with yoghurt..." />
+              </FormField>
+              <FormField label="Foods Always Eaten">
+                <textarea id="foodsAlwaysEaten" {...register('foodsAlwaysEaten')} rows={2} placeholder="Foods always eaten..." />
+              </FormField>
+            </Card>
+
+            <Card title="About Me" className="space-y-4 md:col-span-2">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Hobbies/interests is captured on the Cultural &amp; Consent step's Personal Interests field — not repeated here.
+              </p>
+              <FormField label="Goals">
+                <textarea id="goals" {...register('goals')} rows={2} placeholder="Goals..." />
+              </FormField>
+              <FormField label="Support Areas">
+                <textarea id="supportAreas" {...register('supportAreas')} rows={2} placeholder="Areas where support is needed..." />
+              </FormField>
+              <FormField label="Strengths / Fears">
+                <textarea id="strengthsFears" {...register('strengthsFears')} rows={2} placeholder="Strengths and fears..." />
+              </FormField>
+              <FormField label="Things to Know">
+                <textarea id="thingsToKnow" {...register('thingsToKnow')} rows={2} placeholder="Things you need to know..." />
+              </FormField>
+              <FormField label="Who/What Is Important">
+                <textarea id="whoIsImportant" {...register('whoIsImportant')} rows={2} placeholder="Who or what is important..." />
+              </FormField>
+              <FormField label="Likes & Dislikes">
+                <textarea id="likesDislikes" {...register('likesDislikes')} rows={2} placeholder="Likes and dislikes..." />
+              </FormField>
+            </Card>
+          </div>
+        )}
+
+        {stepIndex === 9 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Risks & Hazards" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (

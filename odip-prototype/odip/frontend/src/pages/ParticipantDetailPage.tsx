@@ -16,7 +16,7 @@ import {
   AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
 } from '@/api/types/participants'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ContactsTab } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab } from './participant-detail'
 
 /** INTAKE sub-wave B — tri-state (boolean | null) display helper, same "—" empty-state idiom as every other unset field on this page. */
 function yesNoUnset(value: boolean | null): string {
@@ -413,6 +413,55 @@ export default function ParticipantDetailPage() {
           <Card className="md:col-span-2">
             <ParticipantConsentsSection participantId={id} />
           </Card>
+          {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
+              rendered (unlike the whole-card-conditional cards below): GetForParticipant always
+              returns all twenty AdlType entries, so there is no genuinely-empty state to hide
+              behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
+              edge case instead. Same convention as ParticipantHealthConditionsSection above. */}
+          <Card className="md:col-span-2">
+            <ParticipantAdlAssessmentsSection participantId={id} />
+          </Card>
+          {/* INTAKE sub-wave C2 — Meals & Diet (Daily Living step, research spec §4.9/§5). Same
+              whole-card-conditional empty-state pattern as Medical/Cultural Background above. */}
+          {(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
+            || p.specialUtensilsDetail || p.specialDietaryNeedsDetail || p.favouriteBreakfast || p.favouriteLunch
+            || p.favouriteDinner || p.medicationTricks || p.foodsAlwaysEaten) && (
+            <Card title="Meals & Diet" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                {p.mealAssistanceDetail && (<><span className="text-[var(--color-muted-foreground)]">Meal Assistance</span><span className="whitespace-pre-line">{p.mealAssistanceDetail}</span></>)}
+                {p.chokingRiskMealDetail && (<><span className="text-[var(--color-muted-foreground)]">Choking Risk — Meal Management</span><span className="whitespace-pre-line">{p.chokingRiskMealDetail}</span></>)}
+                {p.modifiedDietDetail && (<><span className="text-[var(--color-muted-foreground)]">Modified Diet</span><span className="whitespace-pre-line">{p.modifiedDietDetail}</span></>)}
+                {p.pegRegimeMealDetail && (<><span className="text-[var(--color-muted-foreground)]">PEG Regime</span><span className="whitespace-pre-line">{p.pegRegimeMealDetail}</span></>)}
+                {p.specialUtensilsDetail && (<><span className="text-[var(--color-muted-foreground)]">Special Utensils</span><span className="whitespace-pre-line">{p.specialUtensilsDetail}</span></>)}
+                {p.specialDietaryNeedsDetail && (<><span className="text-[var(--color-muted-foreground)]">Special Dietary Needs</span><span className="whitespace-pre-line">{p.specialDietaryNeedsDetail}</span></>)}
+                {(p.favouriteBreakfast || p.favouriteLunch || p.favouriteDinner) && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Favourite Meals</span>
+                    <span className="whitespace-pre-line">
+                      {[p.favouriteBreakfast && `Breakfast: ${p.favouriteBreakfast}`, p.favouriteLunch && `Lunch: ${p.favouriteLunch}`, p.favouriteDinner && `Dinner: ${p.favouriteDinner}`].filter(Boolean).join('\n')}
+                    </span>
+                  </>
+                )}
+                {p.medicationTricks && (<><span className="text-[var(--color-muted-foreground)]">Medication Tricks</span><span className="whitespace-pre-line">{p.medicationTricks}</span></>)}
+                {p.foodsAlwaysEaten && (<><span className="text-[var(--color-muted-foreground)]">Foods Always Eaten</span><span className="whitespace-pre-line">{p.foodsAlwaysEaten}</span></>)}
+              </div>
+            </Card>
+          )}
+          {/* INTAKE sub-wave C2 — About Me (Daily Living step, research spec §4.9/§5). Hobbies is
+              deliberately NOT repeated here — see personalInterests on the Cultural Background
+              card above (dedup call, this PR's report). */}
+          {(p.goals || p.supportAreas || p.strengthsFears || p.thingsToKnow || p.whoIsImportant || p.likesDislikes) && (
+            <Card title="About Me" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                {p.goals && (<><span className="text-[var(--color-muted-foreground)]">Goals</span><span className="whitespace-pre-line">{p.goals}</span></>)}
+                {p.supportAreas && (<><span className="text-[var(--color-muted-foreground)]">Support Areas</span><span className="whitespace-pre-line">{p.supportAreas}</span></>)}
+                {p.strengthsFears && (<><span className="text-[var(--color-muted-foreground)]">Strengths / Fears</span><span className="whitespace-pre-line">{p.strengthsFears}</span></>)}
+                {p.thingsToKnow && (<><span className="text-[var(--color-muted-foreground)]">Things to Know</span><span className="whitespace-pre-line">{p.thingsToKnow}</span></>)}
+                {p.whoIsImportant && (<><span className="text-[var(--color-muted-foreground)]">Who/What Is Important</span><span className="whitespace-pre-line">{p.whoIsImportant}</span></>)}
+                {p.likesDislikes && (<><span className="text-[var(--color-muted-foreground)]">Likes &amp; Dislikes</span><span className="whitespace-pre-line">{p.likesDislikes}</span></>)}
+              </div>
+            </Card>
+          )}
           {(p.mobilityNotes || p.transportRequirements || p.equipmentRequirements || p.notes) && (
             <Card title="Notes" className="md:col-span-2">
               <div className="text-sm space-y-2 text-[var(--color-muted-foreground)]">

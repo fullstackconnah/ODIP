@@ -3,6 +3,7 @@ import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
 import type { CreateParticipantRiskEntryDto } from './risk-entries'
 import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
 import type { ParticipantHealthConditionDto, CreateParticipantHealthConditionDto } from './health-conditions'
+import type { ParticipantAdlAssessmentDto, CreateParticipantAdlAssessmentDto } from './adl-assessments'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -354,6 +355,33 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   receptiveSkills: string | null
   readingAbility: string | null
   communicationAids: string | null
+
+  // ── INTAKE sub-wave C2 — the structured ADL rating grid (Daily Living step).
+  /** Always all twenty AdlType entries — see ParticipantAdlAssessmentsController.GetForParticipant. */
+  adlAssessments: ParticipantAdlAssessmentDto[]
+
+  // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step, Master Data Dictionary MEAL-001..012
+  // minus the allergies dedup — see the backend Participant.cs field group doc).
+  mealAssistanceDetail: string | null
+  chokingRiskMealDetail: string | null
+  modifiedDietDetail: string | null
+  pegRegimeMealDetail: string | null
+  specialUtensilsDetail: string | null
+  specialDietaryNeedsDetail: string | null
+  favouriteBreakfast: string | null
+  favouriteLunch: string | null
+  favouriteDinner: string | null
+  medicationTricks: string | null
+  foodsAlwaysEaten: string | null
+
+  // ── INTAKE sub-wave C2 — About Me (Daily Living step, Master Data Dictionary GOAL-001..008
+  // minus the Hobbies dedup onto personalInterests — see the backend field group doc).
+  goals: string | null
+  supportAreas: string | null
+  strengthsFears: string | null
+  thingsToKnow: string | null
+  whoIsImportant: string | null
+  likesDislikes: string | null
 }
 
 export interface CreateParticipantDto {
@@ -529,6 +557,34 @@ export interface CreateParticipantDto {
   receptiveSkills?: string
   readingAbility?: string
   communicationAids?: string
+
+  /**
+   * INTAKE sub-wave C2 — the structured ADL rating grid, upserted transactionally with the
+   * participant on both create and update — same read-on-both-paths convention as
+   * healthConditions above.
+   */
+  adlAssessments: CreateParticipantAdlAssessmentDto[]
+
+  // ── INTAKE sub-wave C2 — Meals & Diet. All optional.
+  mealAssistanceDetail?: string
+  chokingRiskMealDetail?: string
+  modifiedDietDetail?: string
+  pegRegimeMealDetail?: string
+  specialUtensilsDetail?: string
+  specialDietaryNeedsDetail?: string
+  favouriteBreakfast?: string
+  favouriteLunch?: string
+  favouriteDinner?: string
+  medicationTricks?: string
+  foodsAlwaysEaten?: string
+
+  // ── INTAKE sub-wave C2 — About Me. All optional.
+  goals?: string
+  supportAreas?: string
+  strengthsFears?: string
+  thingsToKnow?: string
+  whoIsImportant?: string
+  likesDislikes?: string
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

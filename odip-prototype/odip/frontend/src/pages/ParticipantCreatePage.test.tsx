@@ -188,6 +188,7 @@ describe('ParticipantCreatePage Review step', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   }
@@ -206,12 +207,12 @@ describe('ParticipantCreatePage Review step', () => {
     expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
 
     // Each group's Edit button carries a distinct accessible name (aria-label) even though
-    // they all show the same "Edit" visible text — nine identical "Edit" accessible names
+    // they all show the same "Edit" visible text — ten identical "Edit" accessible names
     // would be indistinguishable to screen reader users navigating by role.
-    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(9)
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(10)
 
     // Review groups render in step order: Identity(0), NDIS(1), Key Identifiers(2), Contacts(3),
-    // Cultural & Consent(4), Support(5), Medical(6), Behaviour & Communication(7), Risks(8).
+    // Cultural & Consent(4), Support(5), Medical(6), Behaviour & Communication(7), Daily Living(8), Risks(9).
     await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
@@ -287,6 +288,12 @@ describe('ParticipantCreatePage Review step', () => {
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -314,6 +321,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
 
@@ -331,6 +339,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -396,6 +405,7 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -425,6 +435,7 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -504,6 +515,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -580,6 +592,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -614,6 +627,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -645,6 +659,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -665,6 +685,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -695,6 +716,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -714,6 +741,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -747,6 +775,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -765,6 +799,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -793,6 +828,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -826,6 +862,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -859,6 +901,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -892,6 +935,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
         'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
         'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+        // INTAKE sub-wave C2 — always present.
+        'adlAssessments',
+        'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+        'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+        'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+        'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
       ].sort()
     )
   })
@@ -925,6 +974,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -949,6 +999,7 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
 
 async function finishWizard(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1139,6 +1190,7 @@ describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () =>
   async function advanceToRisks(user: ReturnType<typeof userEvent.setup>) {
     await advanceToMedical(user)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   }
 
@@ -1246,6 +1298,7 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1403,7 +1456,7 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
 
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
-    for (let i = 0; i < 9; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    for (let i = 0; i < 10; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -1666,6 +1719,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1982,6 +2036,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
     await user.click(within(screen.getByRole('radiogroup', { name: 'Diabetes' })).getByRole('radio', { name: 'No' }))
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(within(screen.getByRole('radiogroup', { name: 'Behaviours of Concern (Current)' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -2169,6 +2224,200 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
     expect(call.data.healthConditions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ conditionType: 'Epilepsy', has: true, severity: 'GrandMal', planProvided: true, trainingRequired: true }),
+      ])
+    )
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE sub-wave C2: Daily Living (ADL grid, Meals & Diet, About Me)', () => {
+  async function advanceToDailyLiving(user: ReturnType<typeof userEvent.setup>) {
+    await advanceToMedical(user)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+  }
+
+  /** Submits from the Daily Living step onward — NOT finishWizard, which assumes it starts on Medical. */
+  async function finishFromDailyLiving(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+  }
+
+  it('renders "Daily Living" as its own step between Behaviour & Communication and Risks & Hazards, with both ADL sections and the Meals & Diet / About Me fields', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    expect(within(stepNav()).getByRole('button', { name: /daily living/i, current: 'step' })).toBeInTheDocument()
+
+    // Both grouped ADL sections render, one row per type, each its own accessibly-named radiogroup.
+    expect(screen.getByText('Dressing')).toBeInTheDocument()
+    expect(screen.getByText('Medication Administration')).toBeInTheDocument()
+    expect(screen.getByText('Community Access')).toBeInTheDocument()
+    expect(screen.getByText('Banking')).toBeInTheDocument()
+
+    expect(screen.getByLabelText('Meal Assistance')).toBeInTheDocument()
+    expect(screen.getByLabelText('Choking Risk — Meal Management')).toBeInTheDocument()
+    expect(screen.getByLabelText('Modified Diet')).toBeInTheDocument()
+    expect(screen.getByLabelText('PEG Regime')).toBeInTheDocument()
+    expect(screen.getByLabelText('Special Utensils')).toBeInTheDocument()
+    expect(screen.getByLabelText('Special Dietary Needs')).toBeInTheDocument()
+    expect(screen.getByLabelText('Favourite Breakfast')).toBeInTheDocument()
+    expect(screen.getByLabelText('Favourite Lunch')).toBeInTheDocument()
+    expect(screen.getByLabelText('Favourite Dinner')).toBeInTheDocument()
+    expect(screen.getByLabelText('Medication Tricks')).toBeInTheDocument()
+    expect(screen.getByLabelText('Foods Always Eaten')).toBeInTheDocument()
+
+    expect(screen.getByLabelText('Goals')).toBeInTheDocument()
+    expect(screen.getByLabelText('Support Areas')).toBeInTheDocument()
+    expect(screen.getByLabelText('Strengths / Fears')).toBeInTheDocument()
+    expect(screen.getByLabelText('Things to Know')).toBeInTheDocument()
+    expect(screen.getByLabelText('Who/What Is Important')).toBeInTheDocument()
+    expect(screen.getByLabelText('Likes & Dislikes')).toBeInTheDocument()
+  })
+
+  it('does NOT repeat Hobbies or Allergies on this step — dedup onto Personal Interests (Cultural & Consent) and allergiesDetail (Medical)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    // The step explicitly notes where Hobbies lives instead, rather than a second field.
+    expect(screen.getByText(/hobbies\/interests is captured on the cultural & consent step/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Hobbies')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Allergies')).not.toBeInTheDocument()
+  })
+
+  it('a11y: two ADL rows both expose a "Level" radiogroup, each with a distinct row-qualified accessible name (the C1 disambiguation pattern)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    // Before this pattern, two rows sharing the plain "Level" accessible name would be
+    // indistinguishable to a screen reader user navigating by role.
+    expect(screen.queryByRole('radiogroup', { name: 'Level' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Level — Community Access' })).toBeInTheDocument()
+  })
+
+  it('ADL level round-trips through the payload, including the not-assessed state', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'I' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Kitchen' })).getByRole('radio', { name: 'A' }))
+    await finishFromDailyLiving(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const dressingRow = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'Dressing')
+    expect(dressingRow).toMatchObject({ level: 'Independent', notes: null })
+    const kitchenRow = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'Kitchen')
+    expect(kitchenRow).toMatchObject({ level: 'Assistance', notes: null })
+    // Never-touched rows collapse to a null level, not undefined/empty string.
+    const untouchedRow = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'Banking')
+    expect(untouchedRow).toMatchObject({ level: null, notes: null })
+    expect(payload.adlAssessments).toHaveLength(20)
+  })
+
+  it('an ADL row given a level carries its notes into the payload; clearing back to not-assessed drops the notes', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    const communityAccessGroup = () => screen.getByRole('radiogroup', { name: 'Level — Community Access' })
+    await user.click(within(communityAccessGroup()).getByRole('radio', { name: 'A' }))
+    await user.type(screen.getByPlaceholderText('Additional notes...'), '1:1 line-of-sight supervision.')
+    await finishFromDailyLiving(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const row = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'CommunityAccess')
+    expect(row).toMatchObject({ level: 'Assistance', notes: '1:1 line-of-sight supervision.' })
+  })
+
+  it('Meals & Diet / About Me flat fields submit as typed, and the favourite-meal fields follow the Breakfast/Lunch/Dinner source shape', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    await user.type(screen.getByLabelText('Favourite Breakfast'), 'Eggs on toast')
+    await user.type(screen.getByLabelText('Favourite Lunch'), 'Chicken wrap')
+    await user.type(screen.getByLabelText('Favourite Dinner'), 'Roast dinner')
+    await user.type(screen.getByLabelText('Goals'), 'Build independence with meal prep.')
+    await finishFromDailyLiving(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.favouriteBreakfast).toBe('Eggs on toast')
+    expect(payload.favouriteLunch).toBe('Chicken wrap')
+    expect(payload.favouriteDinner).toBe('Roast dinner')
+    expect(payload.goals).toBe('Build independence with meal prep.')
+  })
+
+  it('draft-save succeeds with only a subset of the Daily Living fields filled in', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToDailyLiving(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'I' }))
+    await user.type(screen.getByLabelText('Goals'), 'Try bushwalking.')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    const dressingRow = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'Dressing')
+    expect(dressingRow).toMatchObject({ level: 'Independent' })
+    expect(payload.goals).toBe('Try bushwalking.')
+    // A field left blank ON THIS visited step collapses to null (registered, empty) — but the
+    // never-visited Risks & Hazards step's field is simply absent, same INTAKE-08 doctrine as
+    // every other step.
+    expect(payload.mealAssistanceDetail).toBeNull()
+    expect(payload.behaviourRiskSummary).toBeUndefined()
+  })
+
+  it('edit mode round-trips the ADL grid and Daily Living flat fields into their controls, and a save resubmits them unchanged', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Olivia', lastName: 'Wilson', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+        mealAssistanceDetail: 'Full assistance required for all meals.',
+        modifiedDietDetail: 'No oral intake — nutrition delivered via PEG.',
+        goals: 'Maintain skin integrity and PEG site health.',
+        likesDislikes: 'Likes art galleries and live jazz.',
+        adlAssessments: [
+          { id: 'adl1', participantId: 'participant-1', adlType: 'Dressing', level: 'FullSupport', notes: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', adlType: 'Kitchen', level: null, notes: null, createdAt: null, updatedAt: null },
+        ],
+      },
+      isLoading: false,
+    })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    await user.click(within(stepNav()).getByRole('button', { name: /daily living/i }))
+    expect(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'F' })).toBeChecked()
+    expect(screen.getByLabelText('Meal Assistance')).toHaveValue('Full assistance required for all meals.')
+    expect(screen.getByLabelText('Goals')).toHaveValue('Maintain skin integrity and PEG site health.')
+    expect(screen.getByLabelText('Likes & Dislikes')).toHaveValue('Likes art galleries and live jazz.')
+
+    await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(call.data).toMatchObject({
+      mealAssistanceDetail: 'Full assistance required for all meals.',
+      modifiedDietDetail: 'No oral intake — nutrition delivered via PEG.',
+      goals: 'Maintain skin integrity and PEG site health.',
+      likesDislikes: 'Likes art galleries and live jazz.',
+    })
+    expect(call.data.adlAssessments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ adlType: 'Dressing', level: 'FullSupport' }),
       ])
     )
   })

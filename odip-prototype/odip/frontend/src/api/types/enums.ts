@@ -289,6 +289,40 @@ export type RiskRatingLevel = typeof RISK_RATING_LEVELS[number]
 export const MEMORY_LEVELS = ['Excellent', 'Fair', 'Poor'] as const
 export type MemoryLevel = typeof MEMORY_LEVELS[number]
 
+// ── ADL Type (INTAKE sub-wave C2, Daily Living step — the 20-row structured ADL grid) ───
+// Fixed declaration order matches the backend's Enum.GetValues<AdlType>() order exactly —
+// first 6 are Personal ADLs, remaining 14 are Community/Domestic ADLs. See ADL_TYPE_CATEGORIES
+// below for the grouping this order backs (mirrors the backend's AdlTypeGroups).
+export const ADL_TYPES = [
+  // Personal ADLs
+  'Dressing', 'Bathing', 'OralCare', 'Grooming', 'Toileting', 'MedicationAdministration',
+  // Community / Domestic ADLs
+  'CommunityAccess', 'Socialising', 'MoneyHandling', 'Appointments', 'WorkStudy',
+  'Transportation', 'PublicTransport', 'RoadAwareness', 'Kitchen', 'Laundry',
+  'Cleaning', 'Gardening', 'Shopping', 'Banking',
+] as const
+export type AdlType = typeof ADL_TYPES[number]
+
+/** The Personal-ADL subset of ADL_TYPES — the first 6 declaration-order entries. */
+export const PERSONAL_ADL_TYPES = ADL_TYPES.slice(0, 6)
+/** The Community/Domestic-ADL subset of ADL_TYPES — the remaining 14 declaration-order entries. */
+export const COMMUNITY_DOMESTIC_ADL_TYPES = ADL_TYPES.slice(6)
+
+export const ADL_CATEGORIES = ['Personal', 'CommunityDomestic'] as const
+export type AdlCategory = typeof ADL_CATEGORIES[number]
+
+/** AdlType -> AdlCategory lookup, derived from ADL_TYPES' fixed order — mirrors the backend's AdlTypeGroups.CategoryOf. Not a stored field on either side. */
+export function adlCategoryOf(type: AdlType): AdlCategory {
+  return (PERSONAL_ADL_TYPES as readonly string[]).includes(type) ? 'Personal' : 'CommunityDomestic'
+}
+
+// ── ADL Level (INTAKE sub-wave C2) — the Personal/Community ADL tables' "I/S/A/F" rating
+// scale. See the backend's AdlLevel enum doc: the source form only ever shows the unexpanded
+// letters "I/S/A/F", never spelling them out — "Independent/Supervision/Assistance/FullSupport"
+// is this PR's best-effort plain-English reading, flagged (not a confirmed source expansion).
+export const ADL_LEVELS = ['Independent', 'Supervision', 'Assistance', 'FullSupport'] as const
+export type AdlLevel = typeof ADL_LEVELS[number]
+
 // ── Contact Role Status ───────────────────────────────────
 export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
 export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]
