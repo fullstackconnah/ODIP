@@ -6,11 +6,12 @@ import IncidentCreatePage from './IncidentCreatePage'
 import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
 
 const {
-  mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync,
+  mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices,
 } = vi.hoisted(() => ({
   mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
+  mockUseRestrictivePractices: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
@@ -27,6 +28,8 @@ vi.mock('@/api/hooks', () => ({
     { id: 'staff-3', fullName: 'Alex Rivera' },
   ] }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
+  // INC-04/INC-05
+  useRestrictivePractices: mockUseRestrictivePractices,
 }))
 
 // IncidentCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker —
@@ -49,6 +52,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-incident-1' } })
+  mockUseRestrictivePractices.mockReturnValue({ data: [] })
 })
 
 describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
@@ -277,5 +281,226 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
 
     expect(screen.queryByText(/pre-filled from the medication record/i)).not.toBeInTheDocument()
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('Existing incident')
+  })
+})
+
+describe('IncidentCreatePage — INC-04 RP incident authorisation determination', () => {
+  it('does not show the Restrictive Practice Details card for non-RP incident types', () => {
+    renderCreatePage()
+    expect(screen.queryByText('Restrictive Practice Details')).not.toBeInTheDocument()
+  })
+
+  it('shows the RP type picker once Incident Type is Restrictive Practice Use', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+
+    expect(screen.getByText('Restrictive Practice Details')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Restrictive Practice Type/i)).toBeInTheDocument()
+  })
+
+  it('blocks submit when RP incident type is selected but no RP type is chosen', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
+    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText(/select the restrictive practice type/i)).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('shows a neutral banner until both participant and type are chosen', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+
+    expect(screen.getByText(/select the involved participant and restrictive practice type/i)).toBeInTheDocument()
+  })
+
+  it('shows an authorised banner when the involved participant has a matching active practice', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+
+    expect(await screen.findByText(/matches an active practice/i)).toBeInTheDocument()
+  })
+
+  it('shows the "may be reportable" banner when the involved participant has no matching active practice', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+
+    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+  })
+
+  it('submits restrictivePracticeType in the create payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
+    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      incidentType: 'RestrictivePracticeUse',
+      restrictivePracticeType: 'Seclusion',
+    })
+  })
+})
+
+describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
+  it("lists the involved participant's active practices of the selected type, not other types", async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
+      { id: 'rp-2', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+
+    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
+
+    expect(screen.getByRole('option', { name: /Seclusion room during acute crisis/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Two-person hold/i })).not.toBeInTheDocument()
+  })
+
+  it('linking a practice prepopulates an empty description', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
+    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
+      .toContain('Seclusion room during acute crisis.')
+  })
+
+  it('never overwrites an already-typed description when linking a practice', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Already typed details')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
+    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
+      .toBe('Already typed details')
+  })
+
+  it('submits restrictivePracticeId when a practice is linked', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
+    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
+    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), ' Details here')
+    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      restrictivePracticeType: 'Seclusion',
+      restrictivePracticeId: 'rp-1',
+    })
+  })
+})
+
+// INC-04: the determination is frozen at creation — editing an existing incident must never
+// silently re-run it against today's register, even if the participant/type fields are changed.
+describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
+  const existingRpIncident = {
+    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'RestrictivePracticeUse', otherTypeSpecify: null,
+    restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-1', restrictivePracticeDescription: 'Seclusion room, acute crisis.',
+    restrictivePracticeReviewDate: '2026-12-01', isRestrictivePracticeAuthorised: false,
+    severity: 'High', status: 'Draft', title: 'Existing RP incident', incidentDateTime: '2026-08-01T09:00',
+    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+    involvedParticipantName: 'Sophie Brown', qscReportingStatus: 'Required', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+    participantBookingId: null, involvedParticipantId: 'participant-1', involvedStaffId: null, involvedStaffName: null,
+    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+    witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+  }
+
+  it('shows the frozen unauthorised banner from the record, even though the register now has a matching active practice', async () => {
+    mockUseIncident.mockReturnValue({ data: existingRpIncident })
+    // If the banner were recomputed live, this active matching entry would flip it to authorised.
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true },
+    ] })
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText(/determined when this incident was created/i)).toBeInTheDocument()
+  })
+
+  it('keeps showing the frozen determination even after changing the RP type in the edit form', async () => {
+    mockUseIncident.mockReturnValue({ data: existingRpIncident })
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(screen.getByRole('option', { name: /^physical restraint/i }))
+
+    expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
   })
 })

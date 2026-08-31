@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830202351_AddIncidentRestrictivePracticeFields")]
+    partial class AddIncidentRestrictivePracticeFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1263,26 +1266,6 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AccommodationType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("AddressPostcode")
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
-                    b.Property<string>("AddressState")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<string>("AddressStreet")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("AddressSuburb")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("BehaviourRiskSummary")
                         .HasColumnType("text");
 
@@ -1333,24 +1316,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<bool?>("LivesWithOthers")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("LivingArrangement")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LivingArrangementNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("MainSupportPersonName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("MainSupportPersonRelationship")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("MedicalSummary")
                         .HasColumnType("text");
 
@@ -1372,13 +1337,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<string>("OnSiteSupportHours")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("OthersLivingInAccommodation")
                         .HasColumnType("text");
 
                     b.Property<int>("OvernightRatio")
@@ -1425,19 +1383,8 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("RequiresStandingMachine")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("ResidentialInfo")
-                        .HasColumnType("text");
-
                     b.Property<int>("ServiceStreams")
                         .HasColumnType("integer");
-
-                    b.Property<string>("SilProviderContactPhone")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("SilProviderName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("SupportRatio")
                         .HasColumnType("integer");
@@ -1450,10 +1397,6 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("WhoLivesWith")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
 
                     b.HasKey("Id");
 

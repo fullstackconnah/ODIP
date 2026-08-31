@@ -2,15 +2,17 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants } from '@/api/hooks'
-import { ArrowLeft, Info } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
+import { ArrowLeft, Info, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { Dropdown } from '@/components/Dropdown'
 import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS } from '@/api/types/enums'
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
+import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import {
   isMarIncidentPrefillState,
@@ -18,8 +20,11 @@ import {
   buildIncidentTitleSkeleton,
   buildIncidentDateTime,
   suggestedIncidentSeverity,
+  previewRpAuthorisation,
+  buildRpIncidentDescriptionSkeleton,
 } from '@/lib/incidentPrefill'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
+import { formatDateAu } from '@/lib/utils'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -30,6 +35,10 @@ const incidentSchema = z.object({
   tripInstanceId: z.string().optional(),
   incidentType: z.string().min(1, 'Incident type is required'),
   otherTypeSpecify: z.string().optional(),
+  // INC-04
+  restrictivePracticeType: z.string().optional(),
+  // INC-05
+  restrictivePracticeId: z.string().optional(),
   severity: z.string().min(1, 'Severity is required'),
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
@@ -62,6 +71,9 @@ const incidentSchema = z.object({
   }
   if (data.incidentType === 'Other' && !data.otherTypeSpecify?.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['otherTypeSpecify'], message: 'Please specify the incident type.' })
+  }
+  if (data.incidentType === 'RestrictivePracticeUse' && !data.restrictivePracticeType) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['restrictivePracticeType'], message: 'Please select the restrictive practice type.' })
   }
 })
 
@@ -102,7 +114,7 @@ export default function IncidentCreatePage() {
   const marPrefill = !isEdit && isMarIncidentPrefillState(location.state) ? location.state : null
   const appliedMarPrefillRef = useRef(false)
 
-  const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<IncidentFormData>({
+  const { register, handleSubmit, reset, control, setValue, getValues, formState: { errors, isDirty } } = useForm<IncidentFormData>({
     resolver: incidentResolver,
     defaultValues: {
       serviceType: 'None',
@@ -121,6 +133,38 @@ export default function IncidentCreatePage() {
   const wereEmergencyCalled = useWatch({ control, name: 'wereEmergencyServicesCalled' })
   const familyNotified = useWatch({ control, name: 'familyNotified' })
   const supportCoordinatorNotified = useWatch({ control, name: 'supportCoordinatorNotified' })
+  const involvedParticipantId = useWatch({ control, name: 'involvedParticipantId' })
+  const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
+  const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
+  const isRpIncident = incidentType === 'RestrictivePracticeUse'
+
+  // INC-04/INC-05: the involved participant's ACTIVE register entries — useRestrictivePractices
+  // defaults to active-only, which is exactly the set both the determination and the linked-entry
+  // picker need. Disabled (participantId undefined) unless this is an RP incident with a
+  // participant chosen, so switching incident type away from RestrictivePracticeUse doesn't keep
+  // an unnecessary query alive.
+  const { data: participantPractices = [] } = useRestrictivePractices(isRpIncident ? (involvedParticipantId || undefined) : undefined)
+  const matchingPractices = useMemo(
+    () => participantPractices.filter(p => p.type === restrictivePracticeType),
+    [participantPractices, restrictivePracticeType],
+  )
+
+  // INC-04: live preview of the authorised/unauthorised finding while composing a new incident —
+  // updates as the participant/type selections change, pre-submit. The backend computes and
+  // freezes the real value at Create; on Edit this preview is not used at all — see the banner
+  // below, which reads the frozen `existingIncident.isRestrictivePracticeAuthorised` instead.
+  const rpAuthorisationPreview = previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, matchingPractices)
+
+  function handleSelectLinkedPractice(value: string) {
+    setValue('restrictivePracticeId', value, { shouldDirty: true })
+    if (!value) return
+    const practice = matchingPractices.find(p => p.id === value)
+    // Only prepopulate Description when it's still empty — never clobber what the reporter has
+    // already typed, same "skeleton, don't overwrite" rule INC-03's MAR prefill follows.
+    if (practice && !getValues('description')?.trim()) {
+      setValue('description', buildRpIncidentDescriptionSkeleton(practice), { shouldDirty: true })
+    }
+  }
 
   useEffect(() => {
     if (isEdit && existingIncident) {
@@ -130,6 +174,8 @@ export default function IncidentCreatePage() {
         tripInstanceId: i.tripInstanceId ?? '',
         incidentType: i.incidentType ?? 'Other',
         otherTypeSpecify: i.otherTypeSpecify ?? '',
+        restrictivePracticeType: i.restrictivePracticeType ?? '',
+        restrictivePracticeId: i.restrictivePracticeId ?? '',
         severity: i.severity ?? 'Medium',
         title: i.title ?? '',
         description: i.description ?? '',
@@ -202,6 +248,10 @@ export default function IncidentCreatePage() {
       reportedByStaffId: data.reportedByStaffId,
       incidentType: data.incidentType as IncidentType,
       otherTypeSpecify: data.incidentType === 'Other' ? data.otherTypeSpecify || undefined : undefined,
+      restrictivePracticeType: data.incidentType === 'RestrictivePracticeUse'
+        ? (data.restrictivePracticeType || undefined) as CreateIncidentDto['restrictivePracticeType']
+        : undefined,
+      restrictivePracticeId: data.incidentType === 'RestrictivePracticeUse' ? data.restrictivePracticeId || undefined : undefined,
       severity: data.severity as IncidentSeverity,
       title: data.title,
       description: data.description,
@@ -374,6 +424,110 @@ export default function IncidentCreatePage() {
             </select>
           </FormField>
         </Card>
+
+        {/* Restrictive Practice Details (INC-04/INC-05) */}
+        {isRpIncident && (
+          <Card title="Restrictive Practice Details" className="md:col-span-2 space-y-4">
+            <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message}>
+              <Dropdown
+                variant="form"
+                value={restrictivePracticeType ?? ''}
+                onChange={v => setValue('restrictivePracticeType', v, { shouldDirty: true, shouldValidate: true })}
+                label="Select restrictive practice type..."
+                items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
+              />
+            </FormField>
+
+            {!involvedParticipantId ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Select the involved participant above to see their authorised restrictive practices.
+              </p>
+            ) : restrictivePracticeType && (
+              <FormField
+                label="Link to an authorised practice"
+                hint={matchingPractices.length === 0
+                  ? 'No active authorised practices of this type are on file for this participant.'
+                  : "Choosing one prefills the description below and links this incident to the participant's register entry."}
+              >
+                <Dropdown
+                  variant="form"
+                  value={restrictivePracticeId ?? ''}
+                  onChange={handleSelectLinkedPractice}
+                  label="Not linked"
+                  items={[
+                    { value: '', label: 'Not linked' },
+                    ...matchingPractices.map(p => ({
+                      value: p.id,
+                      label: p.description.length > 80 ? `${p.description.slice(0, 80)}…` : p.description,
+                      description: p.reviewDate ? `Review due ${formatDateAu(p.reviewDate)}` : 'No review date on file',
+                    })),
+                  ]}
+                />
+              </FormField>
+            )}
+
+            {/* INC-04: the authorised/unauthorised determination. On create this is a live preview
+                that updates as the participant/type change; on edit it shows the value frozen at
+                creation (see IncidentReport.IsRestrictivePracticeAuthorised) and never recomputes,
+                even if the fields above are changed in this edit session. */}
+            {isEdit ? (
+              existingIncident && existingIncident.isRestrictivePracticeAuthorised !== null ? (
+                <div
+                  role="status"
+                  className={`flex items-start gap-3 p-3 rounded-lg text-sm border ${
+                    existingIncident.isRestrictivePracticeAuthorised
+                      ? 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/20'
+                      : 'bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] border-[var(--color-destructive)]/20'
+                  }`}
+                >
+                  {existingIncident.isRestrictivePracticeAuthorised
+                    ? <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
+                    : <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />}
+                  <p>
+                    <strong className="font-medium">
+                      {existingIncident.isRestrictivePracticeAuthorised
+                        ? 'Authorised at the time this was reported.'
+                        : 'No matching authorised practice — this may be a reportable incident.'}
+                    </strong>{' '}
+                    Determined when this incident was created and fixed from then on — changing the participant or
+                    type above won't re-check it against today's register.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  No authorisation determination on record for this incident.
+                </p>
+              )
+            ) : (
+              <div
+                role="status"
+                aria-live="polite"
+                className={`flex items-start gap-3 p-3 rounded-lg text-sm border ${
+                  rpAuthorisationPreview === 'authorised'
+                    ? 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/20'
+                    : rpAuthorisationPreview === 'unauthorised'
+                    ? 'bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] border-[var(--color-destructive)]/20'
+                    : 'bg-[var(--color-secondary-container)]/40 text-[var(--color-foreground)] border-[var(--color-secondary-container)]'
+                }`}
+              >
+                {rpAuthorisationPreview === 'authorised' && <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />}
+                {rpAuthorisationPreview === 'unauthorised' && <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />}
+                {rpAuthorisationPreview === 'unknown' && <Info className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />}
+                <p>
+                  {rpAuthorisationPreview === 'authorised' && (
+                    <strong className="font-medium">Authorised — matches an active practice on this participant's register.</strong>
+                  )}
+                  {rpAuthorisationPreview === 'unauthorised' && (
+                    <strong className="font-medium">No matching authorised practice — this may be a reportable incident.</strong>
+                  )}
+                  {rpAuthorisationPreview === 'unknown' && (
+                    <>Select the involved participant and restrictive practice type to check this against their authorised practices.</>
+                  )}
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* What Happened */}
         <Card title="What Happened" className="md:col-span-2 space-y-4">

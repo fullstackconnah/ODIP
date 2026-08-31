@@ -4,6 +4,8 @@ import {
   isMarIncidentPrefillState,
   buildIncidentTitleSkeleton,
   suggestedIncidentSeverity,
+  previewRpAuthorisation,
+  buildRpIncidentDescriptionSkeleton,
   type MarIncidentPrefillState,
 } from './incidentPrefill'
 
@@ -60,5 +62,44 @@ describe('buildIncidentTitleSkeleton', () => {
       participantName: 'Sophie Brown', medicationName: 'Levetiracetam',
     })
     expect(title).toBe('Refused — Levetiracetam (Sophie Brown)')
+  })
+})
+
+// INC-04: mirrors IncidentsController.DetermineRestrictivePracticeAuthorisationAsync — the list
+// passed in is assumed to already be the participant's ACTIVE practices (that's what
+// useRestrictivePractices returns by default), so this only needs to filter by type.
+describe('previewRpAuthorisation', () => {
+  it('is "unknown" when no participant is selected', () => {
+    expect(previewRpAuthorisation(undefined, 'Seclusion', [{ type: 'Seclusion' }])).toBe('unknown')
+  })
+
+  it('is "unknown" when no type is selected', () => {
+    expect(previewRpAuthorisation('participant-1', undefined, [{ type: 'Seclusion' }])).toBe('unknown')
+  })
+
+  it('is "authorised" when an active practice of the matching type is present', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [{ type: 'Seclusion' }, { type: 'PhysicalRestraint' }])).toBe('authorised')
+  })
+
+  it('is "unauthorised" when no active practice matches the type', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [{ type: 'PhysicalRestraint' }])).toBe('unauthorised')
+  })
+
+  it('is "unauthorised" when the participant has no active practices at all', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [])).toBe('unauthorised')
+  })
+})
+
+describe('buildRpIncidentDescriptionSkeleton', () => {
+  it('includes the linked practice description and review date', () => {
+    const skeleton = buildRpIncidentDescriptionSkeleton({ description: 'Locked room during acute crisis.', reviewDate: '2026-12-01' })
+    expect(skeleton).toContain('Locked room during acute crisis.')
+    expect(skeleton).toContain('01/12/2026')
+  })
+
+  it('omits the review date line when there is none on record', () => {
+    const skeleton = buildRpIncidentDescriptionSkeleton({ description: 'Locked room during acute crisis.', reviewDate: null })
+    expect(skeleton).not.toContain('review due')
+    expect(skeleton).toContain('Locked room during acute crisis.')
   })
 })

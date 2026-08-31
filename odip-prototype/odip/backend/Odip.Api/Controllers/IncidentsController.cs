@@ -44,9 +44,10 @@ public class IncidentsController : ControllerBase
             : Task.FromResult(true);
 
     /// <summary>
-    /// INC-01/INC-02 cross-field validation shared by Create and Update: a Trip-stream incident
-    /// must carry a valid trip link, and an "Other" incident type must carry its specify text.
-    /// Returns an error message, or null when the dto passes.
+    /// INC-01/INC-02/INC-04 cross-field validation shared by Create and Update: a Trip-stream
+    /// incident must carry a valid trip link, an "Other" incident type must carry its specify
+    /// text, and a RestrictivePracticeUse incident must carry which of the register's 6
+    /// categories was used. Returns an error message, or null when the dto passes.
     /// </summary>
     private static string? ValidateServiceTypeAndIncidentType(CreateIncidentDto dto)
     {
@@ -54,7 +55,53 @@ public class IncidentsController : ControllerBase
             return "A trip must be selected when the service type is Trip.";
         if (dto.IncidentType == IncidentType.Other && string.IsNullOrWhiteSpace(dto.OtherTypeSpecify))
             return "Please specify the incident type.";
+        if (dto.IncidentType == IncidentType.RestrictivePracticeUse && dto.RestrictivePracticeType == null)
+            return "Please select the restrictive practice type.";
         return null;
+    }
+
+    /// <summary>
+    /// INC-05 FK validation: null is always fine. Otherwise the id must resolve to a
+    /// RestrictivePractice register entry — same-tenant scoping comes for free from
+    /// _db.RestrictivePractices' ambient OdipDbContext query filter, same pattern as
+    /// <see cref="IsValidUserRefAsync"/>. When an involved participant and/or restrictive
+    /// practice type is also present on the dto, the linked entry must belong to that
+    /// participant and match that type — a link that points at the wrong participant's register,
+    /// or a different category than what was reported, would silently mislabel the register
+    /// entry's authorisation as covering an incident it doesn't.
+    /// </summary>
+    private async Task<string?> ValidateRestrictivePracticeLinkAsync(
+        Guid? restrictivePracticeId, RestrictivePracticeType? rpType, Guid? involvedParticipantId, CancellationToken ct)
+    {
+        if (!restrictivePracticeId.HasValue) return null;
+
+        var practice = await _db.RestrictivePractices.FirstOrDefaultAsync(rp => rp.Id == restrictivePracticeId.Value, ct);
+        if (practice == null) return "Linked restrictive practice entry not found.";
+        if (involvedParticipantId.HasValue && practice.ParticipantId != involvedParticipantId.Value)
+            return "Linked restrictive practice entry does not belong to the involved participant.";
+        if (rpType.HasValue && practice.Type != rpType.Value)
+            return "Linked restrictive practice entry does not match the selected restrictive practice type.";
+        return null;
+    }
+
+    /// <summary>
+    /// INC-04: the authorised-vs-unauthorised determination, computed once at Create time only
+    /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update
+    /// never calls this). Authorised means the involved participant had at least one ACTIVE
+    /// register entry of the reported type at this moment — the same tenant-scoped
+    /// _db.RestrictivePractices set INC-05's picker and RestrictivePracticesController both read,
+    /// so "no matching active entry" (including a participant with only inactive/retired rows of
+    /// that type) is Unauthorised, not "unknown". Returns null — not determinable — when this
+    /// isn't a RestrictivePracticeUse incident or no participant was selected.
+    /// </summary>
+    private async Task<bool?> DetermineRestrictivePracticeAuthorisationAsync(
+        IncidentType incidentType, RestrictivePracticeType? rpType, Guid? involvedParticipantId, CancellationToken ct)
+    {
+        if (incidentType != IncidentType.RestrictivePracticeUse) return null;
+        if (rpType == null || involvedParticipantId == null) return null;
+
+        return await _db.RestrictivePractices.AnyAsync(
+            rp => rp.ParticipantId == involvedParticipantId.Value && rp.Type == rpType.Value && rp.IsActive, ct);
     }
 
     [HttpGet]
@@ -116,6 +163,7 @@ public class IncidentsController : ControllerBase
             .Include(i => i.InvolvedParticipant)
             .Include(i => i.InvolvedUser)
             .Include(i => i.ReviewedByUser)
+            .Include(i => i.RestrictivePractice)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -145,6 +193,11 @@ public class IncidentsController : ControllerBase
                 InvolvedStaffName = i.InvolvedUser != null
                     ? i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName : null,
                 ReportedByStaffId = i.ReportedByUserId,
+                RestrictivePracticeType = i.RestrictivePracticeType,
+                RestrictivePracticeId = i.RestrictivePracticeId,
+                RestrictivePracticeDescription = i.RestrictivePractice != null ? i.RestrictivePractice.Description : null,
+                RestrictivePracticeReviewDate = i.RestrictivePractice != null ? i.RestrictivePractice.ReviewDate : null,
+                IsRestrictivePracticeAuthorised = i.IsRestrictivePracticeAuthorised,
                 Description = i.Description,
                 ImmediateActionsTaken = i.ImmediateActionsTaken,
                 WereEmergencyServicesCalled = i.WereEmergencyServicesCalled,
@@ -184,6 +237,14 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
+        var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
+        if (rpLinkError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
+
+        // INC-04: determined once here, from the register as it stood right now — see
+        // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
+        // this never runs again on Update.
+        var isRpAuthorised = await DetermineRestrictivePracticeAuthorisationAsync(dto.IncidentType, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
 
         var incident = new IncidentReport
         {
@@ -196,6 +257,9 @@ public class IncidentsController : ControllerBase
             ReportedByUserId = dto.ReportedByStaffId,
             IncidentType = dto.IncidentType,
             OtherTypeSpecify = dto.OtherTypeSpecify,
+            RestrictivePracticeType = dto.RestrictivePracticeType,
+            RestrictivePracticeId = dto.RestrictivePracticeId,
+            IsRestrictivePracticeAuthorised = isRpAuthorised,
             Severity = dto.Severity,
             Title = dto.Title,
             Description = dto.Description,
@@ -209,8 +273,14 @@ public class IncidentsController : ControllerBase
             Status = IncidentStatus.Draft
         };
 
-        // Auto-set QSC reporting requirement for critical incidents
-        if (dto.Severity == IncidentSeverity.Critical || QscRequiredTypes.Contains(dto.IncidentType))
+        // Auto-set QSC reporting requirement for critical incidents. RestrictivePracticeUse is
+        // already in QscRequiredTypes (any RP incident is reportable-territory regardless of the
+        // determination), so `isRpAuthorised == false` is belt-and-braces here rather than a
+        // behaviour change — it's the INC-04 nudge made explicit, and keeps this correct even if
+        // QscRequiredTypes is ever narrowed to drop RestrictivePracticeUse. This only ever raises
+        // QscReportingStatus to Required as a default; like every field here it's still editable
+        // afterwards on the Update flow, so it's a nudge, not a lock.
+        if (dto.Severity == IncidentSeverity.Critical || QscRequiredTypes.Contains(dto.IncidentType) || isRpAuthorised == false)
         {
             incident.QscReportingStatus = QscReportingStatus.Required;
         }
@@ -264,6 +334,9 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReviewedByStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Reviewed-by staff member not found."));
+        var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
+        if (rpLinkError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
 
         i.ServiceType = dto.ServiceType;
         i.TripInstanceId = dto.TripInstanceId;
@@ -273,6 +346,12 @@ public class IncidentsController : ControllerBase
         i.ReportedByUserId = dto.ReportedByStaffId;
         i.IncidentType = dto.IncidentType;
         i.OtherTypeSpecify = dto.OtherTypeSpecify;
+        // INC-04: RestrictivePracticeType/Id may still be corrected here like any other field, but
+        // IsRestrictivePracticeAuthorised is deliberately left untouched — it's frozen at whatever
+        // Create computed (see the entity field's XML doc). Editing the participant or type here
+        // does NOT silently re-run the authorised/unauthorised finding against today's register.
+        i.RestrictivePracticeType = dto.RestrictivePracticeType;
+        i.RestrictivePracticeId = dto.RestrictivePracticeId;
         i.Severity = dto.Severity;
         i.Status = dto.Status;
         i.Title = dto.Title;
