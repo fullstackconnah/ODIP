@@ -125,7 +125,7 @@ public class ParticipantsController : ControllerBase
                 _db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
             }
-            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes);
+            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
         }
     }
 

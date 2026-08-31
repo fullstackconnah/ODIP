@@ -39,6 +39,9 @@ public record CreateParticipantAdlAssessmentDto
     public AdlLevel? Level { get; init; }
     [StringLength(2000)]
     public string? Notes { get; init; }
+    /// <summary>INTAKE-03, CommunityAccessDailyLiving stream-specific. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
+    [StringLength(2000)]
+    public string? HowToHelpNotes { get; init; }
 }
 
 /// <summary>Upsert payload for the detail-page nested edit endpoint — ParticipantId/AdlType come from the route.</summary>
@@ -47,4 +50,7 @@ public record UpsertParticipantAdlAssessmentDto
     public AdlLevel? Level { get; init; }
     [StringLength(2000)]
     public string? Notes { get; init; }
+    /// <summary>INTAKE-03, CommunityAccessDailyLiving stream-specific. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
+    [StringLength(2000)]
+    public string? HowToHelpNotes { get; init; }
 }

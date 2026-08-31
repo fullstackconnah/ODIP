@@ -55,7 +55,7 @@ public class ParticipantAdlAssessmentsController : ControllerBase
             _db.ParticipantAdlAssessments.Add(row);
         }
 
-        ApplyAnswer(row, dto.Level, dto.Notes);
+        ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantAdlAssessmentDto>.Ok(ToDto(row)));
@@ -64,10 +64,11 @@ public class ParticipantAdlAssessmentsController : ControllerBase
     // ── Helpers ────────────────────────────────────────────────────
 
     /// <summary>Sets an ADL row's answer — same "no separate audit timestamp" shape as ParticipantHealthCondition.ApplyAnswer.</summary>
-    internal static void ApplyAnswer(ParticipantAdlAssessment row, AdlLevel? level, string? notes)
+    internal static void ApplyAnswer(ParticipantAdlAssessment row, AdlLevel? level, string? notes, string? howToHelpNotes)
     {
         row.Level = level;
         row.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        row.HowToHelpNotes = string.IsNullOrWhiteSpace(howToHelpNotes) ? null : howToHelpNotes.Trim();
         row.UpdatedAt = DateTime.UtcNow;
     }
 
@@ -91,8 +92,7 @@ public class ParticipantAdlAssessmentsController : ControllerBase
         AdlType = a.AdlType,
         Level = a.Level,
         Notes = a.Notes,
-        // INTAKE-03, CommunityAccessDailyLiving stream-specific — read-only here; no write path
-        // yet (Create/Upsert DTOs deliberately unchanged, see ParticipantAdlAssessment.HowToHelpNotes's doc).
+        // INTAKE-03, CommunityAccessDailyLiving stream-specific.
         HowToHelpNotes = a.HowToHelpNotes,
         CreatedAt = a.CreatedAt,
         UpdatedAt = a.UpdatedAt,
