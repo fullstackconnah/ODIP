@@ -1,6 +1,7 @@
 import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from './enums'
 import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
 import type { CreateParticipantRiskEntryDto } from './risk-entries'
+import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -273,6 +274,20 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   eyeColour: string | null
   weightKg: number | null
   heightCm: number | null
+  // INTAKE sub-wave B — Cultural & Consent step (Master Data Dictionary CUL-*). All optional.
+  isCald: boolean | null
+  isLgbtqi: boolean | null
+  isFamilyCommunity: boolean | null
+  isAboriginalOrTorresStraitIslander: boolean | null
+  receivedRightsAndResponsibilitiesInfo: boolean | null
+  receivedPrivacyAndConfidentialityInfo: boolean | null
+  receivedFeedbackInfo: boolean | null
+  receivedBeingSafeInfo: boolean | null
+  receivedAdvocacyInfo: boolean | null
+  personalInterests: string | null
+  choiceControlNotes: string | null
+  /** Always all seven ConsentType entries — see ParticipantConsentsController.GetForParticipant. */
+  consents: ParticipantConsentDto[]
 }
 
 export interface CreateParticipantDto {
@@ -391,6 +406,25 @@ export interface CreateParticipantDto {
   eyeColour?: string
   weightKg?: number | null
   heightCm?: number | null
+  // INTAKE sub-wave B — Cultural & Consent step. All optional.
+  isCald?: boolean | null
+  isLgbtqi?: boolean | null
+  isFamilyCommunity?: boolean | null
+  isAboriginalOrTorresStraitIslander?: boolean | null
+  receivedRightsAndResponsibilitiesInfo?: boolean | null
+  receivedPrivacyAndConfidentialityInfo?: boolean | null
+  receivedFeedbackInfo?: boolean | null
+  receivedBeingSafeInfo?: boolean | null
+  receivedAdvocacyInfo?: boolean | null
+  personalInterests?: string
+  choiceControlNotes?: string
+  /**
+   * Consent rows captured on the wizard's Cultural & Consent step, upserted transactionally with
+   * the participant on both create and update — unlike riskEntries (create-mode only), this list
+   * is read on every save, since the step stays editable in edit mode too. See
+   * CreateParticipantDto's backend doc for the fuller reasoning.
+   */
+  consents: CreateParticipantConsentDto[]
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

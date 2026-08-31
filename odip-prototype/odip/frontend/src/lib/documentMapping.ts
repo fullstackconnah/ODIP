@@ -175,7 +175,41 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { field: 'hidpaSupportCategories', label: 'HIDPA Support Categories', sources: ['profile'], notes: 'DIAG-02. The base Profile scatters HIDPA-training-required flags per-condition rather than a single field; the Community Access variant (§3, INTAKE-03 territory) centralises a proper HIDPA checklist instead. Tagged profile pending that later reconciliation.' },
   { field: 'medicalSummary', label: 'Medical Summary', sources: ['shared'], notes: 'Both forms carry a free-text "Health Conditions/Diagnoses" field — one of §2\'s explicit shared-set entries.' },
 
-  // ── Risks & Consents step — §4.10, INTAKE-09 ─────────────────────────────
+  // ── Cultural & Consent step (NEW, sub-wave B) — §4.5/§5 ──────────────────
+  {
+    field: 'isCald', label: 'Culturally and Linguistically Diverse (CALD)', sources: ['shared'], dictionaryId: 'CUL-*',
+    notes: 'NEW (sub-wave B). §4.5: ALL of CALD/LGBTIQA+/Family-Community/ATSI + info-received are NEW — "the clearest one-to-one duplicate in the whole set" per §2, since the Cultural table is IDENTICAL wording/layout on both the Intake coversheet and the Participant Profile.',
+  },
+  {
+    field: 'isLgbtqi', label: 'LGBTQI', sources: ['shared'], dictionaryId: 'CUL-*',
+    notes: 'NEW (sub-wave B). Source forms label this checkbox "LGBTIQA+" — named isLgbtqi here per this PR\'s brief; flagged, not silently reconciled (see this PR\'s report).',
+  },
+  { field: 'isFamilyCommunity', label: 'Family / Community', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
+  {
+    field: 'isAboriginalOrTorresStraitIslander', label: 'Aboriginal and/or Torres Strait Islander', sources: ['shared'], dictionaryId: 'CUL-*',
+    notes: 'NEW (sub-wave B). Source forms label this checkbox "ATSI" — rendered with the respectful full label per the design guardrails.',
+  },
+  { field: 'receivedRightsAndResponsibilitiesInfo', label: 'Received: Rights and Responsibilities', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B). One of the 5 "information received" flags, §4.5.' },
+  { field: 'receivedPrivacyAndConfidentialityInfo', label: 'Received: Privacy and Confidentiality', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
+  { field: 'receivedFeedbackInfo', label: 'Received: Feedback Information and Form', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
+  { field: 'receivedBeingSafeInfo', label: 'Received: Being Safe Information', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
+  { field: 'receivedAdvocacyInfo', label: 'Received: Advocacy Information', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
+  {
+    field: 'personalInterests', label: 'Personal Interests', sources: ['profile'],
+    notes: 'NEW (sub-wave B). §5 groups this with the Cultural & Consent step; loosely maps to the Profile\'s Personal and Cultural Preferences "Hobbies/interests" free text (§1c-16) — Intake has no equivalent.',
+  },
+  {
+    field: 'choiceControlNotes', label: 'Choice & Control Notes', sources: ['profile'],
+    notes: 'NEW (sub-wave B). Maps to the Profile\'s "Participant Choice and Control" section (§1c-6, Support areas/Goals/Strengths-Fears free text) — Intake has no equivalent. Modelled as one free-text field here, not the Profile\'s 3-way split; a finer split is a later-wave design decision if needed.',
+  },
+  {
+    field: 'consents', label: 'Consent & Terms (photo/video, alcohol, OTC medication, emergency medical, privacy, travel insurance, T&Cs)', sources: ['profile'], dictionaryId: 'CNST-001..013',
+    notes: 'NEW (sub-wave B). §4.5: "the entire Consent & Terms block... NEW, and notably there is no consent-tracking entity/field anywhere in the domain model. This is the single largest structural gap for a compliance-sensitive area" — now backed by the ParticipantConsent entity (one row per ConsentType). Profile-only per §2 (§1c-19/§1c-20) — the Intake coversheet has no consent block at all, only the shared Cultural table\'s own Client/Rep signature line (not modelled here — see this PR\'s report). No drawn-signature capture (SignedByName is typed, not a canvas image) — deferred.',
+  },
+
+  // ── Risks & Hazards step — §4.10, INTAKE-09 (renamed from "Risks & Consents" in sub-wave B —
+  // this step never carried any consent content; the Consent & Terms block above now has its own
+  // step, so the two names no longer overlap) ─────────────────────────────
   { field: 'behaviourRiskSummary', label: 'Behaviour Risk Summary', sources: ['shared'], notes: 'Loosely maps to both forms\' BOC current/5yrs severity fields (§2 shared set) — value-set delta flagged there (Low/Med/High/NA on Intake vs. /Critical on Profile), not re-modelled as separate fields here.' },
   { field: 'notes', label: 'General Notes', sources: [], notes: 'ODIP catch-all notes field — not a direct source-form field.' },
   {

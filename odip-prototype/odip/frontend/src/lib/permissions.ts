@@ -145,6 +145,15 @@ export function usePermissions() {
     canWriteContacts: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * INTAKE sub-wave B: consent decisions are compliance-adjacent (photo/video, alcohol, OTC
+     * medication, emergency medical, privacy, travel insurance, T&C acceptance) — same
+     * coordination-only gate as contacts/restrictive practices, narrower than routines/notes/
+     * risks. Mirrors ParticipantConsentsController.Upsert's Admin/Coordinator/SuperAdmin role
+     * gate exactly.
+     */
+    canWriteConsents: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).
