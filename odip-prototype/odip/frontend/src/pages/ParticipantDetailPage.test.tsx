@@ -138,3 +138,118 @@ describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
     expect(screen.queryByText('Falls risk')).not.toBeInTheDocument()
   })
 })
+
+// PDETAIL-01 — the Details tab's card order now mirrors the intake wizard's step-family order
+// (see ParticipantDetailPage.tsx's own doc comment above the 'details' tab block). One test per
+// top-level group asserting its key fields render under the right heading, plus a group-order
+// smoke test and a "the nested CRUD sections all survived the reorg" smoke test.
+describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
+  it('renders the Identity group with the full identity field set', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({
+        middleName: 'Anne', dateOfBirth: '2000-01-15', gender: 'Other', genderSelfDescription: 'Genderfluid',
+        placeOfBirth: 'Brisbane', phone: '0400 000 000', email: 'sophie@example.com', preferredStaffName: 'Jamie Lee',
+      }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('heading', { name: 'Identity' })).toBeInTheDocument()
+    expect(screen.getByText('Anne')).toBeInTheDocument()
+    expect(screen.getByText('15/01/2000')).toBeInTheDocument()
+    expect(screen.getByText('Other (Genderfluid)')).toBeInTheDocument()
+    expect(screen.getByText('Brisbane')).toBeInTheDocument()
+    expect(screen.getByText('0400 000 000')).toBeInTheDocument()
+    expect(screen.getByText('sophie@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Jamie Lee')).toBeInTheDocument()
+  })
+
+  it('renders the NDIS & Funding group split out from Identity, including the DSOA/repeat-client flags', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({
+        fundingSource: 'Ndis', ndisNumber: '123456789', maskedNdisNumber: null,
+        planStartDate: '2026-02-01', planEndDate: '2027-02-01', isDsoa: true, isRepeatClient: true,
+      }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('heading', { name: 'NDIS & Funding' })).toBeInTheDocument()
+    expect(screen.getByText('NDIS')).toBeInTheDocument()
+    expect(screen.getByText('••••••••9')).toBeInTheDocument()
+    expect(screen.getByText('01/02/2026')).toBeInTheDocument()
+    expect(screen.getByText('01/02/2027')).toBeInTheDocument()
+    // DSOA and Repeat Client both render as a plain "Yes" value — at least those two.
+    expect(screen.getAllByText('Yes').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows the Other-funding fields and hides the NDIS plan fields when fundingSource is Other', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ fundingSource: 'Other', fundingOrganisation: 'Local Council' }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    expect(screen.getByText('Local Council')).toBeInTheDocument()
+    expect(screen.queryByText('NDIS Number')).not.toBeInTheDocument()
+  })
+
+  it('renders Support Needs & Mobility with Intensive Support (previously unrendered) and the relocated free-text fields, and retires the old generic "Notes" card', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({
+        isIntensiveSupport: true, mobilityNotes: 'Prefers left-side approach.',
+        equipmentRequirements: 'Needs a slide sheet.', transportRequirements: 'Wheelchair-accessible van only.',
+      }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('heading', { name: 'Support Needs & Mobility' })).toBeInTheDocument()
+    expect(screen.getByText('Intensive Support')).toBeInTheDocument()
+    expect(screen.getByText('Prefers left-side approach.')).toBeInTheDocument()
+    expect(screen.getByText('Needs a slide sheet.')).toBeInTheDocument()
+    expect(screen.getByText('Wheelchair-accessible van only.')).toBeInTheDocument()
+    // No longer under a generic "Notes" heading — PDETAIL-01 retired that card in favour of
+    // relocating its fields to their real wizard-step homes.
+    expect(screen.queryByRole('heading', { name: 'Notes' })).not.toBeInTheDocument()
+  })
+
+  it('renders the Risks & Hazards Summary card with behaviourRiskSummary (previously unrendered anywhere on this page) alongside General Notes', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ behaviourRiskSummary: 'Escalates when routine changes without warning.', notes: 'Prefers morning visits.' }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('heading', { name: 'Risks & Hazards Summary' })).toBeInTheDocument()
+    expect(screen.getByText(/Escalates when routine changes without warning\./)).toBeInTheDocument()
+    expect(screen.getByText(/Prefers morning visits\./)).toBeInTheDocument()
+  })
+
+  it('orders Details-tab groups to mirror the wizard step order: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Support Needs & Mobility, Medical', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ medicareNumber: 'MED123', isCald: true, primaryDiagnosis: 'Autism' }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)
+    const idx = (name: string) => headings.indexOf(name)
+    expect(idx('Identity')).toBeGreaterThanOrEqual(0)
+    expect(idx('Identity')).toBeLessThan(idx('NDIS & Funding'))
+    expect(idx('NDIS & Funding')).toBeLessThan(idx('Key Identifiers'))
+    expect(idx('Key Identifiers')).toBeLessThan(idx('Cultural Background'))
+    expect(idx('Cultural Background')).toBeLessThan(idx('Support Needs & Mobility'))
+    expect(idx('Support Needs & Mobility')).toBeLessThan(idx('Medical'))
+  })
+
+  it('still renders every nested CRUD section (consents/health-conditions/ADL/risk-entries) after the reorg', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByTestId('consents-section')).toBeInTheDocument()
+    expect(screen.getByTestId('health-conditions-section')).toBeInTheDocument()
+    expect(screen.getByTestId('adl-assessments-section')).toBeInTheDocument()
+    expect(screen.getByTestId('risk-entries-section')).toBeInTheDocument()
+  })
+})

@@ -141,9 +141,19 @@ export default function ParticipantDetailPage() {
         onChange={(key) => setTab(key as typeof tab)}
       />
 
+      {/* PDETAIL-01 — the Details tab's card order now mirrors the intake wizard's step-family
+          order (ParticipantCreatePage.tsx's WIZARD_STEPS) end to end: Identity, NDIS & Funding,
+          Key Identifiers, [Contacts has its own sibling tab, matching CONTACT-01/02/03's own
+          wizard step], Cultural & Consent, Support Needs & Mobility, Medical, Behaviour &
+          Communication, Daily Living, Risks & Hazards. A field now lives in the same conceptual
+          group here as it does in the wizard, rather than the prior ad hoc ordering (funding
+          fields dumped into "Personal Information", Key Identifiers and Cultural & Consent
+          floating after Support Needs/Behaviour & Communication, mobility free-text fields
+          stranded in a generic "Notes" card far from the rest of Support Needs & Mobility). See
+          this PR's report for the fuller inventory of what was incoherent before this pass. */}
       {tab === 'details' && (
         <div className="grid md:grid-cols-2 gap-6">
-          <Card title="Personal Information">
+          <Card title="Identity">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               {/* INTAKE sub-wave A, PID-004 — same always-visible empty-state pattern as Place
                   of Birth/Phone/Email below, not a hide-when-unset row. */}
@@ -159,25 +169,6 @@ export default function ParticipantDetailPage() {
               <span className="text-[var(--color-muted-foreground)]">Place of Birth</span><span>{p.placeOfBirth || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Phone</span><span>{p.phone || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Email</span><span>{p.email || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Funding Source</span>
-              <span>{FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis']}</span>
-              {/* FUND-02: subsequent content changes per funding source — NDIS shows the plan
-                  fields (current behaviour); Other shows the reused specify field instead. */}
-              {p.fundingSource !== 'Other' && (
-                <>
-                  <span className="text-[var(--color-muted-foreground)]">NDIS Number</span><span className="font-mono">{p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : '—'}</span>
-                  <span className="text-[var(--color-muted-foreground)]">Plan Start Date</span><span>{formatDateAu(p.planStartDate)}</span>
-                  <span className="text-[var(--color-muted-foreground)]">Plan End Date</span><span>{formatDateAu(p.planEndDate)}</span>
-                </>
-              )}
-              {p.fundingSource === 'Other' && (
-                <>
-                  <span className="text-[var(--color-muted-foreground)]">Funding Organisation</span><span>{p.fundingOrganisation || '—'}</span>
-                </>
-              )}
-              {/* INTAKE sub-wave A, NDIS-006. */}
-              <span className="text-[var(--color-muted-foreground)]">DSOA</span><span>{p.isDsoa ? 'Yes' : 'No'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Preferred Staff</span><span>{p.preferredStaffName ?? '—'}</span>
             </div>
           </Card>
@@ -188,7 +179,8 @@ export default function ParticipantDetailPage() {
               <span className="text-[var(--color-muted-foreground)]">Living Arrangement</span>
               <span>{p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : '—'}</span>
               {/* LIVING-02/03/04: subsequent content changes per arrangement type — same
-                  "only show what's relevant" pattern as the FUND-02 funding-source fields above. */}
+                  "only show what's relevant" pattern as the FUND-02 funding-source fields on the
+                  NDIS & Funding card below. */}
               {p.livingArrangement === 'Family' && (
                 <>
                   <span className="text-[var(--color-muted-foreground)]">Main Support Person</span>
@@ -229,40 +221,39 @@ export default function ParticipantDetailPage() {
               )}
             </div>
           </Card>
-          <Card title="Support Needs">
+          {/* PDETAIL-01 — split out of the old "Personal Information" card, which mixed Identity
+              step fields with these NDIS & Funding step fields under one heading. Own card now,
+              matching the wizard's own step boundary. */}
+          <Card title="NDIS & Funding">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-              <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
-              <span className="flex flex-wrap gap-1">
-                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <Tag key={b} label={b} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
-              <span className="flex flex-wrap gap-1">
-                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <Tag key={o} label={o} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
-              <span>{p.overnightSupport && p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Equipment</span>
-              <span className="flex flex-wrap gap-1">
-                {equipmentBadges.length ? equipmentBadges.map(b => <Tag key={b} label={b} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
-              {/* INTAKE sub-wave C1 — Mobility & Functional (research spec §4.7/§5). */}
-              <span className="text-[var(--color-muted-foreground)]">Ambulant Status</span><span>{p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Falls Risk Rating</span><span>{p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Uneven Ground</span><span>{yesNoUnset(p.unevenGroundFlag)}</span>
-              <span className="text-[var(--color-muted-foreground)]">Level of Personal Care</span><span>{p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : '—'}</span>
-              {p.orthotics && (<><span className="text-[var(--color-muted-foreground)]">Orthotics</span><span className="whitespace-pre-line">{p.orthotics}</span></>)}
-              {p.continenceSupportDetail && (<><span className="text-[var(--color-muted-foreground)]">Continence Support</span><span className="whitespace-pre-line">{p.continenceSupportDetail}</span></>)}
-              {p.bowelCareDetail && (<><span className="text-[var(--color-muted-foreground)]">Colostomy / Catheter / Enema / Suppository</span><span className="whitespace-pre-line">{p.bowelCareDetail}</span></>)}
-              {p.menstruationSupport && (<><span className="text-[var(--color-muted-foreground)]">Menstruation Support</span><span className="whitespace-pre-line">{p.menstruationSupport}</span></>)}
-              {p.skinIntegrity && (<><span className="text-[var(--color-muted-foreground)]">Skin Integrity</span><span className="whitespace-pre-line">{p.skinIntegrity}</span></>)}
+              <span className="text-[var(--color-muted-foreground)]">Funding Source</span>
+              <span>{FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis']}</span>
+              {/* FUND-02: subsequent content changes per funding source — NDIS shows the plan
+                  fields (current behaviour); Other shows the reused specify field instead. */}
+              {p.fundingSource !== 'Other' && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">NDIS Number</span><span className="font-mono">{p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : '—'}</span>
+                  <span className="text-[var(--color-muted-foreground)]">Plan Start Date</span><span>{formatDateAu(p.planStartDate)}</span>
+                  <span className="text-[var(--color-muted-foreground)]">Plan End Date</span><span>{formatDateAu(p.planEndDate)}</span>
+                </>
+              )}
+              {p.fundingSource === 'Other' && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">Funding Organisation</span><span>{p.fundingOrganisation || '—'}</span>
+                </>
+              )}
+              {/* INTAKE sub-wave A, NDIS-006. */}
+              <span className="text-[var(--color-muted-foreground)]">DSOA</span><span>{p.isDsoa ? 'Yes' : 'No'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
             </div>
           </Card>
           {/* INTAKE sub-wave A — Key Identifiers step (research spec §4.4/§5). Same
               whole-card-conditional empty-state pattern as Medical below: nothing here is
               required, so the card only renders once at least one field has a value, rather than
-              showing a wall of "—" placeholders. */}
+              showing a wall of "—" placeholders. PDETAIL-01: repositioned to sit directly after
+              NDIS & Funding, matching the wizard's own step order (Identity → NDIS & Funding →
+              Key Identifiers) — it previously floated after Support Needs, several steps out of
+              sequence. */}
           {(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
             || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm) && (
             <Card title="Key Identifiers">
@@ -312,6 +303,93 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
+          {/* INTAKE sub-wave B — Cultural & Consent step (research spec §4.5/§5). Same
+              whole-card-conditional empty-state pattern as Key Identifiers/Medical above: nothing
+              here is required, so the card only renders once at least one flag/note has a value.
+              PDETAIL-01: repositioned (with the Consents section immediately below it) to sit
+              right after Key Identifiers, matching the wizard's Cultural & Consent step — it
+              previously floated after Behaviour & Communication, several steps out of sequence. */}
+          {(p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
+            || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
+            || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
+            || p.personalInterests || p.choiceControlNotes) && (
+            <Card title="Cultural Background" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                <span className="text-[var(--color-muted-foreground)]">CALD</span><span>{yesNoUnset(p.isCald)}</span>
+                <span className="text-[var(--color-muted-foreground)]">LGBTIQA+</span><span>{yesNoUnset(p.isLgbtqi)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Family / Community</span><span>{yesNoUnset(p.isFamilyCommunity)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Aboriginal and/or Torres Strait Islander</span><span>{yesNoUnset(p.isAboriginalOrTorresStraitIslander)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Rights and Responsibilities</span><span>{yesNoUnset(p.receivedRightsAndResponsibilitiesInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Privacy and Confidentiality</span><span>{yesNoUnset(p.receivedPrivacyAndConfidentialityInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Feedback Information and Form</span><span>{yesNoUnset(p.receivedFeedbackInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Being Safe Information</span><span>{yesNoUnset(p.receivedBeingSafeInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Advocacy Information</span><span>{yesNoUnset(p.receivedAdvocacyInfo)}</span>
+                {p.personalInterests && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Personal Interests</span>
+                    <span className="whitespace-pre-line">{p.personalInterests}</span>
+                  </>
+                )}
+                {p.choiceControlNotes && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Choice & Control Notes</span>
+                    <span className="whitespace-pre-line">{p.choiceControlNotes}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+          <Card className="md:col-span-2">
+            <ParticipantConsentsSection participantId={id} />
+          </Card>
+          {/* PDETAIL-01 — renamed from "Support Needs" to "Support Needs & Mobility" to match the
+              wizard step's own label exactly (STEP_SUPPORT_FIELDS/WIZARD_STEPS), and widened to
+              md:col-span-2 now that it also carries the free-text fields below (previously
+              stranded in a generic "Notes" card near the bottom of the page, alongside the
+              unrelated Risks & Hazards fields) and Intensive Support (previously not rendered
+              anywhere on this page at all — see this PR's report). */}
+          <Card title="Support Needs & Mobility" className="md:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+              <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
+              <span className="flex flex-wrap gap-1">
+                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <Tag key={b} label={b} />) : '—'}
+              </span>
+              <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
+              <span className="flex flex-wrap gap-1">
+                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <Tag key={o} label={o} />) : '—'}
+              </span>
+              <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
+              {/* PDETAIL-01 — Intensive Support (NDIS billing flag): present on the Participant
+                  entity/DTO and the wizard's Support Needs & Mobility step, but never rendered
+                  anywhere on this page before this pass. */}
+              <span className="text-[var(--color-muted-foreground)]">Intensive Support</span><span>{p.isIntensiveSupport ? 'Yes' : 'No'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
+              <span>{p.overnightSupport && p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Equipment</span>
+              <span className="flex flex-wrap gap-1">
+                {equipmentBadges.length ? equipmentBadges.map(b => <Tag key={b} label={b} />) : '—'}
+              </span>
+              <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
+              {/* INTAKE sub-wave C1 — Mobility & Functional (research spec §4.7/§5). */}
+              <span className="text-[var(--color-muted-foreground)]">Ambulant Status</span><span>{p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Falls Risk Rating</span><span>{p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Uneven Ground</span><span>{yesNoUnset(p.unevenGroundFlag)}</span>
+              <span className="text-[var(--color-muted-foreground)]">Level of Personal Care</span><span>{p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : '—'}</span>
+              {p.orthotics && (<><span className="text-[var(--color-muted-foreground)]">Orthotics</span><span className="whitespace-pre-line">{p.orthotics}</span></>)}
+              {p.continenceSupportDetail && (<><span className="text-[var(--color-muted-foreground)]">Continence Support</span><span className="whitespace-pre-line">{p.continenceSupportDetail}</span></>)}
+              {p.bowelCareDetail && (<><span className="text-[var(--color-muted-foreground)]">Colostomy / Catheter / Enema / Suppository</span><span className="whitespace-pre-line">{p.bowelCareDetail}</span></>)}
+              {p.menstruationSupport && (<><span className="text-[var(--color-muted-foreground)]">Menstruation Support</span><span className="whitespace-pre-line">{p.menstruationSupport}</span></>)}
+              {p.skinIntegrity && (<><span className="text-[var(--color-muted-foreground)]">Skin Integrity</span><span className="whitespace-pre-line">{p.skinIntegrity}</span></>)}
+              {/* PDETAIL-01 — moved in from the old bottom-of-page "Notes" card, which mixed
+                  these Support Needs & Mobility step fields with the unrelated Risks & Hazards
+                  step's General Notes field. Rendered with this card's own established
+                  conditional-row idiom (matching Orthotics/Continence Support above) rather than
+                  the old card's flat "<strong>Label:</strong> value" paragraph style. */}
+              {p.mobilityNotes && (<><span className="text-[var(--color-muted-foreground)]">Mobility Notes</span><span className="whitespace-pre-line">{p.mobilityNotes}</span></>)}
+              {p.equipmentRequirements && (<><span className="text-[var(--color-muted-foreground)]">Equipment Requirements</span><span className="whitespace-pre-line">{p.equipmentRequirements}</span></>)}
+              {p.transportRequirements && (<><span className="text-[var(--color-muted-foreground)]">Transport Requirements</span><span className="whitespace-pre-line">{p.transportRequirements}</span></>)}
+            </div>
+          </Card>
           {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.hidpaNotes || p.medicalSummary
             || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes) && (
             <Card title="Medical" className="md:col-span-2">
@@ -398,56 +476,18 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
-          {/* INTAKE sub-wave B — Cultural & Consent step (research spec §4.5/§5). Same
-              whole-card-conditional empty-state pattern as Key Identifiers/Medical above: nothing
-              here is required, so the card only renders once at least one flag/note has a value. */}
-          {(p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
-            || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
-            || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
-            || p.personalInterests || p.choiceControlNotes) && (
-            <Card title="Cultural Background" className="md:col-span-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-                <span className="text-[var(--color-muted-foreground)]">CALD</span><span>{yesNoUnset(p.isCald)}</span>
-                <span className="text-[var(--color-muted-foreground)]">LGBTIQA+</span><span>{yesNoUnset(p.isLgbtqi)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Family / Community</span><span>{yesNoUnset(p.isFamilyCommunity)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Aboriginal and/or Torres Strait Islander</span><span>{yesNoUnset(p.isAboriginalOrTorresStraitIslander)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Received: Rights and Responsibilities</span><span>{yesNoUnset(p.receivedRightsAndResponsibilitiesInfo)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Received: Privacy and Confidentiality</span><span>{yesNoUnset(p.receivedPrivacyAndConfidentialityInfo)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Received: Feedback Information and Form</span><span>{yesNoUnset(p.receivedFeedbackInfo)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Received: Being Safe Information</span><span>{yesNoUnset(p.receivedBeingSafeInfo)}</span>
-                <span className="text-[var(--color-muted-foreground)]">Received: Advocacy Information</span><span>{yesNoUnset(p.receivedAdvocacyInfo)}</span>
-                {p.personalInterests && (
-                  <>
-                    <span className="text-[var(--color-muted-foreground)]">Personal Interests</span>
-                    <span className="whitespace-pre-line">{p.personalInterests}</span>
-                  </>
-                )}
-                {p.choiceControlNotes && (
-                  <>
-                    <span className="text-[var(--color-muted-foreground)]">Choice & Control Notes</span>
-                    <span className="whitespace-pre-line">{p.choiceControlNotes}</span>
-                  </>
-                )}
-              </div>
-            </Card>
-          )}
-          <Card className="md:col-span-2">
-            <ParticipantConsentsSection participantId={id} />
-          </Card>
-          {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
-              rendered (unlike the whole-card-conditional cards below): GetForParticipant always
-              returns all twenty AdlType entries, so there is no genuinely-empty state to hide
-              behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
-              edge case instead. Same convention as ParticipantHealthConditionsSection above. */}
-          <Card className="md:col-span-2">
-            <ParticipantAdlAssessmentsSection participantId={id} />
-          </Card>
           {/* INTAKE-03/04, CommunityAccessDailyLiving stream (research spec §3) — gated on the
               stream flag itself (unlike the whole-card-conditional cards elsewhere on this page,
               which gate on field presence): this card's fields have no meaning for a participant
               who isn't in the CA stream, even if stray data happened to be saved while the flag
               was briefly on (see the stream-removal confirm dialog on the wizard's NDIS & Funding
-              step, which warns before that data is cleared). */}
+              step, which warns before that data is cleared). PDETAIL-01: repositioned directly
+              after Behaviour & Communication — every field this card renders belongs to either
+              the wizard's Support Needs & Mobility step (the Community Mobility & Transport Risk
+              half of checklistItems) or its Behaviour & Communication step (everything else:
+              signsHappyAndSettled..bocWhatNotToDo, supportsLookLike*, and the Community
+              Behaviours of Concern half of checklistItems) — it previously sat after the Daily
+              Living group's ADL section instead, a step family this card has no fields from. */}
           {isCommunityAccess && (
             <Card title="Community Access" className="md:col-span-2">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
@@ -490,6 +530,14 @@ export default function ParticipantDetailPage() {
               )}
             </Card>
           )}
+          {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
+              rendered (unlike the whole-card-conditional cards below): GetForParticipant always
+              returns all twenty AdlType entries, so there is no genuinely-empty state to hide
+              behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
+              edge case instead. Same convention as ParticipantHealthConditionsSection above. */}
+          <Card className="md:col-span-2">
+            <ParticipantAdlAssessmentsSection participantId={id} />
+          </Card>
           {/* INTAKE sub-wave C2 — Meals & Diet (Daily Living step, research spec §4.9/§5). Same
               whole-card-conditional empty-state pattern as Medical/Cultural Background above. */}
           {(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
@@ -531,13 +579,18 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
-          {(p.mobilityNotes || p.transportRequirements || p.equipmentRequirements || p.notes) && (
-            <Card title="Notes" className="md:col-span-2">
+          {/* PDETAIL-01 — renamed from the old catch-all "Notes" card and trimmed to just this
+              Risks & Hazards step's two scalar fields (STEP_RISK_FIELDS: behaviourRiskSummary,
+              notes — riskEntries is the RiskEntriesSection below). The old card also carried
+              mobilityNotes/equipmentRequirements/transportRequirements, which belong to the
+              Support Needs & Mobility step and have moved to that card above — see this PR's
+              report. behaviourRiskSummary itself was previously not rendered anywhere on this
+              page at all, alongside notes' prior mis-grouping. */}
+          {(p.behaviourRiskSummary || p.notes) && (
+            <Card title="Risks & Hazards Summary" className="md:col-span-2">
               <div className="text-sm space-y-2 text-[var(--color-muted-foreground)]">
-                {p.mobilityNotes && <p><strong>Mobility:</strong> {p.mobilityNotes}</p>}
-                {p.transportRequirements && <p><strong>Transport:</strong> {p.transportRequirements}</p>}
-                {p.equipmentRequirements && <p><strong>Equipment:</strong> {p.equipmentRequirements}</p>}
-                {p.notes && <p><strong>General:</strong> {p.notes}</p>}
+                {p.behaviourRiskSummary && <p><strong>Behaviour Risk Summary:</strong> {p.behaviourRiskSummary}</p>}
+                {p.notes && <p><strong>General Notes:</strong> {p.notes}</p>}
               </div>
             </Card>
           )}
