@@ -26,14 +26,14 @@ vi.mock('@/api/hooks', () => ({
 function unassessedRows(): ParticipantAdlAssessmentDto[] {
   return ADL_TYPES.map((type) => ({
     id: null, participantId: 'participant-1', adlType: type,
-    level: null, notes: null, createdAt: null, updatedAt: null,
+    level: null, notes: null, howToHelpNotes: null, createdAt: null, updatedAt: null,
   }))
 }
 
 function makeAssessment(overrides: Partial<ParticipantAdlAssessmentDto> = {}): ParticipantAdlAssessmentDto {
   return {
     id: 'adl-1', participantId: 'participant-1', adlType: 'Dressing',
-    level: null, notes: null,
+    level: null, notes: null, howToHelpNotes: null,
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   }
@@ -158,5 +158,37 @@ describe('ParticipantAdlAssessmentsSection', () => {
     // Proof, not a DOM-proximity guess — getByRole('radiogroup', { name }) only finds a match if
     // ToggleGroup's ariaLabel is actually wired through.
     expect(within(dialog).getByRole('radiogroup', { name: 'Level' })).toBeInTheDocument()
+  })
+
+  // INTAKE-03, CommunityAccessDailyLiving stream — howToHelpNotes' "How To Help Me" column is
+  // its own opt-in table column (see columns()'s `...(assessments.some(a => a.howToHelpNotes) ?
+  // [...] : [])` spread in the component), not a plain per-row conditional cell: it only exists
+  // at all once ANY row across the whole grid actually has a value, matching this page's
+  // whole-card/column presence-or-relevance idiom rather than showing an all-"—" column for a
+  // participant who was never in the CA stream.
+  it('shows the "How To Help Me" column, and only that column, once any row has howToHelpNotes', () => {
+    const data = unassessedRows()
+    replaceAssessment(data, { adlType: 'Dressing', level: 'Independent', howToHelpNotes: 'Lay out clothes in order.' })
+    mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
+
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    // The column is added to BOTH grouped tables (Personal + Community & Domestic) once ANY row
+    // across the whole grid has howToHelpNotes — the presence check in the component isn't
+    // per-table.
+    expect(screen.getAllByRole('columnheader', { name: 'How To Help Me' })).toHaveLength(2)
+    const dressingRow = screen.getByText('Dressing').closest('tr')!
+    expect(within(dressingRow).getByText('Lay out clothes in order.')).toBeInTheDocument()
+    // A row with no howToHelpNotes of its own still renders the column, with the shared "—" empty
+    // cell (alongside Notes' own "—", also empty for this row — two "—" cells, not zero).
+    const kitchenRow = screen.getByText('Kitchen').closest('tr')!
+    expect(within(kitchenRow).getAllByText('—')).toHaveLength(2)
+  })
+
+  it('hides the "How To Help Me" column entirely when no row has howToHelpNotes (e.g. a non-CA participant)', () => {
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    expect(screen.queryByRole('columnheader', { name: 'How To Help Me' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Lay out clothes in order.')).not.toBeInTheDocument()
   })
 })

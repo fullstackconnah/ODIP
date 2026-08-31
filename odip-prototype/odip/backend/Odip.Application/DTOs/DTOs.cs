@@ -82,6 +82,8 @@ public record ParticipantDetailDto : ParticipantListDto
     public List<string> OtherDiagnoses { get; init; } = new();
     /// <summary>DIAG-02.</summary>
     public HidpaSupportCategory HidpaSupportCategories { get; init; }
+    /// <summary>DIAG-02/INTAKE-03 reconciliation. See <see cref="Entities.Participant.HidpaNotes"/>'s doc.</summary>
+    public string? HidpaNotes { get; init; }
     public SupportRatio OvernightRatio { get; init; }
     public bool RequiresHiLoBed { get; init; }
     public bool RequiresHoist { get; init; }
@@ -169,6 +171,9 @@ public record ParticipantDetailDto : ParticipantListDto
     /// <summary>Always all twenty <see cref="Domain.Enums.AdlType"/> entries — see ParticipantAdlAssessmentsController.GetForParticipant.</summary>
     public List<ParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
 
+    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. Always all twenty-one <see cref="Domain.Enums.ChecklistItemType"/> entries — see ParticipantChecklistItemsController.GetForParticipant.</summary>
+    public List<ParticipantChecklistItemDto> ChecklistItems { get; init; } = new();
+
     // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step). See Participant.cs's field group doc.
     public string? MealAssistanceDetail { get; init; }
     public string? ChokingRiskMealDetail { get; init; }
@@ -189,6 +194,18 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? ThingsToKnow { get; init; }
     public string? WhoIsImportant { get; init; }
     public string? LikesDislikes { get; init; }
+
+    // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving stream). See Participant.cs's field group doc.
+    public string? SignsHappyAndSettled { get; init; }
+    public string? WhatHelpsMeCalmDown { get; init; }
+    public string? BocTriggers { get; init; }
+    public string? BocEarlyWarningSigns { get; init; }
+    public string? BocDeEscalationStrategies { get; init; }
+    public string? BocWhatNotToDo { get; init; }
+    public string? SupportsLookLikeMorning { get; init; }
+    public string? SupportsLookLikeDay { get; init; }
+    public string? SupportsLookLikeAfternoonEvening { get; init; }
+    public string? SupportsLookLikeOvernight { get; init; }
 }
 
 public record CreateParticipantDto
@@ -310,6 +327,9 @@ public record CreateParticipantDto
     public List<string> OtherDiagnoses { get; init; } = new();
     /// <summary>DIAG-02. Defaults to None — untagged until intake captures it.</summary>
     public HidpaSupportCategory HidpaSupportCategories { get; init; } = HidpaSupportCategory.None;
+    /// <summary>DIAG-02/INTAKE-03 reconciliation. See <see cref="Entities.Participant.HidpaNotes"/>'s doc.</summary>
+    [StringLength(2000)]
+    public string? HidpaNotes { get; init; }
     public bool IsHighSupport { get; init; }
     public bool IsIntensiveSupport { get; init; }
     public OvernightSupportType OvernightSupport { get; init; }
@@ -464,6 +484,14 @@ public record CreateParticipantDto
     /// </summary>
     public List<CreateParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
 
+    /// <summary>
+    /// INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &amp;
+    /// Transport Risk / Community Behaviours of Concern checklist grid, upserted transactionally
+    /// with the participant on both create and update (same read-on-both-paths convention as
+    /// AdlAssessments above) — see ParticipantsController.UpsertChecklistItemsAsync.
+    /// </summary>
+    public List<CreateParticipantChecklistItemDto> ChecklistItems { get; init; } = new();
+
     // ── INTAKE sub-wave C2 — Meals & Diet (Master Data Dictionary MEAL-001..012, minus the
     // allergies dedup — see Participant.cs's field group doc). All optional.
     [StringLength(500)]
@@ -503,6 +531,30 @@ public record CreateParticipantDto
     public string? WhoIsImportant { get; init; }
     [StringLength(2000)]
     public string? LikesDislikes { get; init; }
+
+    // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
+    // stream, research spec §3). All optional; conditional-visibility gating on ServiceStreams
+    // happens in the wizard (frontend PR), not here.
+    [StringLength(2000)]
+    public string? SignsHappyAndSettled { get; init; }
+    [StringLength(2000)]
+    public string? WhatHelpsMeCalmDown { get; init; }
+    [StringLength(2000)]
+    public string? BocTriggers { get; init; }
+    [StringLength(2000)]
+    public string? BocEarlyWarningSigns { get; init; }
+    [StringLength(2000)]
+    public string? BocDeEscalationStrategies { get; init; }
+    [StringLength(2000)]
+    public string? BocWhatNotToDo { get; init; }
+    [StringLength(2000)]
+    public string? SupportsLookLikeMorning { get; init; }
+    [StringLength(2000)]
+    public string? SupportsLookLikeDay { get; init; }
+    [StringLength(2000)]
+    public string? SupportsLookLikeAfternoonEvening { get; init; }
+    [StringLength(2000)]
+    public string? SupportsLookLikeOvernight { get; init; }
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

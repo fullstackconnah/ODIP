@@ -44,6 +44,8 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantHealthCondition> ParticipantHealthConditions => Set<ParticipantHealthCondition>();
     /// <summary>INTAKE sub-wave C2. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
     public DbSet<ParticipantAdlAssessment> ParticipantAdlAssessments => Set<ParticipantAdlAssessment>();
+    /// <summary>INTAKE-03/04. See <see cref="Entities.ParticipantChecklistItem"/>'s type doc.</summary>
+    public DbSet<ParticipantChecklistItem> ParticipantChecklistItems => Set<ParticipantChecklistItem>();
     public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
@@ -1228,6 +1230,26 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ParticipantId, e.AdlType }).IsUnique();
         });
 
+        // ── ParticipantChecklistItem (INTAKE-03/04) ─────────────────
+        modelBuilder.Entity<ParticipantChecklistItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            // Restrict: same idiom as ParticipantAdlAssessment/ParticipantHealthCondition/
+            // ParticipantConsent -> Participant — a participant with a recorded checklist grid
+            // must not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany(p => p.ChecklistItems)
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+            // One row per (participant, checklist item type) — enforced at the DB level, same
+            // reasoning as ParticipantAdlAssessment's unique index above.
+            entity.HasIndex(e => new { e.ParticipantId, e.ItemType }).IsUnique();
+        });
+
         // ── RestrictivePractice ───────────────────────────────────
         modelBuilder.Entity<RestrictivePractice>(entity =>
         {
@@ -1397,6 +1419,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantAdlAssessment>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantAdlAssessment>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantChecklistItem>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantChecklistItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RestrictivePractice>()

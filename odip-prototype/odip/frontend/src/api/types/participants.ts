@@ -4,6 +4,7 @@ import type { CreateParticipantRiskEntryDto } from './risk-entries'
 import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
 import type { ParticipantHealthConditionDto, CreateParticipantHealthConditionDto } from './health-conditions'
 import type { ParticipantAdlAssessmentDto, CreateParticipantAdlAssessmentDto } from './adl-assessments'
+import type { ParticipantChecklistItemDto, CreateParticipantChecklistItemDto } from './checklist-items'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -125,6 +126,13 @@ export const HIDPA_CATEGORY_LABELS: Record<HidpaSupportCategory, string> = {
   SubcutaneousInjections: 'Subcutaneous Injections',
   ComplexWoundCare: 'Complex Wound Care',
   EpilepsyManagement: 'Epilepsy and Seizure Management',
+  // INTAKE-03 — the 5 genuine-gap categories the Community Access variant's 14-item HIDPA
+  // checklist added on top of DIAG-02's original 9 (research spec §3, Section 3 wording).
+  StomaColostomyCare: 'Stoma / colostomy',
+  DiabetesManagementInsulin: 'Diabetes management (insulin)',
+  PressureCare: 'Pressure care',
+  HighIntensityBehaviourSupport: 'High intensity behaviour support',
+  ComplexMedicationAdministration: 'Medication administration (complex)',
 }
 
 /** Full descriptor-style titles — surfaced as a title tooltip on the HIDPA checkboxes, same pattern as SERVICE_STREAM_TITLES. */
@@ -138,6 +146,11 @@ export const HIDPA_CATEGORY_TITLES: Record<HidpaSupportCategory, string> = {
   SubcutaneousInjections: 'Administering prescribed subcutaneous injections (incl. insulin).',
   ComplexWoundCare: 'Managing wounds requiring specialised dressing/monitoring beyond basic first aid.',
   EpilepsyManagement: "Recognising and responding to seizures per the participant's seizure-management plan.",
+  StomaColostomyCare: 'Managing a surgical stoma/colostomy — appliance changes, site care, output monitoring.',
+  DiabetesManagementInsulin: 'Administering and managing insulin therapy for diagnosed diabetes.',
+  PressureCare: 'Repositioning/skin-integrity care to prevent or manage pressure injuries.',
+  HighIntensityBehaviourSupport: 'Support delivered under a formal high-intensity behaviour support plan.',
+  ComplexMedicationAdministration: 'Administering medication regimes with complex dosing/timing/route requirements beyond routine oral medication.',
 }
 
 /**
@@ -282,6 +295,8 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   otherDiagnoses: string[]
   /** DIAG-02. Wire format: comma-separated HidpaSupportCategory flag names, or "None" — see parseHidpaCategories. */
   hidpaSupportCategories: string
+  /** DIAG-02/INTAKE-03 reconciliation — free-text HIDPA notes. Ungated, same visibility as hidpaSupportCategories itself. */
+  hidpaNotes: string | null
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
   equipmentRequirements: string | null
@@ -360,6 +375,11 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   /** Always all twenty AdlType entries — see ParticipantAdlAssessmentsController.GetForParticipant. */
   adlAssessments: ParticipantAdlAssessmentDto[]
 
+  // ── INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &
+  // Transport Risk / Community Behaviours of Concern checklist grid.
+  /** Always all twenty-one ChecklistItemType entries — see ParticipantChecklistItemsController.GetForParticipant. */
+  checklistItems: ParticipantChecklistItemDto[]
+
   // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step, Master Data Dictionary MEAL-001..012
   // minus the allergies dedup — see the backend Participant.cs field group doc).
   mealAssistanceDetail: string | null
@@ -382,6 +402,21 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   thingsToKnow: string | null
   whoIsImportant: string | null
   likesDislikes: string | null
+
+  // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
+  // stream, research spec §3). CA-gated in the wizard (not on the wire — the backend accepts
+  // these unconditionally; the wizard's conditional-visibility engine is what hides/unregisters
+  // them when the stream isn't selected — see ParticipantCreatePage.tsx's CONDITIONAL_FIELDS).
+  signsHappyAndSettled: string | null
+  whatHelpsMeCalmDown: string | null
+  bocTriggers: string | null
+  bocEarlyWarningSigns: string | null
+  bocDeEscalationStrategies: string | null
+  bocWhatNotToDo: string | null
+  supportsLookLikeMorning: string | null
+  supportsLookLikeDay: string | null
+  supportsLookLikeAfternoonEvening: string | null
+  supportsLookLikeOvernight: string | null
 }
 
 export interface CreateParticipantDto {
@@ -456,6 +491,8 @@ export interface CreateParticipantDto {
   otherDiagnoses: string[]
   /** DIAG-02. Wire format: comma-separated HidpaSupportCategory flag names, or "None" — see formatHidpaCategories. */
   hidpaSupportCategories: string
+  /** DIAG-02/INTAKE-03 reconciliation — free-text HIDPA notes. Ungated, same visibility as hidpaSupportCategories itself. */
+  hidpaNotes?: string
   isHighSupport: boolean
   isIntensiveSupport: boolean
   overnightSupport: OvernightSupportType
@@ -565,6 +602,14 @@ export interface CreateParticipantDto {
    */
   adlAssessments: CreateParticipantAdlAssessmentDto[]
 
+  /**
+   * INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &
+   * Transport Risk / Community Behaviours of Concern checklist grid, upserted transactionally
+   * with the participant on both create and update (same read-on-both-paths convention as
+   * adlAssessments above).
+   */
+  checklistItems: CreateParticipantChecklistItemDto[]
+
   // ── INTAKE sub-wave C2 — Meals & Diet. All optional.
   mealAssistanceDetail?: string
   chokingRiskMealDetail?: string
@@ -585,6 +630,20 @@ export interface CreateParticipantDto {
   thingsToKnow?: string
   whoIsImportant?: string
   likesDislikes?: string
+
+  // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
+  // stream, research spec §3). All optional; conditional-visibility gating on serviceStreams
+  // happens in the wizard, not here — see ParticipantDetailDto's matching field group doc.
+  signsHappyAndSettled?: string
+  whatHelpsMeCalmDown?: string
+  bocTriggers?: string
+  bocEarlyWarningSigns?: string
+  bocDeEscalationStrategies?: string
+  bocWhatNotToDo?: string
+  supportsLookLikeMorning?: string
+  supportsLookLikeDay?: string
+  supportsLookLikeAfternoonEvening?: string
+  supportsLookLikeOvernight?: string
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

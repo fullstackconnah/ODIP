@@ -115,6 +115,13 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
         },
       },
       { key: 'notes', header: 'Notes', render: (row) => row.notes || '—' },
+      // INTAKE-03, CommunityAccessDailyLiving stream-specific — shown as its own column whenever
+      // ANY row across the grid has a value, matching this page's whole-card presence-or-relevance
+      // idiom (see ParticipantDetailPage.tsx's Community Access card): a participant who no longer
+      // has the CA stream but still has saved howToHelpNotes data still gets to see it here.
+      ...(assessments.some((a) => a.howToHelpNotes)
+        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
+        : []),
       {
         key: 'edit', header: '', align: 'right',
         render: (row) => canWriteAdlAssessments && (

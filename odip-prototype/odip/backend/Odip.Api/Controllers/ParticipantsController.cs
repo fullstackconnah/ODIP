@@ -111,6 +111,10 @@ public class ParticipantsController : ControllerBase
     /// reasoning: an Update caller that never mentions AdlAssessments round-trips an empty list,
     /// which must mean "leave existing rows alone", not "clear every ADL answer"). Called before
     /// SaveChangesAsync so every row lands in the same transaction as the participant insert/update.
+    /// Sparse on creation (see the guard inside the loop below): the wizard always submits the
+    /// full fixed twenty-row array with every hidden/unanswered row already null (see
+    /// <see cref="CreateParticipantAdlAssessmentDto"/>'s doc), so a blank incoming row must not
+    /// become a permanent database row just because it was present in the payload.
     /// </summary>
     private async Task UpsertAdlAssessmentsAsync(Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
     {
@@ -121,11 +125,65 @@ public class ParticipantsController : ControllerBase
         {
             if (!byType.TryGetValue(dto.AdlType, out var row))
             {
+                // Load-bearing skip, not just an optimisation: the client (both the wizard's
+                // create/draft submissions and any Update caller) always sends the full
+                // fixed-length AdlAssessments array — every AdlType, every time — with
+                // hidden/never-assessed rows carrying Level/Notes/HowToHelpNotes all null (see
+                // CreateParticipantAdlAssessmentDto's doc). Without this skip, EVERY participant
+                // would get all twenty ParticipantAdlAssessment rows persisted permanently on
+                // first save, even for streams that never show the ADL grid at all. Only skip when
+                // there both is no existing row for this type AND the incoming dto carries no
+                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
+                // to ApplyAnswer below and keeps the row, same clear-to-null-keeps-the-row
+                // convention as UpsertConsentsAsync.
+                if (dto.Level is null && string.IsNullOrWhiteSpace(dto.Notes) && string.IsNullOrWhiteSpace(dto.HowToHelpNotes)) continue;
                 row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = dto.AdlType };
                 _db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
             }
-            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes);
+            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
+        }
+    }
+
+    /// <summary>
+    /// INTAKE-03/04, CommunityAccessDailyLiving stream — upserts every checklist-item row
+    /// submitted with a create/update payload, keyed by <see cref="Domain.Enums.ChecklistItemType"/>.
+    /// Copies UpsertAdlAssessmentsAsync's documented pattern exactly, including the load-bearing
+    /// empty/null guard below (same reasoning: an Update caller that never mentions ChecklistItems
+    /// round-trips an empty list, which must mean "leave existing rows alone", not "clear every
+    /// checklist answer"). Called before SaveChangesAsync so every row lands in the same
+    /// transaction as the participant insert/update. Sparse on creation (see the guard inside the
+    /// loop below): the wizard always submits the full fixed twenty-one-row array with every
+    /// hidden/unanswered row already null (see <see cref="CreateParticipantChecklistItemDto"/>'s
+    /// doc), so a blank incoming row must not become a permanent database row just because it was
+    /// present in the payload.
+    /// </summary>
+    private async Task UpsertChecklistItemsAsync(Guid participantId, List<CreateParticipantChecklistItemDto> items, CancellationToken ct)
+    {
+        if (items is null || items.Count == 0) return;
+        var existing = await _db.ParticipantChecklistItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(a => a.ItemType);
+        foreach (var dto in items)
+        {
+            if (!byType.TryGetValue(dto.ItemType, out var row))
+            {
+                // Load-bearing skip, not just an optimisation: the client (both the wizard's
+                // create/draft submissions and any Update caller) always sends the full
+                // fixed-length ChecklistItems array — every ChecklistItemType, every time — with
+                // hidden/never-assessed rows carrying Value/Notes both null (see
+                // CreateParticipantChecklistItemDto's doc). Without this skip, EVERY participant
+                // would get all twenty-one ParticipantChecklistItem rows persisted permanently on
+                // first save, even for participants with no CommunityAccessDailyLiving stream at
+                // all. Only skip when there both is no existing row for this type AND the incoming
+                // dto carries no answer whatsoever; a dto that clears an EXISTING row to null
+                // still falls through to ApplyAnswer below and keeps the row, same
+                // clear-to-null-keeps-the-row convention as UpsertConsentsAsync.
+                if (dto.Value is null && string.IsNullOrWhiteSpace(dto.Notes)) continue;
+                row = new ParticipantChecklistItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                _db.ParticipantChecklistItems.Add(row);
+                byType[dto.ItemType] = row;
+            }
+            ParticipantChecklistItemsController.ApplyAnswer(row, dto.Value, dto.Notes);
         }
     }
 
@@ -401,6 +459,7 @@ public class ParticipantsController : ControllerBase
             .Include(x => x.Consents)
             .Include(x => x.HealthConditions)
             .Include(x => x.AdlAssessments)
+            .Include(x => x.ChecklistItems)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -437,6 +496,7 @@ public class ParticipantsController : ControllerBase
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
             MobilitySupportOptions = p.MobilitySupportOptions,
             PrimaryDiagnosis = p.PrimaryDiagnosis, OtherDiagnoses = p.OtherDiagnoses, HidpaSupportCategories = p.HidpaSupportCategories,
+            HidpaNotes = p.HidpaNotes,
             OvernightSupport = p.OvernightSupport, OvernightRatio = p.OvernightRatio,
             RequiresHiLoBed = p.RequiresHiLoBed, RequiresHoist = p.RequiresHoist, RequiresShowerChair = p.RequiresShowerChair,
             RequiresCommode = p.RequiresCommode, RequiresStandingMachine = p.RequiresStandingMachine,
@@ -492,6 +552,14 @@ public class ParticipantsController : ControllerBase
             // INTAKE sub-wave C2 — About Me.
             Goals = p.Goals, SupportAreas = p.SupportAreas, StrengthsFears = p.StrengthsFears,
             ThingsToKnow = p.ThingsToKnow, WhoIsImportant = p.WhoIsImportant, LikesDislikes = p.LikesDislikes,
+            // INTAKE-03/04, CommunityAccessDailyLiving stream — the structured checklist grid.
+            ChecklistItems = ParticipantChecklistItemsController.MaterializeAll(p.Id, p.ChecklistItems.ToList()),
+            // INTAKE-03 — Community Access Behaviour & Support Detail.
+            SignsHappyAndSettled = p.SignsHappyAndSettled, WhatHelpsMeCalmDown = p.WhatHelpsMeCalmDown,
+            BocTriggers = p.BocTriggers, BocEarlyWarningSigns = p.BocEarlyWarningSigns,
+            BocDeEscalationStrategies = p.BocDeEscalationStrategies, BocWhatNotToDo = p.BocWhatNotToDo,
+            SupportsLookLikeMorning = p.SupportsLookLikeMorning, SupportsLookLikeDay = p.SupportsLookLikeDay,
+            SupportsLookLikeAfternoonEvening = p.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = p.SupportsLookLikeOvernight,
         }));
     }
 
@@ -624,6 +692,14 @@ public class ParticipantsController : ControllerBase
             // INTAKE sub-wave C2 — About Me.
             Goals = dto.Goals, SupportAreas = dto.SupportAreas, StrengthsFears = dto.StrengthsFears,
             ThingsToKnow = dto.ThingsToKnow, WhoIsImportant = dto.WhoIsImportant, LikesDislikes = dto.LikesDislikes,
+            // DIAG-02/INTAKE-03 reconciliation.
+            HidpaNotes = dto.HidpaNotes,
+            // INTAKE-03 — Community Access Behaviour & Support Detail.
+            SignsHappyAndSettled = dto.SignsHappyAndSettled, WhatHelpsMeCalmDown = dto.WhatHelpsMeCalmDown,
+            BocTriggers = dto.BocTriggers, BocEarlyWarningSigns = dto.BocEarlyWarningSigns,
+            BocDeEscalationStrategies = dto.BocDeEscalationStrategies, BocWhatNotToDo = dto.BocWhatNotToDo,
+            SupportsLookLikeMorning = dto.SupportsLookLikeMorning, SupportsLookLikeDay = dto.SupportsLookLikeDay,
+            SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -695,6 +771,9 @@ public class ParticipantsController : ControllerBase
         // INTAKE sub-wave C2 — ADL-assessment grid rows submitted alongside a new/drafted
         // participant, in the same SaveChangesAsync call as the participant insert below.
         await UpsertAdlAssessmentsAsync(participant.Id, dto.AdlAssessments, ct);
+        // INTAKE-03/04 — Community Access checklist-item grid rows submitted alongside a
+        // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
+        await UpsertChecklistItemsAsync(participant.Id, dto.ChecklistItems, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -840,6 +919,14 @@ public class ParticipantsController : ControllerBase
         // INTAKE sub-wave C2 — About Me.
         p.Goals = dto.Goals; p.SupportAreas = dto.SupportAreas; p.StrengthsFears = dto.StrengthsFears;
         p.ThingsToKnow = dto.ThingsToKnow; p.WhoIsImportant = dto.WhoIsImportant; p.LikesDislikes = dto.LikesDislikes;
+        // DIAG-02/INTAKE-03 reconciliation.
+        p.HidpaNotes = dto.HidpaNotes;
+        // INTAKE-03 — Community Access Behaviour & Support Detail.
+        p.SignsHappyAndSettled = dto.SignsHappyAndSettled; p.WhatHelpsMeCalmDown = dto.WhatHelpsMeCalmDown;
+        p.BocTriggers = dto.BocTriggers; p.BocEarlyWarningSigns = dto.BocEarlyWarningSigns;
+        p.BocDeEscalationStrategies = dto.BocDeEscalationStrategies; p.BocWhatNotToDo = dto.BocWhatNotToDo;
+        p.SupportsLookLikeMorning = dto.SupportsLookLikeMorning; p.SupportsLookLikeDay = dto.SupportsLookLikeDay;
+        p.SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight;
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
@@ -857,6 +944,8 @@ public class ParticipantsController : ControllerBase
         await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
         // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions above.
         await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
+        // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
+        await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }

@@ -38,8 +38,19 @@
  * looks.
  */
 
+import type { ServiceStream } from '@/api/types/enums'
+
 export type SourceDocument = 'intake' | 'profile' | 'shared'
 
+/**
+ * INTAKE-04 — field-level de-duplication / service identity. `serviceStreams` records which
+ * service stream(s) a field belongs to: 'all' (or omitted) for fields relevant regardless of
+ * service, or an explicit ServiceStream[] for fields that only exist because of one particular
+ * service (e.g. CommunityAccessDailyLiving). A field shared by more than one service still
+ * appears as exactly ONE DOCUMENT_MAPPING entry (not one per service) — list every service that
+ * uses it in this array rather than duplicating the entry. This is the field-identity rule
+ * INTAKE-04 asks for: same field, same entry, however many services reference it.
+ */
 export interface DocumentMappingEntry {
   /** The wizard/DTO field name (matches ParticipantFormData / CreateParticipantDto). */
   field: string
@@ -56,6 +67,8 @@ export interface DocumentMappingEntry {
   dictionaryId?: string
   /** Gap/delta/ambiguity notes — mirrors the research spec's EXISTS-DIFFERENTLY / flagged items. */
   notes?: string
+  /** See this interface's own doc comment above (INTAKE-04 field-identity rule). */
+  serviceStreams?: ServiceStream[] | 'all'
 }
 
 export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
@@ -187,7 +200,10 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   // ── Medical step — §4.6, DIAG-01/02 ──────────────────────────────────────
   { field: 'primaryDiagnosis', label: 'Primary Diagnosis', sources: ['profile'], dictionaryId: 'MED-016', notes: 'DIAG-01. Profile\'s structured Diagnoses & Medical Conditions table; the Intake coversheet only has free-text "Health Conditions/Diagnoses" (see medicalSummary below).' },
   { field: 'otherDiagnoses', label: 'Other Diagnoses', sources: ['profile'], dictionaryId: 'MED-016' },
-  { field: 'hidpaSupportCategories', label: 'HIDPA Support Categories', sources: ['profile'], notes: 'DIAG-02. The base Profile scatters HIDPA-training-required flags per-condition rather than a single field; the Community Access variant (§3, INTAKE-03 territory) centralises a proper HIDPA checklist instead. Tagged profile pending that later reconciliation.' },
+  {
+    field: 'hidpaSupportCategories', label: 'HIDPA Support Categories', sources: ['profile'],
+    notes: 'DIAG-02. The base Profile scatters HIDPA-training-required flags per-condition rather than a single field; the Community Access variant (§3, INTAKE-03 territory) centralises a proper HIDPA checklist instead. Tagged profile pending that later reconciliation. UPDATE (INTAKE-03): that reconciliation is now closed — the Community Access variant\'s 14-item HIDPA checklist (research spec §3, Section 3) was checked against this field\'s original 9 values, 9 of which already existed (matched near-verbatim) and were left as-is; the 5 genuine-gap values (StomaColostomyCare, DiabetesManagementInsulin, PressureCare, HighIntensityBehaviourSupport, ComplexMedicationAdministration) were appended to the same HIDPA_SUPPORT_CATEGORIES enum rather than opening a second/duplicate field. Ungated — ALL 14 values are visible regardless of service stream (same as the original 9), not CommunityAccessDailyLiving-conditional.',
+  },
   { field: 'medicalSummary', label: 'Medical Summary', sources: ['shared'], notes: 'Both forms carry a free-text "Health Conditions/Diagnoses" field — one of §2\'s explicit shared-set entries.' },
   {
     field: 'allergiesDetail', label: 'Allergies', sources: ['profile'], dictionaryId: 'MED-012',
@@ -263,7 +279,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   // except the two dedup calls documented below. ──────────────────────────────────────────
   {
     field: 'adlAssessments', label: 'ADL Ratings (Personal + Community/Domestic, structured grid)', sources: ['profile'], dictionaryId: 'PADL-002..007, CADL-001..015',
-    notes: 'NEW (sub-wave C2). §4.9: "Personal-ADL I/S/A/F levels... NEW — no I/S/A/F level field anywhere"; "the entire Community/Domestic ADL domain — ALL NEW, complete gap, no ADL-level fields exist". Now backed by the ParticipantAdlAssessment entity (one row per AdlType, 20 values: 6 Personal §1c-15 + 14 Community/Domestic §1c-17). Level scale "I/S/A/F" is unexpanded in the source form — see the backend AdlLevel enum doc for the flagged plain-English-reading caveat, not a confirmed source expansion.',
+    notes: 'NEW (sub-wave C2). §4.9: "Personal-ADL I/S/A/F levels... NEW — no I/S/A/F level field anywhere"; "the entire Community/Domestic ADL domain — ALL NEW, complete gap, no ADL-level fields exist". Now backed by the ParticipantAdlAssessment entity (one row per AdlType, 20 values: 6 Personal §1c-15 + 14 Community/Domestic §1c-17). Level scale "I/S/A/F" is unexpanded in the source form — see the backend AdlLevel enum doc for the flagged plain-English-reading caveat, not a confirmed source expansion. UPDATE (INTAKE-03): each row also gained an optional howToHelpNotes column (research spec §3) — a per-ADL-row "how to help me" instruction, CommunityAccessDailyLiving-gated in the wizard, distinct from this same row\'s always-visible `notes`. Not split into a separate DOCUMENT_MAPPING entry (sub-field granularity isn\'t this table\'s shape) — the whole adlAssessments field stays tagged \'all\' since the base grid itself is relevant regardless of stream; only its howToHelpNotes column is CA-specific.',
   },
   {
     field: 'mealAssistanceDetail', label: 'Meal Assistance', sources: ['profile'], dictionaryId: 'MEAL-001',
@@ -302,6 +318,64 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   {
     field: 'likesDislikes', label: 'Likes & Dislikes', sources: ['profile'], dictionaryId: 'GOAL-007',
     notes: 'NEW (sub-wave C2). §1c-16 "Likes and dislikes" — no prior field. GOAL-006 "Hobbies/interests" is DELIBERATELY NOT a new field: personalInterests (sub-wave B) already sources from this exact same source-form line (see that entry\'s notes) — adding a second Hobbies field would be a straight duplicate, not a finer split. See this PR\'s report for the dedup call.',
+  },
+
+  // ── Community Access variant (NEW, INTAKE-03/04) — research spec §3. Fields that exist only
+  // because CommunityAccessDailyLiving is one of the participant's serviceStreams — tagged
+  // serviceStreams: ['CommunityAccessDailyLiving'] per the field-identity rule documented on
+  // DocumentMappingEntry above. sources: [] throughout — these are ODIP-operational fields
+  // sourced from the Community Access variant document (research spec §3), not traced to a
+  // Master Data Dictionary id like the base Intake/Profile forms above. hidpaNotes is the one
+  // exception: it's introduced by this same PR but is ungated (see its own entry below), so it is
+  // NOT tagged CommunityAccessDailyLiving-specific — tagging it that way would contradict its own
+  // always-visible wizard placement (Medical step, alongside hidpaSupportCategories).
+  {
+    field: 'signsHappyAndSettled', label: 'Signs I Am Happy and Settled', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 7 — free text.',
+  },
+  {
+    field: 'whatHelpsMeCalmDown', label: 'What Helps Me Calm Down', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 7 — free text.',
+  },
+  {
+    field: 'bocTriggers', label: 'Behaviours of Concern — Triggers', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 8 — free text. Distinct from the checklistItems Community Behaviours of Concern checkbox list below (structured Yes/No/N-A per named item vs. this narrative detail).',
+  },
+  {
+    field: 'bocEarlyWarningSigns', label: 'Behaviours of Concern — Early Warning Signs', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 8 — free text.',
+  },
+  {
+    field: 'bocDeEscalationStrategies', label: 'Behaviours of Concern — De-Escalation Strategies', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 8 — free text.',
+  },
+  {
+    field: 'bocWhatNotToDo', label: 'Behaviours of Concern — What Not To Do', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 8 — free text.',
+  },
+  {
+    field: 'checklistItems', label: 'Community Access Checklists (Mobility & Transport Risk, Behaviours of Concern)', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03/04). research spec §3, Section 7 (9-item Community Mobility & Transport Risk checklist) and Section 8 (12-item Community Behaviours of Concern checkbox list) — one ChecklistItemType row per item, 21 total, same fixed-enumerated-set "materialize all N rows" shape as adlAssessments/healthConditions above (backed by the ParticipantChecklistItem entity). One DOCUMENT_MAPPING entry for the whole grid-shaped field, matching how adlAssessments/healthConditions are represented here.',
+  },
+  {
+    field: 'hidpaNotes', label: 'HIDPA Notes', sources: [],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 3 — free-text elaboration alongside hidpaSupportCategories\' "None of the above" item. DELIBERATELY tagged \'all\' (not CommunityAccessDailyLiving), unlike this section\'s other new fields — ungated in the wizard, same visibility as hidpaSupportCategories itself, since this is the same general support-need concept regardless of service stream. See hidpaSupportCategories\' own entry above for the fuller reconciliation.',
+  },
+  {
+    field: 'supportsLookLikeMorning', label: 'What My Supports Look Like — Morning', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 9 — free text; "only complete where Oassist staff are providing support" per the source.',
+  },
+  {
+    field: 'supportsLookLikeDay', label: 'What My Supports Look Like — Day', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 9. See supportsLookLikeMorning.',
+  },
+  {
+    field: 'supportsLookLikeAfternoonEvening', label: 'What My Supports Look Like — Afternoon-Evening', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 9. See supportsLookLikeMorning.',
+  },
+  {
+    field: 'supportsLookLikeOvernight', label: 'What My Supports Look Like — Overnight', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'NEW (INTAKE-03). research spec §3, Section 9. See supportsLookLikeMorning.',
   },
 
   // ── Risks & Hazards step — §4.10, INTAKE-09 (renamed from "Risks & Consents" in sub-wave B —
