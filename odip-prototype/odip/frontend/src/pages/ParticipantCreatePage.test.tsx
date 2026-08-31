@@ -187,6 +187,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   }
@@ -205,12 +206,12 @@ describe('ParticipantCreatePage Review step', () => {
     expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
 
     // Each group's Edit button carries a distinct accessible name (aria-label) even though
-    // they all show the same "Edit" visible text — six identical "Edit" accessible names
+    // they all show the same "Edit" visible text — nine identical "Edit" accessible names
     // would be indistinguishable to screen reader users navigating by role.
-    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(8)
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(9)
 
     // Review groups render in step order: Identity(0), NDIS(1), Key Identifiers(2), Contacts(3),
-    // Cultural & Consent(4), Support(5), Medical(6), Risks(7).
+    // Cultural & Consent(4), Support(5), Medical(6), Behaviour & Communication(7), Risks(8).
     await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
@@ -278,6 +279,14 @@ describe('ParticipantCreatePage Review step', () => {
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -304,6 +313,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
 
@@ -320,6 +330,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -384,6 +395,7 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -412,6 +424,7 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -490,6 +503,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -565,6 +579,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -598,6 +613,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -621,6 +637,14 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -640,6 +664,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -662,6 +687,14 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -680,6 +713,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -705,6 +739,14 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -722,6 +764,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -749,6 +792,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -774,6 +818,14 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -806,6 +858,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -831,6 +884,14 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
         'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
         'personalInterests', 'choiceControlNotes', 'consents',
+        // INTAKE sub-wave C1 — always present.
+        'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+        'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+        'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+        'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+        'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+        'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+        'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
       ].sort()
     )
   })
@@ -863,6 +924,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -886,6 +948,7 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
 }
 
 async function finishWizard(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1018,7 +1081,10 @@ describe('ParticipantCreatePage — DIAG-02 HIDPA support categories + epilepsy 
     renderCreatePage()
     await advanceToMedical(user)
 
-    await user.click(screen.getByLabelText('Epilepsy')) // the Other Diagnoses checkbox, not the primary select
+    // getByRole('checkbox', ...) rather than getByLabelText — sub-wave C1's health-condition grid
+    // also has an "Epilepsy" control on this same step (a radiogroup, not a checkbox), so a plain
+    // label-text query is now ambiguous between the two.
+    await user.click(screen.getByRole('checkbox', { name: 'Epilepsy' })) // the Other Diagnoses checkbox, not the primary select
     expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
   })
 
@@ -1072,6 +1138,7 @@ describe('ParticipantCreatePage — DIAG-02 HIDPA support categories + epilepsy 
 describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () => {
   async function advanceToRisks(user: ReturnType<typeof userEvent.setup>) {
     await advanceToMedical(user)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   }
 
@@ -1178,6 +1245,7 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1335,7 +1403,7 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
 
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
-    for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    for (let i = 0; i < 9; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -1597,6 +1665,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
   async function finishFromCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
@@ -1810,6 +1879,244 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
       expect.arrayContaining([
         expect.objectContaining({ consentType: 'PhotoVideo', granted: true, signedByName: 'Sophie Brown', signedDate: '2026-01-01' }),
         expect.objectContaining({ consentType: 'Alcohol', granted: false, signedByName: null, signedDate: null }),
+      ])
+    )
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Health & Medical, Mobility & Functional, Behaviour & Communication)', () => {
+  it('renders "Support Needs & Mobility" as the renamed step label, with the new Mobility & Functional fields', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+
+    expect(within(stepNav()).getByRole('button', { name: /support needs & mobility/i, current: 'step' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Ambulant Status')).toBeInTheDocument()
+    expect(screen.getByLabelText('Falls Risk Rating')).toBeInTheDocument()
+    expect(screen.getByLabelText('Level of Personal Care')).toBeInTheDocument()
+    // a11y — radiogroup accessible name for the tri-state Uneven Ground control.
+    expect(screen.getByRole('radiogroup', { name: 'Uneven Ground' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Orthotics')).toBeInTheDocument()
+    expect(screen.getByLabelText('Continence Support')).toBeInTheDocument()
+    expect(screen.getByLabelText('Colostomy / Catheter / Enema / Suppository')).toBeInTheDocument()
+    expect(screen.getByLabelText('Menstruation Support')).toBeInTheDocument()
+    expect(screen.getByLabelText('Skin Integrity')).toBeInTheDocument()
+  })
+
+  it('Medical step shows Allergies/Anaphylaxis fields and the 10-row health-condition grid; row detail only appears once answered "Yes"', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    expect(screen.getByLabelText('Allergies')).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Anaphylaxis Risk' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Allergy Management Notes')).toBeInTheDocument()
+
+    // The grid renders all ten HealthConditionType rows, each its own accessibly-named radiogroup.
+    expect(screen.getByRole('radiogroup', { name: 'Intellectual Disability' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Epilepsy' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Dysphagia' })).toBeInTheDocument()
+
+    // Severity/Plan Provided/Training Required/Notes are hidden until that row is answered "Yes".
+    expect(screen.queryByRole('radiogroup', { name: 'Plan Provided' })).not.toBeInTheDocument()
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' }))
+
+    expect(screen.getAllByRole('radiogroup', { name: 'Plan Provided' })).toHaveLength(1)
+    expect(screen.getAllByRole('radiogroup', { name: 'Training Required' })).toHaveLength(1)
+  })
+
+  it('renders a "Behaviour & Communication" step between Medical and Risks & Hazards, with the new fields', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+
+    expect(within(stepNav()).getByRole('button', { name: /behaviour & communication/i, current: 'step' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Memory')).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Memory Aids' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Impaired Understanding' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Impaired Judgement / Reasoning' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Behaviours of Concern (Current)' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Behaviours of Concern (5-Year History)' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Behaviour Risk Rating')).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'RIDS Logged' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'BSP Plan Provided' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'BOC Chart Provided' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Expressive Skills')).toBeInTheDocument()
+    expect(screen.getByLabelText('Receptive Skills')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reading Ability')).toBeInTheDocument()
+    expect(screen.getByLabelText('Communication Aids')).toBeInTheDocument()
+  })
+
+  it('tri-state fields round-trip true/false/unanswered through the create payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Anaphylaxis Risk' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Diabetes' })).getByRole('radio', { name: 'No' }))
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Behaviours of Concern (Current)' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isAnaphylaxisRisk).toBe(true)
+    expect(payload.behavioursOfConcernCurrent).toBe(true)
+    // Unanswered tri-state fields collapse to null, not undefined/false/'' — same convention as
+    // the pre-existing cultural flags.
+    expect(payload.memoryAids).toBeNull()
+    expect(payload.ridsLogged).toBeNull()
+    const diabetesRow = payload.healthConditions.find((c: { conditionType: string }) => c.conditionType === 'Diabetes')
+    expect(diabetesRow).toMatchObject({ has: false, severity: null, planProvided: null, trainingRequired: null, notes: null })
+    const unansweredRow = payload.healthConditions.find((c: { conditionType: string }) => c.conditionType === 'Asthma')
+    expect(unansweredRow).toMatchObject({ has: null })
+  })
+
+  it('a health-condition row answered "Yes" carries its severity/plan/training/notes detail into the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Asthma' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByPlaceholderText('e.g. Mild, Type 2, GrandMal...'), 'Moderate')
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Plan Provided' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Training Required' })).getByRole('radio', { name: 'No' }))
+    await user.type(screen.getByPlaceholderText('Additional notes...'), 'Puffer kept in bag.')
+
+    await finishWizard(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const asthmaRow = payload.healthConditions.find((c: { conditionType: string }) => c.conditionType === 'Asthma')
+    expect(asthmaRow).toMatchObject({
+      has: true, severity: 'Moderate', planProvided: true, trainingRequired: false, notes: 'Puffer kept in bag.',
+    })
+  })
+
+  it('draft-save succeeds with only a subset of the new fields filled in', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    // INTAKE-08's draft relaxation ("at least one of first/last name") is enforced server-side and
+    // by the "Save as draft" button's direct-getValues() bypass — it does NOT relax the per-step
+    // "Next" validation used to physically navigate here, which still requires the full Identity
+    // step schema (both names) to pass.
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+
+    await user.selectOptions(screen.getByLabelText('Falls Risk Rating'), 'High')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.fallsRiskRating).toBe('High')
+    // Never-visited Behaviour & Communication/Medical fields are simply absent — no "required"
+    // enforcement for a draft, same INTAKE-08 doctrine as every other step.
+    expect(payload.memory).toBeUndefined()
+    expect(payload.allergiesDetail).toBeUndefined()
+  })
+
+  it('an Epilepsy diagnosis pre-selects the health-condition grid\'s Epilepsy row to "Yes" as a default, not a lock', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    // A default, not a lock: the user can untick it back to "No", and it survives further
+    // unrelated edits — same transition-only/user-override-survives contract as DIAG-02's HIDPA
+    // derivation (see FIELD_DERIVATIONS' doc comment).
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' }))
+    await user.type(screen.getByLabelText('Medical Summary'), 'Unrelated edit.')
+
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' })).toBeChecked()
+  })
+
+  it('does not override an explicit "No" already recorded on the grid\'s Epilepsy row when a diagnosis is later set', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    // Answer the grid row directly first (no diagnosis set yet) — an explicit "No".
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' }))
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+
+    // The derivation only fires when the row is still unanswered ('') — an explicit "No" the
+    // user already recorded on the grid itself is never silently overridden.
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' })).toBeChecked()
+  })
+
+  it('edit mode round-trips the clinical enrichment fields into their controls, and a save resubmits them unchanged', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+        allergiesDetail: 'Peanuts and tree nuts.', isAnaphylaxisRisk: true, allergyManagementNotes: 'EpiPen carried at all times.',
+        ambulantStatus: 'Unsteady', fallsRiskRating: 'Medium', unevenGroundFlag: true, levelOfPersonalCare: 'Supervision',
+        orthotics: null, continenceSupportDetail: null, bowelCareDetail: null, menstruationSupport: null, skinIntegrity: null,
+        memory: 'Fair', memoryAids: true, impairedUnderstanding: false, impairedJudgementReasoning: false,
+        behavioursOfConcernCurrent: true, behavioursOfConcernFiveYearHistory: true, behaviourRiskRating: 'Medium',
+        ridsLogged: true, bspPlanProvided: true, bocChartProvided: true,
+        expressiveSkills: 'High — verbal.', receptiveSkills: 'High.', readingAbility: null, communicationAids: null,
+        healthConditions: [
+          { id: 'hc1', participantId: 'participant-1', conditionType: 'Epilepsy', has: true, severity: 'GrandMal', planProvided: true, trainingRequired: true, notes: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', conditionType: 'IntellectualDisability', has: null, severity: null, planProvided: null, trainingRequired: null, notes: null, createdAt: null, updatedAt: null },
+        ],
+      },
+      isLoading: false,
+    })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    await user.click(within(stepNav()).getByRole('button', { name: /medical/i }))
+    expect(screen.getByLabelText('Allergies')).toHaveValue('Peanuts and tree nuts.')
+    expect(within(screen.getByRole('radiogroup', { name: 'Anaphylaxis Risk' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    await user.click(within(stepNav()).getByRole('button', { name: /support needs & mobility/i }))
+    expect(screen.getByLabelText('Ambulant Status')).toHaveValue('Unsteady')
+    expect(screen.getByLabelText('Falls Risk Rating')).toHaveValue('Medium')
+    expect(within(screen.getByRole('radiogroup', { name: 'Uneven Ground' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    await user.click(within(stepNav()).getByRole('button', { name: /behaviour & communication/i }))
+    expect(screen.getByLabelText('Memory')).toHaveValue('Fair')
+    expect(within(screen.getByRole('radiogroup', { name: 'Behaviours of Concern (Current)' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(call.data).toMatchObject({
+      allergiesDetail: 'Peanuts and tree nuts.', isAnaphylaxisRisk: true,
+      ambulantStatus: 'Unsteady', fallsRiskRating: 'Medium', unevenGroundFlag: true,
+      memory: 'Fair', behavioursOfConcernCurrent: true,
+    })
+    expect(call.data.healthConditions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ conditionType: 'Epilepsy', has: true, severity: 'GrandMal', planProvided: true, trainingRequired: true }),
       ])
     )
   })

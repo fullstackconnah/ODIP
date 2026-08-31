@@ -266,6 +266,29 @@ export type ContactRoleType = typeof CONTACT_ROLE_TYPES[number]
 export const NOMINEE_SCOPES = ['Plan', 'Correspondence'] as const
 export type NomineeScope = typeof NOMINEE_SCOPES[number]
 
+// ── Health Condition Type (INTAKE sub-wave C1 — the 10-row structured condition grid) ──
+export const HEALTH_CONDITION_TYPES = [
+  'IntellectualDisability', 'VisualImpairment', 'HearingImpairment', 'MentalHealth',
+  'HighBloodPressure', 'WoundCare', 'Epilepsy', 'Diabetes', 'Asthma', 'Dysphagia',
+] as const
+export type HealthConditionType = typeof HEALTH_CONDITION_TYPES[number]
+
+// ── Ambulant Status (INTAKE sub-wave C1, Mobility & Functional) ─────────────────────────
+export const AMBULANT_STATUSES = ['NoAssist', 'Unsteady', 'Frame', 'ShortDistance'] as const
+export type AmbulantStatus = typeof AMBULANT_STATUSES[number]
+
+// ── Personal Care Level (INTAKE sub-wave C1, Mobility & Functional) ─────────────────────
+export const PERSONAL_CARE_LEVELS = ['Independent', 'Supervision', 'OnePerson', 'TwoPerson'] as const
+export type PersonalCareLevel = typeof PERSONAL_CARE_LEVELS[number]
+
+// ── Risk Rating Level (INTAKE sub-wave C1 — shared by FallsRiskRating and BehaviourRiskRating) ──
+export const RISK_RATING_LEVELS = ['Low', 'Medium', 'High', 'Critical'] as const
+export type RiskRatingLevel = typeof RISK_RATING_LEVELS[number]
+
+// ── Memory Level (INTAKE sub-wave C1, Behaviour & Communication) ────────────────────────
+export const MEMORY_LEVELS = ['Excellent', 'Fair', 'Poor'] as const
+export type MemoryLevel = typeof MEMORY_LEVELS[number]
+
 // ── Contact Role Status ───────────────────────────────────
 export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
 export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]

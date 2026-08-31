@@ -11,9 +11,12 @@ import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, List
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories } from '@/api/types/participants'
+import {
+  OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories,
+  AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
+} from '@/api/types/participants'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ContactsTab } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ContactsTab } from './participant-detail'
 
 /** INTAKE sub-wave B — tri-state (boolean | null) display helper, same "—" empty-state idiom as every other unset field on this page. */
 function yesNoUnset(value: boolean | null): string {
@@ -230,6 +233,16 @@ export default function ParticipantDetailPage() {
                 {equipmentBadges.length ? equipmentBadges.map(b => <Tag key={b} label={b} />) : '—'}
               </span>
               <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
+              {/* INTAKE sub-wave C1 — Mobility & Functional (research spec §4.7/§5). */}
+              <span className="text-[var(--color-muted-foreground)]">Ambulant Status</span><span>{p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Falls Risk Rating</span><span>{p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Uneven Ground</span><span>{yesNoUnset(p.unevenGroundFlag)}</span>
+              <span className="text-[var(--color-muted-foreground)]">Level of Personal Care</span><span>{p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : '—'}</span>
+              {p.orthotics && (<><span className="text-[var(--color-muted-foreground)]">Orthotics</span><span className="whitespace-pre-line">{p.orthotics}</span></>)}
+              {p.continenceSupportDetail && (<><span className="text-[var(--color-muted-foreground)]">Continence Support</span><span className="whitespace-pre-line">{p.continenceSupportDetail}</span></>)}
+              {p.bowelCareDetail && (<><span className="text-[var(--color-muted-foreground)]">Colostomy / Catheter / Enema / Suppository</span><span className="whitespace-pre-line">{p.bowelCareDetail}</span></>)}
+              {p.menstruationSupport && (<><span className="text-[var(--color-muted-foreground)]">Menstruation Support</span><span className="whitespace-pre-line">{p.menstruationSupport}</span></>)}
+              {p.skinIntegrity && (<><span className="text-[var(--color-muted-foreground)]">Skin Integrity</span><span className="whitespace-pre-line">{p.skinIntegrity}</span></>)}
             </div>
           </Card>
           {/* INTAKE sub-wave A — Key Identifiers step (research spec §4.4/§5). Same
@@ -285,7 +298,8 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
-          {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.medicalSummary) && (
+          {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.medicalSummary
+            || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes) && (
             <Card title="Medical" className="md:col-span-2">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
                 <span className="text-[var(--color-muted-foreground)]">Primary Diagnosis</span>
@@ -306,6 +320,60 @@ export default function ParticipantDetailPage() {
                     <span className="whitespace-pre-line">{p.medicalSummary}</span>
                   </>
                 )}
+                {/* INTAKE sub-wave C1 — Allergies/Anaphylaxis (Master Data Dictionary MED-012). */}
+                {p.allergiesDetail && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Allergies</span>
+                    <span className="whitespace-pre-line">{p.allergiesDetail}</span>
+                  </>
+                )}
+                {p.isAnaphylaxisRisk != null && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Anaphylaxis Risk</span>
+                    <span>{p.isAnaphylaxisRisk
+                      ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-destructive)]">warning</span> Yes</span>
+                      : 'No'}</span>
+                  </>
+                )}
+                {p.allergyManagementNotes && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Allergy Management Notes</span>
+                    <span className="whitespace-pre-line">{p.allergyManagementNotes}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+          {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5),
+              always rendered (unlike the whole-card-conditional cards above): GetForParticipant
+              always returns all ten HealthConditionType entries, so there is no genuinely-empty
+              state to hide behind a condition — DataTable's own emptyMessage handles a
+              still-loading/zero-row edge case instead. */}
+          <Card className="md:col-span-2">
+            <ParticipantHealthConditionsSection participantId={id} />
+          </Card>
+          {/* INTAKE sub-wave C1 — Behaviour & Communication (research spec §4.8/§5). Same
+              whole-card-conditional empty-state pattern as Medical above. */}
+          {(p.memory != null || p.memoryAids != null || p.impairedUnderstanding != null || p.impairedJudgementReasoning != null
+            || p.behavioursOfConcernCurrent != null || p.behavioursOfConcernFiveYearHistory != null || p.behaviourRiskRating != null
+            || p.ridsLogged != null || p.bspPlanProvided != null || p.bocChartProvided != null
+            || p.expressiveSkills || p.receptiveSkills || p.readingAbility || p.communicationAids) && (
+            <Card title="Behaviour & Communication" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                <span className="text-[var(--color-muted-foreground)]">Memory</span><span>{p.memory ? MEMORY_LEVEL_LABELS[p.memory] : '—'}</span>
+                <span className="text-[var(--color-muted-foreground)]">Memory Aids</span><span>{yesNoUnset(p.memoryAids)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Impaired Understanding</span><span>{yesNoUnset(p.impairedUnderstanding)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Impaired Judgement / Reasoning</span><span>{yesNoUnset(p.impairedJudgementReasoning)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Behaviours of Concern (Current)</span><span>{yesNoUnset(p.behavioursOfConcernCurrent)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Behaviours of Concern (5-Year History)</span><span>{yesNoUnset(p.behavioursOfConcernFiveYearHistory)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Behaviour Risk Rating</span><span>{p.behaviourRiskRating ? RISK_RATING_LEVEL_LABELS[p.behaviourRiskRating] : '—'}</span>
+                <span className="text-[var(--color-muted-foreground)]">RIDS Logged</span><span>{yesNoUnset(p.ridsLogged)}</span>
+                <span className="text-[var(--color-muted-foreground)]">BSP Plan Provided</span><span>{yesNoUnset(p.bspPlanProvided)}</span>
+                <span className="text-[var(--color-muted-foreground)]">BOC Chart Provided</span><span>{yesNoUnset(p.bocChartProvided)}</span>
+                {p.expressiveSkills && (<><span className="text-[var(--color-muted-foreground)]">Expressive Skills</span><span className="whitespace-pre-line">{p.expressiveSkills}</span></>)}
+                {p.receptiveSkills && (<><span className="text-[var(--color-muted-foreground)]">Receptive Skills</span><span className="whitespace-pre-line">{p.receptiveSkills}</span></>)}
+                {p.readingAbility && (<><span className="text-[var(--color-muted-foreground)]">Reading Ability</span><span className="whitespace-pre-line">{p.readingAbility}</span></>)}
+                {p.communicationAids && (<><span className="text-[var(--color-muted-foreground)]">Communication Aids</span><span className="whitespace-pre-line">{p.communicationAids}</span></>)}
               </div>
             </Card>
           )}

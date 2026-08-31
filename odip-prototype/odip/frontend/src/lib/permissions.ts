@@ -154,6 +154,13 @@ export function usePermissions() {
     canWriteConsents: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * INTAKE sub-wave C1: the structured health-condition grid is support-planning clinical
+     * detail — same coordination-only gate as consents/contacts/restrictive practices. Mirrors
+     * ParticipantHealthConditionsController.Upsert's Admin/Coordinator/SuperAdmin role gate exactly.
+     */
+    canWriteHealthConditions: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).
