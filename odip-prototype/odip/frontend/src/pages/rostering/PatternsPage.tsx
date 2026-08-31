@@ -104,7 +104,8 @@ function PatternsSkeleton() {
 export default function PatternsPage() {
   const { canWrite } = usePermissions()
   const { data: patterns = [], isLoading, isError, refetch } = usePatterns()
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: the shift pattern participant picker excludes drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const { data: staff = [] } = useStaff()
   const updatePattern = useUpdatePattern()
 

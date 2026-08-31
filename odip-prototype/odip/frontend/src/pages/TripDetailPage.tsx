@@ -25,7 +25,8 @@ export default function TripDetailPage() {
   const { data: tasks = [] } = useTripTasks(id)
   const { data: schedule = [] } = useTripSchedule(id)
   const { data: claims = [] } = useTripClaims(id)
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 

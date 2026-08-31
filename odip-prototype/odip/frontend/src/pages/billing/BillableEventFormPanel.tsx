@@ -116,7 +116,8 @@ const eventDefaults = (event: BillableEventDto): FormValues => {
 export default function BillableEventFormPanel({ isOpen, onClose, event, defaultParticipantId }: BillableEventFormPanelProps) {
   const isEdit = !!event
   const locked = !!event && isBillableEventLocked(event.status)
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const createMutation = useCreateBillableEvent()
   const updateMutation = useUpdateBillableEvent()
   const [error, setError] = useState<string | null>(null)

@@ -72,9 +72,14 @@ public class PortalController : ControllerBase
         var start = from ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var end = to ?? start.AddDays(13);
 
+        // INTAKE-08: a draft participant can't have a real shift going forward (Rostering's
+        // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
+        // edge case of a participant later flipped back to draft mid-edit while an old shift
+        // still references them, so the portal never shows it.
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end)
+            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end
+                        && !s.Participant!.IsDraft)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
         var shiftDtos = shifts.Select(ToSummaryDto).ToList();
@@ -111,7 +116,9 @@ public class PortalController : ControllerBase
         var shift = await _db.Shifts
             .Include(s => s.Participant)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null)
+        // INTAKE-08: same defence-in-depth draft exclusion as GetMyShifts above — treat it
+        // identically to "no participant at all" rather than surfacing a draft's detail.
+        if (shift?.Participant is null || shift.Participant.IsDraft)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
         var participant = shift.Participant;

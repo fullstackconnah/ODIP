@@ -185,6 +185,43 @@ describe('ParticipantsPage — alerts badge column', () => {
   })
 })
 
+describe('ParticipantsPage — INTAKE-08 draft badge and filter', () => {
+  it('shows a Draft badge only for a draft participant', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [
+        baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isDraft: false }),
+        baseParticipant({ id: 'p2', fullName: 'Priya Sharma', isDraft: true }),
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Draft')).toBeInTheDocument()
+    // Exactly one badge — not on the non-draft row.
+    expect(screen.getAllByText('Draft')).toHaveLength(1)
+  })
+
+  it('the "Drafts" filter re-fetches with isDraft=true', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
+
+    expect(mockUseParticipants).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isDraft: 'true' })
+    )
+  })
+
+  it('defaults to unfiltered — no isDraft param sent, so drafts show alongside everyone else', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    renderPage()
+
+    const lastCallParams = mockUseParticipants.mock.calls.at(-1)?.[0]
+    expect(lastCallParams).not.toHaveProperty('isDraft')
+  })
+})
+
 describe('ParticipantsPage — row click', () => {
   it('still navigates to the participant detail page (no regression)', async () => {
     const user = userEvent.setup()

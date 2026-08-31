@@ -199,6 +199,8 @@ export interface ParticipantListDto {
   /** Wire format: comma-separated ServiceStreams flag names, or "None" — see parseServiceStreams. */
   serviceStreams: string
   hasActiveMedications: boolean
+  /** INTAKE-08. See CreateParticipantDto.isDraft's doc. */
+  isDraft: boolean
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
@@ -250,6 +252,14 @@ export interface ParticipantDetailDto extends ParticipantListDto {
 export interface CreateParticipantDto {
   firstName: string
   lastName: string
+  /**
+   * INTAKE-08: true for a "Save as draft" wizard call — the server relaxes required-field
+   * checks to "at least one of firstName/lastName" (see ParticipantsController.ValidateNames)
+   * while still enforcing every format/consistency check on whatever IS provided. False (the
+   * default) is a normal, fully-validated create/update, including a final submission from the
+   * wizard's Review step, which clears an existing draft's flag back off.
+   */
+  isDraft?: boolean
   preferredName?: string
   dateOfBirth?: string
   gender?: Gender | null

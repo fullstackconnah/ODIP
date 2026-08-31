@@ -120,7 +120,7 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
-        var result = await controller.GetAll(null, null, null, null, null, 1, 50, CancellationToken.None);
+        var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.True(body.Data!.Items.Single(p => p.Id == withFlag.Id).HasRestrictivePracticeFlag);
@@ -581,7 +581,7 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
-        var result = await controller.GetAll(null, null, null, null, null, 1, 50, CancellationToken.None);
+        var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.True(body.Data!.Items.Single(p => p.Id == withActiveMed.Id).HasActiveMedications);
@@ -1091,6 +1091,228 @@ public class ParticipantsControllerTests
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // ── INTAKE-08: draft saves ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_DraftWithOnlyFirstName_Succeeds_PersistsPartialData()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        // Deliberately bare: no LastName, no PlanType/OvernightSupport/OvernightRatio/
+        // SupportRatio — none of MinimalCreateDto's usual minimums. A draft must persist
+        // whatever is filled in, which here is just a first name.
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.True(createdBody.Data!.IsDraft);
+
+        var getResult = await controller.GetById(createdBody.Data.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal("Priya", body.Data!.FirstName);
+        Assert.Equal(string.Empty, body.Data.LastName);
+        Assert.True(body.Data.IsDraft);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithBothNamesBlank_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { IsDraft = true };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("first or last name", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_NonDraftWithBlankLastName_ReturnsBadRequest()
+    {
+        // IsDraft=false (the default, including a final wizard submission) keeps requiring
+        // both names — same floor [Required] used to enforce.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { LastName = "  " };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("Last name", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithInvalidPostcode_StillReturnsBadRequest()
+    {
+        // Format/consistency checks on whatever WAS provided are never relaxed for a draft —
+        // only the FirstName/LastName floor is.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, AddressPostcode = "12" };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("Postcode", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_DraftWithFundingSourceOtherButNoOrganisation_StillReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto
+        {
+            FirstName = "Priya", IsDraft = true,
+            FundingSource = Domain.Enums.ParticipantFundingSource.Other,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("funding organisation", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Update_FinalSubmissionFromDraft_ClearsIsDraft()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var finalDto = new UpdateParticipantDto
+        {
+            FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await controller.Update(draft.Id, finalDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(draft.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.False(body.Data!.IsDraft);
+        Assert.Equal("Sharma", body.Data.LastName);
+    }
+
+    [Fact]
+    public async Task Update_FinalisedParticipant_CannotBeRevertedToDraft()
+    {
+        // INTAKE-08 fix round 1 (Finding 1b, controller ruling): un-finalising is not a product
+        // capability — a stored IsDraft=false participant must reject any Update whose payload
+        // sets IsDraft=true, leaving the stored row untouched.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var finalised = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = false };
+        db.Participants.Add(finalised);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true,
+        };
+
+        var result = await controller.Update(finalised.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("cannot be reverted to draft", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        var reloaded = await db.Participants.SingleAsync(p => p.Id == finalised.Id);
+        Assert.False(reloaded.IsDraft);
+    }
+
+    [Fact]
+    public async Task Update_SaveAsDraftAgain_KeepsIsDraftTrue_PartialDataPersists()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        // Still no LastName — a later wizard step's draft save, still missing required fields.
+        var updateDto = new UpdateParticipantDto { FirstName = "Priya", Region = "South East QLD", IsDraft = true, IsActive = true };
+
+        var updateResult = await controller.Update(draft.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(draft.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.True(body.Data!.IsDraft);
+        Assert.Equal("South East QLD", body.Data.Region);
+    }
+
+    [Fact]
+    public async Task GetAll_IsDraftFilter_true_ReturnsOnlyDrafts()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var normal = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.AddRange(normal, draft);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetAll(null, null, null, null, null, true, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(draft.Id, item.Id);
+        Assert.True(item.IsDraft);
+    }
+
+    [Fact]
+    public async Task GetAll_IsDraftFilter_false_ExcludesDrafts()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var normal = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.AddRange(normal, draft);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetAll(null, null, null, null, null, false, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(normal.Id, item.Id);
+    }
+
+    [Fact]
+    public async Task GetAll_NoIsDraftFilter_IncludesDraftsWithBadgeData()
+    {
+        // The plain participants list defaults to unfiltered — drafts show up alongside
+        // normal participants (badged client-side off IsDraft), not hidden.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var normal = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.AddRange(normal, draft);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, body.Data!.Items.Count);
+        Assert.True(body.Data.Items.Single(p => p.Id == draft.Id).IsDraft);
+        Assert.False(body.Data.Items.Single(p => p.Id == normal.Id).IsDraft);
     }
 
     [Fact]

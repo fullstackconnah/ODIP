@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
+import type { AxiosError } from 'axios'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
@@ -10,6 +11,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { StatusBadge } from '@/components/StatusBadge'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
 import {
@@ -262,6 +264,14 @@ const participantResolver: Resolver<ParticipantFormData> = (values) => {
 
 function pickShape<T extends readonly (keyof ParticipantFormData)[]>(fields: T) {
   return Object.fromEntries(fields.map((f) => [f, true])) as { [K in T[number]]: true }
+}
+
+// Same shape as RiskEntriesSection's extractErrorMessage — surfaces the server's ApiResponse
+// error message (e.g. ValidateNames' "Provide at least a first or last name...") for the
+// Save-as-draft banner rather than a generic string.
+function extractErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
 function focusField(fieldName: string) {
@@ -723,7 +733,12 @@ export default function ParticipantCreatePage() {
     }
   }, [existing, reset])
 
-  const onSubmit = async (data: ParticipantFormData) => {
+  // INTAKE-08: shared shaping logic between a full submit (draft=false, always validated by
+  // participantResolver first) and a "Save as draft" call (draft=true, called directly off
+  // getValues() with NO zod validation at all — a draft persists whatever is filled). Both
+  // paths still run stripHiddenFieldKeys/the DIAG-01 collapse/the '' -> null pass identically;
+  // only the isDraft flag on the resulting payload differs.
+  const buildPayload = (data: ParticipantFormData, draft: boolean) => {
     // INTAKE-07: unregister-on-hide should already have dropped hidden fields' keys from `data`
     // (react-hook-form's default unregister options exclude them from validation AND from the
     // values object handleSubmit builds) — stripHiddenFieldKeys is the defence-in-depth pass
@@ -742,6 +757,12 @@ export default function ParticipantCreatePage() {
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
+    payload.isDraft = draft
+    return payload
+  }
+
+  const onSubmit = async (data: ParticipantFormData) => {
+    const payload = buildPayload(data, false)
     try {
       if (isEdit) {
         // INTAKE-09: edit-mode never renders the riskEntries rows UI (see riskEntries' schema
@@ -775,9 +796,51 @@ export default function ParticipantCreatePage() {
     }
   }
 
+  // INTAKE-08: "Save as draft" — available on every wizard step, not just Review. Deliberately
+  // bypasses handleSubmit/participantResolver entirely (reads getValues() directly) so a
+  // partially-completed form — missing fields the per-step zod schemas would otherwise block
+  // Next on — still saves. The server applies its own, much looser, draft floor (see
+  // ParticipantsController.ValidateNames): at least one of firstName/lastName, plus every
+  // format/consistency check on whatever else IS filled in (unchanged from a full submit).
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const handleSaveDraft = async () => {
+    setDraftError(null)
+    setSavingDraft(true)
+    const data = getValues()
+    const payload = buildPayload(data, true)
+    try {
+      if (isEdit) {
+        delete payload.riskEntries
+        const res = await updateParticipant.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
+        if (res.success) {
+          flushSync(() => reset(data as unknown as Parameters<typeof reset>[0]))
+        }
+      } else {
+        const res = await createParticipant.mutateAsync(payload)
+        if (res.success && res.data?.id) {
+          flushSync(() => reset(data as unknown as Parameters<typeof reset>[0]))
+          // Switch into the edit route for the just-created draft — same wizard, now resumable
+          // (and re-saveable as a draft again) via its own id.
+          navigate(`/participants/${res.data.id}/edit`)
+        }
+      }
+    } catch (err) {
+      setDraftError(extractErrorMessage(err, 'Failed to save draft. Please try again.'))
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+
+  // INTAKE-08 fix round 1 (Finding 1a): "Save as draft" is offered on create (no existing
+  // record yet — nothing to un-finalise) and on resuming an existing draft, never while editing
+  // an already-finalised participant. `existing` is guaranteed resolved here (the loading guard
+  // above already returned for edit mode while it was pending).
+  const canSaveDraft = !isEdit || existing?.isDraft === true
 
   const preferredStaffName = activeStaff.find(s => s.id === watchedValues.preferredStaffId)?.fullName ?? 'None'
   const supportRatioLabel = OVERNIGHT_RATIO_LABELS[(watchedValues.supportRatio as SupportRatio) ?? 'SharedSupport'] ?? '—'
@@ -927,11 +990,23 @@ export default function ParticipantCreatePage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Participant' : 'Create New Participant'}</h1>
+        {/* INTAKE-08: a clear, always-visible indicator that this record is still a draft —
+            amber rather than StatusBadge's default muted "draft" style, so it reads as
+            "needs attention" rather than blending into the page. */}
+        {isEdit && existing?.isDraft && (
+          <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
+        )}
       </div>
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           Failed to {isEdit ? 'update' : 'create'} participant. Please check your input and try again.
+        </div>
+      )}
+
+      {draftError && (
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          {draftError}
         </div>
       )}
 
@@ -1696,8 +1771,8 @@ export default function ParticipantCreatePage() {
         )}
 
         {/* Wizard navigation */}
-        <div className="md:col-span-2 flex justify-between items-center gap-3 mt-6">
-          <div>
+        <div className="md:col-span-2 flex flex-wrap justify-between items-center gap-3 mt-6">
+          <div className="flex items-center gap-3">
             {stepIndex > 0 && (
               <button
                 type="button"
@@ -1705,6 +1780,21 @@ export default function ParticipantCreatePage() {
                 className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
               >
                 Back
+              </button>
+            )}
+            {/* INTAKE-08 fix round 1 (Finding 1a, controller ruling): un-finalising is not a
+                product capability — this button exists on create and on draft-resume only, never
+                while editing an already-finalised participant (available on EVERY step of those
+                two flows, not just Review). Mirrors the server-side rejection in
+                ParticipantsController.Update (see its Finding 1b comment). */}
+            {canSaveDraft && (
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={savingDraft || mutation.isPending}
+                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+              >
+                {savingDraft ? 'Saving draft...' : 'Save as draft'}
               </button>
             )}
           </div>

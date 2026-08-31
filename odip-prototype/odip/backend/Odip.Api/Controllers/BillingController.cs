@@ -66,7 +66,8 @@ public class BillingController : ControllerBase
     public async Task<ActionResult<ApiResponse<FundingSourceDto>>> CreateFundingSource(
         [FromBody] CreateFundingSourceDto dto, CancellationToken ct)
     {
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId, ct);
+        // INTAKE-08: claims/billing surfaces exclude drafts — a draft can't have a funding source.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct);
         if (participant == null)
             return BadRequest(ApiResponse<FundingSourceDto>.Fail("Participant not found"));
 
@@ -253,7 +254,8 @@ public class BillingController : ControllerBase
     public async Task<ActionResult<ApiResponse<BillableEventDto>>> CreateBillableEvent(
         [FromBody] CreateBillableEventDto dto, CancellationToken ct)
     {
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId, ct);
+        // INTAKE-08: claims/billing surfaces exclude drafts — a draft can't have a billable event.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct);
         if (participant == null) return BadRequest(ApiResponse<BillableEventDto>.Fail("Participant not found"));
 
         var fundingSourceExists = await _db.FundingSources.AnyAsync(f => f.Id == dto.FundingSourceId, ct);
@@ -298,7 +300,8 @@ public class BillingController : ControllerBase
                 $"Cannot update a billable event with status '{ev.Status}'; it has already been claimed."));
         }
 
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId, ct);
+        // INTAKE-08 — same draft exclusion as CreateBillableEvent above.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct);
         if (participant == null) return BadRequest(ApiResponse<BillableEventDto>.Fail("Participant not found"));
 
         ev.ParticipantId = dto.ParticipantId; ev.FundingSourceId = dto.FundingSourceId;

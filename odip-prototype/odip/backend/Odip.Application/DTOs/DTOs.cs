@@ -31,6 +31,8 @@ public record ParticipantListDto
     public ServiceStreams ServiceStreams { get; init; }
     /// <summary>Derived: true iff the participant has any non-Ceased ParticipantMedication row.</summary>
     public bool HasActiveMedications { get; init; }
+    /// <summary>INTAKE-08. See <see cref="Odip.Domain.Entities.Participant.IsDraft"/>.</summary>
+    public bool IsDraft { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto
@@ -88,10 +90,28 @@ public record ParticipantDetailDto : ParticipantListDto
 
 public record CreateParticipantDto
 {
-    [Required, StringLength(100, MinimumLength = 1)]
+    // INTAKE-08: deliberately NOT [Required] (unlike every other truly-mandatory field in this
+    // codebase, requiredness here is enforced via ParticipantsController.ValidateNames, not a
+    // DataAnnotation) — a [Required] attribute is checked by ASP.NET's automatic [ApiController]
+    // model-validation filter BEFORE the action method runs, which would 400 a draft save with
+    // both names blank before ValidateNames ever got a chance to relax that to "at least one of
+    // the two", and would answer with a generic ProblemDetails body rather than this codebase's
+    // ApiResponse-shaped error (same reasoning as ValidateAddressPostcode's doc on why format
+    // checks here are hand-written rather than attribute-driven).
+    [StringLength(100)]
     public string FirstName { get; init; } = string.Empty;
-    [Required, StringLength(100, MinimumLength = 1)]
+    [StringLength(100)]
     public string LastName { get; init; } = string.Empty;
+    /// <summary>
+    /// INTAKE-08: true for a "Save as draft" wizard call (relaxes ValidateNames to "at least one
+    /// of FirstName/LastName" and skips nothing else — every other validator in
+    /// ParticipantsController runs identically for a draft, since a provided value being
+    /// internally inconsistent, e.g. FundingSource=Other with no FundingOrganisation, is never
+    /// OK regardless of draft status). False (the default) is a normal, fully-validated
+    /// create/update, and is also what a final submission from the wizard's Review step sends to
+    /// clear a participant's existing draft flag back off.
+    /// </summary>
+    public bool IsDraft { get; init; }
     [StringLength(100)]
     public string? PreferredName { get; init; }
     public DateOnly? DateOfBirth { get; init; }

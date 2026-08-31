@@ -60,7 +60,8 @@ export default function MarTab() {
   const [date, setDate] = useState(todayIso())
   const [participantId, setParticipantId] = useState('')
   const { data: mar, isLoading } = useMar(date, participantId || undefined)
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: the medication picker excludes drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const recordPrnOutcome = useRecordPrnOutcome()
 
   const [recordingSlot, setRecordingSlot] = useState<MarEntryDto | null>(null)

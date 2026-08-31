@@ -36,6 +36,9 @@ function renderCreatePage() {
       // Registered so the post-submit navigate(`/participants/${id}`) resolves cleanly
       // instead of logging a router 404 to stderr.
       { path: '/participants/:id', element: <div>Participant detail</div> },
+      // INTAKE-08: Save-as-draft on a brand-new (create-mode) participant navigates into this
+      // route to continue drafting under its own id.
+      { path: '/participants/:id/edit', element: <ParticipantCreatePage /> },
     ],
     { initialEntries: ['/participants/new'] },
   )
@@ -242,7 +245,7 @@ describe('ParticipantCreatePage Review step', () => {
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
@@ -558,7 +561,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
@@ -591,7 +594,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region',
@@ -623,7 +626,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'mainSupportPersonName', 'mainSupportPersonRelationship', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -680,7 +683,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livesWithOthers', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -728,7 +731,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'accommodationType', 'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -1061,5 +1064,146 @@ describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () =>
     expect(screen.queryByRole('button', { name: /add risk entry/i })).not.toBeInTheDocument()
     expect(screen.getByText(/risk entries are managed from the/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /risks section/i })).toHaveAttribute('href', '/participants/participant-1')
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
+  it('is available on the very first step and bypasses that step\'s zod validation', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    // Only First Name filled — Last Name and every later-step field left blank. A normal
+    // "Next" click would block here (see the "blocks Next..." test above); Save as draft must
+    // not.
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.firstName).toBe('Jamie')
+    expect(payload.lastName).toBe(null) // blank string coerced to null, same as any other field
+    expect(payload.isDraft).toBe(true)
+  })
+
+  it('is available on a later step too, and still sends only what has been filled in', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.type(screen.getByLabelText('Region'), 'QLD')
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.region).toBe('QLD')
+    expect(payload.isDraft).toBe(true)
+    // Later, never-visited steps' fields are simply absent — no "required" enforcement — the
+    // draft floor server-side only checks firstName/lastName.
+    expect(payload.medicalSummary).toBeUndefined()
+  })
+
+  it('a final submission from Review sends isDraft=false, clearing any existing draft flag', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0].isDraft).toBe(false)
+  })
+
+  it('shows the server\'s validation message and does not navigate when a draft save fails', async () => {
+    mockCreateMutateAsync.mockReset()
+    mockCreateMutateAsync.mockRejectedValue({
+      response: { data: { success: false, errors: ['Provide at least a first or last name to save a draft.'] } },
+    })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/first or last name/i)
+    // Still on the create route — no navigation happened on failure.
+    expect(screen.getByRole('heading', { name: /create new participant/i })).toBeInTheDocument()
+  })
+
+  it('edit mode: shows the Draft badge for an existing draft, and Save as draft keeps it a draft', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Priya', lastName: '', isActive: true, isDraft: true,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    expect(screen.getByText('Draft')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Last Name *'), 'Sharma')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(call.id).toBe('participant-1')
+    expect(call.data.isDraft).toBe(true)
+    expect(call.data.lastName).toBe('Sharma')
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE-08 fix round 1 (Finding 1a): Save-as-draft button visibility', () => {
+  it('is present on create (no existing record — nothing to un-finalise)', () => {
+    renderCreatePage()
+
+    expect(screen.getByRole('button', { name: /save as draft/i })).toBeInTheDocument()
+  })
+
+  it('is present when resuming an existing draft', () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Priya', lastName: '', isActive: true, isDraft: true,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(screen.getByRole('button', { name: /save as draft/i })).toBeInTheDocument()
+  })
+
+  it('is absent when editing an already-finalised (non-draft) participant', () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(screen.queryByRole('button', { name: /save as draft/i })).not.toBeInTheDocument()
+    // The rest of the edit flow is unaffected — no Draft badge, and Next still works normally.
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
   })
 })

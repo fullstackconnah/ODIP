@@ -65,6 +65,23 @@ public class MedicationsControllerTests
         StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
     };
 
+    // ── INTAKE-08: a draft participant is excluded from the medication picker ──────────
+
+    [Fact]
+    public async Task Create_DraftParticipant_ReturnsNotFound()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant);
+
+        var result = await controller.Create(draft.Id, RegularDto(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantMedications.ToListAsync());
+    }
+
     // ── Create validation ────────────────────────────────────────────────
 
     [Fact]

@@ -106,8 +106,10 @@ public class RosteringController : ControllerBase
         // referencing a participant outside that active set (edge case) still need a name
         // for their ShiftDto/exception, so top up with whichever ids weekShifts references
         // that the active set didn't already cover — still just two queries total. ──
+        // INTAKE-08: drafts never appear on the board — same exclusion as every other roster
+        // surface (see ValidateRefsAsync/CreatePattern/UpdatePattern/UpsertCompatibility below).
         var activeParticipants = await _db.Participants
-            .Where(p => p.IsActive)
+            .Where(p => p.IsActive && !p.IsDraft)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToListAsync(ct);
         var participantById = activeParticipants.ToDictionary(p => p.Id);
@@ -461,7 +463,9 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
+        // INTAKE-08: a shift pattern is recurring shift assignment — same draft exclusion as a
+        // one-off shift (ValidateRefsAsync above).
+        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
@@ -488,7 +492,9 @@ public class RosteringController : ControllerBase
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
 
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
+        // INTAKE-08: a shift pattern is recurring shift assignment — same draft exclusion as a
+        // one-off shift (ValidateRefsAsync above).
+        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
@@ -579,7 +585,9 @@ public class RosteringController : ControllerBase
     {
         if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId, ct))
+        // INTAKE-08: the compatibility matrix is a roster surface — drafts excluded, same as
+        // shift/pattern assignment above.
+        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Participant not found."));
 
         var row = await _db.StaffParticipantCompatibilities
@@ -703,7 +711,9 @@ public class RosteringController : ControllerBase
     /// </summary>
     private async Task<string?> ValidateRefsAsync(Guid participantId, Guid? staffId, CancellationToken ct)
     {
-        if (!await _db.Participants.AnyAsync(p => p.Id == participantId, ct))
+        // INTAKE-08: a draft can't be shift-assigned (create/update/check-conflicts all funnel
+        // through this one validator) — reads the same as "not found" from the caller's side.
+        if (!await _db.Participants.AnyAsync(p => p.Id == participantId && !p.IsDraft, ct))
             return "Participant not found.";
         if (staffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == staffId.Value && s.IsActive, ct))
             return "Staff member not found.";

@@ -554,4 +554,37 @@ public class ParticipantAlertsServiceTests
         Assert.Equal(participantAId, dto.ParticipantId);
         Assert.Contains(dto.Alerts, a => a.Type == "routine-coverage-gap");
     }
+
+    // ── INTAKE-08: the aggregate (activeOnly=true) excludes drafts ─────────────────────
+
+    [Fact]
+    public async Task GetAlertsAsync_ActiveOnly_ExcludesDraftParticipants()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var active = SeedParticipant(db, "Sophie", "Brown");
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participantId: null, activeOnly: true);
+
+        Assert.Contains(result, dto => dto.ParticipantId == active.Id);
+        Assert.DoesNotContain(result, dto => dto.ParticipantId == draft.Id);
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_SingleDraftParticipant_StillComputesAlerts()
+    {
+        // A direct single-participant lookup (own detail page) keeps working for a draft —
+        // only the aggregate (activeOnly=true) excludes it. Mirrors the archived-participant
+        // behaviour documented on GetAlertsAsync.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participantId: draft.Id);
+
+        Assert.Single(result);
+    }
 }
