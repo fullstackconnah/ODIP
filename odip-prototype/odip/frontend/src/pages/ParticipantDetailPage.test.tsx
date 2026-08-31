@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -7,11 +8,16 @@ import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseSupportProfile, mockUseParticipantAlerts,
+  mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockUseParticipantBookings: vi.fn(() => ({ data: [] })),
   mockUseSupportProfile: vi.fn(() => ({ data: undefined })),
   mockUseParticipantAlerts: vi.fn(() => ({ data: undefined })),
+  // DOC-01 — mocked like every other hook this file already stubs, so the button-render/click
+  // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
+  mockUseDownloadIntakeFormPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  mockUseDownloadParticipantProfilePdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -24,6 +30,8 @@ vi.mock('@/api/hooks', () => ({
   useParticipantBookings: mockUseParticipantBookings,
   useSupportProfile: mockUseSupportProfile,
   useParticipantAlerts: mockUseParticipantAlerts,
+  useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
+  useDownloadParticipantProfilePdf: mockUseDownloadParticipantProfilePdf,
 }))
 
 vi.mock('./participant-detail', () => ({
@@ -80,6 +88,8 @@ beforeEach(() => {
   mockUseParticipantBookings.mockReturnValue({ data: [] })
   mockUseSupportProfile.mockReturnValue({ data: undefined })
   mockUseParticipantAlerts.mockReturnValue({ data: undefined })
+  mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+  mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   // A role without canViewAlerts keeps the alerts banner path (and its own separate hook
   // contract) out of scope for these tests — see ParticipantAlertsBanner's own test file for that.
   setUserRole('SupportWorker')
@@ -289,5 +299,76 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByTestId('health-conditions-section')).toBeInTheDocument()
     expect(screen.getByTestId('adl-assessments-section')).toBeInTheDocument()
     expect(screen.getByTestId('risk-entries-section')).toBeInTheDocument()
+  })
+})
+
+// DOC-01 — header Documents buttons (Intake Form PDF / Participant Profile PDF). Both hooks are
+// mocked (see the vi.hoisted block above) so these tests never exercise the real axios/blob
+// mutationFn body — that body is identical to useDownloadProdaFile's, already covered by
+// billing.ts's own test coverage.
+describe('ParticipantDetailPage — DOC-01 Documents header buttons', () => {
+  function setup() {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    return renderAt('participant-1')
+  }
+
+  it('renders both Documents buttons with their labels', () => {
+    setup()
+
+    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /participant profile pdf/i })).toBeInTheDocument()
+  })
+
+  it('calls the intake form mutation with the participant id and a filename when clicked', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate, isPending: false, isError: false })
+    setup()
+
+    await user.click(screen.getByRole('button', { name: /intake form pdf/i }))
+
+    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
+  })
+
+  it('calls the participant profile mutation with the participant id and a filename when clicked', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate, isPending: false, isError: false })
+    setup()
+
+    await user.click(screen.getByRole('button', { name: /participant profile pdf/i }))
+
+    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
+  })
+
+  it('disables the Intake Form button and shows loading state while its mutation is pending', () => {
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    setup()
+
+    const button = screen.getByRole('button', { name: /preparing/i })
+    expect(button).toBeDisabled()
+  })
+
+  it('disables the Participant Profile button and shows loading state while its mutation is pending', () => {
+    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    setup()
+
+    // Both buttons share the same "Preparing…" label while pending — assert two are showing it
+    // (the Intake Form button stays in its default, non-pending state).
+    expect(screen.getAllByRole('button', { name: /preparing/i })).toHaveLength(1)
+  })
+
+  it('shows an error alert under the Intake Form button when its mutation errors', () => {
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    setup()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
+  })
+
+  it('shows an error alert under the Participant Profile button when its mutation errors', () => {
+    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    setup()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
   })
 })

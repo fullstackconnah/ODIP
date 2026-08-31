@@ -59,7 +59,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Create_ChecklistItemsSubset_PersistsOnlyThoseRows_RestAreUnansweredPlaceholders()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -107,7 +107,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Update_ChecklistItemsPartialPayload_LeavesOmittedPreviouslySetItemUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var createDto = MinimalCreateDto() with
         {
@@ -155,7 +155,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Create_DraftWithPartialCommunityAccessFields_SavesSuccessfully_UntouchedFieldsStayNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -218,7 +218,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Create_FullChecklistArrayAllNull_PersistsZeroRows()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { ChecklistItems = FullNullChecklistArray() };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -232,7 +232,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Create_FullChecklistArrayWithTwoAnswered_PersistsExactlyTwoRows()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var items = FullNullChecklistArray();
         var wheelchairIdx = items.FindIndex(i => i.ItemType == ChecklistItemType.UsesWheelchair);
@@ -259,7 +259,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Update_FullChecklistArrayAllNullAfterRowsExist_RowsRemainClearedToNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var createDto = MinimalCreateDto() with
         {
@@ -296,7 +296,7 @@ public class ParticipantsControllerCommunityAccessTests
     public async Task Create_HidpaSupportCategoriesExtendedFlagCombination_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var combination = HidpaSupportCategory.PressureCare | HidpaSupportCategory.DiabetesManagementInsulin | HidpaSupportCategory.EpilepsyManagement;
         var dto = MinimalCreateDto() with { HidpaSupportCategories = combination };
