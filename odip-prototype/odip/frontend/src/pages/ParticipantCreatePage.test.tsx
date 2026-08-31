@@ -147,7 +147,7 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
 
     // Trigger the cross-field equipment error: check a box (this un-disables the notes
     // field), type notes, then uncheck the box again so the notes are now orphaned.
@@ -184,7 +184,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
@@ -311,7 +311,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -328,7 +328,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -393,7 +393,7 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -422,7 +422,7 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -501,7 +501,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -577,7 +577,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -611,7 +611,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -662,7 +662,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -711,7 +711,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -762,7 +762,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -790,7 +790,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -856,7 +856,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -922,7 +922,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -943,7 +943,7 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
 }
 
@@ -1243,7 +1243,7 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
 
   async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -1663,7 +1663,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
   }
 
   async function finishFromCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
@@ -1925,12 +1925,29 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
     expect(screen.getByRole('radiogroup', { name: 'Dysphagia' })).toBeInTheDocument()
 
     // Severity/Plan Provided/Training Required/Notes are hidden until that row is answered "Yes".
-    expect(screen.queryByRole('radiogroup', { name: 'Plan Provided' })).not.toBeInTheDocument()
+    // Review-round a11y fix: the sub-toggles' accessible name is row-qualified ("Plan Provided —
+    // <Condition>"), not the bare "Plan Provided" — see YesNoToggleField's ariaLabel doc.
+    expect(screen.queryByRole('radiogroup', { name: /^Plan Provided/ })).not.toBeInTheDocument()
 
     await user.click(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' }))
 
-    expect(screen.getAllByRole('radiogroup', { name: 'Plan Provided' })).toHaveLength(1)
-    expect(screen.getAllByRole('radiogroup', { name: 'Training Required' })).toHaveLength(1)
+    expect(screen.getByRole('radiogroup', { name: 'Plan Provided — Epilepsy' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Training Required — Epilepsy' })).toBeInTheDocument()
+
+    // Review-round a11y fix, the substantive proof: expand a SECOND row and confirm both rows'
+    // "Plan Provided"/"Training Required" radiogroups get distinct, condition-qualified accessible
+    // names — before this fix, a screen reader navigating by role would hit two indistinguishable
+    // "Plan Provided" radiogroups with no way to tell which condition either belonged to.
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Diabetes' })).getByRole('radio', { name: 'Yes' }))
+
+    expect(screen.getByRole('radiogroup', { name: 'Plan Provided — Epilepsy' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Plan Provided — Diabetes' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Training Required — Epilepsy' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Training Required — Diabetes' })).toBeInTheDocument()
+    // Exactly two of each — no bare, unqualified "Plan Provided"/"Training Required" radiogroup
+    // lingering alongside the qualified ones.
+    expect(screen.getAllByRole('radiogroup', { name: /^Plan Provided/ })).toHaveLength(2)
+    expect(screen.getAllByRole('radiogroup', { name: /^Training Required/ })).toHaveLength(2)
   })
 
   it('renders a "Behaviour & Communication" step between Medical and Risks & Hazards, with the new fields', async () => {
@@ -1989,8 +2006,8 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
 
     await user.click(within(screen.getByRole('radiogroup', { name: 'Asthma' })).getByRole('radio', { name: 'Yes' }))
     await user.type(screen.getByPlaceholderText('e.g. Mild, Type 2, GrandMal...'), 'Moderate')
-    await user.click(within(screen.getByRole('radiogroup', { name: 'Plan Provided' })).getByRole('radio', { name: 'Yes' }))
-    await user.click(within(screen.getByRole('radiogroup', { name: 'Training Required' })).getByRole('radio', { name: 'No' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Plan Provided — Asthma' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Training Required — Asthma' })).getByRole('radio', { name: 'No' }))
     await user.type(screen.getByPlaceholderText('Additional notes...'), 'Puffer kept in bag.')
 
     await finishWizard(user)
@@ -2061,6 +2078,41 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
     // The derivation only fires when the row is still unanswered ('') — an explicit "No" the
     // user already recorded on the grid itself is never silently overridden.
     expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' })).toBeChecked()
+  })
+
+  it('edit mode: loading a participant with an Epilepsy diagnosis and the grid\'s Epilepsy row already explicitly "No" does not flip it on mount', async () => {
+    // EDIT-MODE SAFE (see conditionalFields.ts's useDeriveFieldValues doc / FIELD_DERIVATIONS'
+    // grid-row derivation above): `existing` is the resetKey — its identity changing from
+    // undefined to the fetched record re-baselines the hook's "previous when-state" WITHOUT
+    // firing `apply`, the same way a fresh mount does. Without this guard, loading an edit page
+    // for an Epilepsy participant whose grid row was deliberately answered "No" would silently
+    // flip it back to "Yes" the instant the record loads — turning the "default" into a lock via
+    // the back door.
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+        primaryDiagnosis: 'Epilepsy',
+        healthConditions: [
+          { id: 'hc1', participantId: 'participant-1', conditionType: 'Epilepsy', has: false, severity: null, planProvided: null, trainingRequired: null, notes: null, createdAt: null, updatedAt: null },
+        ],
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    // Only navigates to view the Medical step's JSX — never touches the grid or diagnosis
+    // fields. The derivation effect runs off `existing` landing (mount/reset), not off this
+    // click; this click only brings the already-rendered radiogroup into the DOM to inspect.
+    await user.click(within(stepNav()).getByRole('button', { name: /medical/i }))
+
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'No' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' })).not.toBeChecked()
   })
 
   it('edit mode round-trips the clinical enrichment fields into their controls, and a save resubmits them unchanged', async () => {

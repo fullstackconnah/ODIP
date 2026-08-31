@@ -2680,7 +2680,7 @@ public static class DbSeeder
             // seeded coherently rather than derived server-side (see this PR's report).
             (Guid.Parse("d1000000-0000-0000-0000-000000000002"), new[]
             {
-                (HealthConditionType.Epilepsy, (bool?)true, "GrandMal, breakthrough seizures", (bool?)true, (bool?)true, "Seizure management plan on file; PRN midazolam per plan."),
+                (HealthConditionType.Epilepsy, (bool?)true, (string?)"GrandMal, breakthrough seizures", (bool?)true, (bool?)true, "Seizure management plan on file; PRN midazolam per plan."),
                 (HealthConditionType.MentalHealth, (bool?)true, "ABI-related mood changes", (bool?)true, (bool?)false, (string?)null),
             }),
             // Olivia Wilson — CP quadriplegia, PEG feeding.
@@ -2698,22 +2698,22 @@ public static class DbSeeder
             // William Martin — DSOA, no flagged conditions but answered.
             (Guid.Parse("d1000000-0000-0000-0000-000000000009"), new[]
             {
-                (HealthConditionType.HighBloodPressure, (bool?)true, "Controlled with medication", (bool?)false, (bool?)false, (string?)null),
+                (HealthConditionType.HighBloodPressure, (bool?)true, (string?)"Controlled with medication", (bool?)false, (bool?)false, (string?)null),
             }),
             // Chloe Robinson — Down syndrome, congenital heart condition (cleared for travel).
             (Guid.Parse("d2000000-0000-0000-0000-000000000003"), new[]
             {
-                (HealthConditionType.IntellectualDisability, (bool?)true, "Mild", (bool?)true, (bool?)false, (string?)null),
+                (HealthConditionType.IntellectualDisability, (bool?)true, (string?)"Mild", (bool?)true, (bool?)false, (string?)null),
             }),
             // Harrison Lee — Multiple Sclerosis, fatigue management important.
             (Guid.Parse("d2000000-0000-0000-0000-000000000006"), new[]
             {
-                (HealthConditionType.WoundCare, (bool?)false, (string?)null, (bool?)null, (bool?)null, "Monitored due to reduced mobility; no current wounds."),
+                (HealthConditionType.WoundCare, (bool?)false, (string?)null, (bool?)null, (bool?)null, (string?)"Monitored due to reduced mobility; no current wounds."),
             }),
             // Ryan Murphy — ABI (stroke), aphasia, right-side weakness, restrictive practice flag.
             (Guid.Parse("d2000000-0000-0000-0000-000000000008"), new[]
             {
-                (HealthConditionType.MentalHealth, (bool?)true, "Post-stroke frustration/low mood", (bool?)true, (bool?)true, (string?)null),
+                (HealthConditionType.MentalHealth, (bool?)true, (string?)"Post-stroke frustration/low mood", (bool?)true, (bool?)true, (string?)null),
                 (HealthConditionType.HighBloodPressure, (bool?)true, "Controlled", (bool?)false, (bool?)false, (string?)null),
             }),
             // Natalie Walsh — no medical flags recorded, one deliberately-unanswered row (the

@@ -151,7 +151,9 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
     notes: 'Maps loosely to both forms\' contact blocks (Intake\'s Residence/Support Coordinator/NDIS Funds Manager/Family/Administrator/Authorised Signatory rows; Profile\'s NOK/Financial Administrator/Nominated Decision Maker/Support Coordinator/Plan Manager/Plan Nominee blocks) — the merged CONTACT-01/02/03 typed-contact model already satisfies §5\'s "Plan Nominee contact type" call-out; see this PR\'s report. Field-set deltas between the two forms are NOT re-litigated here — see the research spec §2 for that detail.',
   },
 
-  // ── Support Needs & Equipment step — §4.7 ────────────────────────────────
+  // ── Support Needs & Mobility step — §4.7 (renamed from "Support Needs & Equipment" in
+  // sub-wave C1 — see ParticipantCreatePage.tsx's STEP_SUPPORT_FIELDS doc for the rename
+  // rationale) ───────────────────────────────────────────────────────────
   { field: 'mobilityAidWheelchair', label: 'Wheelchair', sources: ['shared'], dictionaryId: 'MOB-004' },
   { field: 'mobilityAidWalker', label: 'Walker', sources: ['intake'], notes: 'Intake\'s equipment checklist includes Walker; the base Profile only lists it as a Non-Ambulant aid, not an equipment checkbox — a flagged delta, not a straight dupe (§2).' },
   { field: 'mobilitySupportOptions', label: 'Mobility Support Options', sources: ['profile'], dictionaryId: 'MOB-004', notes: 'Profile\'s Non-Ambulant Equipment/Transfers picklist; Intake\'s wheelchair sub-checks (Travel in Vehicle/Transfers/etc.) cover similar ground under a different shape.' },

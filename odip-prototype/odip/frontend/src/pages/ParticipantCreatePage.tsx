@@ -476,11 +476,22 @@ const YES_NO_UNANSWERED_OPTIONS = [
   { key: '', label: 'Not recorded' },
 ]
 
-function YesNoToggleField({ control, name, label, hint }: {
+function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
   control: Control<ParticipantFormData>
   name: FieldPath<ParticipantFormData>
   label: string
   hint?: string
+  /**
+   * Overrides the radiogroup's accessible name without changing the visible FormField label —
+   * needed wherever the same short visible label (e.g. "Plan Provided") repeats across several
+   * rows of a list (the health-condition grid's per-row sub-toggles): a screen reader user
+   * navigating by role would otherwise hear several indistinguishable "Plan Provided" radiogroups
+   * with no way to tell which condition each belongs to. Pass a longer, row-qualified string
+   * (e.g. "Plan Provided — Epilepsy") here while `label` stays the short visible text. Defaults
+   * to `label` — every other caller (a field that's the only one of its kind on the page) is
+   * unaffected.
+   */
+  ariaLabel?: string
 }) {
   return (
     <FormField label={label} hint={hint} className="mb-0">
@@ -495,7 +506,7 @@ function YesNoToggleField({ control, name, label, hint }: {
             // FormField's cloneElement labelling can't reach through this Controller (see
             // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
             // the radiogroup has a real accessible name instead of none at all.
-            ariaLabel={label}
+            ariaLabel={ariaLabel ?? label}
           />
         )}
       />
@@ -2625,12 +2636,13 @@ export default function ParticipantCreatePage() {
               <div className="space-y-3">
                 {HEALTH_CONDITION_TYPES.map((type, index) => {
                   const has = watchedValues.healthConditions?.[index]?.has
+                  const conditionLabel = HEALTH_CONDITION_TYPE_LABELS[type as HealthConditionType]
                   return (
                     <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
                       <YesNoToggleField
                         control={control}
                         name={`healthConditions.${index}.has` as FieldPath<ParticipantFormData>}
-                        label={HEALTH_CONDITION_TYPE_LABELS[type as HealthConditionType]}
+                        label={conditionLabel}
                       />
                       {has === 'true' && (
                         <div className="space-y-3">
@@ -2638,15 +2650,24 @@ export default function ParticipantCreatePage() {
                             <input {...register(`healthConditions.${index}.severity` as const)} placeholder="e.g. Mild, Type 2, GrandMal..." />
                           </FormField>
                           <div className="grid grid-cols-2 gap-3">
+                            {/* Review-round a11y fix: with 2+ rows answered "Yes", several
+                                radiogroups would otherwise all share the plain "Plan Provided" /
+                                "Training Required" accessible name — indistinguishable to a
+                                screen reader user navigating by role. ariaLabel carries the
+                                row-qualified name; the visible FormField label (via `label`)
+                                stays the short, unqualified text since sighted users already see
+                                which condition's card they're in. */}
                             <YesNoToggleField
                               control={control}
                               name={`healthConditions.${index}.planProvided` as FieldPath<ParticipantFormData>}
                               label="Plan Provided"
+                              ariaLabel={`Plan Provided — ${conditionLabel}`}
                             />
                             <YesNoToggleField
                               control={control}
                               name={`healthConditions.${index}.trainingRequired` as FieldPath<ParticipantFormData>}
                               label="Training Required"
+                              ariaLabel={`Training Required — ${conditionLabel}`}
                             />
                           </div>
                           <FormField label="Notes" className="mb-0">
