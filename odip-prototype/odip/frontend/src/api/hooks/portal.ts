@@ -45,6 +45,15 @@ export function useUpdateShiftNote(shiftId: string | undefined) {
   })
 }
 
+/** NOTES-02: dismisses the "file an incident report?" prompt on one flagged note — persisted server-side. */
+export function useAcknowledgeShiftNoteFlags(shiftId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPost<ShiftNoteDto>(`/portal/notes/${id}/acknowledge-flags`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-shift-notes', shiftId] }),
+  })
+}
+
 // Shared by the sidebar nav badge and the witness approvals page — same queryKey means both
 // read from (and refresh) the same cached list rather than issuing separate requests.
 // A 60s poll keeps the badge from going stale while someone's on another page.

@@ -38,6 +38,13 @@ export interface ShiftNoteDto {
   body: string
   createdAt: string
   updatedAt: string
+  // NOTES-02: category names (e.g. "Falls", "Medication") the server's keyword scanner matched
+  // in `body` as of the last save. Empty when nothing matched. See ShiftNoteFlagCategory on the
+  // backend and frontend/src/lib/shiftNoteKeywords.ts for the mirrored category set.
+  flaggedCategories: string[]
+  // NOTES-02: when the author dismissed the "file an incident report?" prompt for the CURRENT
+  // flaggedCategories value. Null while unflagged or not yet acknowledged.
+  flagsAcknowledgedAt: string | null
 }
 
 // ── Trip / Leave bars (read-only board material) ─────────

@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { MessageSquare, AlertCircle } from 'lucide-react'
-import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote } from '@/api/hooks'
+import { useNavigate } from 'react-router-dom'
+import { MessageSquare, AlertCircle, AlertTriangle } from 'lucide-react'
+import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote, useAcknowledgeShiftNoteFlags } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { formatWithTimeZone } from '@/lib/utils'
 import type { ShiftNoteDto } from '@/api/types'
+import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 
 const BODY_MAX_LENGTH = 1000
 
@@ -24,18 +27,73 @@ function CharCount({ length }: { length: number }) {
   )
 }
 
+export interface ShiftNotesSectionProps {
+  shiftId: string
+  /** NOTES-02: shift/participant context carried into the incident-report prefill hand-off when a flagged note's banner action is used — see ShiftNoteIncidentPrefillState. */
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+}
+
+/**
+ * NOTES-02 flag banner on one note: "This note mentions X. Consider filing an incident report."
+ * Non-blocking — a dismiss action (persisted server-side, see ShiftNote.FlagsAcknowledgedAt) and
+ * a "File incident report" action that reuses the INC-03 router-state prefill mechanism. Never
+ * auto-files anything; nothing is persisted until the worker/coordinator submits that form.
+ */
+function FlagBanner({
+  note, onFileIncident, onDismiss, dismissing,
+}: {
+  note: ShiftNoteDto
+  onFileIncident: () => void
+  onDismiss: () => void
+  dismissing: boolean
+}) {
+  const categories = note.flaggedCategories as ShiftNoteFlagCategory[]
+  return (
+    <div
+      role="status"
+      className="mt-2 flex flex-col gap-2 rounded-lg border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/60 p-3 text-sm text-[var(--color-on-warning-container)] sm:flex-row sm:items-start sm:justify-between"
+    >
+      <p className="flex items-start gap-1.5">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <span>This note mentions {formatFlaggedCategoryList(categories)}. Consider filing an incident report.</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
+        <button type="button" onClick={onDismiss} disabled={dismissing} className={`${ghostButtonClass} px-3`}>
+          {dismissing ? 'Dismissing…' : 'Dismiss'}
+        </button>
+        <button type="button" onClick={onFileIncident} className={`${primaryButtonClass} !bg-[var(--color-on-warning-container)]`}>
+          File incident report
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /**
  * NOTES-01 — a "Shift notes" section on the portal shift detail page: existing notes (author +
  * local time) plus an add-note form. Any of the caller's own notes on this shift can be edited
  * in place (author-only, no delete — see ShiftNote remarks on the backend). There is no shift-
  * completion event to gate this on (see PortalController remarks), so the form is always
  * available regardless of shift status.
+ *
+ * NOTES-02 — flagged, unacknowledged notes (see ShiftNoteDto.flaggedCategories/flagsAcknowledgedAt)
+ * render a non-blocking FlagBanner underneath them: dismiss (persisted server-side) or jump to a
+ * pre-filled incident report draft via the shared INC-03 prefill mechanism.
  */
-export function ShiftNotesSection({ shiftId }: { shiftId: string }) {
+export function ShiftNotesSection({
+  shiftId, participantId, participantName, serviceDate, startTime, endTime, endsNextDay,
+}: ShiftNotesSectionProps) {
   const { data: notes, isLoading, isError, refetch } = useShiftNotes(shiftId)
   const createNote = useCreateShiftNote(shiftId)
   const updateNote = useUpdateShiftNote(shiftId)
+  const acknowledgeFlags = useAcknowledgeShiftNoteFlags(shiftId)
   const { id: currentUserId } = usePermissions()
+  const navigate = useNavigate()
 
   const [body, setBody] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -73,6 +131,28 @@ export function ShiftNotesSection({ shiftId }: { shiftId: string }) {
     } catch {
       setEditError("Couldn't save your changes. Check your connection and try again.")
     }
+  }
+
+  /** NOTES-02 — reuses the INC-03 router-state prefill mechanism; nothing is persisted here, the destination form still has to be submitted. */
+  function goToIncident(note: ShiftNoteDto) {
+    const prefill: ShiftNoteIncidentPrefillState = {
+      source: 'shift-note',
+      shiftNoteId: note.id,
+      categories: note.flaggedCategories as ShiftNoteFlagCategory[],
+      participantId,
+      participantName,
+      noteBody: note.body,
+      serviceDate,
+      startTime,
+      endTime,
+      endsNextDay,
+      reportedByUserId: currentUserId,
+    }
+    navigate('/incidents/new', { state: prefill })
+  }
+
+  function dismissFlags(noteId: string) {
+    acknowledgeFlags.mutate(noteId)
   }
 
   return (
@@ -141,6 +221,14 @@ export function ShiftNotesSection({ shiftId }: { shiftId: string }) {
                     )}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap">{note.body}</p>
+                  {note.flaggedCategories.length > 0 && !note.flagsAcknowledgedAt && (
+                    <FlagBanner
+                      note={note}
+                      onFileIncident={() => goToIncident(note)}
+                      onDismiss={() => dismissFlags(note.id)}
+                      dismissing={acknowledgeFlags.isPending && acknowledgeFlags.variables === note.id}
+                    />
+                  )}
                 </>
               )}
             </li>

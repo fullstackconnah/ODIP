@@ -517,6 +517,8 @@ describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
       body: 'Quiet shift, no concerns.',
       createdAt: '2026-08-17T09:30:00Z',
       updatedAt: '2026-08-17T09:30:00Z',
+      flaggedCategories: [],
+      flagsAcknowledgedAt: null,
       ...overrides,
     }
   }
@@ -583,5 +585,42 @@ describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
 
     expect(screen.getByText('Third note.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show fewer notes' })).toBeInTheDocument()
+  })
+
+  it('NOTES-02: shows a category badge on a flagged note, but not on an unflagged one', () => {
+    mockUseShiftNotes.mockReturnValue({
+      data: [
+        makeNote({ id: 'note-1', body: 'She had a fall near the bathroom.', flaggedCategories: ['Falls'] }),
+        makeNote({ id: 'note-2', body: 'Quiet shift, no concerns.', flaggedCategories: [] }),
+      ],
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift() }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText('falls')).toBeInTheDocument()
+  })
+
+  it('NOTES-02: shows a joined badge for a note flagged in more than one category', () => {
+    mockUseShiftNotes.mockReturnValue({
+      data: [makeNote({ flaggedCategories: ['Falls', 'Medication'] })],
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift() }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText('falls and medication')).toBeInTheDocument()
   })
 })

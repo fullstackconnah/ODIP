@@ -23,9 +23,15 @@ import {
   suggestedIncidentSeverity,
   previewRpAuthorisation,
   buildRpIncidentDescriptionSkeleton,
+  isShiftNoteIncidentPrefillState,
+  buildShiftNoteIncidentTitleSkeleton,
+  buildShiftNoteIncidentDescriptionSkeleton,
+  buildShiftNoteIncidentDateTime,
+  suggestedIncidentTypeForShiftNote,
 } from '@/lib/incidentPrefill'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatDateAu } from '@/lib/utils'
+import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -115,6 +121,12 @@ export default function IncidentCreatePage() {
   // is submitted like any other.
   const marPrefill = !isEdit && isMarIncidentPrefillState(location.state) ? location.state : null
   const appliedMarPrefillRef = useRef(false)
+
+  // NOTES-02: same router-state prefill idiom, produced by the portal's ShiftNotesSection "file
+  // an incident report" banner action instead of the MAR flow. Mutually exclusive with marPrefill
+  // — only one producer ever sets location.state per navigation.
+  const shiftNotePrefill = !isEdit && isShiftNoteIncidentPrefillState(location.state) ? location.state : null
+  const appliedShiftNotePrefillRef = useRef(false)
 
   const { register, handleSubmit, reset, control, setValue, getValues, formState: { errors, isDirty } } = useForm<IncidentFormData>({
     resolver: incidentResolver,
@@ -249,6 +261,29 @@ export default function IncidentCreatePage() {
     })
   }, [marPrefill, reset])
 
+  // NOTES-02: same "apply once, on mount" guard as the MAR effect above — reportedByStaffId is
+  // deliberately left blank (unlike the MAR hand-off, the portal doesn't know which staff account
+  // is filing the eventual incident report; the worker/coordinator picks it on this form).
+  useEffect(() => {
+    if (!shiftNotePrefill || appliedShiftNotePrefillRef.current) return
+    appliedShiftNotePrefillRef.current = true
+    reset({
+      serviceType: 'None',
+      incidentType: suggestedIncidentTypeForShiftNote(shiftNotePrefill),
+      severity: 'Medium',
+      title: buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill),
+      description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
+      involvedParticipantId: shiftNotePrefill.participantId,
+      reportedByStaffId: shiftNotePrefill.reportedByUserId ?? '',
+      incidentDateTime: buildShiftNoteIncidentDateTime(shiftNotePrefill),
+      status: 'Draft',
+      qscReportingStatus: 'NotRequired',
+      wereEmergencyServicesCalled: false,
+      familyNotified: false,
+      supportCoordinatorNotified: false,
+    })
+  }, [shiftNotePrefill, reset])
+
   const onSubmit = async (data: IncidentFormData) => {
     const base: CreateIncidentDto = {
       serviceType: (data.serviceType || 'None') as CreateIncidentDto['serviceType'],
@@ -326,6 +361,17 @@ export default function IncidentCreatePage() {
             <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-sm text-[var(--color-foreground)]">
               <strong className="font-medium">Pre-filled from the medication record:</strong> {ADMIN_STATUS_LABELS[marPrefill.outcome]} — {marPrefill.medicationName} for {marPrefill.participantName}. Review and complete the details below — nothing is filed until you submit this report.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {shiftNotePrefill && (
+        <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-[var(--color-foreground)]">
+              <strong className="font-medium">Pre-filled from a flagged shift note:</strong> {shiftNotePrefill.participantName}'s shift note mentioned {formatFlaggedCategoryList(shiftNotePrefill.categories)}. Review and complete the details below — nothing is filed until you submit this report.
             </p>
           </div>
         </Card>

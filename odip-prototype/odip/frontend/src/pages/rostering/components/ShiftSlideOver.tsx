@@ -12,6 +12,7 @@ import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
 import { formatWithTimeZone } from '@/lib/utils'
+import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { FindingsList } from './FindingsList'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
@@ -361,9 +362,19 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               <ul className="space-y-2">
                 {visibleNotes.map(note => (
                   <li key={note.id} className="rounded-sm border border-border bg-card px-3 py-2 text-sm">
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
+                      </p>
+                      {/* NOTES-02: coordinator-facing read-only signal — the worker still owns
+                          dismissing/actioning the prompt on the portal; this is visibility only. */}
+                      {note.flaggedCategories.length > 0 && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-on-warning-container)]">
+                          <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                          {formatFlaggedCategoryList(note.flaggedCategories as ShiftNoteFlagCategory[])}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 whitespace-pre-wrap text-foreground">{note.body}</p>
                   </li>
                 ))}
