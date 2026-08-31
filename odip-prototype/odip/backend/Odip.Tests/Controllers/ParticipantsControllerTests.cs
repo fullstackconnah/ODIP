@@ -1243,6 +1243,126 @@ public class ParticipantsControllerTests
         Assert.IsType<CreatedAtActionResult>(result.Result);
     }
 
+    // ── INTAKE sub-wave A: the participant's own Phone/Email ─────────────
+
+    [Theory]
+    [InlineData("not a phone")]
+    [InlineData("abc123")]
+    [InlineData("123")]
+    public async Task Create_InvalidPhone_ReturnsBadRequest(string phone)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Phone = phone };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("phone", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("0400 000 000")]
+    [InlineData("+61 400 000 000")]
+    [InlineData("(07) 3123 4567")]
+    [InlineData("07 3123 4567")]
+    public async Task Create_AuTolerantPhoneFormats_Succeed(string phone)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Phone = phone };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("missing-at-sign.com")]
+    [InlineData("no-domain@")]
+    public async Task Create_InvalidEmail_ReturnsBadRequest(string email)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Email = email };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("email", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_PhoneAndEmailBlank_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithInvalidEmail_StillReturnsBadRequest()
+    {
+        // Format checks on whatever WAS provided are never relaxed for a draft — same doctrine
+        // as Create_DraftWithInvalidPostcode_StillReturnsBadRequest.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, Email = "not-an-email" };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("email", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_DraftWithBlankPhoneAndEmail_Succeeds()
+    {
+        // Absence of the new optional fields never blocks a draft — matches every other
+        // optional field's draft behaviour.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithPartiallyFilledKeyIdentifiers_Succeeds_PersistsPartialData()
+    {
+        // A draft may fill in only SOME of the Key Identifiers step's fields — the rest stay
+        // null, and nothing about that partial fill blocks the save.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto
+        {
+            FirstName = "Priya", IsDraft = true,
+            MedicareNumber = "2951 12345 1", HairColour = "Brown",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal("2951 12345 1", body.Data!.MedicareNumber);
+        Assert.Equal("Brown", body.Data.HairColour);
+        Assert.Null(body.Data.PensionCardNumber);
+        Assert.Null(body.Data.WeightKg);
+    }
+
     // ── INTAKE-08: draft saves ───────────────────────────────────────────
 
     [Fact]
