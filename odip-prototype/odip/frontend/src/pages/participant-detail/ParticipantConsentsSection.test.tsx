@@ -127,4 +127,34 @@ describe('ParticipantConsentsSection', () => {
       data: { granted: false, signedByName: null, signedDate: null },
     })
   })
+
+  it('the modal exposes a "Not recorded" third option, with a real accessible name on the radiogroup', async () => {
+    const user = userEvent.setup()
+    const data = unansweredConsents()
+    data[0] = makeConsent({ id: 'consent-1', consentType: 'PhotoVideo', granted: true, signedByName: 'Sophie Brown', signedDate: '2026-01-15' })
+    mockUseParticipantConsents.mockReturnValue({ data, isLoading: false })
+    mockUpsertMutateAsync.mockResolvedValue({ success: true, data: makeConsent({ granted: null }) })
+
+    render(<ParticipantConsentsSection participantId="participant-1" />)
+
+    const photoVideoRow = screen.getByText('Photo & Video (promotional use)').closest('div')!.parentElement!
+    await user.click(within(photoVideoRow).getByRole('button', { name: 'Edit' }))
+
+    const dialog = screen.getByRole('dialog')
+    // Proof, not a DOM-proximity guess — getByRole('radiogroup', { name }) only finds a match if
+    // ToggleGroup's ariaLabel is actually wired through (see ParticipantConsentsSection.tsx).
+    const grantedGroup = within(dialog).getByRole('radiogroup', { name: 'Granted' })
+
+    // An already-granted consent (with a signature) can be walked all the way back to
+    // unanswered — the whole point of the third option, not just a Yes<->No toggle.
+    await user.click(within(grantedGroup).getByRole('radio', { name: 'Not recorded' }))
+    expect(within(dialog).queryByLabelText('Signed by')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Save consent' }))
+
+    expect(mockUpsertMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      consentType: 'PhotoVideo',
+      data: { granted: null, signedByName: null, signedDate: null },
+    })
+  })
 })

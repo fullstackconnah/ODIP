@@ -424,6 +424,17 @@ function triStateToBool(value: string | undefined): boolean | null {
  * ToggleGroup's own "no match" behaviour — exactly the "not yet answered" visual this tri-state
  * needs, with no third explicit button.
  */
+// Three explicit options, not two: an honest bool? control must be able to go back to "not
+// recorded" after being answered, not just toggle between Yes and No — on a compliance record
+// (consents especially), "I don't know what to put so I'll leave it on whatever it last said" is
+// a real data-entry-error trap. Shared by every tri-state field so the affordance is consistent
+// everywhere it appears (review-round polish).
+const YES_NO_UNANSWERED_OPTIONS = [
+  { key: 'true', label: 'Yes' },
+  { key: 'false', label: 'No' },
+  { key: '', label: 'Not recorded' },
+]
+
 function YesNoToggleField({ control, name, label, hint }: {
   control: Control<ParticipantFormData>
   name: FieldPath<ParticipantFormData>
@@ -437,9 +448,13 @@ function YesNoToggleField({ control, name, label, hint }: {
         name={name}
         render={({ field }) => (
           <ToggleGroup
-            options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }]}
+            options={YES_NO_UNANSWERED_OPTIONS}
             value={(field.value as string) ?? ''}
             onChange={field.onChange}
+            // FormField's cloneElement labelling can't reach through this Controller (see
+            // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
+            // the radiogroup has a real accessible name instead of none at all.
+            ariaLabel={label}
           />
         )}
       />
@@ -1280,12 +1295,12 @@ export default function ParticipantCreatePage() {
       step: 4,
       rows: [
         { label: 'CALD', value: yesNoUnknown(watchedValues.isCald) },
-        { label: 'LGBTQI', value: yesNoUnknown(watchedValues.isLgbtqi) },
+        { label: 'LGBTIQA+', value: yesNoUnknown(watchedValues.isLgbtqi) },
         { label: 'Family / Community', value: yesNoUnknown(watchedValues.isFamilyCommunity) },
         { label: 'Aboriginal and/or Torres Strait Islander', value: yesNoUnknown(watchedValues.isAboriginalOrTorresStraitIslander) },
         { label: 'Received: Rights and Responsibilities', value: yesNoUnknown(watchedValues.receivedRightsAndResponsibilitiesInfo) },
         { label: 'Received: Privacy and Confidentiality', value: yesNoUnknown(watchedValues.receivedPrivacyAndConfidentialityInfo) },
-        { label: 'Received: Feedback Information', value: yesNoUnknown(watchedValues.receivedFeedbackInfo) },
+        { label: 'Received: Feedback Information and Form', value: yesNoUnknown(watchedValues.receivedFeedbackInfo) },
         { label: 'Received: Being Safe Information', value: yesNoUnknown(watchedValues.receivedBeingSafeInfo) },
         { label: 'Received: Advocacy Information', value: yesNoUnknown(watchedValues.receivedAdvocacyInfo) },
         { label: 'Personal Interests', value: watchedValues.personalInterests || '—' },
@@ -1836,6 +1851,11 @@ export default function ParticipantCreatePage() {
                                   ]}
                                   value={row?.personMode ?? 'existing'}
                                   onChange={mode => setValue(`contactRoles.${index}.personMode` as const, mode as 'existing' | 'new', { shouldDirty: true })}
+                                  // Same pre-existing FormField+ToggleGroup labelling gap as
+                                  // YesNoToggleField (see ToggleGroup.tsx's ariaLabel doc) — a
+                                  // bare ToggleGroup doesn't read aria-labelledby either, so it
+                                  // needs its own accessible name passed through directly too.
+                                  ariaLabel="Person"
                                 />
                               </FormField>
 
@@ -1935,7 +1955,7 @@ export default function ParticipantCreatePage() {
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Cultural Background" className="space-y-4">
               <YesNoToggleField control={control} name="isCald" label="Culturally and Linguistically Diverse (CALD)" />
-              <YesNoToggleField control={control} name="isLgbtqi" label="LGBTQI" />
+              <YesNoToggleField control={control} name="isLgbtqi" label="LGBTIQA+" />
               <YesNoToggleField control={control} name="isFamilyCommunity" label="Family / Community" />
               <YesNoToggleField control={control} name="isAboriginalOrTorresStraitIslander" label="Aboriginal and/or Torres Strait Islander" />
             </Card>
@@ -1969,10 +1989,12 @@ export default function ParticipantCreatePage() {
                   const granted = watchedValues.consents?.[index]?.granted
                   return (
                     <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
-                      {/* Reuses the same FormField-labelled YesNoToggleField as the cultural/rights
-                          flags above — gives this row a real accessible name (FormField's
-                          id/aria-labelledby wiring for a custom Controller clone) rather than a
-                          bare unlabelled ToggleGroup next to a plain <span>. */}
+                      {/* Reuses the same YesNoToggleField as the cultural/rights flags above —
+                          gives this row a real accessible name via ToggleGroup's ariaLabel (see
+                          YesNoToggleField's own comment: FormField's cloneElement can't reach
+                          through the Controller wrapper, so ariaLabel is what actually carries
+                          the name here) rather than a bare unlabelled ToggleGroup next to a plain
+                          <span>. */}
                       <YesNoToggleField control={control} name={`consents.${index}.granted` as FieldPath<ParticipantFormData>} label={CONSENT_TYPE_LABELS[type as ConsentType]} />
                       {/* Local conditional render, not the INTAKE-07 conditionalFields engine: that
                           engine's ConditionalFieldDef contract targets named whole-form fields, not

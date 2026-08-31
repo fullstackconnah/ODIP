@@ -1577,18 +1577,12 @@ describe('ParticipantCreatePage — INTAKE-08 fix round 1 (Finding 1a): Save-as-
   })
 })
 
-// Scopes to a single YesNoToggleField's rendered radiogroup by its FormField label text.
-// ToggleGroup doesn't read/forward `aria-labelledby` (a documented, pre-existing FormField
-// limitation for any bare Controller-wrapped custom child — see FormField.tsx's own comment,
-// and the identical gap on the existing Contacts step's "Person: existing/new" ToggleGroup), so
-// the radiogroup itself carries no accessible name to query by. FormField's DOM shape puts the
-// <label> and the control as direct siblings under one wrapping <div> — walking up from the
-// label text to that <div> reliably scopes to just this one field's Yes/No buttons, needed here
-// because the Cultural & Consent step renders 16 separate Yes/No ToggleGroups on one page.
-function toggleGroupFor(labelText: string): HTMLElement {
-  const label = screen.getByText(labelText)
-  return label.closest('div') as HTMLElement
-}
+// Review-round polish: YesNoToggleField now passes ariaLabel through to ToggleGroup (see
+// ToggleGroup.tsx's ariaLabel doc), so each of the Cultural & Consent step's 16 Yes/No/Not
+// recorded radiogroups carries a real accessible name. Every scoped query below is
+// `screen.getByRole('radiogroup', { name: ... })` directly (no DOM-proximity helper) — proof the
+// name genuinely exists: if the wiring were broken, every one of these would fail to find
+// anything rather than silently falling back to some other element.
 
 describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () => {
   async function advanceToCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
@@ -1642,8 +1636,8 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     renderCreatePage()
     await advanceToCulturalConsent(user)
 
-    await user.click(within(toggleGroupFor('Culturally and Linguistically Diverse (CALD)')).getByRole('radio', { name: 'Yes' }))
-    await user.click(within(toggleGroupFor('LGBTQI')).getByRole('radio', { name: 'No' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'LGBTIQA+' })).getByRole('radio', { name: 'No' }))
 
     await finishFromCulturalConsent(user)
 
@@ -1655,12 +1649,51 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     expect(payload.isFamilyCommunity).toBeNull()
   })
 
+  it('a cultural flag answered Yes can be cleared back to "not recorded" (Not just Yes/No toggling)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    const caldGroup = screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })
+    await user.click(within(caldGroup).getByRole('radio', { name: 'Yes' }))
+    expect(within(caldGroup).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    // A third, explicit "Not recorded" option — not just Yes/No — is the whole point: an
+    // already-answered compliance flag must be recoverable back to "unanswered", not stuck
+    // toggling between Yes and No forever once touched.
+    await user.click(within(caldGroup).getByRole('radio', { name: 'Not recorded' }))
+    expect(within(caldGroup).getByRole('radio', { name: 'Not recorded' })).toBeChecked()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isCald).toBeNull()
+  })
+
+  it('a consent answered Yes with a signature can be cleared back to "not recorded", dropping the signature too', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'Not recorded' }))
+
+    expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const alcohol = payload.consents.find((c: { consentType: string }) => c.consentType === 'Alcohol')
+    expect(alcohol).toMatchObject({ granted: null, signedByName: null, signedDate: null })
+  })
+
   it('a consent answered No does not reveal Signed by/Date signed, and submits granted=false with no signature', async () => {
     const user = userEvent.setup()
     renderCreatePage()
     await advanceToCulturalConsent(user)
 
-    await user.click(within(toggleGroupFor('Alcohol')).getByRole('radio', { name: 'No' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'No' }))
 
     expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
 
@@ -1676,7 +1709,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     renderCreatePage()
     await advanceToCulturalConsent(user)
 
-    await user.click(within(toggleGroupFor('Privacy (collection & use of information)')).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Privacy (collection & use of information)' })).getByRole('radio', { name: 'Yes' }))
 
     await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
     await user.type(screen.getByLabelText('Date signed'), '2026-02-01')
@@ -1693,9 +1726,9 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     renderCreatePage()
     await advanceToCulturalConsent(user)
 
-    await user.click(within(toggleGroupFor('Terms & Conditions')).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Terms & Conditions' })).getByRole('radio', { name: 'Yes' }))
     await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
-    await user.click(within(toggleGroupFor('Terms & Conditions')).getByRole('radio', { name: 'No' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Terms & Conditions' })).getByRole('radio', { name: 'No' }))
 
     expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
 
@@ -1711,7 +1744,7 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     renderCreatePage()
     await advanceToCulturalConsent(user)
 
-    await user.click(within(toggleGroupFor('Aboriginal and/or Torres Strait Islander')).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Aboriginal and/or Torres Strait Islander' })).getByRole('radio', { name: 'Yes' }))
     await user.type(screen.getByLabelText('Personal Interests'), 'Fishing, live music.')
 
     await user.click(screen.getByRole('button', { name: /save as draft/i }))
@@ -1758,10 +1791,10 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
 
     await user.click(within(stepNav()).getByRole('button', { name: /cultural & consent/i }))
 
-    expect(within(toggleGroupFor('Culturally and Linguistically Diverse (CALD)')).getByRole('radio', { name: 'Yes' })).toBeChecked()
-    expect(within(toggleGroupFor('LGBTQI')).getByRole('radio', { name: 'No' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'LGBTIQA+' })).getByRole('radio', { name: 'No' })).toBeChecked()
     expect(screen.getByLabelText('Personal Interests')).toHaveValue('Painting, live music.')
-    expect(within(toggleGroupFor('Photo & Video (promotional use)')).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'Photo & Video (promotional use)' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
     expect(screen.getByDisplayValue('Sophie Brown')).toBeInTheDocument()
 
     await user.click(within(stepNav()).getByRole('button', { name: /review/i }))

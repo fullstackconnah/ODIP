@@ -181,8 +181,8 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
     notes: 'NEW (sub-wave B). §4.5: ALL of CALD/LGBTIQA+/Family-Community/ATSI + info-received are NEW — "the clearest one-to-one duplicate in the whole set" per §2, since the Cultural table is IDENTICAL wording/layout on both the Intake coversheet and the Participant Profile.',
   },
   {
-    field: 'isLgbtqi', label: 'LGBTQI', sources: ['shared'], dictionaryId: 'CUL-*',
-    notes: 'NEW (sub-wave B). Source forms label this checkbox "LGBTIQA+" — named isLgbtqi here per this PR\'s brief; flagged, not silently reconciled (see this PR\'s report).',
+    field: 'isLgbtqi', label: 'LGBTIQA+', sources: ['shared'], dictionaryId: 'CUL-*',
+    notes: 'NEW (sub-wave B). Displayed label matches the source forms\' own wording ("LGBTIQA+") per review-round polish; the underlying field/column name stays isLgbtqi (this PR\'s original brief) rather than being renamed to match — a display-only reconciliation, not a schema one.',
   },
   { field: 'isFamilyCommunity', label: 'Family / Community', sources: ['shared'], dictionaryId: 'CUL-*', notes: 'NEW (sub-wave B).' },
   {

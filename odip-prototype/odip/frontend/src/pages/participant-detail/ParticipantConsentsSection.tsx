@@ -176,10 +176,17 @@ export default function ParticipantConsentsSection({ participantId }: { particip
             </div>
           )}
           <FormField label="Granted">
+            {/* Three options, not two: this is a bool? control (Granted is a tri-state), so it
+                must be able to go back to "not recorded" after being answered — see
+                YES_NO_UNANSWERED_OPTIONS' doc comment on the wizard side for the full reasoning.
+                Not Controller-wrapped here (form.granted is plain useState, not react-hook-form),
+                but the same "bare ToggleGroup doesn't read aria-labelledby" gap still applies —
+                see ToggleGroup.tsx's ariaLabel doc — so it still needs ariaLabel passed directly. */}
             <ToggleGroup
-              options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }]}
+              options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }, { key: '', label: 'Not recorded' }]}
               value={form.granted}
-              onChange={(v) => setForm((f) => ({ ...f, granted: v as 'true' | 'false' }))}
+              onChange={(v) => setForm((f) => ({ ...f, granted: v as 'true' | 'false' | '' }))}
+              ariaLabel="Granted"
             />
           </FormField>
           {form.granted === 'true' && (
