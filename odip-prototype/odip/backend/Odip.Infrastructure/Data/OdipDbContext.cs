@@ -932,6 +932,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.RestrictivePracticeAuthorisationRef).HasMaxLength(200);
             entity.Property(e => e.PrescriberName).HasMaxLength(200);
             entity.Property(e => e.PharmacyName).HasMaxLength(200);
+            entity.Property(e => e.PharmacyPhone).HasMaxLength(30);
             entity.Property(e => e.ConsentGivenBy).HasMaxLength(200);
             entity.Property(e => e.StorageRequirements).HasMaxLength(500);
             entity.Property(e => e.Notes).HasMaxLength(2000);

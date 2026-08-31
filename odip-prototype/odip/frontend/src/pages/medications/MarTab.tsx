@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, CalendarClock, ShieldAlert } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
+import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MarEntryDto, MarPrnDto } from '@/api/types/medications'
 
@@ -67,6 +68,9 @@ export default function MarTab() {
   const [amendingSlot, setAmendingSlot] = useState<MarEntryDto | null>(null)
   const [outcomeFor, setOutcomeFor] = useState<MarPrnDto | null>(null)
   const [outcomeText, setOutcomeText] = useState('')
+  // MED-01: lets a coordinator/support worker review the missed-medication guidance calmly,
+  // outside the moment it's triggered by a MAR record — not tied to any specific medication.
+  const [showGuidance, setShowGuidance] = useState(false)
 
   const groups = useMemo(() => {
     const entries = mar?.entries ?? []
@@ -128,6 +132,14 @@ export default function MarTab() {
           aria-label="Select date"
         />
         <span className="text-sm text-[var(--color-muted-foreground)]">{formatDateAu(date)}</span>
+        <button
+          type="button"
+          onClick={() => setShowGuidance(true)}
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-colors"
+        >
+          <Info className="w-4 h-4" aria-hidden="true" />
+          Missed medication — what to do
+        </button>
         <div className="ml-auto w-full sm:w-64">
           <Dropdown
             variant="form"
@@ -295,6 +307,9 @@ export default function MarTab() {
           isHighRisk={recordingSlot.isHighRisk}
           isPrn={false}
           scheduledAt={recordingSlot.scheduledAt}
+          packaging={recordingSlot.packaging}
+          pharmacyName={recordingSlot.pharmacyName}
+          pharmacyPhone={recordingSlot.pharmacyPhone}
         />
       )}
 
@@ -309,6 +324,9 @@ export default function MarTab() {
           isHighRisk={amendingSlot.isHighRisk}
           isPrn={false}
           scheduledAt={amendingSlot.scheduledAt}
+          packaging={amendingSlot.packaging}
+          pharmacyName={amendingSlot.pharmacyName}
+          pharmacyPhone={amendingSlot.pharmacyPhone}
           existingAdministration={amendingSlot.administration}
         />
       )}
@@ -323,8 +341,29 @@ export default function MarTab() {
           doseDescription={recordingPrn.doseDescription}
           isHighRisk={false}
           isPrn
+          packaging={recordingPrn.packaging}
+          pharmacyName={recordingPrn.pharmacyName}
+          pharmacyPhone={recordingPrn.pharmacyPhone}
         />
       )}
+
+      <Modal
+        open={showGuidance}
+        onClose={() => setShowGuidance(false)}
+        title="Missed medication — what to do"
+        size="lg"
+        footer={
+          <button
+            type="button"
+            onClick={() => setShowGuidance(false)}
+            className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
+          >
+            Close
+          </button>
+        }
+      >
+        <MissedMedicationGuidance />
+      </Modal>
 
       <Modal
         open={!!outcomeFor}

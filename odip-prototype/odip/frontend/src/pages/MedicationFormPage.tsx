@@ -61,6 +61,7 @@ const medicationSchema = z.object({
   supportLevel: z.string().min(1),
   prescriberName: z.string().optional(),
   pharmacyName: z.string().optional(),
+  pharmacyPhone: z.string().optional(),
   consentObtained: z.boolean().optional(),
   consentGivenBy: z.string().optional(),
   consentDate: z.string().optional(),
@@ -193,6 +194,7 @@ export default function MedicationFormPage() {
         supportLevel: existing.supportLevel ?? 'SelfAdministered',
         prescriberName: existing.prescriberName ?? '',
         pharmacyName: existing.pharmacyName ?? '',
+        pharmacyPhone: existing.pharmacyPhone ?? '',
         consentObtained: existing.consentObtained ?? false,
         consentGivenBy: existing.consentGivenBy ?? '',
         consentDate: existing.consentDate ? existing.consentDate.split('T')[0] : '',
@@ -235,6 +237,7 @@ export default function MedicationFormPage() {
       supportLevel: data.supportLevel as CreateMedicationDto['supportLevel'],
       prescriberName: data.prescriberName || undefined,
       pharmacyName: data.pharmacyName || undefined,
+      pharmacyPhone: data.pharmacyPhone || undefined,
       consentObtained: data.consentObtained ?? false,
       consentGivenBy: data.consentObtained ? (data.consentGivenBy || undefined) : undefined,
       consentDate: data.consentObtained ? (data.consentDate || undefined) : undefined,
@@ -603,12 +606,15 @@ export default function MedicationFormPage() {
 
         {/* Prescriber & supply */}
         <Card title="Prescriber & supply" className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-3 gap-4">
             <FormField label="Prescriber Name">
               <input {...register('prescriberName')} placeholder="e.g. Dr Smith" />
             </FormField>
             <FormField label="Pharmacy Name">
               <input {...register('pharmacyName')} placeholder="e.g. Chemist Warehouse" />
+            </FormField>
+            <FormField label="Pharmacy Phone" hint="Shown as a tap-to-call number in the missed-medication guidance.">
+              <input type="tel" {...register('pharmacyPhone')} placeholder="e.g. 03 9123 4567" />
             </FormField>
           </div>
           <FormField label="Storage Requirements">

@@ -156,6 +156,90 @@ public class MedicationsControllerTests
         Assert.Equal(participant.Id, saved.ParticipantId);
     }
 
+    // ── MED-01: PharmacyPhone round-trip ────────────────────────────────
+
+    [Fact]
+    public async Task Create_WithPharmacyPhone_RoundTripsInDetail()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new MedicationsController(db, tenant);
+
+        var dto = RegularDto() with { PharmacyName = "Chemist Warehouse", PharmacyPhone = "03 9123 4567" };
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value);
+        Assert.Equal("03 9123 4567", body.Data!.PharmacyPhone);
+
+        var saved = await db.ParticipantMedications.SingleAsync();
+        Assert.Equal("03 9123 4567", saved.PharmacyPhone);
+    }
+
+    [Fact]
+    public async Task Update_ChangesPharmacyPhone_PersistsNewValue()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var createController = new MedicationsController(db, tenant);
+        var created = await createController.Create(participant.Id, RegularDto() with { PharmacyPhone = "03 9000 0000" }, CancellationToken.None);
+        var id = Assert.IsType<ApiResponse<MedicationDetailDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updateController = new MedicationsController(db, tenant);
+        var updateDto = new UpdateMedicationDto
+        {
+            Name = "Levetiracetam", Strength = "500mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+            DoseDescription = "1 tablet (500mg)", Type = MedicationType.Regular, TimesOfDay = "08:00,20:00",
+            DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            Status = MedicationStatus.Active, PharmacyPhone = "03 9111 1111",
+        };
+        var result = await updateController.Update(id, updateDto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value);
+        Assert.Equal("03 9111 1111", body.Data!.PharmacyPhone);
+    }
+
+    [Fact]
+    public async Task Create_WithoutPharmacyPhone_DetailPharmacyPhoneIsNull()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new MedicationsController(db, tenant);
+
+        var result = await controller.Create(participant.Id, RegularDto(), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(body.Data!.PharmacyPhone);
+    }
+
+    [Fact]
+    public async Task GetMar_ExposesPharmacyNameAndPhoneOnEntries()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = today.ToDateTime(TimeOnly.MinValue).AddMonths(-1), ConsentObtained = true,
+            PharmacyName = "Chemist Warehouse", PharmacyPhone = "03 9123 4567",
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var entry = Assert.Single(body.Data!.Entries);
+        Assert.Equal("Chemist Warehouse", entry.PharmacyName);
+        Assert.Equal("03 9123 4567", entry.PharmacyPhone);
+    }
+
     // ── Compliance flags ─────────────────────────────────────────────────
 
     [Fact]

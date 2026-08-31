@@ -13,7 +13,8 @@ import { getClientTimeZone } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { isIncidentTriggerOutcome } from '@/lib/incidentPrefill'
 import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
-import type { MedicationAdministrationStatus } from '@/api/types/enums'
+import { MissedMedicationGuidance } from './MissedMedicationGuidance'
+import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
 
 export type RecordAdministrationModalProps = {
@@ -28,6 +29,11 @@ export type RecordAdministrationModalProps = {
   isPrn: boolean
   scheduledAt?: string | null
   tripInstanceId?: string | null
+  /** MED-01: threaded through to the missed-medication guidance's packaging-check step and
+   * "call the pharmacy on ..." line when a trigger outcome is recorded. */
+  packaging?: PackagingType
+  pharmacyName?: string | null
+  pharmacyPhone?: string | null
   /** When set, the modal amends this existing administration (PUT) instead of recording a new one (POST). */
   existingAdministration?: AdministrationDto
 }
@@ -74,7 +80,8 @@ function extractErrorMessage(err: unknown): string {
 
 export function RecordAdministrationModal({
   open, onClose, onSuccess, medicationId, medicationName, strength, doseDescription,
-  isHighRisk, isPrn, scheduledAt, tripInstanceId, existingAdministration,
+  isHighRisk, isPrn, scheduledAt, tripInstanceId, packaging, pharmacyName, pharmacyPhone,
+  existingAdministration,
 }: RecordAdministrationModalProps) {
   const isAmend = !!existingAdministration
   const navigate = useNavigate()
@@ -310,7 +317,7 @@ export function RecordAdministrationModal({
         title={savedTriggerAdministration
           ? 'Report as incident?'
           : `${isAmend ? 'Amend administration' : 'Record administration'} — ${medicationName}${strength ? ` ${strength}` : ''}`}
-        size="md"
+        size={savedTriggerAdministration ? 'lg' : 'md'}
         footer={
           savedTriggerAdministration ? (
             canCreateIncidents ? (
@@ -367,18 +374,34 @@ export function RecordAdministrationModal({
           // their coordinator instead of getting a dead-end "navigate" button (see permissions.ts
           // canCreateIncidents — every role that can record administrations currently also has
           // incident access, but this stays honest if that ever changes).
-          <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--color-error-container)]/40 border border-[var(--color-error-container)]">
-            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-[var(--color-on-error-container)]" aria-hidden="true" />
-            <div className="space-y-1.5 text-sm text-[var(--color-on-error-container)]">
-              <p className="font-medium">
-                {ADMIN_STATUS_LABELS[savedTriggerAdministration.status]} recorded for {savedTriggerAdministration.participantName} — {savedTriggerAdministration.medicationName}.
-              </p>
-              <p>
-                {canCreateIncidents
-                  ? 'This is incident-reportable. Report it now with the details already filled in, or come back to it later — nothing is filed until you submit the incident form.'
-                  : "This is incident-reportable. Let your coordinator know so they can file an incident report — support workers don't file incident reports directly."}
-              </p>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--color-error-container)]/40 border border-[var(--color-error-container)]">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-[var(--color-on-error-container)]" aria-hidden="true" />
+              <div className="space-y-1.5 text-sm text-[var(--color-on-error-container)]">
+                <p className="font-medium">
+                  {ADMIN_STATUS_LABELS[savedTriggerAdministration.status]} recorded for {savedTriggerAdministration.participantName} — {savedTriggerAdministration.medicationName}.
+                </p>
+                <p>
+                  {canCreateIncidents
+                    ? 'This is incident-reportable. Report it now with the details already filled in, or come back to it later — nothing is filed until you submit the incident form.'
+                    : "This is incident-reportable. Let your coordinator know so they can file an incident report — support workers don't file incident reports directly."}
+                </p>
+              </div>
             </div>
+
+            {/* MED-01: missed-medication guidance surfaced alongside the incident prompt — manager
+                contact first, then the escalation list. Not shown for Administered (this block only
+                ever renders for a trigger outcome — see isIncidentTriggerOutcome above). */}
+            <MissedMedicationGuidance
+              event={{
+                outcome: savedTriggerAdministration.status,
+                participantName: savedTriggerAdministration.participantName,
+                medicationName: savedTriggerAdministration.medicationName,
+                packaging,
+                pharmacyName,
+                pharmacyPhone,
+              }}
+            />
           </div>
         ) : (
         <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
