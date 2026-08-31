@@ -62,6 +62,16 @@ function stepNav() {
   return screen.getByRole('navigation', { name: /intake wizard steps/i })
 }
 
+// Hardens every multi-step traversal helper below: on a slow CI machine a Next click can be
+// processed while async zod validation is still settling, silently dropping one step transition
+// so the helper's remaining clicks land on the wrong step. Awaiting the step pill's aria-current
+// (the same idiom the wizard-navigation tests above already assert steps by) after each Next
+// click makes a dropped transition fail loudly at the exact step it dropped, instead of surfacing
+// as a confusing assertion failure many clicks later.
+async function expectStep(label: string | RegExp) {
+  await within(stepNav()).findByRole('button', { name: label, current: 'step' })
+}
+
 describe('ParticipantCreatePage wizard navigation', () => {
   it('blocks Next on the Identity step until required fields are filled, then advances', async () => {
     const user = userEvent.setup()
@@ -179,18 +189,28 @@ describe('ParticipantCreatePage Review step', () => {
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
 
     await user.type(screen.getByLabelText('NDIS Number'), '431234567')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await expectStep(/key identifiers/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await expectStep(/contacts/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await expectStep(/cultural & consent/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+    await expectStep(/support needs & mobility/i)
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await expectStep(/medical/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await expectStep(/review/i)
   }
 
   it('shows a read-only summary reflecting entered values, and Edit jumps back to that step', async () => {
@@ -453,6 +473,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
   }
 
   it('defaults to Ndis: shows the NDIS plan fields, hides Funding Organisation', async () => {
@@ -536,6 +557,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
     await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
     await user.type(screen.getByLabelText(/Funding Organisation/i), text)
   }
@@ -990,18 +1012,28 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('First Name *'), 'Jamie')
   await user.type(screen.getByLabelText('Last Name *'), 'Smith')
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  await expectStep(/ndis & funding/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+  await expectStep(/key identifiers/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+  await expectStep(/contacts/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+  await expectStep(/cultural & consent/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+  await expectStep(/support needs & mobility/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+  await expectStep(/medical/i)
 }
 
 async function finishWizard(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+  await expectStep(/behaviour & communication/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+  await expectStep(/daily living/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+  await expectStep(/risks & hazards/i)
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+  await expectStep(/review/i)
   await user.click(screen.getByRole('button', { name: /create participant/i }))
 }
 
@@ -1190,8 +1222,11 @@ describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () =>
   async function advanceToRisks(user: ReturnType<typeof userEvent.setup>) {
     await advanceToMedical(user)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
   }
 
   it('adds a row, fills it in, and submits it as part of the create payload', async () => {
@@ -1289,18 +1324,28 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await expectStep(/key identifiers/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await expectStep(/contacts/i)
   }
 
   async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await expectStep(/cultural & consent/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+    await expectStep(/support needs & mobility/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await expectStep(/medical/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await expectStep(/review/i)
     await user.click(screen.getByRole('button', { name: /create participant/i }))
   }
 
@@ -1710,18 +1755,28 @@ describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () =
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await expectStep(/key identifiers/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await expectStep(/contacts/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await expectStep(/cultural & consent/i)
   }
 
   async function finishFromCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+    await expectStep(/support needs & mobility/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await expectStep(/medical/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await expectStep(/review/i)
     await user.click(screen.getByRole('button', { name: /create participant/i }))
   }
 
@@ -2233,13 +2288,17 @@ describe('ParticipantCreatePage — INTAKE sub-wave C2: Daily Living (ADL grid, 
   async function advanceToDailyLiving(user: ReturnType<typeof userEvent.setup>) {
     await advanceToMedical(user)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
   }
 
   /** Submits from the Daily Living step onward — NOT finishWizard, which assumes it starts on Medical. */
   async function finishFromDailyLiving(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await expectStep(/review/i)
     await user.click(screen.getByRole('button', { name: /create participant/i }))
   }
 

@@ -27,5 +27,10 @@ export default defineConfig({
     // — every test file still imports describe/it/expect/vi explicitly rather than relying on globals.
     globals: true,
     css: false,
+    // The 5000ms default is unrealistic for the ParticipantCreatePage wizard's full 11-step
+    // traversal tests on a slow CI builder (the Docker image build's `npm test` gate) — bump
+    // both so a legitimately slow render/validation cycle doesn't get flagged as a hang.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 })
