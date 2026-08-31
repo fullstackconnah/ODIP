@@ -65,20 +65,20 @@ owner decision (collected under Open Flags at the end).
 
 ### B. Participant Intake & Profile (wizard structure)
 
-- [ ] **INTAKE-01 — Wizard driven by Intake Form + Participant Profile.** Rework the
+- [x] **INTAKE-01 — Wizard driven by Intake Form + Participant Profile.** Rework the
   multi-step participant wizard so its data model comes from two defined source
   documents: the Intake Form (initial data captured at intake) and the Participant
   Profile (deeper service-related information). Both forms should trace back to the
   Master Data Dictionary via the field registry/forms engine.
-- [ ] **INTAKE-02 — Split the participant form into Intake vs Profile.** Split the
+- [x] **INTAKE-02 — Split the participant form into Intake vs Profile.** Split the
   single participant form into the two documents above, mapping which fields are shared
   and which are required by each, based on the actual source forms. Includes ensuring
   users have access to both. Feeds DOC-01 — the split defines what each PDF contains.
-- [ ] **INTAKE-03 — Service-specific fields injected inline.** When services are
+- [x] **INTAKE-03 — Service-specific fields injected inline.** When services are
   selected, each pulls in its service-specific questions — not as a new tab/step per
   service, but as extra fields appearing inline within the relevant existing wizard
   tabs.
-- [ ] **INTAKE-04 — De-duplicate overlapping service fields.** Where two selected
+- [x] **INTAKE-04 — De-duplicate overlapping service fields.** Where two selected
   services ask for the same information, the field appears once and satisfies both — a
   field-level identity rule, a natural fit for the field-registry engine (same
   dictionary field referenced by multiple service forms).
