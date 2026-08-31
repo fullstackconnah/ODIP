@@ -4,7 +4,7 @@ import { useForm, useFieldArray, useWatch, Controller, type Resolver, type Field
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
-import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
+import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
@@ -12,8 +12,9 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType } from '@/api/types/enums'
+import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
   GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams,
@@ -108,6 +109,22 @@ const baseParticipantSchema = z.object({
     atRiskParty: z.string().min(1),
     description: z.string().min(1, 'Description is required'),
     mitigationNotes: z.string().optional(),
+  })).optional(),
+  // CONTACT-02. Repeatable contact-role rows — create-mode only (same shape/reasoning as
+  // riskEntries above): rows entered here are created transactionally with the participant
+  // (CreateParticipantDto.contactRoles, via buildPayload's mapping to the full DTO shape below).
+  // Edit-mode instead manages contacts via the nested CRUD (the detail page's Contacts tab), so
+  // this field is never populated from `existing` on reset. Deliberately a lean field set — the
+  // richer per-role-type fields (guardian order scope, nominee scope, etc.) are only editable
+  // from the Contacts tab after the participant is saved.
+  contactRoles: z.array(z.object({
+    personMode: z.enum(['existing', 'new']),
+    personId: z.string().optional(),
+    newPersonFirstName: z.string().optional(),
+    newPersonLastName: z.string().optional(),
+    roleType: z.string().min(1, 'Role type is required'),
+    relationshipToParticipant: z.string().optional(),
+    isPrimary: z.boolean().optional(),
   })).optional(),
 })
 
@@ -223,6 +240,23 @@ function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx) {
   }
 }
 
+// CONTACT-02/03: each contact-role row needs either an existing person selected or a new
+// person's name typed — same standalone-function pattern as the refines above, but per-row
+// (array index in the issue path) rather than a single top-level field, mirroring how
+// riskEntries' row-level errors are handled (see setPathError's doc below).
+type ContactRoleRowFields = { personMode?: 'existing' | 'new'; personId?: string; newPersonFirstName?: string; newPersonLastName?: string }
+type ContactRolesFields = { contactRoles?: ContactRoleRowFields[] }
+function contactRolesRefine(data: ContactRolesFields, ctx: z.RefinementCtx) {
+  data.contactRoles?.forEach((row, index) => {
+    if (row.personMode === 'existing' && !row.personId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'personId'], message: 'Select a person.' })
+    }
+    if (row.personMode === 'new' && !row.newPersonFirstName?.trim() && !row.newPersonLastName?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'newPersonFirstName'], message: "Provide the new person's name." })
+    }
+  })
+}
+
 const participantSchema = baseParticipantSchema
   .superRefine(equipmentRefine)
   .superRefine(genderRefine)
@@ -230,6 +264,7 @@ const participantSchema = baseParticipantSchema
   .superRefine(livingArrangementRefine)
   .superRefine(addressPostcodeRefine)
   .superRefine(diagnosisOtherRefine)
+  .superRefine(contactRolesRefine)
 
 // Sets a react-hook-form-shaped error at an arbitrary zod issue path (e.g.
 // ['riskEntries', 0, 'description']), building the intermediate array/object nodes as it goes —
@@ -293,6 +328,10 @@ const STEP_IDENTITY_FIELDS = [
   'livingArrangementNotes',
 ] as const
 const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingSource', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
+// CONTACT-02: the Contacts step sits immediately after NDIS & Funding — available role types
+// depend on funding/plan-type answers (and, for Plan Nominee, the participant's date of birth
+// captured on the Identity step), so it must come after both.
+const STEP_CONTACTS_FIELDS = ['contactRoles'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -315,8 +354,11 @@ type WizardStep = {
 }
 
 const WIZARD_STEPS: WizardStep[] = [
-  { key: 'identity', label: 'Identity & Contacts', fields: STEP_IDENTITY_FIELDS },
+  { key: 'identity', label: 'Identity', fields: STEP_IDENTITY_FIELDS },
   { key: 'ndis', label: 'NDIS & Funding', fields: STEP_NDIS_FIELDS },
+  // CONTACT-02: moved after NDIS & Funding (was folded into the Identity step's label before
+  // CONTACT-01/02/03 existed) — see STEP_CONTACTS_FIELDS's doc comment above.
+  { key: 'contacts', label: 'Contacts', fields: STEP_CONTACTS_FIELDS },
   { key: 'support', label: 'Support Needs & Equipment', fields: STEP_SUPPORT_FIELDS },
   { key: 'medical', label: 'Medical', fields: STEP_MEDICAL_FIELDS },
   { key: 'risks', label: 'Risks & Consents', fields: STEP_RISK_FIELDS },
@@ -332,6 +374,7 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
+  baseParticipantSchema.pick(pickShape(STEP_CONTACTS_FIELDS)).superRefine(contactRolesRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
@@ -474,10 +517,14 @@ export default function ParticipantCreatePage() {
       requiresStandingMachine: false,
       preferredStaffId: null,
       riskEntries: [],
+      contactRoles: [],
     },
   })
   // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
   const { fields: riskEntryFields, append: appendRiskEntry, remove: removeRiskEntry } = useFieldArray({ control, name: 'riskEntries' })
+  // CONTACT-02: create-mode-only repeatable contact-role rows — see contactRoles' schema doc above.
+  const { fields: contactRoleFields, append: appendContactRole, remove: removeContactRole } = useFieldArray({ control, name: 'contactRoles' })
+  const { data: people = [] } = usePersons()
 
   // Edit mode loads an already-complete record — every step is immediately explorable rather
   // than gated behind a linear Next walk, which only makes sense for a blank intake form.
@@ -729,6 +776,9 @@ export default function ParticipantCreatePage() {
         // already-created participant are managed via the nested CRUD (the detail page's Risks
         // section), not through this wizard. Reset to empty so useFieldArray stays consistent.
         riskEntries: [],
+        // CONTACT-02: same reasoning as riskEntries above — contacts for an already-created
+        // participant are managed via the Contacts tab's nested CRUD, not through this wizard.
+        contactRoles: [],
       })
     }
   }, [existing, reset])
@@ -754,6 +804,28 @@ export default function ParticipantCreatePage() {
     delete payload.primaryDiagnosisOther
     // DIAG-02.
     payload.hidpaSupportCategories = formatHidpaCategories(data.hidpaSupportCategories as HidpaSupportCategory[] | undefined)
+    // CONTACT-02: expand the wizard's lean per-row shape (personMode/personId/newPerson*/roleType/
+    // relationshipToParticipant/isPrimary) into the full CreateParticipantContactRoleDto shape the
+    // server expects — every other role-specific field (guardian order scope, nominee scope, GP
+    // registration number, etc.) is left null here and filled in later via the Contacts tab, since
+    // the wizard step deliberately doesn't surface all 25+ of them.
+    payload.contactRoles = (data.contactRoles ?? []).map((row) => ({
+      personId: row.personMode === 'existing' ? (row.personId || null) : null,
+      newPersonFirstName: row.personMode === 'new' ? (row.newPersonFirstName || null) : null,
+      newPersonLastName: row.personMode === 'new' ? (row.newPersonLastName || null) : null,
+      newPersonPhone: null, newPersonMobile: null, newPersonEmail: null, newPersonOrganisation: null,
+      roleType: row.roleType,
+      relationshipToParticipant: row.relationshipToParticipant || null,
+      isPrimary: !!row.isPrimary,
+      status: 'Active',
+      orderScopeDomains: [],
+      priorityOrder: null, authorisedForMedicalInfo: null, appointingTribunal: null,
+      orderStartDate: null, orderReviewDate: null, orderEndDate: null, nomineeScope: null, appointmentDate: null,
+      reasonForAppointment: null, alternateRepresentativeName: null, fundingLineItemType: null, organisationName: null,
+      registrationNumber: null, lastVisitDate: null, consentToShare: null, discipline: null, frequencyOfContact: null,
+      websterPackFlag: null, roleTitle: null, registeredProviderFlag: null, scopeNotes: null,
+      authorisationDocumentReference: null, preferredLanguage: null, startDate: null, endDate: null, notes: null,
+    }))
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
@@ -765,10 +837,11 @@ export default function ParticipantCreatePage() {
     const payload = buildPayload(data, false)
     try {
       if (isEdit) {
-        // INTAKE-09: edit-mode never renders the riskEntries rows UI (see riskEntries' schema
-        // doc) — drop the always-empty array rather than send a meaningless key the Update
-        // endpoint ignores anyway.
+        // INTAKE-09/CONTACT-02: edit-mode never renders the riskEntries/contactRoles rows UI (see
+        // their schema docs) — drop the always-empty arrays rather than send a meaningless key
+        // the Update endpoint ignores anyway.
         delete payload.riskEntries
+        delete payload.contactRoles
         const res = await updateParticipant.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
         if (res.success) {
           // Clear isDirty synchronously (flushSync) before navigating so the
@@ -812,6 +885,7 @@ export default function ParticipantCreatePage() {
     try {
       if (isEdit) {
         delete payload.riskEntries
+        delete payload.contactRoles
         const res = await updateParticipant.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
         if (res.success) {
           flushSync(() => reset(data as unknown as Parameters<typeof reset>[0]))
@@ -918,7 +992,24 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
+      // CONTACT-02: contacts entered on the Contacts step (create-mode only, mirroring risk
+      // entries) — one row per contact, "New: Firstname Lastname" or "Existing: <personId>"
+      // depending on personMode, since the person's real name isn't known client-side for a
+      // not-yet-saved "existing person" selection beyond whatever the picker already resolved.
       step: 2,
+      rows: (watchedValues.contactRoles?.length ?? 0) === 0
+        ? [{ label: 'Contacts', value: 'None added' }]
+        : (watchedValues.contactRoles ?? []).map((row, i) => ({
+            label: `Contact ${i + 1}`,
+            value: `${CONTACT_ROLE_TYPE_LABELS[(row?.roleType as ContactRoleType) ?? 'NextOfKin']} — ${
+              row?.personMode === 'new'
+                ? [row?.newPersonFirstName, row?.newPersonLastName].filter(Boolean).join(' ') || '—'
+                : people.find(p => p.id === row?.personId)?.fullName ?? '—'
+            }`,
+          })),
+    },
+    {
+      step: 3,
       rows: [
         { label: 'High Support', value: watchedValues.isHighSupport ? 'Yes' : 'No' },
         { label: 'Intensive Support (NDIS billing)', value: watchedValues.isIntensiveSupport ? 'Yes' : 'No' },
@@ -939,7 +1030,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 3,
+      step: 4,
       rows: [
         {
           label: 'Primary Diagnosis',
@@ -958,7 +1049,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 4,
+      step: 5,
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -1162,8 +1253,10 @@ export default function ParticipantCreatePage() {
               {isVisible('mainSupportPersonName') && (
                 <>
                   <FormField label="Main Support Person" required error={errors.mainSupportPersonName?.message}>
-                    {/* Free text for now — plausibly links to a future CONTACT-01 typed contact
-                        rather than free text; CONTACT-01 isn't built yet (see Participant.cs). */}
+                    {/* Free text, deliberately NOT linked to CONTACT-01's Person/ContactRole model
+                        even though it now exists (see Participant.cs's updated doc comment) — no
+                        FK, no auto-migration into a Person row. A future pass can replace this
+                        with a Person picker/NextOfKin role instead. */}
                     <input id="mainSupportPersonName" {...register('mainSupportPersonName')} placeholder="e.g. Jane Citizen" />
                   </FormField>
                   <FormField label="Relationship to Participant">
@@ -1323,7 +1416,145 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
+        {/* CONTACT-02 — the Contacts step, placed after NDIS & Funding since available role
+            types depend on the funding/plan-type answers captured there (plus, for Plan Nominee,
+            the date of birth captured on the Identity step) — see STEP_CONTACTS_FIELDS' doc. */}
         {stepIndex === 2 && (
+          <div className="grid md:grid-cols-1 gap-6">
+            {isEdit ? (
+              <Card title="Contacts" className="space-y-3">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Contacts are managed from the{' '}
+                  <Link to={`/participants/${id}?tab=contacts`} className="text-[var(--color-primary)] hover:underline">
+                    Contacts tab
+                  </Link>{' '}
+                  on this participant's detail page.
+                </p>
+              </Card>
+            ) : (
+              <Card title="Contacts" className="space-y-3">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Add next of kin, guardians, support coordinators, plan managers, and other key
+                  contacts. Optional here — richer per-role details (e.g. a guardian's tribunal
+                  order, a nominee's scope) can be filled in from the Contacts tab after saving.
+                </p>
+                {contactRoleFields.length > 0 && (
+                  <div className="space-y-3">
+                    {contactRoleFields.map((field, index) => {
+                      const row = watchedValues.contactRoles?.[index]
+                      const rowRoleType = (row?.roleType as ContactRoleType | undefined) ?? 'NextOfKin'
+                      const available = availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
+                      const gateError = contactRoleGateError(rowRoleType, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
+                      return (
+                        <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 space-y-3">
+                              <FormField label="Person" className="mb-0">
+                                <div className="flex gap-2">
+                                  {(['existing', 'new'] as const).map(mode => (
+                                    <button
+                                      key={mode}
+                                      type="button"
+                                      onClick={() => setValue(`contactRoles.${index}.personMode` as const, mode, { shouldDirty: true })}
+                                      className={`min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
+                                        (row?.personMode ?? 'existing') === mode
+                                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                          : 'border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                                      }`}
+                                    >
+                                      {mode === 'existing' ? 'Existing person' : 'New person'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </FormField>
+
+                              {(row?.personMode ?? 'existing') === 'existing' ? (
+                                <FormField
+                                  label="Select person"
+                                  required
+                                  error={errors.contactRoles?.[index]?.personId?.message}
+                                  className="mb-0"
+                                >
+                                  <Controller
+                                    control={control}
+                                    name={`contactRoles.${index}.personId` as const}
+                                    render={({ field: personField }) => (
+                                      <SearchableSelect
+                                        value={personField.value ?? ''}
+                                        onChange={personField.onChange}
+                                        onBlur={personField.onBlur}
+                                        items={people.map(p => ({ value: p.id, label: p.fullName, description: p.organisation ?? undefined }))}
+                                        placeholder="Search people…"
+                                        emptyMessage="No people yet — add a new person instead"
+                                      />
+                                    )}
+                                  />
+                                </FormField>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FormField
+                                    label="First name"
+                                    required
+                                    error={errors.contactRoles?.[index]?.newPersonFirstName?.message}
+                                    className="mb-0"
+                                  >
+                                    <input {...register(`contactRoles.${index}.newPersonFirstName` as const)} />
+                                  </FormField>
+                                  <FormField label="Last name" className="mb-0">
+                                    <input {...register(`contactRoles.${index}.newPersonLastName` as const)} />
+                                  </FormField>
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeContactRole(index)}
+                              aria-label={`Remove contact ${index + 1}`}
+                              title="Remove contact"
+                              className="mt-6 p-1.5 min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField label="Role type" className="mb-0" hint={gateError ?? undefined}>
+                              <select {...register(`contactRoles.${index}.roleType` as const)}>
+                                {CONTACT_ROLE_TYPES.map(rt => (
+                                  <option key={rt} value={rt} disabled={!available.includes(rt) && rt !== rowRoleType}>
+                                    {CONTACT_ROLE_TYPE_LABELS[rt]}
+                                  </option>
+                                ))}
+                              </select>
+                            </FormField>
+                            <FormField label="Relationship to participant" className="mb-0">
+                              <input {...register(`contactRoles.${index}.relationshipToParticipant` as const)} placeholder="e.g. Mother" />
+                            </FormField>
+                          </div>
+                          {gateError && (
+                            <p role="alert" className="text-xs text-[var(--color-destructive)]">{gateError}</p>
+                          )}
+                          <FormField label="Primary" layout="checkbox" className="mb-0">
+                            <input type="checkbox" {...register(`contactRoles.${index}.isPrimary` as const)} className="w-4 h-4 rounded border-[var(--color-border)]" />
+                          </FormField>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleType: availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)[0] ?? 'NextOfKin', relationshipToParticipant: '', isPrimary: false })}
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+                >
+                  <Plus className="w-4 h-4" /> Add contact
+                </button>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {stepIndex === 3 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Support Needs" className="space-y-4">
               <FormField label="High Support" layout="checkbox">
@@ -1481,7 +1712,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 3 && (
+        {stepIndex === 4 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Diagnoses" className="space-y-4">
               <FormField label="Primary Diagnosis">
@@ -1642,7 +1873,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 4 && (
+        {stepIndex === 5 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Risks & Consents" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (
