@@ -41,7 +41,17 @@ public class StaffCompatibilityLinkService
     /// <paramref name="oldUserId"/> and the new value as <paramref name="newUserId"/>. Either
     /// may be null; equal values are a cheap no-op.
     /// </summary>
-    public async Task SyncFromParticipantPreferredStaffAsync(Guid participantId, Guid? oldUserId, Guid? newUserId, CancellationToken ct)
+    /// <param name="isDraft">
+    /// INTAKE-08 fix round 1 (Finding 3): true when the participant being saved is (or is being
+    /// saved as) a draft — <see cref="Odip.Domain.Entities.Participant.IsDraft"/>/
+    /// <c>CreateParticipantDto.IsDraft</c> at the call site. A draft's preferred-staff pick never
+    /// creates/refreshes an <see cref="StaffParticipantCompatibility.AutoLinked"/> row — the
+    /// compatibility matrix is itself a roster surface drafts are excluded from (see
+    /// RosteringController's own draft exclusions), so a draft should never seed a row there just
+    /// because a coordinator picked a preferred staff member mid-intake. Defaults false so every
+    /// pre-existing non-draft call site (and every existing test) is unaffected.
+    /// </param>
+    public async Task SyncFromParticipantPreferredStaffAsync(Guid participantId, Guid? oldUserId, Guid? newUserId, CancellationToken ct, bool isDraft = false)
     {
         if (oldUserId == newUserId) return;
 
@@ -58,7 +68,7 @@ public class StaffCompatibilityLinkService
                 _db.StaffParticipantCompatibilities.Remove(oldRow);
         }
 
-        if (newUserId.HasValue)
+        if (newUserId.HasValue && !isDraft)
         {
             var newRow = await _db.StaffParticipantCompatibilities
                 .FirstOrDefaultAsync(c => c.UserId == newUserId.Value && c.ParticipantId == participantId, ct);

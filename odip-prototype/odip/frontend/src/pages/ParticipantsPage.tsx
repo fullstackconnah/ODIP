@@ -66,7 +66,7 @@ export default function ParticipantsPage() {
             {p.fullName}
           </span>
           {p.isDraft && (
-            <StatusBadge status="Draft" colorMap={{ draft: 'bg-[#fef3c7] text-[#92400e]' }} />
+            <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
           )}
         </span>
       ),

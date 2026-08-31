@@ -1147,3 +1147,48 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
     expect(call.data.lastName).toBe('Sharma')
   })
 })
+
+describe('ParticipantCreatePage — INTAKE-08 fix round 1 (Finding 1a): Save-as-draft button visibility', () => {
+  it('is present on create (no existing record — nothing to un-finalise)', () => {
+    renderCreatePage()
+
+    expect(screen.getByRole('button', { name: /save as draft/i })).toBeInTheDocument()
+  })
+
+  it('is present when resuming an existing draft', () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Priya', lastName: '', isActive: true, isDraft: true,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(screen.getByRole('button', { name: /save as draft/i })).toBeInTheDocument()
+  })
+
+  it('is absent when editing an already-finalised (non-draft) participant', () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(screen.queryByRole('button', { name: /save as draft/i })).not.toBeInTheDocument()
+    // The rest of the edit flow is unaffected — no Draft badge, and Next still works normally.
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
+})

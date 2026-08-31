@@ -1211,6 +1211,35 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task Update_FinalisedParticipant_CannotBeRevertedToDraft()
+    {
+        // INTAKE-08 fix round 1 (Finding 1b, controller ruling): un-finalising is not a product
+        // capability — a stored IsDraft=false participant must reject any Update whose payload
+        // sets IsDraft=true, leaving the stored row untouched.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var finalised = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = false };
+        db.Participants.Add(finalised);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true,
+        };
+
+        var result = await controller.Update(finalised.Id, dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("cannot be reverted to draft", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        var reloaded = await db.Participants.SingleAsync(p => p.Id == finalised.Id);
+        Assert.False(reloaded.IsDraft);
+    }
+
+    [Fact]
     public async Task Update_SaveAsDraftAgain_KeepsIsDraftTrue_PartialDataPersists()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

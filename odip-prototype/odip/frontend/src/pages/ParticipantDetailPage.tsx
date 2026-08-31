@@ -69,7 +69,7 @@ export default function ParticipantDetailPage() {
             <h1 className="text-2xl font-bold">{p.fullName}</h1>
             <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
             {p.isDraft && (
-              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[#fef3c7] text-[#92400e]' }} />
+              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
             )}
           </div>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
@@ -77,7 +77,7 @@ export default function ParticipantDetailPage() {
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
           {p.isDraft && (
-            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[#fef3c7] text-[#92400e] text-sm border border-[#92400e]/20">
+            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
                 This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised.
@@ -85,7 +85,7 @@ export default function ParticipantDetailPage() {
               {canWrite && (
                 <Link
                   to={`/participants/${id}/edit`}
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg bg-[#92400e] text-white text-sm font-medium hover:bg-[#92400e]/90 transition-colors shrink-0"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
                 >
                   <Pencil className="w-4 h-4" /> Resume intake
                 </Link>

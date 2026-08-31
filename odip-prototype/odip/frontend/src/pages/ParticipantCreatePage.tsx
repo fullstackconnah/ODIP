@@ -835,6 +835,12 @@ export default function ParticipantCreatePage() {
 
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
+  // INTAKE-08 fix round 1 (Finding 1a): "Save as draft" is offered on create (no existing
+  // record yet — nothing to un-finalise) and on resuming an existing draft, never while editing
+  // an already-finalised participant. `existing` is guaranteed resolved here (the loading guard
+  // above already returned for edit mode while it was pending).
+  const canSaveDraft = !isEdit || existing?.isDraft === true
+
   const preferredStaffName = activeStaff.find(s => s.id === watchedValues.preferredStaffId)?.fullName ?? 'None'
   const supportRatioLabel = OVERNIGHT_RATIO_LABELS[(watchedValues.supportRatio as SupportRatio) ?? 'SharedSupport'] ?? '—'
   const overnightSupportLabel = OVERNIGHT_SUPPORT_LABELS[(watchedValues.overnightSupport as OvernightSupportType) ?? 'None'] ?? '—'
@@ -987,7 +993,7 @@ export default function ParticipantCreatePage() {
             amber rather than StatusBadge's default muted "draft" style, so it reads as
             "needs attention" rather than blending into the page. */}
         {isEdit && existing?.isDraft && (
-          <StatusBadge status="Draft" colorMap={{ draft: 'bg-[#fef3c7] text-[#92400e]' }} />
+          <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
         )}
       </div>
 
@@ -1774,17 +1780,21 @@ export default function ParticipantCreatePage() {
                 Back
               </button>
             )}
-            {/* INTAKE-08: available on EVERY step (not just Review) — persists whatever is
-                filled in right now, bypassing this step's (and every other step's) zod
-                validation entirely. See handleSaveDraft's doc for why. */}
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              disabled={savingDraft || mutation.isPending}
-              className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            >
-              {savingDraft ? 'Saving draft...' : 'Save as draft'}
-            </button>
+            {/* INTAKE-08 fix round 1 (Finding 1a, controller ruling): un-finalising is not a
+                product capability — this button exists on create and on draft-resume only, never
+                while editing an already-finalised participant (available on EVERY step of those
+                two flows, not just Review). Mirrors the server-side rejection in
+                ParticipantsController.Update (see its Finding 1b comment). */}
+            {canSaveDraft && (
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={savingDraft || mutation.isPending}
+                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+              >
+                {savingDraft ? 'Saving draft...' : 'Save as draft'}
+              </button>
+            )}
           </div>
           <div className="flex justify-end gap-3">
             {stepIndex < REVIEW_STEP_INDEX && (

@@ -75,6 +75,22 @@ public class StaffCompatibilityLinkServiceTests
     }
 
     [Fact]
+    public async Task SetPreferredStaff_DraftParticipant_DoesNotCreateAutoLinkedRow()
+    {
+        // INTAKE-08 fix round 1 (Finding 3): a draft's preferred-staff pick must never seed the
+        // compatibility matrix — that matrix is itself a roster surface drafts are excluded from.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var service = new StaffCompatibilityLinkService(db);
+
+        await service.SyncFromParticipantPreferredStaffAsync(participant.Id, null, staff.Id, CancellationToken.None, isDraft: true);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.StaffParticipantCompatibilities.Where(c => c.UserId == staff.Id && c.ParticipantId == participant.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task SetPreferredStaff_SameValueTwice_IsANoOp()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

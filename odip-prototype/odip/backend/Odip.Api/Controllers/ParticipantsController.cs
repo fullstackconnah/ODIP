@@ -338,7 +338,8 @@ public class ParticipantsController : ControllerBase
         }
         // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
         // rostering compatibility matrix, in the same transaction as the participant insert.
-        await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct);
+        // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -381,6 +382,17 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        // INTAKE-08 fix round 1 (Finding 1b, controller ruling): un-finalising is not a product
+        // capability. A participant that has already been finalised (p.IsDraft == false) can
+        // never be sent back into draft state via this endpoint — only a genuinely new-or-still-
+        // drafting record (p.IsDraft == true already) may keep saving with IsDraft=true. If this
+        // ever becomes a real capability it ships as a deliberate, separate feature rather than a
+        // side effect of the wizard's universal "Save as draft" button being clickable everywhere
+        // (the frontend also removes that button for a finalised participant — see
+        // ParticipantCreatePage.tsx — this is the server-side half of that same ruling).
+        if (dto.IsDraft && !p.IsDraft)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("A finalised participant cannot be reverted to draft."));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
@@ -420,7 +432,8 @@ public class ParticipantsController : ControllerBase
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update.
-        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct);
+        // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }
