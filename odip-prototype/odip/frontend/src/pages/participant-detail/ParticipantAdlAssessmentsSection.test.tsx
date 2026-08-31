@@ -26,14 +26,14 @@ vi.mock('@/api/hooks', () => ({
 function unassessedRows(): ParticipantAdlAssessmentDto[] {
   return ADL_TYPES.map((type) => ({
     id: null, participantId: 'participant-1', adlType: type,
-    level: null, notes: null, createdAt: null, updatedAt: null,
+    level: null, notes: null, howToHelpNotes: null, createdAt: null, updatedAt: null,
   }))
 }
 
 function makeAssessment(overrides: Partial<ParticipantAdlAssessmentDto> = {}): ParticipantAdlAssessmentDto {
   return {
     id: 'adl-1', participantId: 'participant-1', adlType: 'Dressing',
-    level: null, notes: null,
+    level: null, notes: null, howToHelpNotes: null,
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   }

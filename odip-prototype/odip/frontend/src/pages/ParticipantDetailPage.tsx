@@ -14,8 +14,10 @@ import { usePermissions } from '@/lib/permissions'
 import {
   OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories,
   AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
+  parseServiceStreams,
 } from '@/api/types/participants'
-import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
+import { CHECKLIST_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
+import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory, ChecklistItemType } from '@/api/types/enums'
 import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab } from './participant-detail'
 
 /** INTAKE sub-wave B — tri-state (boolean | null) display helper, same "—" empty-state idiom as every other unset field on this page. */
@@ -65,6 +67,18 @@ export default function ParticipantDetailPage() {
 
   // DIAG-02.
   const hidpaCategories = parseHidpaCategories(p.hidpaSupportCategories)
+
+  // INTAKE-03, CommunityAccessDailyLiving stream.
+  const isCommunityAccess = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
+  // Only items that actually have a Value set — matching the ADL/health-condition sections'
+  // "don't show a wall of unanswered rows" convention (this page has no such precedent of its
+  // own; the fixed-enumerated-set sections instead render every row via DataTable, which has its
+  // own emptyMessage for a still-loading/zero-row state — but a compact inline list here follows
+  // the whole-card presence-or-relevance idiom this page DOES use everywhere else, so unanswered
+  // placeholder rows are skipped).
+  const answeredChecklistItems = CHECKLIST_ITEM_TYPES
+    .map((type) => p.checklistItems?.find((row) => row.itemType === type))
+    .filter((row): row is NonNullable<typeof row> => !!row?.value)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -298,7 +312,7 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
-          {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.medicalSummary
+          {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.hidpaNotes || p.medicalSummary
             || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes) && (
             <Card title="Medical" className="md:col-span-2">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
@@ -314,6 +328,13 @@ export default function ParticipantDetailPage() {
                     ? hidpaCategories.map((c) => <Tag key={c} label={HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c} />)
                     : '—'}
                 </span>
+                {/* INTAKE-03/DIAG-02 reconciliation — ungated, same visibility as the categories above. */}
+                {p.hidpaNotes && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">HIDPA Notes</span>
+                    <span className="whitespace-pre-line">{p.hidpaNotes}</span>
+                  </>
+                )}
                 {p.medicalSummary && (
                   <>
                     <span className="text-[var(--color-muted-foreground)]">Medical Summary</span>
@@ -421,6 +442,54 @@ export default function ParticipantDetailPage() {
           <Card className="md:col-span-2">
             <ParticipantAdlAssessmentsSection participantId={id} />
           </Card>
+          {/* INTAKE-03/04, CommunityAccessDailyLiving stream (research spec §3) — gated on the
+              stream flag itself (unlike the whole-card-conditional cards elsewhere on this page,
+              which gate on field presence): this card's fields have no meaning for a participant
+              who isn't in the CA stream, even if stray data happened to be saved while the flag
+              was briefly on (see the stream-removal confirm dialog on the wizard's NDIS & Funding
+              step, which warns before that data is cleared). */}
+          {isCommunityAccess && (
+            <Card title="Community Access" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                {p.signsHappyAndSettled && (<><span className="text-[var(--color-muted-foreground)]">Signs I Am Happy and Settled</span><span className="whitespace-pre-line">{p.signsHappyAndSettled}</span></>)}
+                {p.whatHelpsMeCalmDown && (<><span className="text-[var(--color-muted-foreground)]">What Helps Me Calm Down</span><span className="whitespace-pre-line">{p.whatHelpsMeCalmDown}</span></>)}
+                {p.bocTriggers && (<><span className="text-[var(--color-muted-foreground)]">BOC — Triggers</span><span className="whitespace-pre-line">{p.bocTriggers}</span></>)}
+                {p.bocEarlyWarningSigns && (<><span className="text-[var(--color-muted-foreground)]">BOC — Early Warning Signs</span><span className="whitespace-pre-line">{p.bocEarlyWarningSigns}</span></>)}
+                {p.bocDeEscalationStrategies && (<><span className="text-[var(--color-muted-foreground)]">BOC — De-Escalation Strategies</span><span className="whitespace-pre-line">{p.bocDeEscalationStrategies}</span></>)}
+                {p.bocWhatNotToDo && (<><span className="text-[var(--color-muted-foreground)]">BOC — What Not To Do</span><span className="whitespace-pre-line">{p.bocWhatNotToDo}</span></>)}
+                {(p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight) && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">What My Supports Look Like</span>
+                    <span className="whitespace-pre-line">
+                      {[
+                        p.supportsLookLikeMorning && `Morning: ${p.supportsLookLikeMorning}`,
+                        p.supportsLookLikeDay && `Day: ${p.supportsLookLikeDay}`,
+                        p.supportsLookLikeAfternoonEvening && `Afternoon-Evening: ${p.supportsLookLikeAfternoonEvening}`,
+                        p.supportsLookLikeOvernight && `Overnight: ${p.supportsLookLikeOvernight}`,
+                      ].filter(Boolean).join('\n')}
+                    </span>
+                  </>
+                )}
+              </div>
+              {/* Compact list — only items that actually have a Value set (see answeredChecklistItems' doc above). */}
+              {answeredChecklistItems.length > 0 && (
+                <div className="mt-4 space-y-2 text-sm">
+                  <p className="font-medium text-[var(--color-muted-foreground)]">Community Mobility &amp; Transport Risk / Behaviours of Concern Checklist</p>
+                  <div className="divide-y divide-[var(--color-border)]">
+                    {answeredChecklistItems.map((row) => (
+                      <div key={row.itemType} className="py-2 flex items-start justify-between gap-4">
+                        <span>{CHECKLIST_ITEM_TYPE_LABELS[row.itemType as ChecklistItemType]}</span>
+                        <span className="text-right">
+                          <Tag label={CHECKLIST_ITEM_VALUE_LABELS[row.value!] ?? row.value!} />
+                          {row.notes && <span className="block text-xs text-[var(--color-muted-foreground)] mt-1 max-w-xs">{row.notes}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
           {/* INTAKE sub-wave C2 — Meals & Diet (Daily Living step, research spec §4.9/§5). Same
               whole-card-conditional empty-state pattern as Medical/Cultural Background above. */}
           {(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
