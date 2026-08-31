@@ -206,6 +206,18 @@ public class PortalControllerTests
             Description = "Gentle wake, warm drink", Category = RoutineCategory.PersonalCare,
             IsCritical = true, IsActive = true,
         });
+        // INTAKE-09: one active, one retired — only the active one should surface (same
+        // active-only scoping as routines/medications above).
+        db.ParticipantRiskEntries.Add(new ParticipantRiskEntry
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, AtRiskParty = AtRiskParty.Staff,
+            Description = "Risk of aggression towards staff.", MitigationNotes = "Two-person support.", IsActive = true,
+        });
+        db.ParticipantRiskEntries.Add(new ParticipantRiskEntry
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, AtRiskParty = AtRiskParty.Participant,
+            Description = "Retired risk, no longer applicable.", IsActive = false,
+        });
         db.ParticipantMedications.Add(new ParticipantMedication
         {
             Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Paracetamol", Form = MedicationForm.Tablet,
@@ -235,6 +247,9 @@ public class PortalControllerTests
         Assert.Equal("Hoist required for transfers", dto.Participant.EquipmentRequirements);
         var routine = Assert.Single(dto.Routines);
         Assert.Equal("Morning routine", routine.Title);
+        var riskEntry = Assert.Single(dto.RiskEntries); // Retired risk entry excluded
+        Assert.Equal(AtRiskParty.Staff, riskEntry.AtRiskParty);
+        Assert.Equal("Risk of aggression towards staff.", riskEntry.Description);
         var med = Assert.Single(dto.Medications); // Ceased med excluded
         Assert.Equal("Paracetamol", med.Name);
     }

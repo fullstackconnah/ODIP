@@ -547,6 +547,19 @@ public enum RoutineCategory
 }
 
 /// <summary>
+/// INTAKE-09: who a captured <see cref="Odip.Domain.Entities.ParticipantRiskEntry"/> concerns —
+/// the participant themselves, other participants they may be supported alongside, the public,
+/// or support staff.
+/// </summary>
+public enum AtRiskParty
+{
+    Participant,
+    OtherParticipants,
+    Public,
+    Staff
+}
+
+/// <summary>
 /// The NDIS-authoritative restrictive practice categories, plus <see cref="Unclassified"/> for
 /// register rows backfilled from the old free-text <c>SupportProfile.RestrictivePracticeDetails</c>
 /// field (see the AddRestrictivePractices migration) where no specific category is known.

@@ -121,6 +121,13 @@ public class PortalController : ControllerBase
             .OrderByDescending(r => r.IsCritical).ThenBy(r => r.DayOfWeek).ThenBy(r => r.StartTime)
             .ToListAsync(ct);
 
+        // INTAKE-09: active risk entries only — same active-only scoping as routines/medications
+        // above; a retired risk entry is no longer shift-relevant.
+        var riskEntries = await _db.ParticipantRiskEntries
+            .Where(r => r.ParticipantId == participant.Id && r.IsActive)
+            .OrderBy(r => r.AtRiskParty).ThenByDescending(r => r.CreatedAt)
+            .ToListAsync(ct);
+
         var medications = await _db.ParticipantMedications
             .Where(m => m.ParticipantId == participant.Id && m.Status == MedicationStatus.Active)
             .OrderBy(m => m.Name)
@@ -131,6 +138,7 @@ public class PortalController : ControllerBase
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
             ToParticipantSummaryDto(participant),
             routines.Select(ToRoutineDto).ToList(),
+            riskEntries.Select(ToRiskEntryDto).ToList(),
             medications.Select(ToMedicationSummaryDto).ToList());
 
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(dto));
@@ -245,6 +253,18 @@ public class PortalController : ControllerBase
         StartTime = r.StartTime,
         EndTime = r.EndTime,
         IsCritical = r.IsCritical,
+        IsActive = r.IsActive,
+        CreatedAt = r.CreatedAt,
+        UpdatedAt = r.UpdatedAt,
+    };
+
+    private static ParticipantRiskEntryDto ToRiskEntryDto(ParticipantRiskEntry r) => new()
+    {
+        Id = r.Id,
+        ParticipantId = r.ParticipantId,
+        AtRiskParty = r.AtRiskParty,
+        Description = r.Description,
+        MitigationNotes = r.MitigationNotes,
         IsActive = r.IsActive,
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt,

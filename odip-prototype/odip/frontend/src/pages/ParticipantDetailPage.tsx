@@ -13,7 +13,7 @@ import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories } from '@/api/types/participants'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -232,6 +232,11 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
+          {/* INTAKE-09 — a compact section rather than its own tab; see RiskEntriesSection's
+              module doc for the tab-count call. */}
+          <Card className="md:col-span-2">
+            <RiskEntriesSection participantId={id} />
+          </Card>
         </div>
       )}
 

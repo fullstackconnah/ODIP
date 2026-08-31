@@ -189,6 +189,13 @@ public record CreateParticipantDto
     public string? Notes { get; init; }
     public Guid? PreferredStaffId { get; init; }
     public ServiceStreams ServiceStreams { get; init; } = ServiceStreams.None;
+    /// <summary>
+    /// INTAKE-09. Repeatable risk-entry rows captured at intake, created transactionally with the
+    /// participant — see ParticipantsController.Create. Edit-mode manages risk entries via the
+    /// separate nested CRUD (ParticipantRiskEntriesController) instead: despite this list being
+    /// inherited onto UpdateParticipantDto below, ParticipantsController.Update never reads it.
+    /// </summary>
+    public List<CreateParticipantRiskEntryDto> RiskEntries { get; init; } = new();
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

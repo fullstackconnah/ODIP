@@ -1,5 +1,6 @@
 import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from './enums'
 import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
+import type { CreateParticipantRiskEntryDto } from './risk-entries'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -319,6 +320,13 @@ export interface CreateParticipantDto {
   preferredStaffId?: string | null
   /** Wire format: comma-separated ServiceStreams flag names, or "None" — see formatServiceStreams. */
   serviceStreams: string
+  /**
+   * INTAKE-09. Repeatable risk-entry rows captured at intake, created transactionally with the
+   * participant. Edit-mode manages risk entries via the separate nested CRUD
+   * (useParticipantRiskEntries/useCreateRiskEntry/etc, surfaced on the participant detail page)
+   * instead of this collection — the wizard only renders the add-rows UI in create mode.
+   */
+  riskEntries: CreateParticipantRiskEntryDto[]
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

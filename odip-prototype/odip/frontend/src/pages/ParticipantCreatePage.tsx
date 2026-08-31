@@ -1,15 +1,15 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
+import { useForm, useFieldArray, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
-import { ArrowLeft, Check } from 'lucide-react'
+import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
@@ -17,6 +17,7 @@ import {
   DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS, HIDPA_CATEGORY_TITLES,
   parseHidpaCategories, formatHidpaCategories,
 } from '@/api/types/participants'
+import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import {
   useConditionalFields, useUnregisterHiddenFields, useFocusFallbackOnHide, stripHiddenFieldKeys,
@@ -96,6 +97,15 @@ const baseParticipantSchema = z.object({
   behaviourRiskSummary: z.string().optional(),
   notes: z.string().optional(),
   preferredStaffId: z.string().optional().nullable(),
+  // INTAKE-09. Repeatable risk-entry rows — create-mode only (see riskEntryFields' guard below);
+  // each row's description is required, but the collection as a whole is optional (zero rows is
+  // fine). Submitted alongside a new participant only; edit-mode instead manages risk entries via
+  // the nested CRUD (see the participant detail page's Risks section).
+  riskEntries: z.array(z.object({
+    atRiskParty: z.string().min(1),
+    description: z.string().min(1, 'Description is required'),
+    mitigationNotes: z.string().optional(),
+  })).optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -218,6 +228,23 @@ const participantSchema = baseParticipantSchema
   .superRefine(addressPostcodeRefine)
   .superRefine(diagnosisOtherRefine)
 
+// Sets a react-hook-form-shaped error at an arbitrary zod issue path (e.g.
+// ['riskEntries', 0, 'description']), building the intermediate array/object nodes as it goes —
+// react-hook-form's FieldErrors tree already expects exactly this nested array-of-objects shape
+// for a useFieldArray-backed field, so no flattening is needed for a row-level error (e.g.
+// errors.riskEntries?.[0]?.description) to reach the row that owns it. A single-segment path
+// (every pre-existing field) degenerates to the old flat `errors[field] = {...}` behaviour.
+function setPathError(errors: Record<string, unknown>, path: PropertyKey[], message: string, code: string) {
+  let node: Record<PropertyKey, unknown> = errors
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i]
+    if (node[key] === undefined) node[key] = typeof path[i + 1] === 'number' ? [] : {}
+    node = node[key] as Record<PropertyKey, unknown>
+  }
+  const last = path[path.length - 1]
+  if (node[last] === undefined) node[last] = { type: code, message }
+}
+
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
 // favour of .issues), so it throws past react-hook-form instead of populating
 // formState.errors on validation failure. Resolve directly against zod's safeParse/.issues
@@ -227,8 +254,7 @@ const participantResolver: Resolver<ParticipantFormData> = (values) => {
   if (result.success) return { values: result.data, errors: {} }
   const errors: FieldErrors<ParticipantFormData> = {}
   for (const issue of result.error.issues) {
-    const field = String(issue.path[0]) as keyof ParticipantFormData
-    if (!errors[field]) errors[field] = { type: issue.code, message: issue.message }
+    setPathError(errors as Record<string, unknown>, issue.path, issue.message, issue.code)
   }
   return { values: {}, errors }
 }
@@ -268,7 +294,7 @@ const STEP_SUPPORT_FIELDS = [
 // summary last as overflow for anything the structured fields don't capture. See the HIDPA
 // research note on wizard placement for the fuller reasoning against opening a new step.
 const STEP_MEDICAL_FIELDS = ['primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'medicalSummary'] as const
-const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes'] as const
+const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const
 const STEP_REVIEW_FIELDS = [] as const
 
 type WizardStep = {
@@ -436,8 +462,11 @@ export default function ParticipantCreatePage() {
       requiresCommode: false,
       requiresStandingMachine: false,
       preferredStaffId: null,
+      riskEntries: [],
     },
   })
+  // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
+  const { fields: riskEntryFields, append: appendRiskEntry, remove: removeRiskEntry } = useFieldArray({ control, name: 'riskEntries' })
 
   // Edit mode loads an already-complete record — every step is immediately explorable rather
   // than gated behind a linear Next walk, which only makes sense for a blank intake form.
@@ -500,11 +529,15 @@ export default function ParticipantCreatePage() {
     for (const f of currentStep.fields) clearErrors(f)
     const result = schema.safeParse(getValues())
     if (!result.success) {
-      let firstField: keyof ParticipantFormData | null = null
+      let firstField: string | null = null
       for (const issue of result.error.issues) {
-        const field = String(issue.path[0]) as keyof ParticipantFormData
+        // Full dot/index path (e.g. "riskEntries.0.description"), not just issue.path[0] — a
+        // row-level error must land on that row, not collapse onto the whole array field, or
+        // FormField's per-row `error={errors.riskEntries?.[i]?.description?.message}` lookup
+        // below would never find it.
+        const field = issue.path.map(String).join('.')
         if (!firstField) firstField = field
-        setError(field, { type: issue.code, message: issue.message })
+        setError(field as keyof ParticipantFormData, { type: issue.code, message: issue.message })
       }
       if (firstField) requestFocus(firstField)
       return
@@ -539,7 +572,11 @@ export default function ParticipantCreatePage() {
   // INTAKE-07 — see src/lib/conditionalFields.ts's module doc. isVisible/hiddenFields drive JSX
   // gating and the Review step below; the two hooks handle unregister-on-hide (validation +
   // payload exclusion) and focus-fallback (accessibility) as side effects.
-  const { isVisible, hiddenFields } = useConditionalFields(watchedValues, CONDITIONAL_FIELDS)
+  // `as Partial<...>`: useWatch's return type deep-partials array-item fields (riskEntries'
+  // atRiskParty/description become optional there), while these shared utilities' `Partial<V>`
+  // signature is TS's shallow Partial (only top-level keys), which doesn't follow suit — a
+  // spurious structural mismatch, not a real behavioural one.
+  const { isVisible, hiddenFields } = useConditionalFields(watchedValues as Partial<ParticipantFormData>, CONDITIONAL_FIELDS)
   useUnregisterHiddenFields(unregister, hiddenFields)
   useFocusFallbackOnHide(CONDITIONAL_FIELDS, hiddenFields)
 
@@ -547,7 +584,7 @@ export default function ParticipantCreatePage() {
   // reference) is the resetKey — see useDeriveFieldValues' doc for why this keeps a saved
   // participant's deliberately-unticked HIDPA selection from being silently re-derived on every
   // edit-page load, while still deriving live off real edits in both create and edit modes.
-  useDeriveFieldValues(watchedValues, FIELD_DERIVATIONS, setValue, existing)
+  useDeriveFieldValues(watchedValues as Partial<ParticipantFormData>, FIELD_DERIVATIONS, setValue, existing)
 
   // FUND-02 review-round fix: the server unconditionally clears FundingOrganisation on save
   // whenever FundingSource != Other (defence in depth against a stale value lingering — see
@@ -677,6 +714,10 @@ export default function ParticipantCreatePage() {
         behaviourRiskSummary: existing.behaviourRiskSummary ?? '',
         notes: existing.notes ?? '',
         preferredStaffId: existing.preferredStaffId ?? '',
+        // INTAKE-09: edit-mode never populates this from `existing` — risk entries for an
+        // already-created participant are managed via the nested CRUD (the detail page's Risks
+        // section), not through this wizard. Reset to empty so useFieldArray stays consistent.
+        riskEntries: [],
       })
     }
   }, [existing, reset])
@@ -702,17 +743,29 @@ export default function ParticipantCreatePage() {
     }
     try {
       if (isEdit) {
+        // INTAKE-09: edit-mode never renders the riskEntries rows UI (see riskEntries' schema
+        // doc) — drop the always-empty array rather than send a meaningless key the Update
+        // endpoint ignores anyway.
+        delete payload.riskEntries
         const res = await updateParticipant.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
         if (res.success) {
           // Clear isDirty synchronously (flushSync) before navigating so the
           // unsaved-changes blocker doesn't fire for this intentional navigation.
-          flushSync(() => reset(data))
+          // `as unknown as ...`: react-hook-form's DeepPartial helper doesn't recurse into array-of-object
+          // fields (riskEntries), so it keeps that nested item shape non-optional in reset()'s
+          // parameter type — a spurious mismatch against `data`'s own (correctly non-optional)
+          // shape, not a real one.
+          flushSync(() => reset(data as unknown as Parameters<typeof reset>[0]))
           navigate(`/participants/${id}`)
         }
       } else {
         const res = await createParticipant.mutateAsync(payload)
         if (res.success && res.data?.id) {
-          flushSync(() => reset(data))
+          // `as unknown as ...`: react-hook-form's DeepPartial helper doesn't recurse into array-of-object
+          // fields (riskEntries), so it keeps that nested item shape non-optional in reset()'s
+          // parameter type — a spurious mismatch against `data`'s own (correctly non-optional)
+          // shape, not a real one.
+          flushSync(() => reset(data as unknown as Parameters<typeof reset>[0]))
           navigate(`/participants/${res.data.id}`)
         }
       }
@@ -845,6 +898,13 @@ export default function ParticipantCreatePage() {
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
+        // INTAKE-09 — create-mode only; edit-mode never populates riskEntries (see its schema doc).
+        ...(!isEdit ? [{
+          label: 'Risk Entries',
+          value: watchedValues.riskEntries?.length
+            ? `${watchedValues.riskEntries.length} entered`
+            : 'None',
+        }] : []),
       ],
     },
   ]
@@ -1525,6 +1585,80 @@ export default function ParticipantCreatePage() {
                 <textarea id="notes" {...register('notes')} rows={3} placeholder="Any additional notes..." />
               </FormField>
             </Card>
+
+            {/* INTAKE-09 — repeatable risk-entry rows, categorised by who is at risk. Create-mode
+                only: the wizard submits one participant payload, so rows entered here are created
+                transactionally with the participant (CreateParticipantDto.riskEntries). Once a
+                participant exists, risk entries are instead managed via the nested CRUD on the
+                detail page's Risks section (RiskEntriesSection) — mirroring how Routines' own tab
+                works for its own entity — so this block doesn't render in edit mode at all. */}
+            {isEdit ? (
+              <Card title="Risk Entries" className="space-y-3">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Risk entries are managed from the{' '}
+                  <Link to={`/participants/${id}`} className="text-[var(--color-primary)] hover:underline">
+                    Risks section
+                  </Link>{' '}
+                  on this participant's detail page.
+                </p>
+              </Card>
+            ) : (
+              <Card title="Risk Entries" className="space-y-3">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Capture potential risks in supporting this participant, categorised by who is at
+                  risk. Optional — add a row for each risk identified at intake.
+                </p>
+                {riskEntryFields.length > 0 && (
+                  <div className="space-y-3">
+                    {riskEntryFields.map((field, index) => (
+                      <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                        <div className="flex items-start gap-2">
+                          <FormField label="At Risk" className="flex-1 mb-0">
+                            <select id={`riskEntries.${index}.atRiskParty`} {...register(`riskEntries.${index}.atRiskParty` as const)}>
+                              {AT_RISK_PARTIES.map((party) => (
+                                <option key={party} value={party}>{AT_RISK_PARTY_LABELS[party]}</option>
+                              ))}
+                            </select>
+                          </FormField>
+                          <button
+                            type="button"
+                            onClick={() => removeRiskEntry(index)}
+                            aria-label={`Remove risk entry ${index + 1}`}
+                            title="Remove risk entry"
+                            className="mt-6 p-1.5 min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <FormField label="Description" required error={errors.riskEntries?.[index]?.description?.message} className="mb-0">
+                          <textarea
+                            id={`riskEntries.${index}.description`}
+                            {...register(`riskEntries.${index}.description` as const)}
+                            rows={2}
+                            placeholder="Describe the risk..."
+                          />
+                        </FormField>
+                        <FormField label="Mitigation Notes" className="mb-0">
+                          <textarea
+                            id={`riskEntries.${index}.mitigationNotes`}
+                            {...register(`riskEntries.${index}.mitigationNotes` as const)}
+                            rows={2}
+                            placeholder="How this risk is mitigated (optional)..."
+                          />
+                        </FormField>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => appendRiskEntry({ atRiskParty: 'Participant', description: '', mitigationNotes: '' })}
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+                >
+                  <Plus className="w-4 h-4" /> Add risk entry
+                </button>
+              </Card>
+            )}
           </div>
         )}
 

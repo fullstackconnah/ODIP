@@ -10,6 +10,7 @@ import type {
   WitnessStatus,
 } from './enums'
 import type { ParticipantRoutineDto } from './routines'
+import type { ParticipantRiskEntryDto } from './risk-entries'
 
 // ── My Shifts list ────────────────────────────────────────
 
@@ -103,6 +104,9 @@ export interface PortalShiftDetailDto {
   participant: PortalParticipantSummaryDto
   // Reuses the Task 2 routine shape — feed straight into getRelevantRoutines().
   routines: ParticipantRoutineDto[]
+  // INTAKE-09. Active risk entries only — unlike routines these are not shift-window filtered,
+  // since a risk applies regardless of time of day.
+  riskEntries: ParticipantRiskEntryDto[]
   medications: PortalMedicationSummaryDto[]
 }
 

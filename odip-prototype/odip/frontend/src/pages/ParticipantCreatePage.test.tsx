@@ -247,7 +247,7 @@ describe('ParticipantCreatePage Review step', () => {
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
-        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements',
       ].sort()
     )
@@ -548,7 +548,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
-        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements',
       ].sort()
     )
@@ -581,7 +581,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region',
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
-        'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
+        'requiresStandingMachine', 'riskEntries', 'serviceStreams', 'supportRatio', 'transportRequirements',
       ].sort()
     )
   })
@@ -614,8 +614,8 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'othersLivingInAccommodation', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
-        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'serviceStreams',
-        'supportRatio', 'transportRequirements',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'riskEntries',
+        'serviceStreams', 'supportRatio', 'transportRequirements',
       ].sort()
     )
   })
@@ -671,7 +671,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
-        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements', 'whoLivesWith',
       ].sort()
     )
@@ -719,7 +719,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'onSiteSupportHours', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
-        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'silProviderContactPhone', 'silProviderName', 'supportRatio', 'transportRequirements',
       ].sort()
     )
@@ -950,5 +950,101 @@ describe('ParticipantCreatePage — DIAG-02 HIDPA support categories + epilepsy 
     await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Cerebral Palsy') // `when` never transitions
 
     expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked() // untouched by the engine either way
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () => {
+  async function advanceToRisks(user: ReturnType<typeof userEvent.setup>) {
+    await advanceToMedical(user)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+  }
+
+  it('adds a row, fills it in, and submits it as part of the create payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToRisks(user)
+
+    await user.click(screen.getByRole('button', { name: /add risk entry/i }))
+    await user.selectOptions(screen.getByLabelText('At Risk'), 'Staff')
+    await user.type(screen.getByPlaceholderText('Describe the risk...'), 'Risk of aggression towards staff.')
+    await user.type(screen.getByPlaceholderText(/how this risk is mitigated/i), 'Two-person support.')
+
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.riskEntries).toEqual([
+      { atRiskParty: 'Staff', description: 'Risk of aggression towards staff.', mitigationNotes: 'Two-person support.' },
+    ])
+  })
+
+  it('supports adding more than one row and removing one', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToRisks(user)
+
+    await user.click(screen.getByRole('button', { name: /add risk entry/i }))
+    await user.type(screen.getAllByPlaceholderText('Describe the risk...')[0], 'First risk.')
+    await user.click(screen.getByRole('button', { name: /add risk entry/i }))
+    await user.type(screen.getAllByPlaceholderText('Describe the risk...')[1], 'Second risk.')
+
+    expect(screen.getAllByPlaceholderText('Describe the risk...')).toHaveLength(2)
+
+    await user.click(screen.getByRole('button', { name: /remove risk entry 1/i }))
+
+    expect(screen.getAllByPlaceholderText('Describe the risk...')).toHaveLength(1)
+    expect(screen.getByPlaceholderText('Describe the risk...')).toHaveValue('Second risk.')
+  })
+
+  it('blocks Next when a row is added with a blank description', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToRisks(user)
+
+    await user.click(screen.getByRole('button', { name: /add risk entry/i }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    // A row-level error renders inline under that row's Description field (FormField's own
+    // error text, not the top-of-step alert summary — a nested array-item error doesn't
+    // collapse onto the whole `riskEntries` field the way a flat field's error would).
+    expect(screen.getByText('Description is required')).toBeInTheDocument()
+    // Still on the Risks & Consents step — Review's read-only content hasn't appeared.
+    expect(screen.getByRole('button', { name: /add risk entry/i })).toBeInTheDocument()
+  })
+
+  it('rows are optional overall — submitting with zero rows sends an empty array', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToRisks(user)
+
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review, no rows added
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0].riskEntries).toEqual([])
+  })
+
+  it('edit mode does not render the add-rows UI, and points to the detail page\'s Risks section instead', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    // Edit mode makes every step immediately explorable — jump straight to the Risks pill.
+    await user.click(within(stepNav()).getByRole('button', { name: /risks/i }))
+
+    expect(screen.queryByRole('button', { name: /add risk entry/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/risk entries are managed from the/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /risks section/i })).toHaveAttribute('href', '/participants/participant-1')
   })
 })

@@ -2347,4 +2347,85 @@ public static class DbSeeder
         await SeedRestrictivePracticesAsync(context, ct);
     }
 
+    /// <summary>
+    /// INTAKE-09. Seeds a few demo <see cref="ParticipantRiskEntry"/> rows spanning all four
+    /// <see cref="AtRiskParty"/> categories, for the same demo participants as
+    /// <see cref="SeedParticipantRoutinesAsync"/>/<see cref="SeedRestrictivePracticesAsync"/>.
+    /// Idempotent via fixed GUIDs + an existence check, same pattern as those two methods.
+    /// </summary>
+    public static async Task SeedParticipantRiskEntriesAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.ParticipantRiskEntries.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+
+        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
+        if (existingParticipants.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var entries = new List<ParticipantRiskEntry>();
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            entries.Add(new ParticipantRiskEntry
+            {
+                Id = Guid.Parse("76000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, ParticipantId = sophieId,
+                AtRiskParty = AtRiskParty.Participant,
+                Description = "Risk of seizure-related injury during a fall.",
+                MitigationNotes = "Padded flooring in her room; staff trained in seizure first aid.",
+                IsActive = true, CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddMonths(-6),
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            entries.Add(new ParticipantRiskEntry
+            {
+                Id = Guid.Parse("76000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                AtRiskParty = AtRiskParty.Public,
+                Description = "Risk to public safety if she leaves the property unsupervised in an unfamiliar area.",
+                MitigationNotes = "Continuous supervision protocol per her routine; GPS tracker watch.",
+                IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+
+            entries.Add(new ParticipantRiskEntry
+            {
+                Id = Guid.Parse("76000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                AtRiskParty = AtRiskParty.OtherParticipants,
+                Description = "Risk of overstimulation triggering distress that could escalate around other participants during group activities.",
+                MitigationNotes = "Schedule her activities separately from large groups where possible; use noise-cancelling headphones.",
+                IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(harrisonId))
+        {
+            entries.Add(new ParticipantRiskEntry
+            {
+                Id = Guid.Parse("76000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, ParticipantId = harrisonId,
+                AtRiskParty = AtRiskParty.Staff,
+                Description = "Risk of a hypoglycaemic episode requiring staff intervention during outings.",
+                MitigationNotes = "Staff carry glucose tablets and are trained to recognise early signs.",
+                IsActive = true, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (entries.Count == 0)
+            return;
+
+        context.ParticipantRiskEntries.AddRange(entries);
+        await context.SaveChangesAsync(ct);
+    }
+
 }
