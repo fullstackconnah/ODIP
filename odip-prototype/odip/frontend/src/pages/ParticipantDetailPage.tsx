@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useParticipant, useParticipantBookings, useSupportProfile, useParticipantAlerts } from '@/api/hooks'
+import { useParticipant, useParticipantBookings, useSupportProfile, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf } from '@/api/hooks'
 import { formatDateAu, maskNdisNumber } from '@/lib/utils'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { Card } from '@/components/Card'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2 } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -48,6 +48,10 @@ export default function ParticipantDetailPage() {
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: supportProfile } = useSupportProfile(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
+  // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
+  // early returns below, per the rules of hooks.
+  const downloadIntakeForm = useDownloadIntakeFormPdf()
+  const downloadParticipantProfile = useDownloadParticipantProfilePdf()
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!p) return <div className="text-center py-12">Participant not found</div>
@@ -118,11 +122,50 @@ export default function ParticipantDetailPage() {
             <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
           )}
         </div>
-        {canWrite && (
-          <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-            <Pencil className="w-4 h-4" /> Edit
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
+              downloading/printing documents is a read action, and this page has no more specific
+              canView... flag of its own to gate read-level content on (see usePermissions — the
+              closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
+              features), so these follow the rest of the page's ungated read-only content. */}
+          <div className="flex flex-col items-start gap-1">
+            <button
+              type="button"
+              onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
+              disabled={downloadIntakeForm.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
+            >
+              {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
+            </button>
+            {downloadIntakeForm.isError && (
+              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-start gap-1">
+            <button
+              type="button"
+              onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
+              disabled={downloadParticipantProfile.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
+            >
+              {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
+            </button>
+            {downloadParticipantProfile.isError && (
+              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
+            )}
+          </div>
+          {canWrite && (
+            <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
+              <Pencil className="w-4 h-4" /> Edit
+            </Link>
+          )}
+        </div>
       </div>
 
       <TabNav
