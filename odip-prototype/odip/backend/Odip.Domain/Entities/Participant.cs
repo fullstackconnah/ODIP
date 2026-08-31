@@ -170,6 +170,20 @@ public class Participant : ITenantEntity
     /// </summary>
     public HidpaSupportCategory HidpaSupportCategories { get; set; } = HidpaSupportCategory.None;
 
+    /// <summary>
+    /// INTAKE-08: true while this participant is a partially-completed wizard draft, saved via
+    /// the "Save as draft" action on any intake wizard step rather than a full Review submission.
+    /// Defaults false (a normal, fully-validated participant). A draft is excluded from every
+    /// operational picker/aggregate surface (roster board, shift assignment, compatibility,
+    /// medication/witness pickers, incident participant pickers, trip/booking pickers,
+    /// claims/billing, the alerts aggregate, and the portal) — see the surfaces enumerated in
+    /// ParticipantsController's Create/Update doc and the individual `!p.IsDraft` query sites
+    /// this flag gates — while still showing (with a badge) on the plain participants list, so a
+    /// coordinator can find and resume it. Cleared back to false the moment a final submission
+    /// (IsDraft=false on the Update payload) comes from the wizard's Review step.
+    /// </summary>
+    public bool IsDraft { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

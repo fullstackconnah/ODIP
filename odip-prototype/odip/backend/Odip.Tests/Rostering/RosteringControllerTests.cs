@@ -92,6 +92,45 @@ public class RosteringControllerTests
         OverrideReason = overrideReason, AcknowledgedFindingCodes = codes
     };
 
+    // ── INTAKE-08: draft participants are excluded from every roster surface ────────────
+
+    [Fact]
+    public async Task CreateShift_DraftParticipant_ReturnsBadRequest_ParticipantNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+        var dto = CleanCreateDto(draft.Id, staff.Id);
+
+        var result = await controller.CreateShift(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
+        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetBoard_ParticipantMode_ExcludesDraftParticipants()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var activeParticipant = SeedParticipant(db, "Amy", "Ng");
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Contains(body.Data!.ParticipantRows, r => r.ParticipantId == activeParticipant.Id);
+        Assert.DoesNotContain(body.Data.ParticipantRows, r => r.ParticipantId == draft.Id);
+    }
+
     // ── Blocking finding gate ────────────────────────────────────────────
 
     [Fact]

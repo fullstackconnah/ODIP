@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { Card } from '@/components/Card'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -68,11 +68,30 @@ export default function ParticipantDetailPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">{p.fullName}</h1>
             <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
+            {p.isDraft && (
+              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[#fef3c7] text-[#92400e]' }} />
+            )}
           </div>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
           <div className="mt-2">
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
+          {p.isDraft && (
+            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[#fef3c7] text-[#92400e] text-sm border border-[#92400e]/20">
+              <span className="flex items-center gap-2">
+                <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
+                This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised.
+              </span>
+              {canWrite && (
+                <Link
+                  to={`/participants/${id}/edit`}
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg bg-[#92400e] text-white text-sm font-medium hover:bg-[#92400e]/90 transition-colors shrink-0"
+                >
+                  <Pencil className="w-4 h-4" /> Resume intake
+                </Link>
+              )}
+            </div>
+          )}
           {canViewAlerts && alertsData && (
             <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
           )}

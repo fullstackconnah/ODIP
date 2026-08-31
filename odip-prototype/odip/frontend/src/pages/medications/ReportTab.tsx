@@ -36,7 +36,8 @@ export default function ReportTab() {
 
   const rangeInvalid = Boolean(from && to && from > to)
 
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: the medication picker excludes drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const { data: report, isLoading } = useAdministrationsReport({
     participantId: participantId || undefined,
     from: from || undefined,

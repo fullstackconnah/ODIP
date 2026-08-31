@@ -113,7 +113,8 @@ export default function ClaimBatchBuilderPage() {
 
   const { data, isLoading, isFetching, isError } = useBillableEvents(queryParams)
   const events = data ?? NO_EVENTS
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
   // ── Selection — survives filter changes ─────────────────────────────────
   // `selectedIds` is never touched by a refetch. `knownEvents` accumulates event records we've

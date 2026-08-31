@@ -104,7 +104,8 @@ export default function IncidentCreatePage() {
   const mutation = isEdit ? updateIncident : createIncident
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: the incident participant picker excludes drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const { data: existingIncident } = useIncident(id)
 
   // INC-03: router-state prefill dropped in by RecordAdministrationModal after a

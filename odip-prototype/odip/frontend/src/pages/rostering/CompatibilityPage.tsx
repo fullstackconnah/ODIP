@@ -84,7 +84,8 @@ function CompatibilityMatrixSkeleton() {
 
 export default function CompatibilityPage() {
   const { canWrite } = usePermissions()
-  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants()
+  // INTAKE-08: the compatibility matrix excludes drafts.
+  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants({ isDraft: 'false' })
   const { data: staff = [], isLoading: staffLoading, isError: staffError, refetch: refetchStaff } = useStaff()
 
   const participantIds = useMemo(() => participants.map(p => p.id), [participants])

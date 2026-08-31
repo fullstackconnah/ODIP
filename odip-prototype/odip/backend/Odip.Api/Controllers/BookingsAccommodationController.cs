@@ -100,6 +100,11 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Create([FromBody] CreateBookingDto dto, CancellationToken ct)
     {
+        // INTAKE-08: trip/booking pickers exclude drafts — a draft can't be booked onto a trip.
+        // Also closes a pre-existing gap: ParticipantId wasn't validated to exist at all before.
+        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
+            return BadRequest(ApiResponse<BookingDetailDto>.Fail("Participant not found"));
+
         var booking = new ParticipantBooking
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, ParticipantId = dto.ParticipantId,

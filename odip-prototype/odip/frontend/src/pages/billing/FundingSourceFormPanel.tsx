@@ -77,7 +77,8 @@ export default function FundingSourceFormPanel({
   defaultParticipantId,
 }: FundingSourceFormPanelProps) {
   const isEdit = !!fundingSource
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const createMutation = useCreateFundingSource()
   const updateMutation = useUpdateFundingSource()
   const [error, setError] = useState<string | null>(null)

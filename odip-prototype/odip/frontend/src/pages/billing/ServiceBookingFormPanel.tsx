@@ -40,7 +40,8 @@ export type ServiceBookingFormPanelProps = {
 const EMPTY_LINE = { supportItemNumber: '', allocatedAmount: 0 }
 
 export default function ServiceBookingFormPanel({ isOpen, onClose, defaultParticipantId }: ServiceBookingFormPanelProps) {
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const createMutation = useCreateServiceBooking()
   const [error, setError] = useState<string | null>(null)
 

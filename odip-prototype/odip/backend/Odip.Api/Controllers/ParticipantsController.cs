@@ -36,6 +36,25 @@ public class ParticipantsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
+    /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
+    /// enough to be findable in the list (at least one of the two names), while a full
+    /// create/update (IsDraft false, including a final wizard submission) requires both, exactly
+    /// as [Required] used to. Called first, ahead of every other validator below, in both
+    /// Create and Update.
+    /// </summary>
+    private static string? ValidateNames(CreateParticipantDto dto)
+    {
+        var firstBlank = string.IsNullOrWhiteSpace(dto.FirstName);
+        var lastBlank = string.IsNullOrWhiteSpace(dto.LastName);
+        if (dto.IsDraft)
+            return firstBlank && lastBlank ? "Provide at least a first or last name to save a draft." : null;
+        if (firstBlank) return "First name is required.";
+        if (lastBlank) return "Last name is required.";
+        return null;
+    }
+
     /// <summary>INTAKE-05: Gender "Other" requires the self-description free-text field, both ends.</summary>
     private static string? ValidateGender(CreateParticipantDto dto) =>
         dto.Gender == Gender.Other && string.IsNullOrWhiteSpace(dto.GenderSelfDescription)
@@ -141,7 +160,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
         [FromQuery] string? search, [FromQuery] string? region, [FromQuery] bool? isActive,
-        [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport,
+        [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 200);
@@ -153,6 +172,10 @@ public class ParticipantsController : ControllerBase
         if (isActive.HasValue) query = query.Where(p => p.IsActive == isActive.Value);
         if (wheelchairRequired.HasValue) query = query.Where(p => p.MobilityAidWheelchair == wheelchairRequired.Value);
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
+        // INTAKE-08: unfiltered by default (the plain participants list shows drafts, badged) —
+        // every picker/aggregate surface that must exclude drafts passes isDraft=false explicitly
+        // (see the report's enumerated surface list for every frontend call site that does).
+        if (isDraft.HasValue) query = query.Where(p => p.IsDraft == isDraft.Value);
 
         var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .Select(p => new ParticipantListDto
@@ -169,6 +192,7 @@ public class ParticipantsController : ControllerBase
                 HasRestrictivePracticeFlag = p.RestrictivePractices.Any(rp => rp.IsActive),
                 ServiceStreams = p.ServiceStreams,
                 HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
+                IsDraft = p.IsDraft,
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -224,6 +248,7 @@ public class ParticipantsController : ControllerBase
             PreferredStaffName = p.PreferredUser != null
                 ? p.PreferredUser.FirstName + " " + p.PreferredUser.LastName
                 : null,
+            IsDraft = p.IsDraft,
         }));
     }
 
@@ -232,6 +257,10 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Create([FromBody] CreateParticipantDto dto, CancellationToken ct)
     {
+        var namesError = ValidateNames(dto);
+        if (namesError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
+
         var invalidOptions = dto.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
         if (invalidOptions.Count > 0)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
@@ -287,6 +316,7 @@ public class ParticipantsController : ControllerBase
             // INTAKE-06 — plain participant-level fields, not arrangement-conditional.
             AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
             AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
+            IsDraft = dto.IsDraft,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -311,7 +341,7 @@ public class ParticipantsController : ControllerBase
         await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
-            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
+            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
     }
 
     /// <summary>Update an existing participant.</summary>
@@ -319,6 +349,10 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Update(Guid id, [FromBody] UpdateParticipantDto dto, CancellationToken ct)
     {
+        var namesError = ValidateNames(dto);
+        if (namesError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
+
         var invalidOptions = dto.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
         if (invalidOptions.Count > 0)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
@@ -378,13 +412,17 @@ public class ParticipantsController : ControllerBase
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;
         p.Notes = dto.Notes; p.PreferredUserId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
+        // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
+        // draft (another "Save as draft" click, from any wizard step), false is a full save,
+        // including the final Review-step submission that's meant to clear a draft off for good.
+        p.IsDraft = dto.IsDraft;
         p.UpdatedAt = DateTime.UtcNow;
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update.
         await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct);
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, UpdatedAt = p.UpdatedAt }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }
 
     /// <summary>Get bookings for a participant.</summary>

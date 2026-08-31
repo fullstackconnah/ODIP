@@ -110,7 +110,9 @@ export default function BillingPage() {
 
 function FundingSourcesTab() {
   const { canWrite } = usePermissions()
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts — a draft can't have funding
+  // sources/bookings/billable events.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const updateFundingSource = useUpdateFundingSource()
   const [participantFilter, setParticipantFilter] = useState('')
   const [routeTypeFilter, setRouteTypeFilter] = useState('')
@@ -247,7 +249,9 @@ function FundingSourcesTab() {
 
 function ServiceBookingsTab() {
   const { canWrite } = usePermissions()
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts — a draft can't have funding
+  // sources/bookings/billable events.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const [participantFilter, setParticipantFilter] = useState('')
   const [activeOnly, setActiveOnly] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -352,7 +356,9 @@ function ServiceBookingsTab() {
 
 function BillableEventsTab() {
   const { canWrite } = usePermissions()
-  const { data: participants = [] } = useParticipants()
+  // INTAKE-08: claims/billing surfaces exclude drafts — a draft can't have funding
+  // sources/bookings/billable events.
+  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const [participantFilter, setParticipantFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [streamFilter, setStreamFilter] = useState('')

@@ -309,4 +309,42 @@ public class BillingControllerTests
         var reloaded = await db.BillableEvents.SingleAsync(e => e.Id == ev.Id);
         Assert.Equal(10m, reloaded.TotalAmount); // unchanged
     }
+
+    // ── INTAKE-08: draft participants are excluded from claims/billing surfaces ────────
+
+    [Fact]
+    public async Task CreateFundingSource_DraftParticipant_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        db.SaveChanges();
+        var controller = new BillingController(db);
+
+        var result = await controller.CreateFundingSource(
+            new CreateFundingSourceDto { ParticipantId = draft.Id, RouteType = FundingRouteType.AgencyManaged },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.FundingSources.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBillableEvent_DraftParticipant_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
+        db.Participants.Add(draft);
+        var fs = new FundingSource { Id = Guid.NewGuid(), ParticipantId = draft.Id, RouteType = FundingRouteType.AgencyManaged };
+        db.FundingSources.Add(fs);
+        db.SaveChanges();
+        var controller = new BillingController(db);
+
+        var result = await controller.CreateBillableEvent(
+            new CreateBillableEventDto { ParticipantId = draft.Id, FundingSourceId = fs.Id },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.BillableEvents.ToListAsync());
+    }
 }

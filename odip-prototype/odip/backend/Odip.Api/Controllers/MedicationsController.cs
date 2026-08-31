@@ -55,7 +55,9 @@ public class MedicationsController : ControllerBase
     public async Task<ActionResult<ApiResponse<MedicationDetailDto>>> Create(
         Guid participantId, [FromBody] CreateMedicationDto dto, CancellationToken ct)
     {
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
+        // INTAKE-08: a draft participant can't have a medication record created against them —
+        // reads the same as "not found" from the caller's side (mirrors the Rostering pattern).
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId && !p.IsDraft, ct);
         if (participant == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Participant not found"));
 
         var validationError = ValidateMedicationDto(
