@@ -123,6 +123,13 @@ export default function ParticipantDetailPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <Card title="Personal Information">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+              {/* INTAKE sub-wave A, PID-004 — only shown when set, same empty-state pattern as
+                  the other optional fields below. */}
+              {p.middleName && (
+                <>
+                  <span className="text-[var(--color-muted-foreground)]">Middle Name</span><span>{p.middleName}</span>
+                </>
+              )}
               <span className="text-[var(--color-muted-foreground)]">Date of Birth</span><span>{formatDateAu(p.dateOfBirth)}</span>
               <span className="text-[var(--color-muted-foreground)]">Gender</span>
               <span>
@@ -130,6 +137,10 @@ export default function ParticipantDetailPage() {
                   ? GENDER_LABELS[p.gender as Gender] + (p.gender === 'Other' && p.genderSelfDescription ? ` (${p.genderSelfDescription})` : '')
                   : '—'}
               </span>
+              {/* INTAKE sub-wave A, PID-010/CON-007/CON-008. */}
+              <span className="text-[var(--color-muted-foreground)]">Place of Birth</span><span>{p.placeOfBirth || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Phone</span><span>{p.phone || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Email</span><span>{p.email || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Funding Source</span>
               <span>{FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis']}</span>
               {/* FUND-02: subsequent content changes per funding source — NDIS shows the plan
@@ -146,6 +157,8 @@ export default function ParticipantDetailPage() {
                   <span className="text-[var(--color-muted-foreground)]">Funding Organisation</span><span>{p.fundingOrganisation || '—'}</span>
                 </>
               )}
+              {/* INTAKE sub-wave A, NDIS-006. */}
+              <span className="text-[var(--color-muted-foreground)]">DSOA</span><span>{p.isDsoa ? 'Yes' : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
               <span className="text-[var(--color-muted-foreground)]">Preferred Staff</span><span>{p.preferredStaffName ?? '—'}</span>
             </div>
@@ -153,7 +166,7 @@ export default function ParticipantDetailPage() {
           <Card title="Address & Living Arrangements">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Address</span>
-              <span>{[p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode].filter(Boolean).join(', ') || '—'}</span>
+              <span>{[p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode, p.country].filter(Boolean).join(', ') || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Living Arrangement</span>
               <span>{p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : '—'}</span>
               {/* LIVING-02/03/04: subsequent content changes per arrangement type — same
@@ -218,6 +231,59 @@ export default function ParticipantDetailPage() {
               <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
             </div>
           </Card>
+          {/* INTAKE sub-wave A — Key Identifiers step (research spec §4.4/§5). Same
+              whole-card-conditional empty-state pattern as Medical below: nothing here is
+              required, so the card only renders once at least one field has a value, rather than
+              showing a wall of "—" placeholders. */}
+          {(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
+            || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm) && (
+            <Card title="Key Identifiers">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                {p.pensionCardNumber && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Pension Card</span>
+                    <span>{p.pensionCardNumber}{p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}</span>
+                  </>
+                )}
+                {p.medicareNumber && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Medicare</span>
+                    <span>{p.medicareNumber}{p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}</span>
+                  </>
+                )}
+                {p.companionCardNumber && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Companion Card</span>
+                    <span>{p.companionCardNumber}{p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}</span>
+                  </>
+                )}
+                {p.privateHealthFund && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Private Health Fund</span>
+                    <span>{p.privateHealthFund}{p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}</span>
+                  </>
+                )}
+                {p.taxiCardNumber && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Taxi Card</span>
+                    <span>{p.taxiCardNumber}</span>
+                  </>
+                )}
+                {(p.hairColour || p.eyeColour) && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Hair / Eye Colour</span>
+                    <span>{[p.hairColour, p.eyeColour].filter(Boolean).join(' / ') || '—'}</span>
+                  </>
+                )}
+                {(p.weightKg != null || p.heightCm != null) && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Weight / Height</span>
+                    <span>{[p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') || '—'}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
           {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.medicalSummary) && (
             <Card title="Medical" className="md:col-span-2">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
