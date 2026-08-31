@@ -155,6 +155,19 @@ export default function ParticipantDetailPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <Card title="Identity">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+              {/* PDETAIL-01 review round — First Name/Last Name/Preferred Name are captured on
+                  the wizard's Identity step and shown as their own rows on its Review summary
+                  (ParticipantCreatePage.tsx's reviewGroups), but previously rendered nowhere on
+                  this page: the header's <h1> shows only the computed FullName, which — per
+                  Participant.FullName's own formula — substitutes PreferredName for FirstName
+                  entirely once a preferred name is set, so a participant's legal first name (and
+                  the fact a preferred name is even in use) could become invisible here. Same
+                  always-visible "—" idiom as every other row on this card; FirstName/LastName are
+                  non-nullable on the DTO (always populated for a saved participant) but guarded
+                  the same way as everything else on this card for consistency. */}
+              <span className="text-[var(--color-muted-foreground)]">First Name</span><span>{p.firstName || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Last Name</span><span>{p.lastName || '—'}</span>
+              <span className="text-[var(--color-muted-foreground)]">Preferred Name</span><span>{p.preferredName || '—'}</span>
               {/* INTAKE sub-wave A, PID-004 — same always-visible empty-state pattern as Place
                   of Birth/Phone/Email below, not a hide-when-unset row. */}
               <span className="text-[var(--color-muted-foreground)]">Middle Name</span><span>{p.middleName || '—'}</span>

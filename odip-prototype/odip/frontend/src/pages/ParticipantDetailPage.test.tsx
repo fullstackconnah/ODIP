@@ -144,9 +144,10 @@ describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
 // top-level group asserting its key fields render under the right heading, plus a group-order
 // smoke test and a "the nested CRUD sections all survived the reorg" smoke test.
 describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
-  it('renders the Identity group with the full identity field set', () => {
+  it('renders the Identity group with the full identity field set, including First/Last/Preferred Name (review round — previously unrendered)', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({
+        firstName: 'Sophie', lastName: 'Brown', preferredName: 'Soph',
         middleName: 'Anne', dateOfBirth: '2000-01-15', gender: 'Other', genderSelfDescription: 'Genderfluid',
         placeOfBirth: 'Brisbane', phone: '0400 000 000', email: 'sophie@example.com', preferredStaffName: 'Jamie Lee',
       }),
@@ -155,6 +156,12 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     renderAt('participant-1')
 
     expect(screen.getByRole('heading', { name: 'Identity' })).toBeInTheDocument()
+    // The header <h1> only ever shows the single computed FullName string ("Soph Brown" once a
+    // preferred name is set) — these three must appear as their OWN distinct row values, proving
+    // the underlying FirstName/LastName/PreferredName are each independently visible here too.
+    expect(screen.getByText('Sophie')).toBeInTheDocument()
+    expect(screen.getByText('Brown')).toBeInTheDocument()
+    expect(screen.getByText('Soph')).toBeInTheDocument()
     expect(screen.getByText('Anne')).toBeInTheDocument()
     expect(screen.getByText('15/01/2000')).toBeInTheDocument()
     expect(screen.getByText('Other (Genderfluid)')).toBeInTheDocument()
@@ -162,6 +169,17 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByText('0400 000 000')).toBeInTheDocument()
     expect(screen.getByText('sophie@example.com')).toBeInTheDocument()
     expect(screen.getByText('Jamie Lee')).toBeInTheDocument()
+  })
+
+  it('falls back to "—" for Preferred Name when unset, per this card\'s always-visible empty-state idiom', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ preferredName: null }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    const row = screen.getByText('Preferred Name').nextElementSibling
+    expect(row).toHaveTextContent('—')
   })
 
   it('renders the NDIS & Funding group split out from Identity, including the DSOA/repeat-client flags', () => {
@@ -226,9 +244,20 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByText(/Prefers morning visits\./)).toBeInTheDocument()
   })
 
-  it('orders Details-tab groups to mirror the wizard step order: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Support Needs & Mobility, Medical', () => {
+  it('orders ALL ten Details-tab step-family groups to mirror the wizard step order end to end: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Support Needs & Mobility, Medical, Behaviour & Communication, Community Access, Daily Living, Risks & Hazards', () => {
     mockUseParticipant.mockReturnValue({
-      data: makeParticipant({ medicareNumber: 'MED123', isCald: true, primaryDiagnosis: 'Autism' }),
+      // One field (or the CommunityAccessDailyLiving stream itself, for the stream-gated card)
+      // per whole-card-conditional group, so every group's Card actually renders and can be
+      // located in the heading list — same minimal-trigger approach as each group's own test above.
+      data: makeParticipant({
+        medicareNumber: 'MED123',                              // Key Identifiers
+        isCald: true,                                          // Cultural Background
+        primaryDiagnosis: 'Autism',                            // Medical
+        memory: 'Fair',                                        // Behaviour & Communication
+        serviceStreams: 'CommunityAccessDailyLiving',          // Community Access (stream-gated — see the card's own doc comment: gated on the flag itself, no field needed)
+        favouriteBreakfast: 'Toast',                           // Daily Living (Meals & Diet)
+        behaviourRiskSummary: 'Escalates when routine changes.', // Risks & Hazards Summary
+      }),
       isLoading: false,
     })
     renderAt('participant-1')
@@ -241,6 +270,15 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(idx('Key Identifiers')).toBeLessThan(idx('Cultural Background'))
     expect(idx('Cultural Background')).toBeLessThan(idx('Support Needs & Mobility'))
     expect(idx('Support Needs & Mobility')).toBeLessThan(idx('Medical'))
+    expect(idx('Medical')).toBeLessThan(idx('Behaviour & Communication'))
+    // Community Access is stream-gated overflow content belonging to the Support Needs & Mobility /
+    // Behaviour & Communication steps (see the Community Access card's own doc comment) —
+    // positioned directly after Behaviour & Communication, matching where it actually renders.
+    expect(idx('Behaviour & Communication')).toBeLessThan(idx('Community Access'))
+    // Daily Living has no single card of its own (its ADL grid section carries no title) — Meals &
+    // Diet is one of its constituent cards and stands in as the group's position marker here.
+    expect(idx('Community Access')).toBeLessThan(idx('Meals & Diet'))
+    expect(idx('Meals & Diet')).toBeLessThan(idx('Risks & Hazards Summary'))
   })
 
   it('still renders every nested CRUD section (consents/health-conditions/ADL/risk-entries) after the reorg', () => {
