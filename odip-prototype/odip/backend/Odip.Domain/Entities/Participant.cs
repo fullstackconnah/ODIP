@@ -222,6 +222,15 @@ public class Participant : ITenantEntity
     public HidpaSupportCategory HidpaSupportCategories { get; set; } = HidpaSupportCategory.None;
 
     /// <summary>
+    /// DIAG-02/INTAKE-03 reconciliation: free-text HIDPA notes, satisfying the Community Access
+    /// variant's HIDPA checklist (research spec §3, Section 3) "None of the above + free-text HIDPA
+    /// notes" item. Ungated — same visibility footing as HidpaSupportCategories itself (not
+    /// CommunityAccessDailyLiving-conditional), since this is the same general support-need concept
+    /// regardless of which service stream the participant is in.
+    /// </summary>
+    public string? HidpaNotes { get; set; }
+
+    /// <summary>
     /// INTAKE-08: true while this participant is a partially-completed wizard draft, saved via
     /// the "Save as draft" action on any intake wizard step rather than a full Review submission.
     /// Defaults false (a normal, fully-validated participant). A draft is excluded from every
@@ -424,6 +433,34 @@ public class Participant : ITenantEntity
     /// </summary>
     public string? LikesDislikes { get; set; }
 
+    // ── Community Access — Behaviour & Support Detail (INTAKE-03, CommunityAccessDailyLiving
+    // service-stream variant, research spec §3) ────────────────────────────────────────────────
+    // Flat nullable columns, gated CommunityAccessDailyLiving-conditional in the wizard (that
+    // conditional-visibility wiring is the frontend PR, not this one). See also
+    // ParticipantAdlAssessment.HowToHelpNotes for the per-ADL-row half of this same CA variant,
+    // and ParticipantChecklistItem for the two structured CA checklists (Community Mobility & Transport
+    // Risk, Community Behaviours of Concern) this free-text group sits alongside.
+    /// <summary>CA (research spec §3, Community Access variant, Section 7): "Signs I am happy and settled" — free text. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? SignsHappyAndSettled { get; set; }
+    /// <summary>CA (research spec §3): "What helps me calm down" — free text. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? WhatHelpsMeCalmDown { get; set; }
+    /// <summary>CA (research spec §3, Section 8, Behaviours of Concern): "Triggers" free text. INTAKE-03, CommunityAccessDailyLiving stream-specific. Verified not to overlap Participant's existing Behaviour &amp; Communication fields (Memory/BehavioursOfConcernCurrent/etc. — none capture trigger detail).</summary>
+    public string? BocTriggers { get; set; }
+    /// <summary>CA (research spec §3, Section 8): "Early warning signs" free text. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? BocEarlyWarningSigns { get; set; }
+    /// <summary>CA (research spec §3, Section 8): "What works (de-escalation)" free text. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? BocDeEscalationStrategies { get; set; }
+    /// <summary>CA (research spec §3, Section 8): "What NOT to do" free text. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? BocWhatNotToDo { get; set; }
+    /// <summary>CA (research spec §3, Section 9, "What My Supports Look Like" — four free-text blocks by shift window, "only complete where Oassist staff are providing support"): Morning block. INTAKE-03, CommunityAccessDailyLiving stream-specific.</summary>
+    public string? SupportsLookLikeMorning { get; set; }
+    /// <summary>CA (research spec §3, Section 9): Day block.</summary>
+    public string? SupportsLookLikeDay { get; set; }
+    /// <summary>CA (research spec §3, Section 9): Afternoon-Evening block.</summary>
+    public string? SupportsLookLikeAfternoonEvening { get; set; }
+    /// <summary>CA (research spec §3, Section 9): Overnight block.</summary>
+    public string? SupportsLookLikeOvernight { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -444,4 +481,7 @@ public class Participant : ITenantEntity
 
     /// <summary>INTAKE sub-wave C2. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
     public ICollection<ParticipantAdlAssessment> AdlAssessments { get; set; } = new List<ParticipantAdlAssessment>();
+
+    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. See <see cref="Entities.ParticipantChecklistItem"/>'s type doc.</summary>
+    public ICollection<ParticipantChecklistItem> ChecklistItems { get; set; } = new List<ParticipantChecklistItem>();
 }

@@ -648,6 +648,14 @@ public enum ServiceStreams
 /// OFF — so later REMOVING the Epilepsy diagnosis entirely (not just switching it away and back to
 /// re-trigger the default) still never silently clears an already-set EpilepsyManagement flag. A
 /// flagged high-intensity support need is never dropped without an explicit, separate user action.
+///
+/// INTAKE-03 RECONCILIATION: the Community Access service-stream variant's 14-item HIDPA checklist
+/// (research spec §3, Section 3) was checked against this enum's original 9 members — 9 of the 14
+/// items already existed here (added by DIAG-02) and matched near-verbatim, so this member list was
+/// extended rather than replaced or duplicated. The 5 new members below (512..8192) are the genuine
+/// gap. The checklist's "None of the above" item is already covered by this enum's existing
+/// <see cref="None"/> = 0 default, and its free-text HIDPA-notes item is covered by
+/// <see cref="Entities.Participant.HidpaNotes"/>.
 /// </summary>
 [Flags]
 public enum HidpaSupportCategory
@@ -671,6 +679,16 @@ public enum HidpaSupportCategory
     ComplexWoundCare = 128,
     /// <summary>Recognising and responding to seizures per the participant's seizure-management plan, incl. emergency medication (e.g. midazolam) where authorised. See the DIAG-02 derivation rule above.</summary>
     EpilepsyManagement = 256,
+    /// <summary>INTAKE-03. Managing a surgical stoma/colostomy — appliance changes, site care, output monitoring. Research spec §3 Section 3: "Stoma/colostomy".</summary>
+    StomaColostomyCare = 512,
+    /// <summary>INTAKE-03. Administering and managing insulin therapy for diagnosed diabetes. Research spec §3 Section 3: "Diabetes management (insulin)".</summary>
+    DiabetesManagementInsulin = 1024,
+    /// <summary>INTAKE-03. Repositioning/skin-integrity care to prevent or manage pressure injuries. Research spec §3 Section 3: "Pressure care".</summary>
+    PressureCare = 2048,
+    /// <summary>INTAKE-03. Support delivered under a formal high-intensity behaviour support plan. Research spec §3 Section 3: "High intensity behaviour support".</summary>
+    HighIntensityBehaviourSupport = 4096,
+    /// <summary>INTAKE-03. Administering medication regimes with complex dosing/timing/route requirements beyond routine oral medication. Research spec §3 Section 3: "Medication administration (complex)".</summary>
+    ComplexMedicationAdministration = 8192,
 }
 
 /// <summary>
@@ -866,4 +884,103 @@ public enum AdlLevel
     Supervision,
     Assistance,
     FullSupport,
+}
+
+/// <summary>
+/// INTAKE-03/04 — the two structured checklists the Community Access service-stream variant adds
+/// (research spec §3): Community Mobility &amp; Transport Risk (Section 7, 9 items) and Community
+/// Behaviours of Concern (Section 8's checkbox list, 12 items). Derived via
+/// <see cref="ChecklistItemTypeGroups"/> from <see cref="ChecklistItemType"/>, same "category
+/// derived, not stored" shape as <see cref="AdlCategory"/>/<see cref="AdlTypeGroups"/>.
+/// </summary>
+public enum ChecklistType
+{
+    CommunityMobilityRisk,
+    CommunityBehaviourOfConcern,
+}
+
+/// <summary>Tri-state checklist item answer. Null on <see cref="Entities.ParticipantChecklistItem.Value"/> = not yet assessed (mirrors <see cref="AdlLevel"/>'s nullable convention).</summary>
+public enum ChecklistItemValue
+{
+    No,
+    Yes,
+    NotApplicable,
+}
+
+/// <summary>
+/// INTAKE-03/04 — one member per checklist item across BOTH new Community Access checklists
+/// (research spec §3): the 9-item Community Mobility &amp; Transport Risk checklist (Section 7) and
+/// the 12-item Community Behaviours of Concern checklist (Section 8's checkbox list, distinct from
+/// the free-text Triggers/EarlyWarningSigns/DeEscalation/WhatNotToDo fields on
+/// <see cref="Entities.Participant"/>). Modelled as ONE enum (not two), exactly like
+/// <see cref="AdlType"/> spans Personal and Community/Domestic ADLs — category is derived via
+/// <see cref="ChecklistItemTypeGroups"/>, not stored, same pattern as
+/// <see cref="AdlTypeGroups"/>.
+///
+/// COMMUNITY MOBILITY &amp; TRANSPORT RISK (first 9, research spec §3 Section 7, quoted verbatim):
+/// "Uses wheelchair, Wheelchair accessible vehicle required, Walking frame/ aids, Issues with uneven
+/// ground, Falls risk, Fatigues easily, Seatbelt must be checked, Sensory sensitivities (noise/crowds),
+/// Communication aid/device used".
+/// COMMUNITY BEHAVIOURS OF CONCERN (remaining 12, research spec §3 Section 8, quoted verbatim):
+/// "Harm to self, Harm to others, Property damage, Absconding/running away, Verbal aggression/yelling,
+/// Physical aggression, Refusal to move/ transition, Inappropriate public behaviour, Taking others'
+/// property, Removing clothing in public, Removing seatbelt in vehicle, Other".
+/// </summary>
+public enum ChecklistItemType
+{
+    // ── Community Mobility & Transport Risk checklist (research spec §3, Section 7) ──────────
+    UsesWheelchair,
+    WheelchairAccessibleVehicleRequired,
+    WalkingFrameOrAids,
+    IssuesWithUnevenGround,
+    FallsRisk,
+    FatiguesEasily,
+    SeatbeltMustBeChecked,
+    SensorySensitivities,
+    CommunicationAidOrDeviceUsed,
+
+    // ── Community Behaviours of Concern checklist (research spec §3, Section 8) ───────────────
+    HarmToSelf,
+    HarmToOthers,
+    PropertyDamage,
+    AbscondingRunningAway,
+    VerbalAggressionYelling,
+    PhysicalAggression,
+    RefusalToMoveTransition,
+    InappropriatePublicBehaviour,
+    TakingOthersProperty,
+    RemovingClothingInPublic,
+    RemovingSeatbeltInVehicle,
+    Other,
+}
+
+/// <summary>
+/// Static <see cref="ChecklistItemType"/> -&gt; <see cref="ChecklistType"/> lookup, derived from
+/// <see cref="ChecklistItemType"/>'s fixed declaration order (the first 9 members are Community
+/// Mobility &amp; Transport Risk, the remaining 12 are Community Behaviours of Concern) rather than
+/// a stored column — exactly the same shape and reasoning as <see cref="AdlTypeGroups"/>.
+/// </summary>
+public static class ChecklistItemTypeGroups
+{
+    public static readonly IReadOnlyList<ChecklistItemType> CommunityMobilityRisk = new[]
+    {
+        ChecklistItemType.UsesWheelchair, ChecklistItemType.WheelchairAccessibleVehicleRequired,
+        ChecklistItemType.WalkingFrameOrAids, ChecklistItemType.IssuesWithUnevenGround,
+        ChecklistItemType.FallsRisk, ChecklistItemType.FatiguesEasily,
+        ChecklistItemType.SeatbeltMustBeChecked, ChecklistItemType.SensorySensitivities,
+        ChecklistItemType.CommunicationAidOrDeviceUsed,
+    };
+
+    public static readonly IReadOnlyList<ChecklistItemType> CommunityBehaviourOfConcern = new[]
+    {
+        ChecklistItemType.HarmToSelf, ChecklistItemType.HarmToOthers, ChecklistItemType.PropertyDamage,
+        ChecklistItemType.AbscondingRunningAway, ChecklistItemType.VerbalAggressionYelling,
+        ChecklistItemType.PhysicalAggression, ChecklistItemType.RefusalToMoveTransition,
+        ChecklistItemType.InappropriatePublicBehaviour, ChecklistItemType.TakingOthersProperty,
+        ChecklistItemType.RemovingClothingInPublic, ChecklistItemType.RemovingSeatbeltInVehicle,
+        ChecklistItemType.Other,
+    };
+
+    public static ChecklistType CategoryOf(ChecklistItemType type) =>
+        CommunityMobilityRisk.Contains(type) ? ChecklistType.CommunityMobilityRisk : ChecklistType.CommunityBehaviourOfConcern;
 }

@@ -26,11 +26,18 @@ namespace Odip.Domain.Entities;
 /// source form's unexpanded "I/S/A/F" column headers, flagged as an assumption rather than a
 /// confirmed source-document expansion.
 ///
-/// FUTURE EXTENSION (INTAKE-03, next PR): the Community Access service-stream variant adds a
-/// per-ADL "how to help me" free-text instruction column to this same table (research spec §3).
-/// <see cref="Notes"/> is deliberately the landing spot for that later addition (rather than a new
-/// column) so it arrives as an additive migration with no reshaping of this entity — do not repurpose
-/// Notes for anything narrower than "free-text elaboration for this row" in the meantime.
+/// INTAKE-03 RECONCILIATION (supersedes an earlier "FUTURE EXTENSION" note that proposed reusing
+/// <see cref="Notes"/> for this): the Community Access service-stream variant's per-ADL "how to
+/// help me" free-text instruction (research spec §3) is instead a distinct, new, nullable
+/// <see cref="HowToHelpNotes"/> column, NOT a repurposing of Notes. <see cref="Notes"/> is already
+/// rendered unconditionally in the wizard's ADL grid for every participant regardless of service
+/// stream (generic free-text elaboration); reusing it for a CommunityAccessDailyLiving-gated
+/// concept would either break that existing non-CA behaviour or defeat the conditional-visibility
+/// engine's hide/unregister contract, which operates on whole named fields, not per-stream
+/// relabeling of one shared field. So the two fields now serve different, non-overlapping roles:
+/// Notes stays generic and always-visible, HowToHelpNotes is CommunityAccessDailyLiving-conditional
+/// (that conditional-visibility wiring — showing/hiding the column per stream — is the frontend
+/// PR's job, not this one; this entity only adds the additive, always-nullable column).
 /// </summary>
 public class ParticipantAdlAssessment : ITenantEntity
 {
@@ -47,6 +54,13 @@ public class ParticipantAdlAssessment : ITenantEntity
     public AdlLevel? Level { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// INTAKE-03, CommunityAccessDailyLiving stream-specific: per-ADL-row "how to help me" free-text
+    /// instruction (research spec §3). See this type's doc comment's INTAKE-03 RECONCILIATION note
+    /// for why this is a separate column from <see cref="Notes"/> rather than a reuse of it.
+    /// </summary>
+    public string? HowToHelpNotes { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
