@@ -124,19 +124,47 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// INTAKE-08 fix round 2 (Finding 1): true iff <paramref name="role"/> identifies a person
+    /// either way CONTACT-03 allows (an existing Person via <see cref="CreateParticipantContactRoleDto.PersonId"/>,
+    /// or a new one via a non-blank NewPersonFirstName/NewPersonLastName) — shared by
+    /// <see cref="ValidateContactRoles"/> and <see cref="Create"/>'s persistence loop below so the
+    /// two never disagree about which rows are "real".
+    /// </summary>
+    private static bool ContactRoleHasPerson(CreateParticipantContactRoleDto role) =>
+        role.PersonId != null || !string.IsNullOrWhiteSpace(role.NewPersonFirstName) || !string.IsNullOrWhiteSpace(role.NewPersonLastName);
+
+    /// <summary>
     /// CONTACT-02: server-side gate + CONTACT-03 uniqueness for every contact role row submitted
     /// transactionally with a new participant (mirrors RiskEntries' validate-before-save shape).
     /// Checked against <paramref name="dto"/>'s own PlanType/DateOfBirth (the participant entity
     /// doesn't exist yet at validation time) and against the other rows already in the same
     /// submission (a brand-new participant has no pre-existing rows to check against).
+    ///
+    /// INTAKE-08 fix round 2 (Finding 1): unlike every other validator in this controller, this
+    /// one IS gated on <paramref name="dto"/>.IsDraft — mirrored on <see cref="ValidateNames"/>'s
+    /// shape, not the "always runs identically" doctrine documented on
+    /// <see cref="CreateParticipantDto.IsDraft"/>. Reason: the wizard's Contacts step lets a
+    /// caller add a contact row and then abandon it mid-fill (or never touch it at all) before
+    /// clicking "Save as draft" — <see cref="ContactRoleHasPerson"/>-false rows are silently
+    /// skipped (not validated, not persisted — see Create's loop below) rather than hard-failing
+    /// the entire draft save on the existing-or-new-person requirement. A row that DOES identify
+    /// a person is still gated + uniqueness-checked exactly as a full submission, since a person
+    /// being provided at all means it's actually going to be persisted. Format-level checks on
+    /// whatever a caller DID provide (e.g. NewPersonFirstName's [StringLength(100)]) still run
+    /// regardless of IsDraft — those are enforced automatically by [ApiController]'s model
+    /// validation filter before this method is ever reached, same as every other DTO field. A
+    /// non-draft (IsDraft false) submission hard-fails a personless row exactly as before.
     /// </summary>
     private static string? ValidateContactRoles(CreateParticipantDto dto)
     {
         var seen = new List<(ContactRoleType RoleType, bool IsPrimary, ContactRoleStatus Status)>();
         foreach (var role in dto.ContactRoles)
         {
-            if (role.PersonId == null && string.IsNullOrWhiteSpace(role.NewPersonFirstName) && string.IsNullOrWhiteSpace(role.NewPersonLastName))
+            if (!ContactRoleHasPerson(role))
+            {
+                if (dto.IsDraft) continue;
                 return "Each contact needs either an existing person or a new person's name.";
+            }
 
             var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag);
             if (gateError != null) return gateError;
@@ -373,6 +401,13 @@ public class ParticipantsController : ControllerBase
         // row looks it up by id (already tenant-scoped via _db.People's query filter).
         foreach (var roleDto in dto.ContactRoles)
         {
+            // INTAKE-08 fix round 2 (Finding 1): mirrors ValidateContactRoles' skip above — a
+            // draft's wholly-empty/abandoned-mid-fill row (no person identified) is silently
+            // dropped from the save entirely, rather than trying to create a Person with a blank
+            // name. A non-draft reaches here having already 400'd on this same row inside
+            // ValidateContactRoles, so this branch is unreachable for it.
+            if (!ContactRoleHasPerson(roleDto) && dto.IsDraft) continue;
+
             Person person;
             if (roleDto.PersonId.HasValue)
             {

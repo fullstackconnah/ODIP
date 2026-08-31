@@ -1,3 +1,5 @@
+using Odip.Domain.Entities;
+
 namespace Odip.Domain.Enums;
 
 /// <summary>
@@ -149,5 +151,101 @@ public static class ContactRoleRules
             return "This participant already has a primary Next of Kin — unset the existing primary first.";
 
         return null;
+    }
+}
+
+/// <summary>
+/// Fix-round finding 2: per-<see cref="ContactRoleType"/> field relevance, mirroring the
+/// frontend's CONTACT_ROLE_FIELD_MAP (frontend/src/api/types/contacts.ts) that drives the
+/// add/edit modal's showField visibility (ContactsTab.tsx / ParticipantCreatePage.tsx's Contacts
+/// step) — same "one authoritative source, co-documented across the TS/C# boundary" convention
+/// already used for <see cref="ContactRoleRules.Validate"/>/the frontend's contactRoleGateError.
+/// Keep this map in sync with CONTACT_ROLE_FIELD_MAP by hand — there is no shared codegen source
+/// between the two runtimes; a future pass could add one, out of scope here.
+/// <see cref="Entities.ParticipantContactRole.RelationshipToParticipant"/>/IsPrimary/Status/Notes
+/// (plus the person-identifying and lifecycle-bookkeeping columns) are never cleared — they're
+/// valid input for every role type, matching CONTACT_ROLE_FIELD_MAP's own comment that
+/// "relationshipToParticipant/notes are offered for every role and aren't listed per-entry".
+/// </summary>
+public static class ContactRoleFieldRules
+{
+    private static readonly HashSet<string> NoExtraFields = new();
+
+    private static readonly IReadOnlyDictionary<ContactRoleType, HashSet<string>> RelevantFields = new Dictionary<ContactRoleType, HashSet<string>>
+    {
+        [ContactRoleType.NextOfKin] = NoExtraFields,
+        [ContactRoleType.EmergencyContact] = new() { nameof(ParticipantContactRole.PriorityOrder), nameof(ParticipantContactRole.AuthorisedForMedicalInfo) },
+        [ContactRoleType.Guardian] = new()
+        {
+            nameof(ParticipantContactRole.AppointingTribunal), nameof(ParticipantContactRole.OrderScopeDomains),
+            nameof(ParticipantContactRole.OrderStartDate), nameof(ParticipantContactRole.OrderReviewDate), nameof(ParticipantContactRole.OrderEndDate),
+        },
+        [ContactRoleType.PlanNominee] = new() { nameof(ParticipantContactRole.NomineeScope), nameof(ParticipantContactRole.AppointmentDate), nameof(ParticipantContactRole.ReasonForAppointment) },
+        [ContactRoleType.ChildRepresentative] = new() { nameof(ParticipantContactRole.AlternateRepresentativeName) },
+        [ContactRoleType.SupportCoordinator] = new()
+        {
+            nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.FundingLineItemType),
+            nameof(ParticipantContactRole.RegistrationNumber), nameof(ParticipantContactRole.StartDate), nameof(ParticipantContactRole.EndDate),
+        },
+        [ContactRoleType.PlanManager] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.StartDate), nameof(ParticipantContactRole.EndDate) },
+        [ContactRoleType.Gp] = new()
+        {
+            nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.RegistrationNumber),
+            nameof(ParticipantContactRole.LastVisitDate), nameof(ParticipantContactRole.ConsentToShare),
+        },
+        [ContactRoleType.Specialist] = new() { nameof(ParticipantContactRole.Discipline), nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.FrequencyOfContact) },
+        [ContactRoleType.Pharmacy] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.WebsterPackFlag) },
+        [ContactRoleType.ProviderContact] = new()
+        {
+            nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.RoleTitle),
+            nameof(ParticipantContactRole.RegisteredProviderFlag), nameof(ParticipantContactRole.RegistrationNumber),
+        },
+        [ContactRoleType.Advocate] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
+        [ContactRoleType.Interpreter] = new() { nameof(ParticipantContactRole.PreferredLanguage), nameof(ParticipantContactRole.OrganisationName) },
+        [ContactRoleType.Solicitor] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
+    };
+
+    /// <summary>
+    /// Server-side clearing mirroring <c>ParticipantsController.ApplyLivingArrangementFields</c>
+    /// (per the entity's own type doc) — nulls every role-specific field NOT relevant to
+    /// <paramref name="role"/>'s CURRENT RoleType, regardless of what a stale payload (e.g. a
+    /// client that switched RoleType without re-fetching the form) carried for that field. Call
+    /// this AFTER copying every DTO field onto the entity (see
+    /// ParticipantContactRolesController.ApplyRoleFields), so it clears against the
+    /// just-assigned RoleType — a Guardian -> NextOfKin RoleType change on Update nulls
+    /// AppointingTribunal/OrderScopeDomains/OrderStartDate/OrderReviewDate/OrderEndDate; the
+    /// reverse direction (NextOfKin -> Guardian) leaves those fields exactly as the incoming DTO
+    /// set them, since NextOfKin's own set has nothing to clear.
+    /// </summary>
+    public static void ClearIrrelevantFields(ParticipantContactRole role)
+    {
+        var relevant = RelevantFields.TryGetValue(role.RoleType, out var set) ? set : NoExtraFields;
+
+        if (!relevant.Contains(nameof(role.PriorityOrder))) role.PriorityOrder = null;
+        if (!relevant.Contains(nameof(role.AuthorisedForMedicalInfo))) role.AuthorisedForMedicalInfo = null;
+        if (!relevant.Contains(nameof(role.AppointingTribunal))) role.AppointingTribunal = null;
+        if (!relevant.Contains(nameof(role.OrderScopeDomains))) role.OrderScopeDomains = new();
+        if (!relevant.Contains(nameof(role.OrderStartDate))) role.OrderStartDate = null;
+        if (!relevant.Contains(nameof(role.OrderReviewDate))) role.OrderReviewDate = null;
+        if (!relevant.Contains(nameof(role.OrderEndDate))) role.OrderEndDate = null;
+        if (!relevant.Contains(nameof(role.NomineeScope))) role.NomineeScope = null;
+        if (!relevant.Contains(nameof(role.AppointmentDate))) role.AppointmentDate = null;
+        if (!relevant.Contains(nameof(role.ReasonForAppointment))) role.ReasonForAppointment = null;
+        if (!relevant.Contains(nameof(role.AlternateRepresentativeName))) role.AlternateRepresentativeName = null;
+        if (!relevant.Contains(nameof(role.FundingLineItemType))) role.FundingLineItemType = null;
+        if (!relevant.Contains(nameof(role.OrganisationName))) role.OrganisationName = null;
+        if (!relevant.Contains(nameof(role.RegistrationNumber))) role.RegistrationNumber = null;
+        if (!relevant.Contains(nameof(role.LastVisitDate))) role.LastVisitDate = null;
+        if (!relevant.Contains(nameof(role.ConsentToShare))) role.ConsentToShare = null;
+        if (!relevant.Contains(nameof(role.Discipline))) role.Discipline = null;
+        if (!relevant.Contains(nameof(role.FrequencyOfContact))) role.FrequencyOfContact = null;
+        if (!relevant.Contains(nameof(role.WebsterPackFlag))) role.WebsterPackFlag = null;
+        if (!relevant.Contains(nameof(role.RoleTitle))) role.RoleTitle = null;
+        if (!relevant.Contains(nameof(role.RegisteredProviderFlag))) role.RegisteredProviderFlag = null;
+        if (!relevant.Contains(nameof(role.ScopeNotes))) role.ScopeNotes = null;
+        if (!relevant.Contains(nameof(role.AuthorisationDocumentReference))) role.AuthorisationDocumentReference = null;
+        if (!relevant.Contains(nameof(role.PreferredLanguage))) role.PreferredLanguage = null;
+        if (!relevant.Contains(nameof(role.StartDate))) role.StartDate = null;
+        if (!relevant.Contains(nameof(role.EndDate))) role.EndDate = null;
     }
 }

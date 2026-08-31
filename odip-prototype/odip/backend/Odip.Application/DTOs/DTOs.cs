@@ -104,10 +104,13 @@ public record CreateParticipantDto
     public string LastName { get; init; } = string.Empty;
     /// <summary>
     /// INTAKE-08: true for a "Save as draft" wizard call (relaxes ValidateNames to "at least one
-    /// of FirstName/LastName" and skips nothing else — every other validator in
-    /// ParticipantsController runs identically for a draft, since a provided value being
-    /// internally inconsistent, e.g. FundingSource=Other with no FundingOrganisation, is never
-    /// OK regardless of draft status). False (the default) is a normal, fully-validated
+    /// of FirstName/LastName"). Every other validator in ParticipantsController still runs
+    /// identically for a draft, since a provided value being internally inconsistent, e.g.
+    /// FundingSource=Other with no FundingOrganisation, is never OK regardless of draft status —
+    /// with one further exception (fix round 2, Finding 1): ValidateContactRoles also relaxes
+    /// for a draft, skipping (rather than hard-failing on) a <see cref="ContactRoles"/> row that
+    /// identifies no person at all, since the wizard's Contacts step lets a row be added and then
+    /// abandoned mid-fill before a draft save. False (the default) is a normal, fully-validated
     /// create/update, and is also what a final submission from the wizard's Review step sends to
     /// clear a participant's existing draft flag back off.
     /// </summary>

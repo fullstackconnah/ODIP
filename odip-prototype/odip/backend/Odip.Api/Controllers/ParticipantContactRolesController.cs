@@ -141,7 +141,9 @@ public class ParticipantContactRolesController : ControllerBase
 
     /// <summary>Applies every role-specific field from either DTO shape (Create/Update share the
     /// same field set past the person-identifying fields) onto the entity — used by Create, Update,
-    /// and (see ParticipantsController.Create) the wizard-transactional path.</summary>
+    /// and (see ParticipantsController.Create) the wizard-transactional path. Finishes by clearing
+    /// every field <see cref="ContactRoleFieldRules"/> says isn't relevant to the row's (just-set)
+    /// RoleType — see that type's doc for why (fix-round finding 2).</summary>
     internal static void ApplyRoleFields(ParticipantContactRole role, CreateParticipantContactRoleDto dto)
     {
         role.RoleType = dto.RoleType;
@@ -175,6 +177,7 @@ public class ParticipantContactRolesController : ControllerBase
         role.EndDate = dto.EndDate;
         role.Status = dto.Status;
         role.Notes = dto.Notes;
+        ContactRoleFieldRules.ClearIrrelevantFields(role);
     }
 
     /// <summary>Overload for <see cref="UpdateParticipantContactRoleDto"/>, which carries the same
@@ -212,6 +215,7 @@ public class ParticipantContactRolesController : ControllerBase
         role.EndDate = dto.EndDate;
         role.Status = dto.Status;
         role.Notes = dto.Notes;
+        ContactRoleFieldRules.ClearIrrelevantFields(role);
     }
 
     internal static ParticipantContactRoleDto ToDto(ParticipantContactRole r) => new()

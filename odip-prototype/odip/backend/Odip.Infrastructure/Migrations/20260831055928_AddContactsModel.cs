@@ -167,6 +167,20 @@ namespace Odip.Infrastructure.Migrations
             // overwhelmingly common case of a Contact only ever being linked within one tenant;
             // an orphaned Contact with zero participant links has no tenant to derive and is
             // simply not migrated (it stays reachable via the untouched legacy Contacts table).
+            //
+            // MINOR fix-round finding 4 — accepted cross-tenant edge case: a legacy Contact
+            // linked to participants in TWO DIFFERENT tenants backfills its Person row into only
+            // the smaller TenantId (per the DISTINCT ON tie-break immediately below). Step 2/3's
+            // role row for the OTHER tenant's participant then points at a PersonId that tenant's
+            // own People query filter hides — ParticipantContactRolesController.ToDto's
+            // `r.Person?.FullName ?? string.Empty` falls back to an empty PersonFullName for that
+            // row rather than throwing, so this degrades to a blank-looking contact rather than a
+            // crash, but the row is otherwise unreachable/unfixable from that tenant's UI. This is
+            // accepted as-is for the data actually being deployed here (verified: no Contact in
+            // the current deployed dataset is linked across more than one tenant, so this path
+            // does not fire in practice). Manual remedy if it's ever hit: insert a duplicate
+            // People row scoped to the second tenant (copying the same source fields) and
+            // repoint that tenant's orphaned ParticipantContactRole.PersonId at it.
             migrationBuilder.Sql(
                 """
                 WITH contact_links AS (
@@ -204,25 +218,66 @@ namespace Odip.Infrastructure.Migrations
             // closest fit for the DbSeeder's actual legacy data — every migrated seed Contact's
             // RoleRelationship is a family relationship, e.g. "Mother", "Sister / Next of Kin") —
             // Primary also sets IsPrimary = TRUE, mirroring its old meaning.
+            //
+            // MAJOR fix-round finding 3 — dedup against ContactRoleRules.ValidateUniqueness:
+            // legacy data can carry TWO OR MORE PlanManager-type (ContactType=3) or Primary-type
+            // (ContactType=5) ParticipantContacts rows for the same participant. Landed naively,
+            // that would seed >= 2 active PlanManager roles (ValidateUniqueness: "max 1 active
+            // Plan Manager") or >= 2 active-and-primary NextOfKin roles (ValidateUniqueness: "one
+            // primary NoK") for one participant — data that violates the app's own invariant the
+            // moment this migration lands, and that any later write through
+            // ParticipantContactRolesController would then reject. `ranked` below assigns each
+            // candidate row a deterministic rank (earliest CreatedAt first, ties broken by the
+            // legacy Contact's Id) within its participant + dedup-group (PlanManager rows and
+            // primary-NextOfKin rows are ranked as two separate groups; every other row is
+            // ungrouped and always rank 1, i.e. never touched by the two CASE branches below).
+            // Only rank 1 keeps the state that trips ValidateUniqueness: a later-ranked PlanManager
+            // row is landed Status=Superseded (2) instead of Active (0); a later-ranked Primary
+            // row is landed IsPrimary=FALSE instead of TRUE. No legacy data is dropped — every
+            // row is still inserted, just with the conflicting flag/status downgraded.
             migrationBuilder.Sql(
                 """
+                WITH mapped AS (
+                    SELECT
+                        pc."ParticipantId" AS participant_id,
+                        p."TenantId" AS tenant_id,
+                        c."Id" AS person_id,
+                        CASE c."ContactType"
+                            WHEN 1 THEN 2  -- Guardian -> Guardian
+                            WHEN 2 THEN 1  -- EmergencyContact -> EmergencyContact
+                            WHEN 3 THEN 6  -- PlanManager -> PlanManager
+                            WHEN 4 THEN 5  -- SupportCoordinator -> SupportCoordinator
+                            ELSE 0         -- General/Primary/Secondary/Other -> NextOfKin
+                        END AS role_type,
+                        (c."ContactType" = 5) AS is_primary,
+                        c."RoleRelationship" AS relationship, c."Organisation" AS organisation,
+                        c."Notes" AS notes, c."CreatedAt" AS created_at, c."UpdatedAt" AS updated_at
+                    FROM "ParticipantContacts" pc
+                    JOIN "Contacts" c ON c."Id" = pc."ContactId"
+                    JOIN "Participants" p ON p."Id" = pc."ParticipantId"
+                ),
+                ranked AS (
+                    SELECT m.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY m.participant_id,
+                                CASE WHEN m.role_type = 6 THEN 'plan_manager'
+                                     WHEN m.is_primary THEN 'primary_nok'
+                                     ELSE NULL END
+                            ORDER BY m.created_at, m.person_id
+                        ) AS dedup_rank
+                    FROM mapped m
+                )
                 INSERT INTO "ParticipantContactRoles"
                     ("Id", "TenantId", "ParticipantId", "PersonId", "RoleType",
                      "RelationshipToParticipant", "IsPrimary", "OrderScopeDomains",
                      "OrganisationName", "Status", "Notes", "CreatedAt", "UpdatedAt")
-                SELECT gen_random_uuid(), p."TenantId", pc."ParticipantId", c."Id",
-                       CASE c."ContactType"
-                           WHEN 1 THEN 2  -- Guardian -> Guardian
-                           WHEN 2 THEN 1  -- EmergencyContact -> EmergencyContact
-                           WHEN 3 THEN 6  -- PlanManager -> PlanManager
-                           WHEN 4 THEN 5  -- SupportCoordinator -> SupportCoordinator
-                           ELSE 0         -- General/Primary/Secondary/Other -> NextOfKin
-                       END,
-                       c."RoleRelationship", (c."ContactType" = 5), ARRAY[]::text[],
-                       c."Organisation", 0, c."Notes", c."CreatedAt", c."UpdatedAt"
-                FROM "ParticipantContacts" pc
-                JOIN "Contacts" c ON c."Id" = pc."ContactId"
-                JOIN "Participants" p ON p."Id" = pc."ParticipantId";
+                SELECT gen_random_uuid(), r.tenant_id, r.participant_id, r.person_id, r.role_type,
+                       r.relationship,
+                       CASE WHEN r.is_primary AND r.dedup_rank > 1 THEN FALSE ELSE r.is_primary END,
+                       ARRAY[]::text[], r.organisation,
+                       CASE WHEN r.role_type = 6 AND r.dedup_rank > 1 THEN 2 ELSE 0 END,
+                       r.notes, r.created_at, r.updated_at
+                FROM ranked r;
                 """);
 
             // Step 3: one PlanManager role per Participant.PlanManagerContactId, skipped where

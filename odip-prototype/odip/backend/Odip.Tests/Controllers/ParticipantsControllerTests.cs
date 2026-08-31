@@ -1335,6 +1335,76 @@ public class ParticipantsControllerTests
         Assert.Contains("funding organisation", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
+    // ── INTAKE-08 fix round 2 (Finding 1): drafts with an empty/abandoned contact row ────
+
+    [Fact]
+    public async Task Create_DraftWithEmptyContactRow_Succeeds()
+    {
+        // The exact regression scenario: the wizard's Contacts step lets a caller click
+        // "Add contact" and then abandon it (no person picked/typed) before "Save as draft" —
+        // that row must be silently dropped rather than 400ing the whole draft save.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto
+        {
+            FirstName = "Priya", IsDraft = true,
+            ContactRoles = new() { new CreateParticipantContactRoleDto { RoleType = Domain.Enums.ContactRoleType.NextOfKin } },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.False(await db.ParticipantContactRoles.AnyAsync(r => r.ParticipantId == createdBody.Data!.Id));
+    }
+
+    [Fact]
+    public async Task Create_DraftWithEmptyAndFullyValidContactRows_PersistsOnlyTheValidRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto
+        {
+            FirstName = "Priya", IsDraft = true,
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { RoleType = Domain.Enums.ContactRoleType.NextOfKin }, // wholly empty — skipped
+                new CreateParticipantContactRoleDto
+                {
+                    NewPersonFirstName = "Karen", NewPersonLastName = "Johnson",
+                    RoleType = Domain.Enums.ContactRoleType.NextOfKin, RelationshipToParticipant = "Mother",
+                },
+            },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        var savedRole = await db.ParticipantContactRoles.Include(r => r.Person)
+            .SingleAsync(r => r.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal("Karen", savedRole.Person!.FirstName);
+        Assert.Equal("Mother", savedRole.RelationshipToParticipant);
+    }
+
+    [Fact]
+    public async Task Create_NonDraftWithEmptyContactRow_StillReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new() { new CreateParticipantContactRoleDto { RoleType = Domain.Enums.ContactRoleType.NextOfKin } },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("existing person or a new person", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.False(await db.Participants.AnyAsync());
+    }
+
     [Fact]
     public async Task Update_FinalSubmissionFromDraft_ClearsIsDraft()
     {
