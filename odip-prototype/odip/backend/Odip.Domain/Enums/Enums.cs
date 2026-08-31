@@ -826,8 +826,10 @@ public enum AdlCategory
 /// <see cref="AdlType"/>'s fixed declaration order (the first 6 members are Personal, the
 /// remaining 14 are Community/Domestic) rather than a stored column — see
 /// <see cref="Entities.ParticipantAdlAssessment"/>'s type doc for the reasoning. Both the backend
-/// (MaterializeAll's grid) and the frontend (ADL_TYPE_CATEGORIES in api/types/enums.ts) group rows
-/// this same way; keep the two in sync if this list ever changes.
+/// (MaterializeAll's grid) and the frontend (PERSONAL_ADL_TYPES/COMMUNITY_DOMESTIC_ADL_TYPES/
+/// adlCategoryOf in api/types/enums.ts) group rows this same way; keep the two in sync if this
+/// list ever changes — a partition-completeness test guards each side (AdlTypeGroupsTests.cs
+/// here, api/types/enums.test.ts on the frontend).
 /// </summary>
 public static class AdlTypeGroups
 {

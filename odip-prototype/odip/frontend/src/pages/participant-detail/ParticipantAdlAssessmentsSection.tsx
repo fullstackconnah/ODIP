@@ -8,10 +8,10 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
-import { PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES } from '@/api/types/enums'
+import { ADL_TYPES, adlCategoryOf } from '@/api/types/enums'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import type { ParticipantAdlAssessmentDto } from '@/api/types/adl-assessments'
-import type { AdlType, AdlLevel } from '@/api/types/enums'
+import type { AdlCategory, AdlLevel } from '@/api/types/enums'
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
@@ -61,8 +61,15 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
   const [form, setForm] = useState<AssessmentFormState>(EMPTY_FORM)
   const [modalError, setModalError] = useState<string | null>(null)
 
-  function orderedFor(types: readonly AdlType[]) {
-    return types
+  /**
+   * Groups by category via adlCategoryOf (the same derivation the backend's AdlTypeGroups.
+   * CategoryOf uses) rather than importing PERSONAL_ADL_TYPES/COMMUNITY_DOMESTIC_ADL_TYPES
+   * directly — one source of truth for "which category does this row belong to" that the
+   * partition-completeness tests (api/types/enums.test.ts) already guard.
+   */
+  function orderedFor(category: AdlCategory) {
+    return ADL_TYPES
+      .filter((type) => adlCategoryOf(type) === category)
       .map((type) => assessments.find((a) => a.adlType === type))
       .filter((a): a is ParticipantAdlAssessmentDto => !!a)
   }
@@ -130,7 +137,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
           <Activity className="w-4 h-4" /> Personal ADLs
         </h3>
         <DataTable
-          data={orderedFor(PERSONAL_ADL_TYPES)}
+          data={orderedFor('Personal')}
           columns={columns()}
           keyField="adlType"
           loading={isLoading}
@@ -144,7 +151,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
           <Activity className="w-4 h-4" /> Community &amp; Domestic ADLs
         </h3>
         <DataTable
-          data={orderedFor(COMMUNITY_DOMESTIC_ADL_TYPES)}
+          data={orderedFor('CommunityDomestic')}
           columns={columns()}
           keyField="adlType"
           loading={isLoading}

@@ -225,7 +225,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   },
   {
     field: 'choiceControlNotes', label: 'Choice & Control Notes', sources: ['profile'],
-    notes: 'NEW (sub-wave B). Maps to the Profile\'s "Participant Choice and Control" section (§1c-6, Support areas/Goals/Strengths-Fears free text) — Intake has no equivalent. Modelled as one free-text field here, not the Profile\'s 3-way split; a finer split is a later-wave design decision if needed.',
+    notes: 'NEW (sub-wave B). Maps to the Profile\'s "Participant Choice and Control" section (§1c-6, Support areas/Goals/Strengths-Fears free text) — Intake has no equivalent. Modelled as one free-text field here, not the Profile\'s 3-way split; a finer split is a later-wave design decision if needed. UPDATE (sub-wave C2): that finer split now exists as the dedicated goals/supportAreas/strengthsFears fields (Daily Living step) — see the goals entry\'s DEDUP note for the full reconciliation. This field is kept (existing data, general elaboration not otherwise captured) rather than removed or backfilled from it.',
   },
   {
     field: 'consents', label: 'Consent & Terms (photo/video, alcohol, OTC medication, emergency medical, privacy, travel insurance, T&Cs)', sources: ['profile'], dictionaryId: 'CNST-001..013',
