@@ -211,6 +211,36 @@ public class DbSeederExpansionTests
         Assert.True(withPharmacy >= total - 2, $"Expected almost every medication to carry a PharmacyName ({withPharmacy}/{total}).");
     }
 
+    // ── Guard: RecordedByName/WitnessName must agree with the resolved user (fix round 1) ──
+
+    [Fact]
+    public async Task SeedMedicationsAsync_RecordedByNameAndWitnessNameAgreeWithTheirResolvedUser()
+    {
+        using var db = await SeedFullAsync(Guid.NewGuid().ToString());
+
+        var users = await db.Users.IgnoreQueryFilters().ToDictionaryAsync(u => u.Id, u => u.FullName);
+        var administrations = await db.MedicationAdministrations.IgnoreQueryFilters().ToListAsync();
+
+        foreach (var a in administrations)
+        {
+            if (a.RecordedByUserId is { } recordedByUserId)
+            {
+                Assert.True(users.TryGetValue(recordedByUserId, out var expectedName),
+                    $"Administration {a.Id}: RecordedByUserId {recordedByUserId} does not match any seeded user.");
+                Assert.True(a.RecordedByName == expectedName,
+                    $"Administration {a.Id}: RecordedByName \"{a.RecordedByName}\" does not match RecordedByUserId {recordedByUserId}'s FullName \"{expectedName}\".");
+            }
+
+            if (a.WitnessUserId is { } witnessUserId && a.WitnessName is not null)
+            {
+                Assert.True(users.TryGetValue(witnessUserId, out var expectedWitnessName),
+                    $"Administration {a.Id}: WitnessUserId {witnessUserId} does not match any seeded user.");
+                Assert.True(a.WitnessName == expectedWitnessName,
+                    $"Administration {a.Id}: WitnessName \"{a.WitnessName}\" does not match WitnessUserId {witnessUserId}'s FullName \"{expectedWitnessName}\".");
+            }
+        }
+    }
+
     // ── Administration record variety ───────────────────────────────────
 
     [Fact]

@@ -322,9 +322,10 @@ public static class DbSeeder
             p.FundingSource = string.IsNullOrWhiteSpace(p.FundingOrganisation) ? ParticipantFundingSource.Ndis : ParticipantFundingSource.Other;
 
         // ── Coherence pass (seed-expansion task) ─────────────────
-        // Participants[0..3] already carry address/living-arrangement/plan-date data from
-        // earlier waves (LIVING-01..04, INTAKE-06, FUND-01). Backfill the remaining 16 so every
-        // demo participant has a complete profile, and give every participant a plan date so the
+        // Participants[0..3] already carry address/living-arrangement data from earlier waves
+        // (LIVING-01..04, INTAKE-06) — backfill address/living-arrangement for the remaining 16
+        // below. No participant had PlanStartDate/PlanEndDate set before this task, so the ??=
+        // loop backfills plan dates for all 20, giving every demo participant a plan date so the
         // dashboard's plan-expiry alerts (ParticipantAlertsService rule 4) have something to key
         // off. Gender is already set on every seed row above, so it needs no backfill here.
         var planToday = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -1365,6 +1366,7 @@ public static class DbSeeder
         var priyaUserId = Guid.Parse("a2000000-0000-0000-0000-000000000002");
         var lachlanUserId = Guid.Parse("a2000000-0000-0000-0000-000000000003");
         var jadeUserId = Guid.Parse("a2000000-0000-0000-0000-000000000004");
+        var brendanUserId = Guid.Parse("a2000000-0000-0000-0000-000000000005");
 
         // Most recent Monday/Wednesday/Friday on or before today — used for Grace's SpecificDays
         // (Mon/Wed/Fri) Ferrous Sulfate history so the dates line up with her actual schedule
@@ -1662,7 +1664,7 @@ public static class DbSeeder
                 ParticipantMedicationId = prednisoloneId, ParticipantId = williamId,
                 ScheduledAt = today.AddDays(-2).AddHours(8), AdministeredAt = today.AddDays(-2).AddHours(8).AddMinutes(3),
                 Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (5mg)",
-                RecordedByName = "Brendan Nguyen", RecordedByUserId = jadeUserId,
+                RecordedByName = "Brendan Nguyen", RecordedByUserId = brendanUserId,
             });
             administrations.Add(new MedicationAdministration
             {
