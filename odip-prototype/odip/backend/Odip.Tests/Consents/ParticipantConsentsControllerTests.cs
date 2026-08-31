@@ -153,6 +153,33 @@ public class ParticipantConsentsControllerTests
         Assert.Null(body.Data.RecordedAt);
     }
 
+    /// <summary>
+    /// Review-round polish: ApplyAnswer only re-stamps RecordedAt when Granted actually CHANGES
+    /// (see its own doc) — resaving the exact same answer (e.g. re-opening and re-confirming the
+    /// same consent row without changing anything) must leave the original recorded timestamp
+    /// alone, not bump it to "now" on every unrelated save.
+    /// </summary>
+    [Fact]
+    public async Task Upsert_ResavingTheSameAnswer_LeavesRecordedAtUnchanged()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantConsentsController(db);
+
+        var first = await controller.Upsert(participant.Id, nameof(ConsentType.Privacy), new UpsertParticipantConsentDto { Granted = true }, CancellationToken.None);
+        var firstBody = Assert.IsType<ApiResponse<ParticipantConsentDto>>(Assert.IsType<OkObjectResult>(first.Result).Value);
+        var firstRecordedAt = firstBody.Data!.RecordedAt;
+        Assert.NotNull(firstRecordedAt);
+
+        // Same Granted value, resaved — a different SignedByName doesn't count as an answer
+        // change (only Granted does, per ApplyAnswer), so RecordedAt must not move.
+        var second = await controller.Upsert(participant.Id, nameof(ConsentType.Privacy), new UpsertParticipantConsentDto { Granted = true, SignedByName = "Sophie Brown" }, CancellationToken.None);
+        var secondBody = Assert.IsType<ApiResponse<ParticipantConsentDto>>(Assert.IsType<OkObjectResult>(second.Result).Value);
+
+        Assert.Equal(firstRecordedAt, secondBody.Data!.RecordedAt);
+        Assert.True(secondBody.Data.Granted);
+    }
+
     [Fact]
     public async Task Upsert_TenantScoped_ConsentGetsSameTenantIdAsParticipant()
     {

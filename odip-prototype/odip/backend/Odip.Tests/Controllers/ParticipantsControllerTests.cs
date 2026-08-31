@@ -472,6 +472,71 @@ public class ParticipantsControllerTests
         Assert.Equal(tenantId, savedConsent.TenantId);
     }
 
+    /// <summary>
+    /// Review-round polish: the exact scenario UpsertConsentsAsync's early-return guard defends —
+    /// a caller (e.g. ParticipantsPage's isActive-only toggle) that PUTs an UpdateParticipantDto
+    /// without ever touching Consents (defaults to an empty list) must not wipe/no-op away the
+    /// participant's already-answered consent rows just because this particular save didn't
+    /// mention them.
+    /// </summary>
+    [Fact]
+    public async Task Update_WithoutConsentsField_LeavesExistingConsentRowsUntouched()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var withConsent = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = true, SignedByName = "Sophie Brown" } },
+        };
+        await controller.Update(participant.Id, withConsent, CancellationToken.None);
+
+        // A later, unrelated save (e.g. an isActive toggle from the participants list) that never
+        // mentions Consents at all — same shape as any DTO caller built before this field existed.
+        var toggleOnly = withConsent with { Consents = new(), IsActive = false };
+        await controller.Update(participant.Id, toggleOnly, CancellationToken.None);
+
+        var saved = await db.ParticipantConsents.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.True(single.Granted);
+        Assert.Equal("Sophie Brown", single.SignedByName);
+    }
+
+    /// <summary>
+    /// Proves the null-guard added alongside the empty-list guard above: System.Text.Json
+    /// overwrites CreateParticipantDto.Consents' `= new()` initializer with an explicit null when
+    /// a raw request body includes `"consents": null` (present-but-null, unlike an omitted
+    /// property) — UpsertConsentsAsync must treat that the same as "don't touch consents", not NRE.
+    /// </summary>
+    [Fact]
+    public async Task Update_ConsentsExplicitlyNull_DoesNotThrow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            Consents = null!,
+        };
+
+        var result = await controller.Update(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantConsents.AnyAsync(c => c.ParticipantId == participant.Id));
+    }
+
     // ── CONTACT-01/02/03: contact roles created transactionally with the participant ────
 
     [Fact]

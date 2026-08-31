@@ -52,7 +52,18 @@ public class ParticipantsController : ControllerBase
     /// </summary>
     private async Task UpsertConsentsAsync(Guid participantId, List<CreateParticipantConsentDto> consents, CancellationToken ct)
     {
-        if (consents.Count == 0) return;
+        // Load-bearing guard, not just an optimisation: an Update caller that never mentions
+        // Consents (e.g. ParticipantsPage's isActive-only toggle, or any older client built
+        // before this field existed) round-trips CreateParticipantDto/UpdateParticipantDto with
+        // Consents defaulted to an empty list — without this early return, an empty submission
+        // would be indistinguishable from "delete every consent answer" and this loop would have
+        // nothing to iterate anyway, but the intent must read as "leave existing rows alone",
+        // which is exactly what returning before touching the database achieves. `consents is
+        // null` additionally covers a raw `"consents": null` JSON payload — System.Text.Json
+        // overwrites the DTO's `= new()` initializer with an explicit null when the property IS
+        // present (even if null) in the request body, so the empty-list default alone doesn't
+        // guarantee non-null at runtime despite the non-nullable parameter type.
+        if (consents is null || consents.Count == 0) return;
         var existing = await _db.ParticipantConsents.Where(c => c.ParticipantId == participantId).ToListAsync(ct);
         var byType = existing.ToDictionary(c => c.ConsentType);
         foreach (var dto in consents)
