@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, adlCategoryOf } from './enums'
+import {
+  ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, adlCategoryOf,
+  CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES,
+  CHECKLIST_ITEM_TYPE_LABELS, getChecklistItemGroup,
+} from './enums'
 import { ADL_TYPE_LABELS } from './adl-assessments'
 
 /**
@@ -38,6 +42,46 @@ describe('ADL type category partition (PERSONAL_ADL_TYPES / COMMUNITY_DOMESTIC_A
     for (const type of ADL_TYPES) {
       const expected = (PERSONAL_ADL_TYPES as readonly string[]).includes(type) ? 'Personal' : 'CommunityDomestic'
       expect(adlCategoryOf(type)).toBe(expected)
+    }
+  })
+})
+
+/**
+ * INTAKE-03/04, review-round polish — frontend counterpart to the backend's
+ * ChecklistItemTypeGroupsTests: COMMUNITY_MOBILITY_RISK_ITEM_TYPES and
+ * COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES must together cover every ChecklistItemType member
+ * exactly once (no omission, no overlap). Both subsets are derived from CHECKLIST_ITEM_TYPES via
+ * slice(), so coverage/no-overlap are structurally guaranteed here, but a future 22nd
+ * ChecklistItemType member landing in CHECKLIST_ITEM_TYPES without a matching
+ * CHECKLIST_ITEM_TYPE_LABELS entry (the label map every consumer actually renders from) would
+ * still slip through unnoticed without this cross-check — mirrors the ADL block above exactly.
+ */
+describe('Checklist item type category partition (COMMUNITY_MOBILITY_RISK_ITEM_TYPES / COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES)', () => {
+  it('together cover every ChecklistItemType member from CHECKLIST_ITEM_TYPES exactly once, with no omission', () => {
+    const union = [...COMMUNITY_MOBILITY_RISK_ITEM_TYPES, ...COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES].sort()
+    expect(union).toEqual([...CHECKLIST_ITEM_TYPES].sort())
+  })
+
+  it('together cover every ChecklistItemType member from CHECKLIST_ITEM_TYPE_LABELS\' keys exactly once', () => {
+    const union = [...COMMUNITY_MOBILITY_RISK_ITEM_TYPES, ...COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES].sort()
+    expect(union).toEqual(Object.keys(CHECKLIST_ITEM_TYPE_LABELS).sort())
+  })
+
+  it('do not overlap', () => {
+    const mobility = new Set(COMMUNITY_MOBILITY_RISK_ITEM_TYPES)
+    const overlap = COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES.filter((t) => mobility.has(t))
+    expect(overlap).toEqual([])
+  })
+
+  it('have no internal duplicates', () => {
+    expect(new Set(COMMUNITY_MOBILITY_RISK_ITEM_TYPES).size).toBe(COMMUNITY_MOBILITY_RISK_ITEM_TYPES.length)
+    expect(new Set(COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES).size).toBe(COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES.length)
+  })
+
+  it('getChecklistItemGroup agrees with group membership for every ChecklistItemType member', () => {
+    for (const type of CHECKLIST_ITEM_TYPES) {
+      const expected = (COMMUNITY_MOBILITY_RISK_ITEM_TYPES as readonly string[]).includes(type) ? 'CommunityMobilityRisk' : 'CommunityBehaviourOfConcern'
+      expect(getChecklistItemGroup(type)).toBe(expected)
     }
   })
 })
