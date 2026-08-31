@@ -490,4 +490,163 @@ public class PortalControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // NOTES-02: keyword flagging
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CreateShiftNote_BodyTripsAKeyword_StoresFlaggedCategory()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "She had a fall near the bathroom this morning." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.Equal(new[] { "Falls" }, dto.FlaggedCategories);
+        Assert.Null(dto.FlagsAcknowledgedAt);
+
+        var stored = Assert.Single(db.ShiftNotes.IgnoreQueryFilters());
+        Assert.Equal(ShiftNoteFlagCategory.Falls, stored.FlaggedCategories);
+    }
+
+    [Fact]
+    public async Task CreateShiftNote_NeutralBody_StoresNoFlaggedCategories()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "Quiet shift, watched a movie together." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.Empty(dto.FlaggedCategories);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_EditIntroducesAKeyword_RecomputesFlags()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Original body.", FlaggedCategories = ShiftNoteFlagCategory.None };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "She slipped on the wet floor." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.Equal(new[] { "Falls" }, dto.FlaggedCategories);
+        Assert.Equal(ShiftNoteFlagCategory.Falls, db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).FlaggedCategories);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_CategorySetChanges_ClearsAPriorAcknowledgement()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var note = new ShiftNote
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner",
+            Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls,
+            FlagsAcknowledgedAt = DateTime.UtcNow.AddHours(-1),
+        };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        // Editing to a body with a DIFFERENT flagged-category set (Medication instead of Falls)
+        // must clear the earlier dismissal so the (now different) prompt is seen again.
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "Gave her the wrong tablet by mistake." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.Equal(new[] { "Medication" }, dto.FlaggedCategories);
+        Assert.Null(dto.FlagsAcknowledgedAt);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_CategorySetUnchanged_KeepsAPriorAcknowledgement()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var acknowledgedAt = DateTime.UtcNow.AddHours(-1);
+        var note = new ShiftNote
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner",
+            Body = "She had a fall near the bathroom.", FlaggedCategories = ShiftNoteFlagCategory.Falls,
+            FlagsAcknowledgedAt = acknowledgedAt,
+        };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        // Still trips only Falls after the edit — the acknowledgement should survive.
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "She slipped near the bathroom, corrected typo." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.Equal(acknowledgedAt, dto.FlagsAcknowledgedAt);
+    }
+
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_Author_StampsAcknowledgedAt()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.AcknowledgeShiftNoteFlags(note.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value).Data!;
+        Assert.NotNull(dto.FlagsAcknowledgedAt);
+        Assert.NotNull(db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).FlagsAcknowledgedAt);
+    }
+
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_NotTheAuthor_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var author = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
+        var shift = SeedShift(db, SeedParticipant(db).Id, author.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = author.Id, AuthorName = "Ben Turner", Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, otherUser.Id);
+
+        var result = await controller.AcknowledgeShiftNoteFlags(note.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Null(db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).FlagsAcknowledgedAt);
+    }
+
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_NonexistentNote_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.AcknowledgeShiftNoteFlags(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
 }

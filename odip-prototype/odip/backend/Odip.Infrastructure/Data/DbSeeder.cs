@@ -3525,6 +3525,15 @@ public static class DbSeeder
                 Body = "Handover: left her medication chart on the kitchen counter for the evening shift to sign off.",
                 CreatedAt = now.AddDays(-2).AddHours(8).AddMinutes(45), UpdatedAt = now.AddDays(-2).AddHours(8).AddMinutes(45),
             });
+            // NOTES-02 demo: trips the Falls category so the live demo shows the keyword-flagging
+            // banner + incident-report prompt on a real seeded note.
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000005"), TenantId = demoTenantId,
+                ShiftId = sophieShift.Id, AuthorUserId = jamesUserId, AuthorName = "James O'Brien",
+                Body = "Sophie stumbled near the back step on the way in from the garden — caught herself on the rail, no injury seen but keeping an eye on her today.",
+                CreatedAt = now.AddDays(-2).AddHours(9), UpdatedAt = now.AddDays(-2).AddHours(9),
+            });
         }
 
         if (existingParticipants.Contains(charlotteId) && existingUsers.Contains(emilyUserId))
@@ -3546,10 +3555,27 @@ public static class DbSeeder
                 Body = "Charlotte was a little agitated after a change to the evening routine — settled quickly once we moved to a quiet space with her headphones.",
                 CreatedAt = now.AddDays(-1).AddHours(7), UpdatedAt = now.AddDays(-1).AddHours(7),
             });
+            // NOTES-02 demo: trips the Medication category alongside the existing agitation note
+            // above (which already trips BehaviourOfConcern on its own), so the demo tenant shows
+            // both seeded categories the brief asks for (falls + medication) without either note
+            // being contrived-looking.
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000006"), TenantId = demoTenantId,
+                ShiftId = charlotteShift.Id, AuthorUserId = emilyUserId, AuthorName = "Emily Nguyen",
+                Body = "Charlotte's 6pm medication was given a little later than usual — checked the chart and confirmed the tablet was the right dose.",
+                CreatedAt = now.AddDays(-1).AddHours(7).AddMinutes(30), UpdatedAt = now.AddDays(-1).AddHours(7).AddMinutes(30),
+            });
         }
 
         if (shifts.Count == 0)
             return;
+
+        // NOTES-02: compute flagged categories the same way PortalController does at save time —
+        // via the shared scanner, not hardcoded — so the seeded demo data always reflects the
+        // vocabulary's current behaviour rather than a value that could silently drift from it.
+        foreach (var note in notes)
+            note.FlaggedCategories = ShiftNoteKeywordScanner.Scan(note.Body);
 
         context.Shifts.AddRange(shifts);
         context.ShiftNotes.AddRange(notes);

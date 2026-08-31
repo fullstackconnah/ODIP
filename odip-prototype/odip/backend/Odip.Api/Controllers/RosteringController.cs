@@ -661,7 +661,8 @@ public class RosteringController : ControllerBase
     private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message };
 
     private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
-        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt);
+        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
 
     private static ShiftPatternDto ToPatternDto(ShiftPattern p) => new()
     {
