@@ -34,9 +34,19 @@ const baseParticipantSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   preferredName: z.string().optional(),
+  // INTAKE sub-wave A, PID-004.
+  middleName: z.string().optional(),
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
   genderSelfDescription: z.string().optional(),
+  // INTAKE sub-wave A — Participant Details additions (research spec §5). placeOfBirth/country
+  // are free text; phone/email are the participant's OWN contact methods (previously the
+  // Participant had none — every phone/email elsewhere in this codebase belongs to a Contact/
+  // Person row instead). Format checked by phoneEmailRefine below, only when non-blank.
+  placeOfBirth: z.string().optional(),
+  country: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
   // INTAKE-06 — structured address. Lives on the Identity step (see the wizard-placement note
   // above CONDITIONAL_FIELDS below): a participant's address doesn't depend on funding/support
   // answers, so it sits with the other core-identity fields rather than opening a dedicated step.
@@ -70,6 +80,8 @@ const baseParticipantSchema = z.object({
   // Required only when fundingSource is Other (see fundingSourceRefine) — hidden+excluded
   // entirely when Ndis.
   fundingOrganisation: z.string().optional(),
+  // INTAKE sub-wave A, NDIS-006 — Disability Support for Older Australians.
+  isDsoa: z.boolean().optional(),
   isRepeatClient: z.boolean().optional(),
   serviceStreams: z.array(z.string()).optional(),
   mobilityAidWheelchair: z.boolean().optional(),
@@ -127,6 +139,24 @@ const baseParticipantSchema = z.object({
     relationshipToParticipant: z.string().optional(),
     isPrimary: z.boolean().optional(),
   })).optional(),
+  // INTAKE sub-wave A — "Key Identifiers" wizard step (research spec §4.4/§5). All optional;
+  // expiries are plain date strings (YYYY-MM-DD, same shape as planStartDate/planEndDate above).
+  // weightKg/heightCm use z.coerce.number() — same convention as AccommodationCreatePage's
+  // bedroomCount/bedCount/maxCapacity — since a native number input still hands react-hook-form
+  // a string; buildPayload treats a coerced 0 (an empty input) as null, same as that page does.
+  pensionCardNumber: z.string().optional(),
+  pensionCardExpiry: z.string().optional(),
+  medicareNumber: z.string().optional(),
+  medicareExpiry: z.string().optional(),
+  companionCardNumber: z.string().optional(),
+  companionCardExpiry: z.string().optional(),
+  privateHealthFund: z.string().optional(),
+  privateHealthMembershipNumber: z.string().optional(),
+  taxiCardNumber: z.string().optional(),
+  hairColour: z.string().optional(),
+  eyeColour: z.string().optional(),
+  weightKg: z.coerce.number().optional(),
+  heightCm: z.coerce.number().optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -232,6 +262,34 @@ function addressPostcodeRefine(data: AddressFields, ctx: z.RefinementCtx) {
   }
 }
 
+// INTAKE sub-wave A: the participant's own Phone/Email — AU-tolerant, non-strict format checks,
+// same "optional field, blank is fine" shape as addressPostcodeRefine, mirroring the backend's
+// ParticipantsController.ValidatePhone/ValidateEmail exactly (same regexes).
+type ContactMethodFields = { phone?: string; email?: string }
+function contactMethodRefine(data: ContactMethodFields, ctx: z.RefinementCtx) {
+  if (data.phone && !/^\+?[\d\s\-()]{6,20}$/.test(data.phone)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Please provide a valid phone number.' })
+  }
+  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Please provide a valid email address.' })
+  }
+}
+
+// INTAKE sub-wave A polish round: WeightKg/HeightCm are numeric(5,2) columns server-side — mirror
+// ParticipantsController.ValidateWeight/ValidateHeight's bounds (0 < value <= 999.99) exactly so a
+// full submit blocks with a message instead of only failing at the server. A blank input coerces
+// to 0 via z.coerce.number() (see weightKg/heightCm's schema doc) — treated as "not provided" here
+// too, same as buildPayload's numField loop, so leaving the field empty is never itself an error.
+type WeightHeightFields = { weightKg?: number; heightCm?: number }
+function weightHeightRefine(data: WeightHeightFields, ctx: z.RefinementCtx) {
+  if (data.weightKg && (data.weightKg <= 0 || data.weightKg > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weightKg'], message: 'Weight must be greater than 0 and no more than 999.99 kg.' })
+  }
+  if (data.heightCm && (data.heightCm <= 0 || data.heightCm > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['heightCm'], message: 'Height must be greater than 0 and no more than 999.99 cm.' })
+  }
+}
+
 // DIAG-01: primaryDiagnosis "Other — specify" requires the typed free-text field — same
 // standalone-function pattern as genderRefine/fundingSourceRefine.
 type DiagnosisFields = { primaryDiagnosis?: string; primaryDiagnosisOther?: string }
@@ -264,6 +322,8 @@ const participantSchema = baseParticipantSchema
   .superRefine(fundingSourceRefine)
   .superRefine(livingArrangementRefine)
   .superRefine(addressPostcodeRefine)
+  .superRefine(contactMethodRefine)
+  .superRefine(weightHeightRefine)
   .superRefine(diagnosisOtherRefine)
   .superRefine(contactRolesRefine)
 
@@ -321,17 +381,28 @@ function focusField(fieldName: string) {
 // avoids inserting a step, which would renumber every later step and break every test that
 // assumes the current step order (see the Wave-3 report for the fuller reasoning).
 const STEP_IDENTITY_FIELDS = [
-  'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId',
+  'firstName', 'lastName', 'preferredName', 'middleName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'preferredStaffId',
+  // INTAKE sub-wave A — Participant Details additions (research spec §5).
+  'placeOfBirth', 'country', 'phone', 'email',
   'addressStreet', 'addressSuburb', 'addressState', 'addressPostcode',
   'livingArrangement', 'mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo',
   'livesWithOthers', 'whoLivesWith',
   'silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours',
   'livingArrangementNotes',
 ] as const
-const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingSource', 'fundingOrganisation', 'isRepeatClient', 'serviceStreams'] as const
-// CONTACT-02: the Contacts step sits immediately after NDIS & Funding — available role types
-// depend on funding/plan-type answers (and, for Plan Nominee, the participant's date of birth
-// captured on the Identity step), so it must come after both.
+const STEP_NDIS_FIELDS = ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'region', 'fundingSource', 'fundingOrganisation', 'isDsoa', 'isRepeatClient', 'serviceStreams'] as const
+// INTAKE sub-wave A — new "Key Identifiers" step (research spec §4.4/§5), placed after "NDIS &
+// Funding" and before "Contacts" (the spec's placement instruction: "after NDIS & Funding,
+// before whatever follows" — Contacts was, and remains, the next step). All fields optional.
+const STEP_KEY_IDENTIFIERS_FIELDS = [
+  'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry',
+  'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber',
+  'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+] as const
+// CONTACT-02: the Contacts step sits immediately after NDIS & Funding (now, after Key
+// Identifiers too) — available role types depend on funding/plan-type answers (and, for Plan
+// Nominee, the participant's date of birth captured on the Identity step), so it must come after
+// NDIS & Funding regardless of what else sits between them.
 const STEP_CONTACTS_FIELDS = ['contactRoles'] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
@@ -357,6 +428,8 @@ type WizardStep = {
 const WIZARD_STEPS: WizardStep[] = [
   { key: 'identity', label: 'Identity', fields: STEP_IDENTITY_FIELDS },
   { key: 'ndis', label: 'NDIS & Funding', fields: STEP_NDIS_FIELDS },
+  // INTAKE sub-wave A — see STEP_KEY_IDENTIFIERS_FIELDS's doc comment above for placement.
+  { key: 'keyIdentifiers', label: 'Key Identifiers', fields: STEP_KEY_IDENTIFIERS_FIELDS },
   // CONTACT-02: moved after NDIS & Funding (was folded into the Identity step's label before
   // CONTACT-01/02/03 existed) — see STEP_CONTACTS_FIELDS's doc comment above.
   { key: 'contacts', label: 'Contacts', fields: STEP_CONTACTS_FIELDS },
@@ -373,8 +446,10 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 // inputs of its own, so there is nothing to validate before landing on it besides the
 // preceding step.
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
-  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine),
+  baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine).superRefine(contactMethodRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
+  // INTAKE sub-wave A — Key Identifiers: every field optional except the weight/height bounds.
+  baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
   baseParticipantSchema.pick(pickShape(STEP_CONTACTS_FIELDS)).superRefine(contactRolesRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
@@ -496,6 +571,7 @@ export default function ParticipantCreatePage() {
       livingArrangement: '',
       livesWithOthers: false,
       fundingSource: 'Ndis',
+      isDsoa: false,
       planType: 'SelfManaged',
       supportRatio: 'SharedSupport',
       isRepeatClient: false,
@@ -712,9 +788,14 @@ export default function ParticipantCreatePage() {
         firstName: existing.firstName ?? '',
         lastName: existing.lastName ?? '',
         preferredName: existing.preferredName ?? '',
+        middleName: existing.middleName ?? '',
         dateOfBirth: existing.dateOfBirth ? existing.dateOfBirth.split('T')[0] : '',
         gender: existing.gender ?? '',
         genderSelfDescription: existing.genderSelfDescription ?? '',
+        placeOfBirth: existing.placeOfBirth ?? '',
+        country: existing.country ?? '',
+        phone: existing.phone ?? '',
+        email: existing.email ?? '',
         addressStreet: existing.addressStreet ?? '',
         addressSuburb: existing.addressSuburb ?? '',
         addressState: existing.addressState ?? '',
@@ -738,6 +819,7 @@ export default function ParticipantCreatePage() {
         region: existing.region ?? '',
         fundingSource: existing.fundingSource ?? 'Ndis',
         fundingOrganisation: existing.fundingOrganisation ?? '',
+        isDsoa: existing.isDsoa ?? false,
         isRepeatClient: existing.isRepeatClient ?? false,
         serviceStreams: parseServiceStreams(existing.serviceStreams),
         mobilityAidWheelchair: existing.mobilityAidWheelchair ?? false,
@@ -773,6 +855,20 @@ export default function ParticipantCreatePage() {
         behaviourRiskSummary: existing.behaviourRiskSummary ?? '',
         notes: existing.notes ?? '',
         preferredStaffId: existing.preferredStaffId ?? '',
+        // INTAKE sub-wave A — Key Identifiers step round-trip.
+        pensionCardNumber: existing.pensionCardNumber ?? '',
+        pensionCardExpiry: existing.pensionCardExpiry ? existing.pensionCardExpiry.split('T')[0] : '',
+        medicareNumber: existing.medicareNumber ?? '',
+        medicareExpiry: existing.medicareExpiry ? existing.medicareExpiry.split('T')[0] : '',
+        companionCardNumber: existing.companionCardNumber ?? '',
+        companionCardExpiry: existing.companionCardExpiry ? existing.companionCardExpiry.split('T')[0] : '',
+        privateHealthFund: existing.privateHealthFund ?? '',
+        privateHealthMembershipNumber: existing.privateHealthMembershipNumber ?? '',
+        taxiCardNumber: existing.taxiCardNumber ?? '',
+        hairColour: existing.hairColour ?? '',
+        eyeColour: existing.eyeColour ?? '',
+        weightKg: existing.weightKg ?? undefined,
+        heightCm: existing.heightCm ?? undefined,
         // INTAKE-09: edit-mode never populates this from `existing` — risk entries for an
         // already-created participant are managed via the nested CRUD (the detail page's Risks
         // section), not through this wizard. Reset to empty so useFieldArray stays consistent.
@@ -827,6 +923,18 @@ export default function ParticipantCreatePage() {
       websterPackFlag: null, roleTitle: null, registeredProviderFlag: null, scopeNotes: null,
       authorisationDocumentReference: null, preferredLanguage: null, startDate: null, endDate: null, notes: null,
     }))
+    // INTAKE sub-wave A: weightKg/heightCm are z.coerce.number() fields, but only a full submit
+    // (participantResolver) actually runs that coercion — "Save as draft" reads getValues()
+    // directly (bypassing the resolver entirely, by design — see handleSaveDraft's doc), so the
+    // raw value here may still be the native number input's string. Coerce explicitly for both
+    // paths rather than relying on the resolver having already run; empty/non-numeric coerces to
+    // null (same "0 means not provided" convention as AccommodationCreatePage's
+    // bedroomCount/bedCount/maxCapacity).
+    for (const numField of ['weightKg', 'heightCm']) {
+      const raw = payload[numField]
+      const num = raw === '' || raw === null || raw === undefined ? NaN : Number(raw)
+      payload[numField] = Number.isFinite(num) && num !== 0 ? num : null
+    }
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
@@ -931,6 +1039,7 @@ export default function ParticipantCreatePage() {
         { label: 'First Name', value: watchedValues.firstName || '—' },
         { label: 'Last Name', value: watchedValues.lastName || '—' },
         { label: 'Preferred Name', value: watchedValues.preferredName || '—' },
+        { label: 'Middle Name', value: watchedValues.middleName || '—' },
         { label: 'Date of Birth', value: watchedValues.dateOfBirth || '—' },
         {
           label: 'Gender',
@@ -940,9 +1049,12 @@ export default function ParticipantCreatePage() {
             : '—',
         },
         { label: 'Preferred Staff Member', value: preferredStaffName },
+        { label: 'Place of Birth', value: watchedValues.placeOfBirth || '—' },
+        { label: 'Phone', value: watchedValues.phone || '—' },
+        { label: 'Email', value: watchedValues.email || '—' },
         {
           label: 'Address',
-          value: [watchedValues.addressStreet, watchedValues.addressSuburb, watchedValues.addressState, watchedValues.addressPostcode]
+          value: [watchedValues.addressStreet, watchedValues.addressSuburb, watchedValues.addressState, watchedValues.addressPostcode, watchedValues.country]
             .filter(Boolean).join(', ') || '—',
         },
         {
@@ -983,6 +1095,7 @@ export default function ParticipantCreatePage() {
         ...(isVisible('planType') ? [{ label: 'Plan Type', value: PLAN_TYPE_LABELS[watchedValues.planType ?? ''] ?? '—' }] : []),
         { label: 'Region', value: watchedValues.region || '—' },
         ...(isVisible('fundingOrganisation') ? [{ label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' }] : []),
+        { label: 'Disability Support for Older Australians (DSOA)', value: watchedValues.isDsoa ? 'Yes' : 'No' },
         { label: 'Repeat Client', value: watchedValues.isRepeatClient ? 'Yes' : 'No' },
         {
           label: 'Service Streams',
@@ -993,11 +1106,30 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
+      // INTAKE sub-wave A — Key Identifiers step review summary.
+      step: 2,
+      rows: [
+        { label: 'Pension Card Number', value: watchedValues.pensionCardNumber || '—' },
+        { label: 'Pension Card Expiry', value: watchedValues.pensionCardExpiry || '—' },
+        { label: 'Medicare Number', value: watchedValues.medicareNumber || '—' },
+        { label: 'Medicare Expiry', value: watchedValues.medicareExpiry || '—' },
+        { label: 'Companion Card Number', value: watchedValues.companionCardNumber || '—' },
+        { label: 'Companion Card Expiry', value: watchedValues.companionCardExpiry || '—' },
+        { label: 'Private Health Fund', value: watchedValues.privateHealthFund || '—' },
+        { label: 'Private Health Membership Number', value: watchedValues.privateHealthMembershipNumber || '—' },
+        { label: 'Taxi Card Number', value: watchedValues.taxiCardNumber || '—' },
+        { label: 'Hair Colour', value: watchedValues.hairColour || '—' },
+        { label: 'Eye Colour', value: watchedValues.eyeColour || '—' },
+        { label: 'Weight (kg)', value: watchedValues.weightKg ? String(watchedValues.weightKg) : '—' },
+        { label: 'Height (cm)', value: watchedValues.heightCm ? String(watchedValues.heightCm) : '—' },
+      ],
+    },
+    {
       // CONTACT-02: contacts entered on the Contacts step (create-mode only, mirroring risk
       // entries) — one row per contact, "New: Firstname Lastname" or "Existing: <personId>"
       // depending on personMode, since the person's real name isn't known client-side for a
       // not-yet-saved "existing person" selection beyond whatever the picker already resolved.
-      step: 2,
+      step: 3,
       rows: (watchedValues.contactRoles?.length ?? 0) === 0
         ? [{ label: 'Contacts', value: 'None added' }]
         : (watchedValues.contactRoles ?? []).map((row, i) => ({
@@ -1010,7 +1142,7 @@ export default function ParticipantCreatePage() {
           })),
     },
     {
-      step: 3,
+      step: 4,
       rows: [
         { label: 'High Support', value: watchedValues.isHighSupport ? 'Yes' : 'No' },
         { label: 'Intensive Support (NDIS billing)', value: watchedValues.isIntensiveSupport ? 'Yes' : 'No' },
@@ -1031,7 +1163,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 4,
+      step: 5,
       rows: [
         {
           label: 'Primary Diagnosis',
@@ -1050,7 +1182,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 5,
+      step: 6,
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -1170,6 +1302,11 @@ export default function ParticipantCreatePage() {
                 <input id="preferredName" {...register('preferredName')} placeholder="e.g. Johnny" />
               </FormField>
 
+              {/* INTAKE sub-wave A, PID-004. */}
+              <FormField label="Middle Name">
+                <input id="middleName" {...register('middleName')} placeholder="e.g. Robert" />
+              </FormField>
+
               <FormField label="Date of Birth">
                 <input id="dateOfBirth" type="date" {...register('dateOfBirth')} />
               </FormField>
@@ -1188,6 +1325,22 @@ export default function ParticipantCreatePage() {
                   <input id="genderSelfDescription" {...register('genderSelfDescription')} placeholder="How the participant describes their gender" />
                 </FormField>
               )}
+
+              {/* INTAKE sub-wave A, PID-010. */}
+              <FormField label="Place of Birth">
+                <input id="placeOfBirth" {...register('placeOfBirth')} placeholder="e.g. Brisbane, QLD" />
+              </FormField>
+
+              {/* INTAKE sub-wave A, CON-007/CON-008 — the participant's OWN phone/email
+                  (previously the only phone/email fields on a participant belonged to a
+                  Contact/Person row — see research spec §5). */}
+              <FormField label="Phone" error={errors.phone?.message}>
+                <input id="phone" type="tel" {...register('phone')} placeholder="e.g. 0400 000 000" />
+              </FormField>
+
+              <FormField label="Email" error={errors.email?.message}>
+                <input id="email" type="email" {...register('email')} placeholder="e.g. name@example.com" />
+              </FormField>
             </Card>
 
             <Card title="Staff Preferences" className="space-y-4">
@@ -1236,6 +1389,11 @@ export default function ParticipantCreatePage() {
 
               <FormField label="Postcode" error={errors.addressPostcode?.message} hint="4 digits, e.g. 4000">
                 <input id="addressPostcode" {...register('addressPostcode')} inputMode="numeric" maxLength={4} placeholder="e.g. 4000" />
+              </FormField>
+
+              {/* INTAKE sub-wave A, CON-006. */}
+              <FormField label="Country">
+                <input id="country" {...register('country')} placeholder="e.g. Australia" />
               </FormField>
             </Card>
 
@@ -1378,6 +1536,12 @@ export default function ParticipantCreatePage() {
               <FormField label="Repeat Client" layout="checkbox">
                 <input id="isRepeatClient" type="checkbox" {...register('isRepeatClient')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
+
+              {/* INTAKE sub-wave A, NDIS-006 — labelled in full with the acronym per the
+                  research spec. */}
+              <FormField label="Disability Support for Older Australians (DSOA)" layout="checkbox">
+                <input id="isDsoa" type="checkbox" {...register('isDsoa')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+              </FormField>
             </Card>
 
             <Card title="Service Streams" className="space-y-4">
@@ -1417,10 +1581,69 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
+        {/* INTAKE sub-wave A — "Key Identifiers" step (research spec §4.4/§5), placed after
+            "NDIS & Funding" and before "Contacts" — see STEP_KEY_IDENTIFIERS_FIELDS' doc. Every
+            field optional; expiries are date inputs, weight/height are numeric with
+            unit-labelled fields. */}
+        {stepIndex === 2 && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Identification Cards" className="space-y-4">
+              <FormField label="Pension Card Number">
+                <input id="pensionCardNumber" {...register('pensionCardNumber')} placeholder="e.g. PCN1029384" />
+              </FormField>
+              <FormField label="Pension Card Expiry">
+                <input id="pensionCardExpiry" type="date" {...register('pensionCardExpiry')} />
+              </FormField>
+
+              <FormField label="Medicare Number">
+                <input id="medicareNumber" {...register('medicareNumber')} placeholder="e.g. 2951 12345 1" />
+              </FormField>
+              <FormField label="Medicare Expiry">
+                <input id="medicareExpiry" type="date" {...register('medicareExpiry')} />
+              </FormField>
+
+              <FormField label="Companion Card Number">
+                <input id="companionCardNumber" {...register('companionCardNumber')} placeholder="e.g. CC-58213" />
+              </FormField>
+              <FormField label="Companion Card Expiry">
+                <input id="companionCardExpiry" type="date" {...register('companionCardExpiry')} />
+              </FormField>
+            </Card>
+
+            <Card title="Private Health & Taxi Card" className="space-y-4">
+              <FormField label="Private Health Fund">
+                <input id="privateHealthFund" {...register('privateHealthFund')} placeholder="e.g. Bupa" />
+              </FormField>
+              <FormField label="Private Health Membership Number">
+                <input id="privateHealthMembershipNumber" {...register('privateHealthMembershipNumber')} placeholder="e.g. BUP-773421" />
+              </FormField>
+
+              <FormField label="Taxi Card Number">
+                <input id="taxiCardNumber" {...register('taxiCardNumber')} placeholder="e.g. TC-90211" />
+              </FormField>
+            </Card>
+
+            <Card title="Physical Description" className="space-y-4">
+              <FormField label="Hair Colour">
+                <input id="hairColour" {...register('hairColour')} placeholder="e.g. Brown" />
+              </FormField>
+              <FormField label="Eye Colour">
+                <input id="eyeColour" {...register('eyeColour')} placeholder="e.g. Blue" />
+              </FormField>
+              <FormField label="Weight (kg)" error={errors.weightKg?.message}>
+                <input id="weightKg" type="number" min="0" max="999.99" step="0.1" {...register('weightKg')} placeholder="e.g. 78.5" />
+              </FormField>
+              <FormField label="Height (cm)" error={errors.heightCm?.message}>
+                <input id="heightCm" type="number" min="0" max="999.99" step="0.1" {...register('heightCm')} placeholder="e.g. 179" />
+              </FormField>
+            </Card>
+          </div>
+        )}
+
         {/* CONTACT-02 — the Contacts step, placed after NDIS & Funding since available role
             types depend on the funding/plan-type answers captured there (plus, for Plan Nominee,
             the date of birth captured on the Identity step) — see STEP_CONTACTS_FIELDS' doc. */}
-        {stepIndex === 2 && (
+        {stepIndex === 3 && (
           <div className="grid md:grid-cols-1 gap-6">
             {isEdit ? (
               <Card title="Contacts" className="space-y-3">
@@ -1549,7 +1772,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 3 && (
+        {stepIndex === 4 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Support Needs" className="space-y-4">
               <FormField label="High Support" layout="checkbox">
@@ -1707,7 +1930,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 4 && (
+        {stepIndex === 5 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Diagnoses" className="space-y-4">
               <FormField label="Primary Diagnosis">
@@ -1868,7 +2091,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 5 && (
+        {stepIndex === 6 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Risks & Consents" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (

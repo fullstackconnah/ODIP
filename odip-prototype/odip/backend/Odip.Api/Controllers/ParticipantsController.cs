@@ -96,6 +96,51 @@ public class ParticipantsController : ControllerBase
             : null;
 
     /// <summary>
+    /// INTAKE sub-wave A (research spec §5 "Participant Details"): the participant's OWN phone
+    /// number — a foundational gap the spec flagged (Participant previously had no phone field of
+    /// any kind, only Contact/Person rows did). AU-tolerant, deliberately non-strict: allows an
+    /// optional leading "+", digits, spaces, hyphens, and parentheses, with 6-20 total characters
+    /// — wide enough to accept "0400 000 000", "+61 400 000 000", "(07) 3123 4567", or "07 3123
+    /// 4567" without hard-coding a specific AU number-length/area-code rule. Per INTAKE-08
+    /// doctrine, this format check runs on whatever IS provided — including on a draft save — but
+    /// absence (null/blank) never blocks a save either way.
+    /// </summary>
+    private static string? ValidatePhone(CreateParticipantDto dto) =>
+        !string.IsNullOrWhiteSpace(dto.Phone) && !System.Text.RegularExpressions.Regex.IsMatch(dto.Phone, @"^\+?[\d\s\-()]{6,20}$")
+            ? "Please provide a valid phone number."
+            : null;
+
+    /// <summary>
+    /// INTAKE sub-wave A (research spec §5): the participant's OWN email — same foundational gap
+    /// as <see cref="ValidatePhone"/>. A simple, deliberately non-strict shape check (something@
+    /// something.something, no whitespace) rather than a full RFC 5322 validator — same
+    /// "provided-value format check, absence never blocks" doctrine as ValidatePhone.
+    /// </summary>
+    private static string? ValidateEmail(CreateParticipantDto dto) =>
+        !string.IsNullOrWhiteSpace(dto.Email) && !System.Text.RegularExpressions.Regex.IsMatch(dto.Email, @"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+            ? "Please provide a valid email address."
+            : null;
+
+    /// <summary>
+    /// INTAKE sub-wave A polish round: WeightKg is stored as numeric(5,2) (see OdipDbContext's
+    /// HasPrecision(5, 2)), so anything outside 0 &lt; value &lt;= 999.99 either can't fit or is
+    /// nonsensical for a participant's weight — reject it cleanly here rather than letting an
+    /// out-of-range value fall through to an unhandled Npgsql numeric-overflow exception at
+    /// SaveChangesAsync. Same "provided-value format check, absence never blocks" doctrine as
+    /// ValidatePhone/ValidateEmail.
+    /// </summary>
+    private static string? ValidateWeight(CreateParticipantDto dto) =>
+        dto.WeightKg.HasValue && (dto.WeightKg.Value <= 0 || dto.WeightKg.Value > 999.99m)
+            ? "Weight must be greater than 0 and no more than 999.99 kg."
+            : null;
+
+    /// <summary>Same shape/reasoning as <see cref="ValidateWeight"/>, for HeightCm.</summary>
+    private static string? ValidateHeight(CreateParticipantDto dto) =>
+        dto.HeightCm.HasValue && (dto.HeightCm.Value <= 0 || dto.HeightCm.Value > 999.99m)
+            ? "Height must be greater than 0 and no more than 999.99 cm."
+            : null;
+
+    /// <summary>
     /// DIAG-01: unlike ValidateGender/ValidateFundingSource/ValidateLivingArrangement (which
     /// enforce a required companion field), diagnoses are open text with a curated picklist as UI
     /// guidance only (see Diagnoses.cs's type doc) — so the only server-side rule is "not blank,
@@ -269,10 +314,19 @@ public class ParticipantsController : ControllerBase
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {
             Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName,
+            MiddleName = p.MiddleName,
             FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
-            PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region,
+            PlaceOfBirth = p.PlaceOfBirth, Country = p.Country, Phone = p.Phone, Email = p.Email,
+            PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region, IsDsoa = p.IsDsoa,
+            // Key Identifiers (INTAKE sub-wave A).
+            PensionCardNumber = p.PensionCardNumber, PensionCardExpiry = p.PensionCardExpiry,
+            MedicareNumber = p.MedicareNumber, MedicareExpiry = p.MedicareExpiry,
+            CompanionCardNumber = p.CompanionCardNumber, CompanionCardExpiry = p.CompanionCardExpiry,
+            PrivateHealthFund = p.PrivateHealthFund, PrivateHealthMembershipNumber = p.PrivateHealthMembershipNumber,
+            TaxiCardNumber = p.TaxiCardNumber, HairColour = p.HairColour, EyeColour = p.EyeColour,
+            WeightKg = p.WeightKg, HeightCm = p.HeightCm,
             FundingSource = p.FundingSource, FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
             LivingArrangement = p.LivingArrangement,
             MainSupportPersonName = p.MainSupportPersonName, MainSupportPersonRelationship = p.MainSupportPersonRelationship,
@@ -336,6 +390,22 @@ public class ParticipantsController : ControllerBase
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
+        var phoneError = ValidatePhone(dto);
+        if (phoneError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
+
+        var emailError = ValidateEmail(dto);
+        if (emailError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
+
+        var weightError = ValidateWeight(dto);
+        if (weightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
+
+        var heightError = ValidateHeight(dto);
+        if (heightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
+
         var diagnosesError = ValidateDiagnoses(dto);
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
@@ -350,9 +420,18 @@ public class ParticipantsController : ControllerBase
         var participant = new Participant
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, PreferredName = dto.PreferredName,
+            MiddleName = dto.MiddleName,
             DateOfBirth = dto.DateOfBirth, Gender = dto.Gender, GenderSelfDescription = dto.GenderSelfDescription,
+            PlaceOfBirth = dto.PlaceOfBirth, Country = dto.Country, Phone = dto.Phone, Email = dto.Email,
             NdisNumber = dto.NdisNumber, PlanStartDate = dto.PlanStartDate, PlanEndDate = dto.PlanEndDate,
-            PlanType = dto.PlanType, Region = dto.Region,
+            PlanType = dto.PlanType, Region = dto.Region, IsDsoa = dto.IsDsoa,
+            // Key Identifiers (INTAKE sub-wave A).
+            PensionCardNumber = dto.PensionCardNumber, PensionCardExpiry = dto.PensionCardExpiry,
+            MedicareNumber = dto.MedicareNumber, MedicareExpiry = dto.MedicareExpiry,
+            CompanionCardNumber = dto.CompanionCardNumber, CompanionCardExpiry = dto.CompanionCardExpiry,
+            PrivateHealthFund = dto.PrivateHealthFund, PrivateHealthMembershipNumber = dto.PrivateHealthMembershipNumber,
+            TaxiCardNumber = dto.TaxiCardNumber, HairColour = dto.HairColour, EyeColour = dto.EyeColour,
+            WeightKg = dto.WeightKg, HeightCm = dto.HeightCm,
             FundingSource = dto.FundingSource,
             // Ndis ignores whatever the client sent for the reused "Other — specify" field —
             // stored as null rather than trusting the client's INTAKE-07 payload exclusion alone.
@@ -472,6 +551,22 @@ public class ParticipantsController : ControllerBase
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
+        var phoneError = ValidatePhone(dto);
+        if (phoneError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
+
+        var emailError = ValidateEmail(dto);
+        if (emailError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
+
+        var weightError = ValidateWeight(dto);
+        if (weightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
+
+        var heightError = ValidateHeight(dto);
+        if (heightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
+
         var diagnosesError = ValidateDiagnoses(dto);
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
@@ -496,10 +591,20 @@ public class ParticipantsController : ControllerBase
         var previousPreferredStaffId = p.PreferredUserId;
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
+        p.MiddleName = dto.MiddleName;
         p.DateOfBirth = dto.DateOfBirth; p.Gender = dto.Gender; p.GenderSelfDescription = dto.GenderSelfDescription;
+        p.PlaceOfBirth = dto.PlaceOfBirth; p.Country = dto.Country; p.Phone = dto.Phone; p.Email = dto.Email;
         p.NdisNumber = dto.NdisNumber; p.PlanStartDate = dto.PlanStartDate; p.PlanEndDate = dto.PlanEndDate;
         p.PlanType = dto.PlanType;
         p.Region = dto.Region;
+        p.IsDsoa = dto.IsDsoa;
+        // Key Identifiers (INTAKE sub-wave A).
+        p.PensionCardNumber = dto.PensionCardNumber; p.PensionCardExpiry = dto.PensionCardExpiry;
+        p.MedicareNumber = dto.MedicareNumber; p.MedicareExpiry = dto.MedicareExpiry;
+        p.CompanionCardNumber = dto.CompanionCardNumber; p.CompanionCardExpiry = dto.CompanionCardExpiry;
+        p.PrivateHealthFund = dto.PrivateHealthFund; p.PrivateHealthMembershipNumber = dto.PrivateHealthMembershipNumber;
+        p.TaxiCardNumber = dto.TaxiCardNumber; p.HairColour = dto.HairColour; p.EyeColour = dto.EyeColour;
+        p.WeightKg = dto.WeightKg; p.HeightCm = dto.HeightCm;
         p.FundingSource = dto.FundingSource;
         // Ndis ignores whatever the client sent for the reused "Other — specify" field — same
         // server-side clearing as Create, so flipping Other -> Ndis actually clears stale text

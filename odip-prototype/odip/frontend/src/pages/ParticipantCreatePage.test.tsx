@@ -144,6 +144,7 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
 
     await user.type(screen.getByLabelText('Region'), 'QLD')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
@@ -156,9 +157,11 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/select an equipment item/i)
 
-    // Go back to the NDIS step (via Contacts) — its own field is still editable and shows no
-    // error, even though the Support step above it currently has an outstanding validation error.
+    // Go back to the NDIS step (via Contacts, then Key Identifiers) — its own field is still
+    // editable and shows no error, even though the Support step above it currently has an
+    // outstanding validation error.
     await user.click(screen.getByRole('button', { name: 'Back' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Back' })) // -> NDIS & Funding
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
@@ -176,6 +179,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
 
     await user.type(screen.getByLabelText('NDIS Number'), '431234567')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
@@ -200,10 +204,10 @@ describe('ParticipantCreatePage Review step', () => {
     // Each group's Edit button carries a distinct accessible name (aria-label) even though
     // they all show the same "Edit" visible text — six identical "Edit" accessible names
     // would be indistinguishable to screen reader users navigating by role.
-    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(6)
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(7)
 
-    // Review groups render in step order: Identity(0), NDIS(1), Contacts(2), Support(3),
-    // Medical(4), Risks(5).
+    // Review groups render in step order: Identity(0), NDIS(1), Key Identifiers(2), Contacts(3),
+    // Support(4), Medical(5), Risks(6).
     await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
@@ -254,14 +258,17 @@ describe('ParticipantCreatePage Review step', () => {
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
-        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
+        'behaviourRiskSummary', 'contactRoles', 'country', 'dateOfBirth', 'email', 'equipmentRequirements', 'eyeColour', 'firstName',
+        'fundingSource', 'gender', 'hairColour', 'heightCm', 'hidpaSupportCategories', 'isDraft', 'isDsoa', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'medicareExpiry', 'medicareNumber',
+        'middleName', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
-        'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'overnightRatio', 'overnightSupport', 'companionCardExpiry', 'companionCardNumber',
+        'pensionCardExpiry', 'pensionCardNumber', 'phone', 'placeOfBirth', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'privateHealthFund', 'privateHealthMembershipNumber',
+        'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
-        'supportRatio', 'transportRequirements',
+        'supportRatio', 'taxiCardNumber', 'transportRequirements', 'weightKg',
       ].sort()
     )
   })
@@ -283,6 +290,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -297,6 +305,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByDisplayValue('Alex Rivera'))
     await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -359,6 +368,7 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
     await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -385,6 +395,7 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
 
     await user.type(screen.getByLabelText('Plan Start Date'), '2026-01-01')
     await user.type(screen.getByLabelText('Plan End Date'), '2026-12-31')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -461,6 +472,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
 
     await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -534,6 +546,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument() // now Ndis
     expect(screen.queryByLabelText(/Funding Organisation/i)).not.toBeInTheDocument()
 
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -565,6 +578,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
     await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -585,6 +599,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements',
+        'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
       ].sort()
     )
   })
@@ -599,6 +614,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
 
     await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -618,6 +634,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region',
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
         'requiresStandingMachine', 'riskEntries', 'serviceStreams', 'supportRatio', 'transportRequirements',
+        'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
       ].sort()
     )
   })
@@ -631,6 +648,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Family')
     await user.type(screen.getByLabelText(/Main Support Person/i), 'Jane Citizen')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -653,6 +671,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'riskEntries',
         'serviceStreams', 'supportRatio', 'transportRequirements',
+        'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
       ].sort()
     )
   })
@@ -665,6 +684,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Independent')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -690,6 +710,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByLabelText('Lives With Others'))
     await user.type(screen.getByLabelText(/Who They Live With/i), 'Housemates')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -712,6 +733,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements', 'whoLivesWith',
+        'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
       ].sort()
     )
   })
@@ -739,6 +761,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'SupportedAccommodation')
     await user.type(screen.getByLabelText(/SIL Provider Name/i), 'Sunrise SIL Services')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -761,6 +784,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'silProviderContactPhone', 'silProviderName', 'supportRatio', 'transportRequirements',
+        'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
       ].sort()
     )
   })
@@ -788,6 +812,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('State'), 'QLD')
     await user.type(screen.getByLabelText('Postcode'), '4006')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -806,6 +831,7 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('First Name *'), 'Jamie')
   await user.type(screen.getByLabelText('Last Name *'), 'Smith')
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -1096,6 +1122,7 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
   }
 
@@ -1259,7 +1286,7 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
 
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
-    for (let i = 0; i < 6; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    for (let i = 0; i < 7; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -1307,6 +1334,152 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
     expect(call.id).toBe('participant-1')
     expect(call.data.isDraft).toBe(true)
     expect(call.data.lastName).toBe('Sharma')
+  })
+})
+
+describe('ParticipantCreatePage — INTAKE sub-wave A: new-field draft-save and edit round-trip', () => {
+  it('Save as draft with every new field left empty still succeeds, sending them as null', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    // Only First Name filled — none of the sub-wave A fields (Participant Details additions,
+    // DSOA, or the whole Key Identifiers step) ever touched.
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    // isDsoa is a checkbox with a useForm defaultValue of false, so it's present even without
+    // visiting the NDIS & Funding step — unset means false, not null (same convention as
+    // isRepeatClient/isHighSupport elsewhere in this payload).
+    expect(payload.isDsoa).toBe(false)
+    // Identity-step text fields are registered (that step is always visited first) but left
+    // blank — same "" -> null coercion as every other optional text field.
+    for (const field of ['middleName', 'placeOfBirth', 'country', 'phone', 'email']) {
+      expect(payload[field]).toBeNull()
+    }
+    // weightKg/heightCm are explicitly coerced (see buildPayload's numField loop) regardless of
+    // whether their step was ever visited.
+    expect(payload.weightKg).toBeNull()
+    expect(payload.heightCm).toBeNull()
+    // The rest of the Key Identifiers step's fields were never registered at all — this step was
+    // never visited — so they're simply absent from the payload, same "later, never-visited
+    // steps' fields are simply absent" convention already documented on the medicalSummary
+    // assertion in "is available on a later step too, and still sends only what has been filled
+    // in" above.
+    for (const field of [
+      'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry',
+      'companionCardNumber', 'companionCardExpiry', 'privateHealthFund',
+      'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour',
+    ]) {
+      expect(payload[field]).toBeUndefined()
+    }
+  })
+
+  it('Save as draft with only SOME new fields filled in sends exactly those, others null', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.type(screen.getByLabelText('Middle Name'), 'Robert')
+    await user.type(screen.getByLabelText('Phone'), '0400 000 000')
+    // Email deliberately left blank — a partial fill, not a full one.
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByLabelText(/Disability Support for Older Australians/i))
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.type(screen.getByLabelText('Medicare Number'), '2951 12345 1')
+    await user.type(screen.getByLabelText('Hair Colour'), 'Brown')
+    // Pension/Companion/Private Health/Taxi Card/Eye Colour/Weight/Height left blank.
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.middleName).toBe('Robert')
+    expect(payload.phone).toBe('0400 000 000')
+    expect(payload.isDsoa).toBe(true)
+    expect(payload.medicareNumber).toBe('2951 12345 1')
+    expect(payload.hairColour).toBe('Brown')
+    expect(payload.email).toBeNull()
+    expect(payload.pensionCardNumber).toBeNull()
+    expect(payload.eyeColour).toBeNull()
+    expect(payload.weightKg).toBeNull()
+    expect(payload.heightCm).toBeNull()
+  })
+
+  it('edit mode round-trips every new field into its input, and a save resubmits them unchanged', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Liam', lastName: 'Johnson', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+        middleName: 'Robert', placeOfBirth: 'Southport, QLD', country: 'Australia',
+        phone: '0400 111 222', email: 'liam.johnson@example.com.au', isDsoa: true,
+        pensionCardNumber: 'PCN1029384', pensionCardExpiry: '2027-06-30',
+        medicareNumber: '2951 12345 1', medicareExpiry: '2029-04-30',
+        companionCardNumber: 'CC-58213', companionCardExpiry: '2027-03-31',
+        privateHealthFund: 'Bupa', privateHealthMembershipNumber: 'BUP-773421',
+        taxiCardNumber: 'TC-90211', hairColour: 'Brown', eyeColour: 'Blue',
+        weightKg: 78.5, heightCm: 179,
+      },
+      isLoading: false,
+    })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    // Identity step fields round-trip immediately.
+    expect(screen.getByLabelText('Middle Name')).toHaveValue('Robert')
+    expect(screen.getByLabelText('Place of Birth')).toHaveValue('Southport, QLD')
+    expect(screen.getByLabelText('Country')).toHaveValue('Australia')
+    expect(screen.getByLabelText('Phone')).toHaveValue('0400 111 222')
+    expect(screen.getByLabelText('Email')).toHaveValue('liam.johnson@example.com.au')
+
+    // NDIS & Funding step — DSOA.
+    await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+    expect(screen.getByLabelText(/Disability Support for Older Australians/i)).toBeChecked()
+
+    // Key Identifiers step — every field round-trips.
+    await user.click(within(stepNav()).getByRole('button', { name: /key identifiers/i }))
+    expect(screen.getByLabelText('Pension Card Number')).toHaveValue('PCN1029384')
+    expect(screen.getByLabelText('Pension Card Expiry')).toHaveValue('2027-06-30')
+    expect(screen.getByLabelText('Medicare Number')).toHaveValue('2951 12345 1')
+    expect(screen.getByLabelText('Medicare Expiry')).toHaveValue('2029-04-30')
+    expect(screen.getByLabelText('Companion Card Number')).toHaveValue('CC-58213')
+    expect(screen.getByLabelText('Companion Card Expiry')).toHaveValue('2027-03-31')
+    expect(screen.getByLabelText('Private Health Fund')).toHaveValue('Bupa')
+    expect(screen.getByLabelText('Private Health Membership Number')).toHaveValue('BUP-773421')
+    expect(screen.getByLabelText('Taxi Card Number')).toHaveValue('TC-90211')
+    expect(screen.getByLabelText('Hair Colour')).toHaveValue('Brown')
+    expect(screen.getByLabelText('Eye Colour')).toHaveValue('Blue')
+    expect(screen.getByLabelText('Weight (kg)')).toHaveValue(78.5)
+    expect(screen.getByLabelText('Height (cm)')).toHaveValue(179)
+
+    // The Save/submit button only renders on the Review step — jump there (edit mode makes
+    // every step immediately clickable) before saving.
+    await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(call.data).toMatchObject({
+      middleName: 'Robert', placeOfBirth: 'Southport, QLD', country: 'Australia',
+      phone: '0400 111 222', email: 'liam.johnson@example.com.au', isDsoa: true,
+      pensionCardNumber: 'PCN1029384', pensionCardExpiry: '2027-06-30',
+      medicareNumber: '2951 12345 1', medicareExpiry: '2029-04-30',
+      companionCardNumber: 'CC-58213', companionCardExpiry: '2027-03-31',
+      privateHealthFund: 'Bupa', privateHealthMembershipNumber: 'BUP-773421',
+      taxiCardNumber: 'TC-90211', hairColour: 'Brown', eyeColour: 'Blue',
+      weightKg: 78.5, heightCm: 179,
+    })
   })
 })
 

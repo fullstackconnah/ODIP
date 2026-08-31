@@ -204,12 +204,24 @@ export interface ParticipantListDto {
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
+  /** INTAKE sub-wave A, Master Data Dictionary PID-004. */
+  middleName: string | null
   dateOfBirth: string | null
   gender: Gender | null
   genderSelfDescription: string | null
+  /** INTAKE sub-wave A, PID-010. */
+  placeOfBirth: string | null
+  /** INTAKE sub-wave A, CON-006. */
+  country: string | null
+  /** INTAKE sub-wave A, CON-007 — the participant's OWN phone (not a Contact's). */
+  phone: string | null
+  /** INTAKE sub-wave A, CON-008 — the participant's OWN email (not a Contact's). */
+  email: string | null
   ndisNumber: string | null
   planStartDate: string | null
   planEndDate: string | null
+  /** INTAKE sub-wave A, NDIS-006 — Disability Support for Older Australians. */
+  isDsoa: boolean
   /** FUND-02. */
   fundingSource: FundingSource
   fundingOrganisation: string | null
@@ -247,6 +259,20 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   updatedAt: string
   preferredStaffId: string | null
   preferredStaffName: string | null
+  // INTAKE sub-wave A — Key Identifiers step (Master Data Dictionary CARD-*/PHY-*). All optional.
+  pensionCardNumber: string | null
+  pensionCardExpiry: string | null
+  medicareNumber: string | null
+  medicareExpiry: string | null
+  companionCardNumber: string | null
+  companionCardExpiry: string | null
+  privateHealthFund: string | null
+  privateHealthMembershipNumber: string | null
+  taxiCardNumber: string | null
+  hairColour: string | null
+  eyeColour: string | null
+  weightKg: number | null
+  heightCm: number | null
 }
 
 export interface CreateParticipantDto {
@@ -261,15 +287,29 @@ export interface CreateParticipantDto {
    */
   isDraft?: boolean
   preferredName?: string
+  /** INTAKE sub-wave A, PID-004. */
+  middleName?: string
   dateOfBirth?: string
   gender?: Gender | null
   /** Only meaningful (and validated server-side) when gender is "Other". */
   genderSelfDescription?: string
+  /** INTAKE sub-wave A, PID-010. */
+  placeOfBirth?: string
+  /** INTAKE sub-wave A, CON-006. */
+  country?: string
+  /** INTAKE sub-wave A, CON-007 — the participant's OWN phone. AU-tolerant format validated
+   * server-side whenever provided; absence never blocks a draft. */
+  phone?: string
+  /** INTAKE sub-wave A, CON-008 — the participant's OWN email. Format validated server-side
+   * whenever provided; absence never blocks a draft. */
+  email?: string
   ndisNumber?: string
   planStartDate?: string
   planEndDate?: string
   planType: PlanType
   region?: string
+  /** INTAKE sub-wave A, NDIS-006 — Disability Support for Older Australians. */
+  isDsoa?: boolean
   /** FUND-02. Defaults server-side to Ndis when omitted. */
   fundingSource?: FundingSource
   /** Reused "Other — specify" field: required iff fundingSource is Other; ignored when Ndis. */
@@ -337,6 +377,20 @@ export interface CreateParticipantDto {
    * instead of this collection — the wizard only renders the add-rows UI in create mode.
    */
   riskEntries: CreateParticipantRiskEntryDto[]
+  // INTAKE sub-wave A — Key Identifiers step (Master Data Dictionary CARD-*/PHY-*). All optional.
+  pensionCardNumber?: string
+  pensionCardExpiry?: string
+  medicareNumber?: string
+  medicareExpiry?: string
+  companionCardNumber?: string
+  companionCardExpiry?: string
+  privateHealthFund?: string
+  privateHealthMembershipNumber?: string
+  taxiCardNumber?: string
+  hairColour?: string
+  eyeColour?: string
+  weightKg?: number | null
+  heightCm?: number | null
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

@@ -1243,6 +1243,239 @@ public class ParticipantsControllerTests
         Assert.IsType<CreatedAtActionResult>(result.Result);
     }
 
+    // ── INTAKE sub-wave A: the participant's own Phone/Email ─────────────
+
+    [Theory]
+    [InlineData("not a phone")]
+    [InlineData("abc123")]
+    [InlineData("123")]
+    public async Task Create_InvalidPhone_ReturnsBadRequest(string phone)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Phone = phone };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("phone", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("0400 000 000")]
+    [InlineData("+61 400 000 000")]
+    [InlineData("(07) 3123 4567")]
+    [InlineData("07 3123 4567")]
+    public async Task Create_AuTolerantPhoneFormats_Succeed(string phone)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Phone = phone };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("missing-at-sign.com")]
+    [InlineData("no-domain@")]
+    public async Task Create_InvalidEmail_ReturnsBadRequest(string email)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { Email = email };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("email", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_PhoneAndEmailBlank_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithInvalidEmail_StillReturnsBadRequest()
+    {
+        // Format checks on whatever WAS provided are never relaxed for a draft — same doctrine
+        // as Create_DraftWithInvalidPostcode_StillReturnsBadRequest.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, Email = "not-an-email" };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("email", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_DraftWithInvalidPhone_StillReturnsBadRequest()
+    {
+        // Format checks on whatever WAS provided are never relaxed for a draft — same doctrine
+        // as Create_DraftWithInvalidEmail_StillReturnsBadRequest/Create_DraftWithInvalidPostcode_StillReturnsBadRequest.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, Phone = "not a phone" };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("phone", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_DraftWithBlankPhoneAndEmail_Succeeds()
+    {
+        // Absence of the new optional fields never blocks a draft — matches every other
+        // optional field's draft behaviour.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithPartiallyFilledKeyIdentifiers_Succeeds_PersistsPartialData()
+    {
+        // A draft may fill in only SOME of the Key Identifiers step's fields — the rest stay
+        // null, and nothing about that partial fill blocks the save.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = new CreateParticipantDto
+        {
+            FirstName = "Priya", IsDraft = true,
+            MedicareNumber = "2951 12345 1", HairColour = "Brown",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal("2951 12345 1", body.Data!.MedicareNumber);
+        Assert.Equal("Brown", body.Data.HairColour);
+        Assert.Null(body.Data.PensionCardNumber);
+        Assert.Null(body.Data.WeightKg);
+    }
+
+    [Fact]
+    public async Task Create_RealWeightAndHeight_RoundTripThroughGetById()
+    {
+        // The stays-null case is covered above (Create_DraftWithPartiallyFilledKeyIdentifiers...)
+        // — this covers the other half: a real, non-null decimal value actually persists and
+        // reads back exactly, not just "doesn't error."
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { WeightKg = 78.5m, HeightCm = 179m };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal(78.5m, body.Data!.WeightKg);
+        Assert.Equal(179m, body.Data.HeightCm);
+    }
+
+    [Fact]
+    public async Task Update_RealWeightAndHeight_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            WeightKg = 62.25m, HeightCm = 165.5m,
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal(62.25m, body.Data!.WeightKg);
+        Assert.Equal(165.5m, body.Data.HeightCm);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(1000)]
+    public async Task Create_WeightOutOfRange_ReturnsBadRequest(decimal weight)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { WeightKg = weight };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("weight", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(1000)]
+    public async Task Create_HeightOutOfRange_ReturnsBadRequest(decimal height)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { HeightCm = height };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("height", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Participants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_WeightAndHeightAtUpperBound_Succeeds()
+    {
+        // 999.99 is the exact numeric(5,2) ceiling — must be accepted, not rejected off-by-one.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { WeightKg = 999.99m, HeightCm = 999.99m };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
     // ── INTAKE-08: draft saves ───────────────────────────────────────────
 
     [Fact]

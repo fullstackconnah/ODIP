@@ -14,6 +14,14 @@ public class Participant : ITenantEntity
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? PreferredName { get; set; }
+
+    /// <summary>
+    /// INTAKE (sub-wave A), Master Data Dictionary PID-004. Optional — the Oassist source forms
+    /// carry a Middle Name field alongside First/Last/Preferred; not folded into
+    /// <see cref="FullName"/> (which stays First/Preferred + Last, unchanged) since none of the
+    /// source forms show it used that way.
+    /// </summary>
+    public string? MiddleName { get; set; }
     public string FullName => string.IsNullOrWhiteSpace(PreferredName)
         ? $"{FirstName} {LastName}"
         : $"{PreferredName} {LastName}";
@@ -24,9 +32,49 @@ public class Participant : ITenantEntity
 
     /// <summary>Optional free-text self-description, only meaningful when <see cref="Gender"/> is <see cref="Enums.Gender.Other"/>.</summary>
     public string? GenderSelfDescription { get; set; }
+
+    /// <summary>INTAKE (sub-wave A), Master Data Dictionary PID-010. Free text (e.g. a suburb/town
+    /// or hospital name) — no curated picklist in the source forms.</summary>
+    public string? PlaceOfBirth { get; set; }
+
+    /// <summary>
+    /// INTAKE (sub-wave A), Master Data Dictionary CON-006. Deliberately separate from
+    /// <see cref="AddressState"/>/<see cref="AddressPostcode"/> (INTAKE-06's structured AU
+    /// address) — the source forms show Country as its own field on the Participant Details
+    /// block, not folded into the address group. Free text — AU-centric operations rarely need a
+    /// curated country list, and the spec doesn't call for one.
+    /// </summary>
+    public string? Country { get; set; }
+
+    /// <summary>
+    /// INTAKE (sub-wave A), Master Data Dictionary CON-007 — the participant's OWN phone number,
+    /// flagged in the research spec (§5) as a foundational gap: every other phone number in this
+    /// codebase belongs to a <see cref="Contact"/>/<see cref="Person"/> (NOK, coordinator, etc.),
+    /// never to the participant themselves. Format validated server-side (AU-tolerant, non-strict
+    /// — see ParticipantsController.ValidatePhone) whenever provided; absence never blocks a save,
+    /// including a draft (INTAKE-08 doctrine: format checks run on provided values only).
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
+    /// INTAKE (sub-wave A), Master Data Dictionary CON-008 — the participant's OWN email, same gap
+    /// as <see cref="Phone"/>. Format validated server-side whenever provided (see
+    /// ParticipantsController.ValidateEmail); absence never blocks a draft.
+    /// </summary>
+    public string? Email { get; set; }
     public string? NdisNumber { get; set; }
     public PlanType PlanType { get; set; }
     public string? Region { get; set; }
+
+    /// <summary>
+    /// INTAKE (sub-wave A), Master Data Dictionary NDIS-006 — "Disability Support for Older
+    /// Australians" flag, spelled out in full per the research spec's labelling instruction.
+    /// Deliberately a standalone bool rather than folded into <see cref="FundingSource"/>: the
+    /// research spec (§4.3) notes DSOA would otherwise have to be inferred from FundingSource=Other
+    /// plus free-text FundingOrganisation, which is lossy — a DSOA-funded participant may still be
+    /// NDIS-funded overall. Defaults false; no backfill for pre-existing participants.
+    /// </summary>
+    public bool IsDsoa { get; set; }
 
     /// <summary>FUND-02: NDIS vs Other funding source. Defaults to Ndis (also the backfill default
     /// for pre-existing rows with no FundingOrganisation text).</summary>
@@ -186,6 +234,29 @@ public class Participant : ITenantEntity
     /// (IsDraft=false on the Update payload) comes from the wizard's Review step.
     /// </summary>
     public bool IsDraft { get; set; }
+
+    // ── Key Identifiers (INTAKE sub-wave A, Master Data Dictionary CARD-*, PHY-*) ──────────
+    // Wizard step "Key Identifiers", placed after "NDIS & Funding" — see
+    // ParticipantCreatePage.tsx's WIZARD_STEPS. All optional; the Participant Profile source
+    // form (§4.4/§5) lists these as a discrete section with no field marked required. Expiry
+    // dates render as date inputs; Weight/Height are numeric with unit-labelled fields
+    // (kg/cm respectively, not stored as free text so future reporting can do real comparisons).
+    // Deliberately NOT included: a second "Plan Number" field (spec §6.3 — ambiguous vs.
+    // NdisNumber, flagged rather than guessed) and Participant Photo (needs an upload/storage
+    // design, deferred — see this PR's description).
+    public string? PensionCardNumber { get; set; }
+    public DateOnly? PensionCardExpiry { get; set; }
+    public string? MedicareNumber { get; set; }
+    public DateOnly? MedicareExpiry { get; set; }
+    public string? CompanionCardNumber { get; set; }
+    public DateOnly? CompanionCardExpiry { get; set; }
+    public string? PrivateHealthFund { get; set; }
+    public string? PrivateHealthMembershipNumber { get; set; }
+    public string? TaxiCardNumber { get; set; }
+    public string? HairColour { get; set; }
+    public string? EyeColour { get; set; }
+    public decimal? WeightKg { get; set; }
+    public decimal? HeightCm { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
