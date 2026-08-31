@@ -205,7 +205,7 @@ owner decision (collected under Open Flags at the end).
   editable table with that many rows — columns: description, authorised by,
   authorisation date, review date — plus an add-row control. On save each row becomes
   its own register entry. Uses DS-01's shared table; feeds INC-05.
-- [ ] **DOC-01 — PDF export of Intake Form and Participant Profile.** Separately
+- [x] **DOC-01 — PDF export of Intake Form and Participant Profile.** Separately
   selectable PDF downloads per participant. QuestPDF already handles trip itineraries,
   so this extends an existing capability. Depends on INTAKE-02's field split.
 
@@ -225,10 +225,10 @@ owner decision (collected under Open Flags at the end).
 
 ### L. Shift Notes (potential feature — not yet committed)
 
-- [ ] **NOTES-01 — Shift notes at shift completion.** Support workers add shift notes
+- [x] **NOTES-01 — Shift notes at shift completion.** Support workers add shift notes
   when completing a shift, presumably in the portal's My Shifts flow. Explicitly a
   potential feature — scope/commit decision pending.
-- [ ] **NOTES-02 — Keyword flagging for incidents in shift notes.** Scan shift notes for
+- [x] **NOTES-02 — Keyword flagging for incidents in shift notes.** Scan shift notes for
   incident-suggestive keywords (falls, medication, injury, behaviours) and prompt toward
   filing an incident report. Depends on NOTES-01; same potential status.
 
