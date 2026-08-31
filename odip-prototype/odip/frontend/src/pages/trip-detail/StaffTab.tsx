@@ -9,6 +9,7 @@ import {
 } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { formatDateAu } from '@/lib/utils'
 import type { SleepoverType, AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -323,23 +324,24 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
             </div>
 
             <div className="space-y-4">
-              {/* Staff Select */}
+              {/* Staff Select — UX-01: staff-scale list, SearchableSelect not a bounded native
+                  select. This file doesn't wrap fields in FormField, so the label/control
+                  association is wired by hand (id + aria-labelledby) the same way FormField does
+                  it for a custom component child. */}
               <div>
-                <label className="block text-sm font-medium mb-1">Staff Member</label>
-                <select value={selectedStaffId} onChange={e => setSelectedStaffId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  <option value="">Select staff...</option>
-                  {allStaff
+                <label id="addStaffMemberLabel" className="block text-sm font-medium mb-1">Staff Member</label>
+                <SearchableSelect
+                  aria-labelledby="addStaffMemberLabel"
+                  value={selectedStaffId}
+                  onChange={setSelectedStaffId}
+                  placeholder="Select staff..."
+                  items={allStaff
                     .filter((s: StaffListDto) => !assignedStaffIds.has(s.id))
                     .map((s: StaffListDto) => {
                       const isAvailable = availableStaffIds.has(s.id)
-                      return (
-                        <option key={s.id} value={s.id}>
-                          {s.fullName}{!isAvailable ? ' (Unavailable)' : ''}
-                        </option>
-                      )
+                      return { value: s.id, label: `${s.fullName}${!isAvailable ? ' (Unavailable)' : ''}` }
                     })}
-                </select>
+                />
                 {selectedStaffId && !availableStaffIds.has(selectedStaffId) && (
                   <p className="text-xs text-[var(--color-warning)] mt-1 flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> This staff member has a scheduling conflict for the trip dates

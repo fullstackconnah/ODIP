@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS } from '@/api/types/enums'
@@ -136,6 +137,12 @@ export default function IncidentCreatePage() {
   const involvedParticipantId = useWatch({ control, name: 'involvedParticipantId' })
   const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
+  // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect (below), which
+  // — like the RP type/RP id pickers above — isn't a native input `register()` can bind to, so
+  // it's tracked the same way: watched here, written back via setValue on change.
+  const reportedByStaffId = useWatch({ control, name: 'reportedByStaffId' })
+  const involvedStaffId = useWatch({ control, name: 'involvedStaffId' })
+  const reviewedByStaffId = useWatch({ control, name: 'reviewedByStaffId' })
   const isRpIncident = incidentType === 'RestrictivePracticeUse'
 
   // INC-04/INC-05: the involved participant's ACTIVE register entries — useRestrictivePractices
@@ -396,32 +403,39 @@ export default function IncidentCreatePage() {
         </Card>
 
         {/* People Involved */}
+        {/* UX-01: participant/staff-scale pickers — SearchableSelect, not a bounded Dropdown/select
+            (see components/README.md "Picking a picker"). The RP linked-practice picker below
+            stays a Dropdown — register entries per participant are a small, bounded set. */}
         <Card title="People Involved" className="space-y-4">
           <FormField label="Reported By" required error={errors.reportedByStaffId?.message}>
-            <select {...register('reportedByStaffId')}>
-              <option value="">Select staff member...</option>
-              {staff.map((s: StaffListDto) => (
-                <option key={s.id} value={s.id}>{s.fullName}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={reportedByStaffId ?? ''}
+              onChange={v => setValue('reportedByStaffId', v, { shouldDirty: true, shouldValidate: true })}
+              placeholder="Select staff member..."
+              items={staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName }))}
+            />
           </FormField>
 
           <FormField label="Involved Participant">
-            <select {...register('involvedParticipantId')}>
-              <option value="">None</option>
-              {participants.map((p: ParticipantListDto) => (
-                <option key={p.id} value={p.id}>{p.fullName || `${p.firstName} ${p.lastName}`}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={involvedParticipantId ?? ''}
+              onChange={v => setValue('involvedParticipantId', v, { shouldDirty: true })}
+              items={[
+                { value: '', label: 'None' },
+                ...participants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName || `${p.firstName} ${p.lastName}` })),
+              ]}
+            />
           </FormField>
 
           <FormField label="Involved Staff Member">
-            <select {...register('involvedStaffId')}>
-              <option value="">None</option>
-              {staff.map((s: StaffListDto) => (
-                <option key={s.id} value={s.id}>{s.fullName}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={involvedStaffId ?? ''}
+              onChange={v => setValue('involvedStaffId', v, { shouldDirty: true })}
+              items={[
+                { value: '', label: 'None' },
+                ...staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName })),
+              ]}
+            />
           </FormField>
         </Card>
 
@@ -595,12 +609,14 @@ export default function IncidentCreatePage() {
               </FormField>
 
               <FormField label="Reviewed By">
-                <select {...register('reviewedByStaffId')}>
-                  <option value="">Not reviewed</option>
-                  {staff.map((s: StaffListDto) => (
-                    <option key={s.id} value={s.id}>{s.fullName}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  value={reviewedByStaffId ?? ''}
+                  onChange={v => setValue('reviewedByStaffId', v, { shouldDirty: true })}
+                  items={[
+                    { value: '', label: 'Not reviewed' },
+                    ...staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName })),
+                  ]}
+                />
               </FormField>
             </div>
 

@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff } from '@/api/hooks'
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -1023,19 +1024,20 @@ export default function ParticipantCreatePage() {
             </Card>
 
             <Card title="Staff Preferences" className="space-y-4">
+              {/* UX-01: participant/staff-scale picker — was a Dropdown `searchable`, now
+                  SearchableSelect per components/README.md "Picking a picker". Scoped to this one
+                  field's control only — see feat/intake08-drafts, a different lane touching other
+                  parts of this same wizard file. */}
               <FormField label="Preferred Staff Member">
                 <Controller
                   control={control}
                   name="preferredStaffId"
                   render={({ field }) => (
-                    <Dropdown
+                    <SearchableSelect
                       id="preferredStaffId"
-                      variant="form"
-                      label="None"
                       value={field.value ?? ''}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
-                      searchable
                       items={[
                         { value: '', label: 'None' },
                         ...activeStaff.map(s => ({ value: s.id, label: s.fullName })),

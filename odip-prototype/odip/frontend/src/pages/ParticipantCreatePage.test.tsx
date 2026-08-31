@@ -261,11 +261,12 @@ describe('ParticipantCreatePage Review step', () => {
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
 
     // Preferred Staff Member lives on the Identity step, alongside First/Last Name. Its
-    // Dropdown trigger is wrapped in react-hook-form's <Controller>, which does not forward
-    // FormField's aria-labelledby clone to the render-prop Dropdown, so it isn't reachable via
-    // getByLabelText (a pre-existing gap, not introduced here) — query the trigger button by its
-    // own visible text instead.
-    await user.click(screen.getByRole('button', { name: 'None' }))
+    // SearchableSelect trigger is wrapped in react-hook-form's <Controller>, which does not
+    // forward FormField's aria-labelledby clone to the render-prop child, so it isn't reachable
+    // via getByLabelText (a pre-existing gap, not introduced by this migration) — query the
+    // combobox by its current displayed value instead (the 'None' item is explicitly in the
+    // items list, so it's what shows before anything is picked).
+    await user.click(screen.getByDisplayValue('None'))
     await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
@@ -279,7 +280,7 @@ describe('ParticipantCreatePage Review step', () => {
     // server-side concern (StaffCompatibilityLinkService), but the form must carry the changed
     // value through to submit for that to have anything to act on.
     await user.click(screen.getByRole('button', { name: /^Edit Identity/ }))
-    await user.click(screen.getByRole('button', { name: 'Alex Rivera' }))
+    await user.click(screen.getByDisplayValue('Alex Rivera'))
     await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
@@ -290,6 +291,20 @@ describe('ParticipantCreatePage Review step', () => {
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ preferredStaffId: 'staff-2' })
+  })
+
+  // UX-01: Preferred Staff Member moved from a Dropdown `searchable` trigger to SearchableSelect —
+  // one keyboard-only smoke test (open, arrow to an option, Enter) for the new combobox model.
+  it('selects a preferred staff member via keyboard only (ArrowDown + Enter)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const preferredStaff = screen.getByDisplayValue('None')
+    await user.click(preferredStaff)
+    // First enabled option is 'None' (value '') — one more ArrowDown reaches the first staff entry.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+
+    expect(preferredStaff).toHaveValue('Alex Rivera')
   })
 })
 
