@@ -145,6 +145,91 @@ public class PortalController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
+    // SHIFT NOTES (NOTES-01)
+    // ══════════════════════════════════════════════════════════════
+    //
+    // Committed by owner instruction despite the backlog doc's "potential feature" label. There
+    // is no shift-completion transition in this domain for the assigned worker to hang note
+    // creation off — ShiftStatus.Completed exists as an enum value but nothing anywhere in
+    // RosteringController or this controller ever sets it, so a note attaches to the shift
+    // directly rather than gating on a completion event the product doesn't actually have.
+
+    /// <summary>
+    /// Notes on one of the caller's own shifts, newest first. Same 404-indistinguishable
+    /// ownership scoping as <see cref="GetShiftDetail"/> — not linked, shift not found, and
+    /// shift-belongs-to-someone-else all 404 identically.
+    /// </summary>
+    [HttpGet("shifts/{id:guid}/notes")]
+    public async Task<ActionResult<ApiResponse<List<ShiftNoteDto>>>> GetShiftNotes(Guid id, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
+
+        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (!ownsShift)
+            return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
+
+        var notes = await _db.ShiftNotes
+            .Where(n => n.ShiftId == id)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync(ct);
+
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+    }
+
+    /// <summary>Creates a note on one of the caller's own shifts. Same ownership scoping as <see cref="GetShiftNotes"/>.</summary>
+    [HttpPost("shifts/{id:guid}/notes")]
+    public async Task<ActionResult<ApiResponse<ShiftNoteDto>>> CreateShiftNote(
+        Guid id, [FromBody] CreateShiftNoteDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
+
+        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (!owns)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
+
+        var note = new ShiftNote
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = id,
+            AuthorUserId = staffId.Value,
+            AuthorName = GetCallerName(),
+            Body = dto.Body.Trim(),
+        };
+        _db.ShiftNotes.Add(note);
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+    }
+
+    /// <summary>
+    /// Author-only edit of one of the caller's own shift notes — no delete anywhere (compliance-
+    /// adjacent record). Not linked, note not found, and note authored by someone else all 404
+    /// identically, per the class's ownership convention.
+    /// </summary>
+    [HttpPut("notes/{noteId:guid}")]
+    public async Task<ActionResult<ApiResponse<ShiftNoteDto>>> UpdateShiftNote(
+        Guid noteId, [FromBody] UpdateShiftNoteDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
+
+        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        if (note is null)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
+
+        note.Body = dto.Body.Trim();
+        note.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // WITNESS APPROVALS
     // ══════════════════════════════════════════════════════════════
 
@@ -273,6 +358,15 @@ public class PortalController : ControllerBase
     private static PortalMedicationSummaryDto ToMedicationSummaryDto(ParticipantMedication m) => new(
         m.Id, m.Name, m.Strength, m.DoseDescription, m.Type, m.TimesOfDay, m.IsHighRisk, m.IsPsychotropic,
         m.IsChemicalRestraint, m.DrugSchedule, m.SupportLevel, m.PrnIndication);
+
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt);
+
+    /// <summary>Same "fullName claim, fall back to the Name claim" idiom as ParticipantNotesController.GetCreatedByName.</summary>
+    private string GetCallerName() =>
+        User?.FindFirst("fullName")?.Value
+        ?? User?.FindFirst(ClaimTypes.Name)?.Value
+        ?? "Unknown";
 
     private static PortalWitnessRequestDto ToWitnessRequestDto(MedicationAdministration a) => new(
         a.Id, a.ParticipantId, a.Participant?.FullName ?? string.Empty,

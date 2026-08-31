@@ -8,6 +8,7 @@ import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { getRelevantRoutines } from '@/pages/rostering/lib/routines'
 import { formatShiftTimeRange, formatDayAccessibleName, RATIO_LABELS } from '@/pages/rostering/lib/roster'
 import { OVERNIGHT_SUPPORT_LABELS } from './lib/portal'
+import { ShiftNotesSection } from './components/ShiftNotesSection'
 
 function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'warning' }) {
   const toneClass = tone === 'warning'
@@ -248,6 +249,9 @@ export default function PortalShiftDetailPage() {
           </ul>
         )}
       </div>
+
+      {/* NOTES-01 */}
+      <ShiftNotesSection shiftId={shift.id} />
     </div>
   )
 }

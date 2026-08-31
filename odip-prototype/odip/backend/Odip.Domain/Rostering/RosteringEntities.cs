@@ -158,3 +158,35 @@ public class StaffParticipantCompatibility : ITenantEntity
     /// </summary>
     public bool AutoLinked { get; set; }
 }
+
+/// <summary>
+/// A free-text note the assigned support worker attaches to one of their own <see cref="Shift"/>
+/// rows (NOTES-01). There is no shift-completion transition anywhere in this domain for the
+/// assigned worker to hang note-taking off — <see cref="ShiftStatus.Completed"/> is a defined
+/// enum value but nothing in <c>RosteringController</c> or <c>PortalController</c> ever sets it,
+/// the coordinator's Draft→Published toggle is the only status write that exists — so a note
+/// simply attaches to the shift directly, any time during or after it, rather than gating on a
+/// completion event the product doesn't actually have yet. Compliance-adjacent record: same
+/// "never delete" idiom as <see cref="Odip.Domain.Entities.ParticipantNote"/>, except v1 doesn't
+/// even carry an archive flag — the only mutation is the author correcting their own
+/// <see cref="Body"/> (<c>PortalController.UpdateShiftNote</c>, author-scoped).
+/// </summary>
+public class ShiftNote : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+
+    public Guid ShiftId { get; set; }
+    public Shift? Shift { get; set; }
+
+    public Guid AuthorUserId { get; set; }
+    public User? AuthorUser { get; set; }
+
+    /// <summary>Denormalised display name, stamped server-side from JWT claims at creation — same idiom as ParticipantNote.CreatedByName.</summary>
+    public string AuthorName { get; set; } = string.Empty;
+
+    public string Body { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

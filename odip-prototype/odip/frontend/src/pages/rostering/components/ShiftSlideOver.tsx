@@ -9,12 +9,18 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
-  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, getRosterFindings,
+  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
+import { formatWithTimeZone } from '@/lib/utils'
 import { FindingsList } from './FindingsList'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { getRelevantRoutines } from '../lib/routines'
+
+/** "medium date, short time" in the viewer's own zone — matches PortalWitnessApprovalsPage's convention. */
+function formatNoteTimestamp(iso: string): string {
+  return formatWithTimeZone(iso, undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
 
 export type ShiftSlideOverTarget =
   | {
@@ -96,6 +102,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Preferred staff sort to the top of the dropdown and carry a hint; Excluded staff carry a
   // non-blocking warning both in the dropdown and inline once selected.
   const { data: compatibilityRows = [] } = useCompatibility(participantId || undefined)
+
+  // NOTES-01: read-only for the coordinator — only the assigned worker creates/edits their own,
+  // through the portal. Only fetched in edit mode (a real shift id exists); a new/unsaved shift
+  // can't have notes yet.
+  const { data: shiftNotes = [] } = useRosterShiftNotes(existing?.id)
+  const [showAllNotes, setShowAllNotes] = useState(false)
+  const visibleNotes = showAllNotes ? shiftNotes : shiftNotes.slice(0, 2)
   const compatibilityByStaffId = useMemo(() => {
     const map = new Map<string, { level: 'Preferred' | 'Allowed' | 'Excluded'; reason: string | null }>()
     compatibilityRows.forEach(row => map.set(row.staffId, { level: row.level, reason: row.reason }))
@@ -339,6 +352,31 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {isEdit && shiftNotes.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-medium text-foreground">Shift notes</p>
+              <ul className="space-y-2">
+                {visibleNotes.map(note => (
+                  <li key={note.id} className="rounded-sm border border-border bg-card px-3 py-2 text-sm">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-foreground">{note.body}</p>
+                  </li>
+                ))}
+              </ul>
+              {shiftNotes.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllNotes(v => !v)}
+                  className="mt-2 min-h-[44px] text-sm font-medium text-primary transition-colors duration-150 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+                >
+                  {showAllNotes ? 'Show fewer notes' : `Show all ${shiftNotes.length} notes`}
+                </button>
+              )}
             </div>
           )}
 

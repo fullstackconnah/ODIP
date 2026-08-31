@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Data;
 
@@ -2425,6 +2426,109 @@ public static class DbSeeder
             return;
 
         context.ParticipantRiskEntries.AddRange(entries);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Seeds a couple of demo <see cref="Shift"/> rows plus <see cref="ShiftNote"/> entries on
+    /// them (NOTES-01). No other seeder in this file creates <see cref="Shift"/> rows at all —
+    /// rostering data normally only exists once a coordinator uses the roster board — so this
+    /// method creates the handful of shifts it needs itself, gated on the same
+    /// idempotency check as everywhere else in this file (fixed GUIDs + an existence check on
+    /// the table this method actually owns seeding of, ShiftNotes).
+    /// </summary>
+    public static async Task SeedShiftNotesAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        if (await context.ShiftNotes.IgnoreQueryFilters().AnyAsync(ct))
+            return;
+
+        var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
+        if (demoTenant is null)
+            return;
+        var demoTenantId = demoTenant.Id;
+
+        var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
+        var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
+        var jamesUserId = Guid.Parse("b1000000-0000-0000-0000-000000000003");
+        var emilyUserId = Guid.Parse("b2000000-0000-0000-0000-000000000002");
+
+        var targetParticipantIds = new[] { sophieId, charlotteId };
+        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+            .Where(p => targetParticipantIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
+        var targetUserIds = new[] { jamesUserId, emilyUserId };
+        var existingUsers = await context.Users.IgnoreQueryFilters()
+            .Where(u => targetUserIds.Contains(u.Id)).Select(u => u.Id).ToListAsync(ct);
+        if (existingParticipants.Count == 0 || existingUsers.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(now);
+        var shifts = new List<Shift>();
+        var notes = new List<ShiftNote>();
+
+        if (existingParticipants.Contains(sophieId) && existingUsers.Contains(jamesUserId))
+        {
+            var sophieShift = new Shift
+            {
+                Id = Guid.Parse("77000000-0000-0000-0000-000000000001"), TenantId = demoTenantId,
+                ParticipantId = sophieId, UserId = jamesUserId, ServiceDate = today.AddDays(-2),
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+                Ratio = SupportRatio.TwoToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published,
+                CreatedAt = now.AddDays(-2), UpdatedAt = now.AddDays(-2),
+            };
+            shifts.Add(sophieShift);
+
+            // Three notes — enough to exercise the roster slide-over's collapsed-disclosure
+            // threshold (>2 notes).
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000001"), TenantId = demoTenantId,
+                ShiftId = sophieShift.Id, AuthorUserId = jamesUserId, AuthorName = "James O'Brien",
+                Body = "Quiet shift — Sophie spent most of the afternoon on her art project. No seizure activity observed.",
+                CreatedAt = now.AddDays(-2).AddHours(8), UpdatedAt = now.AddDays(-2).AddHours(8),
+            });
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000002"), TenantId = demoTenantId,
+                ShiftId = sophieShift.Id, AuthorUserId = jamesUserId, AuthorName = "James O'Brien",
+                Body = "Reminded Sophie about her hair appointment next week with Marie — she's looking forward to it.",
+                CreatedAt = now.AddDays(-2).AddHours(8).AddMinutes(30), UpdatedAt = now.AddDays(-2).AddHours(8).AddMinutes(30),
+            });
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000003"), TenantId = demoTenantId,
+                ShiftId = sophieShift.Id, AuthorUserId = jamesUserId, AuthorName = "James O'Brien",
+                Body = "Handover: left her medication chart on the kitchen counter for the evening shift to sign off.",
+                CreatedAt = now.AddDays(-2).AddHours(8).AddMinutes(45), UpdatedAt = now.AddDays(-2).AddHours(8).AddMinutes(45),
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId) && existingUsers.Contains(emilyUserId))
+        {
+            var charlotteShift = new Shift
+            {
+                Id = Guid.Parse("77000000-0000-0000-0000-000000000002"), TenantId = demoTenantId,
+                ParticipantId = charlotteId, UserId = emilyUserId, ServiceDate = today.AddDays(-1),
+                StartTime = new TimeOnly(14, 0), EndTime = new TimeOnly(22, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published,
+                CreatedAt = now.AddDays(-1), UpdatedAt = now.AddDays(-1),
+            };
+            shifts.Add(charlotteShift);
+
+            notes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000004"), TenantId = demoTenantId,
+                ShiftId = charlotteShift.Id, AuthorUserId = emilyUserId, AuthorName = "Emily Nguyen",
+                Body = "Charlotte was a little agitated after a change to the evening routine — settled quickly once we moved to a quiet space with her headphones.",
+                CreatedAt = now.AddDays(-1).AddHours(7), UpdatedAt = now.AddDays(-1).AddHours(7),
+            });
+        }
+
+        if (shifts.Count == 0)
+            return;
+
+        context.Shifts.AddRange(shifts);
+        context.ShiftNotes.AddRange(notes);
         await context.SaveChangesAsync(ct);
     }
 
