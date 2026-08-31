@@ -8,6 +8,7 @@ import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff, u
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -1450,22 +1451,14 @@ export default function ParticipantCreatePage() {
                           <div className="flex items-start gap-2">
                             <div className="flex-1 space-y-3">
                               <FormField label="Person" className="mb-0">
-                                <div className="flex gap-2">
-                                  {(['existing', 'new'] as const).map(mode => (
-                                    <button
-                                      key={mode}
-                                      type="button"
-                                      onClick={() => setValue(`contactRoles.${index}.personMode` as const, mode, { shouldDirty: true })}
-                                      className={`min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
-                                        (row?.personMode ?? 'existing') === mode
-                                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
-                                          : 'border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
-                                      }`}
-                                    >
-                                      {mode === 'existing' ? 'Existing person' : 'New person'}
-                                    </button>
-                                  ))}
-                                </div>
+                                <ToggleGroup
+                                  options={[
+                                    { key: 'existing', label: 'Existing person' },
+                                    { key: 'new', label: 'New person' },
+                                  ]}
+                                  value={row?.personMode ?? 'existing'}
+                                  onChange={mode => setValue(`contactRoles.${index}.personMode` as const, mode as 'existing' | 'new', { shouldDirty: true })}
+                                />
                               </FormField>
 
                               {(row?.personMode ?? 'existing') === 'existing' ? (
@@ -1519,13 +1512,15 @@ export default function ParticipantCreatePage() {
 
                           <div className="grid grid-cols-2 gap-3">
                             <FormField label="Role type" className="mb-0" hint={gateError ?? undefined}>
-                              <select {...register(`contactRoles.${index}.roleType` as const)}>
-                                {CONTACT_ROLE_TYPES.map(rt => (
-                                  <option key={rt} value={rt} disabled={!available.includes(rt) && rt !== rowRoleType}>
-                                    {CONTACT_ROLE_TYPE_LABELS[rt]}
-                                  </option>
-                                ))}
-                              </select>
+                              <Dropdown
+                                variant="form"
+                                value={rowRoleType}
+                                onChange={v => setValue(`contactRoles.${index}.roleType` as const, v as ContactRoleType, { shouldDirty: true })}
+                                items={CONTACT_ROLE_TYPES.map(rt => ({
+                                  value: rt, label: CONTACT_ROLE_TYPE_LABELS[rt],
+                                  disabled: !available.includes(rt) && rt !== rowRoleType,
+                                }))}
+                              />
                             </FormField>
                             <FormField label="Relationship to participant" className="mb-0">
                               <input {...register(`contactRoles.${index}.relationshipToParticipant` as const)} placeholder="e.g. Mother" />

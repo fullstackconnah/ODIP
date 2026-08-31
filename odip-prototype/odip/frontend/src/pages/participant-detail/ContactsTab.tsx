@@ -11,6 +11,7 @@ import { FormField } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
@@ -419,24 +420,14 @@ export default function ContactsTab({ participantId }: { participantId: string |
 
           {modalState?.mode === 'create' && (
             <FormField label="Person">
-              <div className="flex gap-2" role="radiogroup" aria-label="Person">
-                {(['existing', 'new'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={form.personMode === mode}
-                    onClick={() => setForm(f => ({ ...f, personMode: mode }))}
-                    className={`min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
-                      form.personMode === mode
-                        ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
-                        : 'border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
-                    }`}
-                  >
-                    {mode === 'existing' ? 'Existing person' : 'New person'}
-                  </button>
-                ))}
-              </div>
+              <ToggleGroup
+                options={[
+                  { key: 'existing', label: 'Existing person' },
+                  { key: 'new', label: 'New person' },
+                ]}
+                value={form.personMode}
+                onChange={mode => setForm(f => ({ ...f, personMode: mode as 'existing' | 'new' }))}
+              />
             </FormField>
           )}
 

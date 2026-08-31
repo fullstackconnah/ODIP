@@ -1113,7 +1113,7 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await advanceToContacts(user)
 
     await user.click(screen.getByRole('button', { name: /add contact/i }))
-    await user.click(screen.getByRole('button', { name: 'New person' }))
+    await user.click(screen.getByRole('radio', { name: 'New person' }))
     await user.type(screen.getByLabelText('First name *'), 'Karen')
     await user.type(screen.getByLabelText('Last name'), 'Johnson')
     await user.type(screen.getByLabelText('Relationship to participant'), 'Mother')
@@ -1172,6 +1172,29 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     expect(mockCreateMutateAsync.mock.calls[0][0].contactRoles).toEqual([])
   })
 
+  // INTAKE-08 fix round 2 (Finding 1): an added-but-never-filled-in contact row must not block
+  // "Save as draft" — the server silently skips a personless row for a draft (see
+  // ParticipantsController.ValidateContactRoles); this only needs to prove the frontend's
+  // existing raw-getValues() draft payload reaches the mutation and succeeds, not that the
+  // server accepts it (that's the backend test suite's job).
+  it('an added-but-empty contact row does not block Save as draft', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    // Leave the row entirely untouched — no person selected/typed.
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.contactRoles).toHaveLength(1)
+    expect(payload.contactRoles[0]).toMatchObject({ personId: null, newPersonFirstName: null })
+  })
+
   // CONTACT-02: Plan Manager is only available when Plan Type is Plan Managed — the default
   // wizard answer is SelfManaged (see ParticipantCreatePage's defaultValues), so the option is
   // disabled and its explanatory hint is shown as soon as a row is added.
@@ -1181,9 +1204,8 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await advanceToContacts(user)
 
     await user.click(screen.getByRole('button', { name: /add contact/i }))
-    const roleSelect = screen.getByLabelText('Role type') as HTMLSelectElement
-    const planManagerOption = within(roleSelect).getByRole('option', { name: 'Plan Manager' }) as HTMLOptionElement
-    expect(planManagerOption.disabled).toBe(true)
+    await user.click(screen.getByRole('button', { name: /role type/i }))
+    expect(screen.getByRole('option', { name: 'Plan Manager' })).toHaveAttribute('aria-disabled', 'true')
     // A role type the newly-added row is NOT currently pointed at (NextOfKin, the first
     // available type) stays disabled without a gate-error hint cluttering the row — the hint
     // only appears once a since-invalidated role is actually selected (see ContactRoleRules'
