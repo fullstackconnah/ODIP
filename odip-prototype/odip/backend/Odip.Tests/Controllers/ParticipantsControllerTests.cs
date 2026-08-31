@@ -537,6 +537,232 @@ public class ParticipantsControllerTests
         Assert.False(await db.ParticipantConsents.AnyAsync(c => c.ParticipantId == participant.Id));
     }
 
+    // ── INTAKE sub-wave C1: health-condition grid rows upserted transactionally with the participant ───
+
+    [Fact]
+    public async Task Create_WithHealthConditions_CreatesThemTransactionallyWithParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            HealthConditions = new()
+            {
+                new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Epilepsy, Has = true, Severity = "GrandMal", PlanProvided = true, TrainingRequired = true },
+                new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Asthma, Has = false },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantHealthConditions.Where(c => c.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, c => c.ConditionType == Domain.Enums.HealthConditionType.Epilepsy && c.Has == true && c.Severity == "GrandMal" && c.PlanProvided == true && c.TrainingRequired == true);
+        Assert.Contains(saved, c => c.ConditionType == Domain.Enums.HealthConditionType.Asthma && c.Has == false);
+    }
+
+    [Fact]
+    public async Task GetById_NoHealthConditionRows_StillReturnsAllTenAsSynthesizedPlaceholders()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetById(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(10, body.Data!.HealthConditions.Count);
+        Assert.All(body.Data.HealthConditions, c => Assert.Null(c.Id));
+        Assert.Equal(Enum.GetValues<Domain.Enums.HealthConditionType>().ToHashSet(), body.Data.HealthConditions.Select(c => c.ConditionType).ToHashSet());
+    }
+
+    [Fact]
+    public async Task Update_WithHealthConditions_UpsertsSameRows_DoesNotDuplicate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            HealthConditions = new() { new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Diabetes, Has = false } },
+        };
+
+        await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        await controller.Update(participant.Id, updateDto with
+        {
+            HealthConditions = new() { new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Diabetes, Has = true, Severity = "Type2", PlanProvided = true } },
+        }, CancellationToken.None);
+
+        var saved = await db.ParticipantHealthConditions.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.True(single.Has);
+        Assert.Equal("Type2", single.Severity);
+        Assert.True(single.PlanProvided);
+    }
+
+    /// <summary>
+    /// Mirrors Update_WithoutConsentsField_LeavesExistingConsentRowsUntouched — the same
+    /// load-bearing empty/null guard copied onto UpsertHealthConditionsAsync (this PR's brief).
+    /// </summary>
+    [Fact]
+    public async Task Update_WithoutHealthConditionsField_LeavesExistingRowsUntouched()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var withCondition = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            HealthConditions = new() { new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Epilepsy, Has = true, PlanProvided = true } },
+        };
+        await controller.Update(participant.Id, withCondition, CancellationToken.None);
+
+        // A later, unrelated save (e.g. an isActive toggle) that never mentions HealthConditions at
+        // all — same shape as any DTO caller built before this field existed.
+        var toggleOnly = withCondition with { HealthConditions = new(), IsActive = false };
+        await controller.Update(participant.Id, toggleOnly, CancellationToken.None);
+
+        var saved = await db.ParticipantHealthConditions.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.True(single.Has);
+        Assert.True(single.PlanProvided);
+    }
+
+    /// <summary>Mirrors Update_ConsentsExplicitlyNull_DoesNotThrow for the health-conditions guard.</summary>
+    [Fact]
+    public async Task Update_HealthConditionsExplicitlyNull_DoesNotThrow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            HealthConditions = null!,
+        };
+
+        var result = await controller.Update(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantHealthConditions.AnyAsync(c => c.ParticipantId == participant.Id));
+    }
+
+    [Fact]
+    public async Task Create_WithHealthConditions_TenantScoped_RowsGetSameTenantIdAsParticipant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            HealthConditions = new() { new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.Asthma, Has = true } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedRow = await db.ParticipantHealthConditions.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(tenantId, savedRow.TenantId);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithPartialHealthConditions_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            IsDraft = true,
+            HealthConditions = new() { new CreateParticipantHealthConditionDto { ConditionType = Domain.Enums.HealthConditionType.MentalHealth, Has = true } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(1, await db.ParticipantHealthConditions.CountAsync(c => c.ParticipantId == createdBody.Data!.Id));
+    }
+
+    /// <summary>
+    /// Covers the new flat Mobility &amp; Functional / Behaviour &amp; Communication / Allergies
+    /// columns' round-trip through Create -&gt; GetById, including a value from each of the new
+    /// enums (AmbulantStatus/FallsRiskRating/LevelOfPersonalCare/Memory/BehaviourRiskRating).
+    /// </summary>
+    [Fact]
+    public async Task Create_WithClinicalEnrichmentFields_RoundTripsThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            AllergiesDetail = "Peanuts", IsAnaphylaxisRisk = true, AllergyManagementNotes = "EpiPen in bag",
+            AmbulantStatus = Domain.Enums.AmbulantStatus.Frame,
+            FallsRiskRating = Domain.Enums.RiskRatingLevel.High,
+            UnevenGroundFlag = true,
+            LevelOfPersonalCare = Domain.Enums.PersonalCareLevel.OnePerson,
+            Orthotics = "AFO both feet",
+            ContinenceSupportDetail = "Pads, prompted",
+            BowelCareDetail = "Colostomy, staff-trained",
+            MenstruationSupport = "Verbal prompting",
+            SkinIntegrity = "Pressure area on left heel",
+            Memory = Domain.Enums.MemoryLevel.Fair,
+            MemoryAids = true,
+            ImpairedUnderstanding = false,
+            ImpairedJudgementReasoning = false,
+            BehavioursOfConcernCurrent = true,
+            BehavioursOfConcernFiveYearHistory = true,
+            BehaviourRiskRating = Domain.Enums.RiskRatingLevel.Medium,
+            RidsLogged = true, BspPlanProvided = true, BocChartProvided = false,
+            ExpressiveSkills = "High, verbal",
+            ReceptiveSkills = "High",
+            ReadingAbility = "Good",
+            CommunicationAids = "None",
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal("Peanuts", body.Data!.AllergiesDetail);
+        Assert.True(body.Data.IsAnaphylaxisRisk);
+        Assert.Equal(Domain.Enums.AmbulantStatus.Frame, body.Data.AmbulantStatus);
+        Assert.Equal(Domain.Enums.RiskRatingLevel.High, body.Data.FallsRiskRating);
+        Assert.True(body.Data.UnevenGroundFlag);
+        Assert.Equal(Domain.Enums.PersonalCareLevel.OnePerson, body.Data.LevelOfPersonalCare);
+        Assert.Equal(Domain.Enums.MemoryLevel.Fair, body.Data.Memory);
+        Assert.Equal(Domain.Enums.RiskRatingLevel.Medium, body.Data.BehaviourRiskRating);
+        Assert.True(body.Data.RidsLogged);
+        Assert.Equal("None", body.Data.CommunicationAids);
+    }
+
     // ── CONTACT-01/02/03: contact roles created transactionally with the participant ────
 
     [Fact]

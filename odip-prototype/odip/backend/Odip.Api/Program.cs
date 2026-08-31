@@ -427,6 +427,8 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         await DbSeeder.SeedRestrictivePracticesAsync(db);
         await DbSeeder.SeedParticipantRiskEntriesAsync(db);
         await DbSeeder.SeedParticipantConsentsAsync(db);
+        await DbSeeder.SeedParticipantHealthConditionsAsync(db);
+        await DbSeeder.SeedParticipantClinicalEnrichmentAsync(db);
         await DbSeeder.SeedShiftNotesAsync(db);
 
         break; // Success — exit retry loop

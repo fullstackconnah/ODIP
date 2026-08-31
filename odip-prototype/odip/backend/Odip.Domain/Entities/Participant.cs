@@ -287,6 +287,74 @@ public class Participant : ITenantEntity
     /// <summary>Free text — Participant Choice and Control notes (research spec §5's "Choice &amp; Control notes").</summary>
     public string? ChoiceControlNotes { get; set; }
 
+    // ── Allergies/Anaphylaxis (INTAKE sub-wave C1, Master Data Dictionary MED-012) ─────────────
+    // Wizard step "Medical" — see Participant.cs's field group doc pattern above. Distinct from
+    // MedicalSummary (generic free text) and from HealthConditions below (the 10-condition
+    // support-planning grid) — allergies get their own explicit fields per the research spec's §5
+    // call-out rather than being folded into either.
+    public string? AllergiesDetail { get; set; }
+    public bool? IsAnaphylaxisRisk { get; set; }
+    public string? AllergyManagementNotes { get; set; }
+
+    // ── Mobility & Functional (INTAKE sub-wave C1, Master Data Dictionary MOB-002/003/005..010/012)
+    // ─────────────────────────────────────────────────────────────────────────────────────────
+    // Wizard step "Support Needs & Mobility" (renamed from "Support Needs & Equipment" — the
+    // existing name no longer honestly covers the content once these 9 fields land; see this PR's
+    // report). Flat nullable columns, per this PR's brief. Where the source form shows a
+    // Y/No/Plan-plus-free-detail shape (Orthotics, Continence Support, Colostomy/Catheter/Enema/
+    // Suppository, Menstruation Support) this collapses to ONE free-text descriptive column per
+    // item rather than exploding into 3-4 sub-fields each — a deliberate simplification, flagged
+    // in this PR's report, that keeps the migration additive-and-minimal and matches this PR's
+    // brief naming each of these as a single item rather than a sub-field group.
+    /// <summary>MOB-002. Ambulant sub-grid (§1c-9): No Assist/Unsteady/Frame/Short Distance.</summary>
+    public AmbulantStatus? AmbulantStatus { get; set; }
+    /// <summary>MOB-003. Falls Risk rating — source-supported Low/Med/High/Critical values only (see <see cref="Enums.RiskRatingLevel"/>).</summary>
+    public RiskRatingLevel? FallsRiskRating { get; set; }
+    /// <summary>MOB-002's "Uneven ground Y/N" sub-field.</summary>
+    public bool? UnevenGroundFlag { get; set; }
+    /// <summary>MOB-006. Independent/Supervision/One-person/Two-person.</summary>
+    public PersonalCareLevel? LevelOfPersonalCare { get; set; }
+    /// <summary>MOB-007. "Y/N/Plan + list" collapsed to one free-text column — see the field-group doc above.</summary>
+    public string? Orthotics { get; set; }
+    /// <summary>MOB-008. "Y/NA/Plan + Prompt/Assist + aids + Pull-up/Pads + night support" collapsed to one free-text column.</summary>
+    public string? ContinenceSupportDetail { get; set; }
+    /// <summary>MOB-009/010. Colostomy/Catheter/Enema/Suppository "Y/No/Plan + equipment + support-required + training" collapsed to one free-text column.</summary>
+    public string? BowelCareDetail { get; set; }
+    /// <summary>MOB-012. "Y/No/Plan + Independent/Verbal/Physical" collapsed to one free-text column.</summary>
+    public string? MenstruationSupport { get; set; }
+    /// <summary>Not further enumerated in the source form — free text.</summary>
+    public string? SkinIntegrity { get; set; }
+
+    // ── Behaviour & Communication (INTAKE sub-wave C1, Master Data Dictionary COG-001..004/006/
+    // 008/009/010/011, COM-001..004) ────────────────────────────────────────────────────────────
+    // NEW wizard step "Behaviour & Communication", placed between "Medical" and "Risks & Hazards"
+    // — the Medical step already carries diagnoses/HIDPA/allergies/the health-condition grid, and
+    // this domain's 14 fields would push that step past a reasonable single-screen length; see
+    // this PR's report for the fuller reasoning.
+    /// <summary>COG-001. Excellent/Fair/Poor.</summary>
+    public MemoryLevel? Memory { get; set; }
+    public bool? MemoryAids { get; set; }
+    /// <summary>COG-003. Split from ImpairedJudgementReasoning below — the source form has these as two separate Y/N fields ("Impaired Understanding"/"Impaired Judgement/Reasoning"), not one combined item.</summary>
+    public bool? ImpairedUnderstanding { get; set; }
+    public bool? ImpairedJudgementReasoning { get; set; }
+    /// <summary>COG-005. Discrete Y/N — current behaviours of concern.</summary>
+    public bool? BehavioursOfConcernCurrent { get; set; }
+    /// <summary>Discrete Y/N — behaviours of concern in the past 5 years.</summary>
+    public bool? BehavioursOfConcernFiveYearHistory { get; set; }
+    /// <summary>COG-011. Source-supported Low/Med/High/Critical values only (see <see cref="Enums.RiskRatingLevel"/>) — shares the enum with <see cref="FallsRiskRating"/>.</summary>
+    public RiskRatingLevel? BehaviourRiskRating { get; set; }
+    public bool? RidsLogged { get; set; }
+    public bool? BspPlanProvided { get; set; }
+    public bool? BocChartProvided { get; set; }
+    /// <summary>COM-001. Free text — source form combines High/Med/Low + Verbal/Non-verbal/Restrictions/Sign, too varied for one enum.</summary>
+    public string? ExpressiveSkills { get; set; }
+    /// <summary>COM-002. Free text — source form combines High/Med/Low.</summary>
+    public string? ReceptiveSkills { get; set; }
+    /// <summary>COM-003. Free text — source form combines Y/N + Good/Med/Low.</summary>
+    public string? ReadingAbility { get; set; }
+    /// <summary>COM-004. Free text — source form combines Y/N + specify.</summary>
+    public string? CommunicationAids { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -301,4 +369,7 @@ public class Participant : ITenantEntity
 
     /// <summary>INTAKE sub-wave B. See <see cref="Entities.ParticipantConsent"/>'s type doc.</summary>
     public ICollection<ParticipantConsent> Consents { get; set; } = new List<ParticipantConsent>();
+
+    /// <summary>INTAKE sub-wave C1. See <see cref="Entities.ParticipantHealthCondition"/>'s type doc.</summary>
+    public ICollection<ParticipantHealthCondition> HealthConditions { get; set; } = new List<ParticipantHealthCondition>();
 }
