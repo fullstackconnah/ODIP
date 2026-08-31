@@ -240,9 +240,10 @@ describe('ParticipantCreatePage Review step', () => {
     // converted to the wire string before submit.
     expect(Object.keys(payload).sort()).toEqual(
       [
+        'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'isHighSupport',
-        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
@@ -540,9 +541,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     const payload = mockCreateMutateAsync.mock.calls[0][0]
     expect(Object.keys(payload).sort()).toEqual(
       [
+        'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'genderSelfDescription', 'isHighSupport',
-        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
         'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
@@ -572,14 +574,189 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     const payload = mockCreateMutateAsync.mock.calls[0][0]
     expect(Object.keys(payload).sort()).toEqual(
       [
+        'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingOrganisation', 'fundingSource', 'gender', 'isHighSupport',
-        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'medicalSummary', 'mobilityAidWalker',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes',
         'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'region',
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
         'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
       ].sort()
     )
+  })
+
+  it('LivingArrangement=Family: exact payload key set adds the Family fields and shared notes', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Family')
+    await user.type(screen.getByLabelText(/Main Support Person/i), 'Jane Citizen')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({ livingArrangement: 'Family', mainSupportPersonName: 'Jane Citizen' })
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
+        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'fundingSource', 'gender', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
+        'mainSupportPersonName', 'mainSupportPersonRelationship', 'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'othersLivingInAccommodation', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'serviceStreams',
+        'supportRatio', 'transportRequirements',
+      ].sort()
+    )
+  })
+
+  it('LivingArrangement=Independent, LivesWithOthers=false: whoLivesWith stays excluded from the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Independent')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.livingArrangement).toBe('Independent')
+    expect(payload.livesWithOthers).toBe(false)
+    expect('whoLivesWith' in payload).toBe(false)
+    expect('livingArrangementNotes' in payload).toBe(true) // shared field — visible for any arrangement
+  })
+
+  it('LivingArrangement=Independent, LivesWithOthers=true: exact payload key set adds livesWithOthers and whoLivesWith', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Independent')
+    await user.click(screen.getByLabelText('Lives With Others'))
+    await user.type(screen.getByLabelText(/Who They Live With/i), 'Housemates')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({ livingArrangement: 'Independent', livesWithOthers: true, whoLivesWith: 'Housemates' })
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
+        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'fundingSource', 'gender', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livesWithOthers', 'livingArrangement', 'livingArrangementNotes',
+        'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'supportRatio', 'transportRequirements', 'whoLivesWith',
+      ].sort()
+    )
+  })
+
+  it('blocks Next on the Identity step when LivingArrangement=Independent, LivesWithOthers=true, but who-they-live-with is empty', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Independent')
+    await user.click(screen.getByLabelText('Lives With Others'))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/please specify who the participant lives with/i)
+    expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument() // still on Identity step
+  })
+
+  it('LivingArrangement=SupportedAccommodation: exact payload key set adds the SIL/accommodation fields', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'SupportedAccommodation')
+    await user.type(screen.getByLabelText(/SIL Provider Name/i), 'Sunrise SIL Services')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({ livingArrangement: 'SupportedAccommodation', silProviderName: 'Sunrise SIL Services' })
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'accommodationType', 'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
+        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'fundingSource', 'gender', 'isHighSupport',
+        'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
+        'medicalSummary', 'mobilityAidWalker',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'onSiteSupportHours', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
+        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
+        'silProviderContactPhone', 'silProviderName', 'supportRatio', 'transportRequirements',
+      ].sort()
+    )
+  })
+
+  it('blocks Next on the Identity step for an invalid postcode', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.type(screen.getByLabelText('Postcode'), '123')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/postcode must be exactly 4 digits/i)
+  })
+
+  it('submits a valid address', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.type(screen.getByLabelText('Street'), '12 Example Street')
+    await user.type(screen.getByLabelText('Suburb'), 'Fortitude Valley')
+    await user.selectOptions(screen.getByLabelText('State'), 'QLD')
+    await user.type(screen.getByLabelText('Postcode'), '4006')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      addressStreet: '12 Example Street', addressSuburb: 'Fortitude Valley', addressState: 'QLD', addressPostcode: '4006',
+    })
   })
 })

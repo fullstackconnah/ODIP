@@ -53,6 +53,62 @@ public class ParticipantsController : ControllerBase
             ? "Please specify the funding organisation."
             : null;
 
+    /// <summary>
+    /// LIVING-01/02/03/04: each arrangement type requires its one key identifying field, both
+    /// ends — same shape as ValidateGender/ValidateFundingSource. Independent's WhoLivesWith is
+    /// only required when LivesWithOthers is true (a second level of conditionality nested inside
+    /// the arrangement-type gate).
+    /// </summary>
+    private static string? ValidateLivingArrangement(CreateParticipantDto dto)
+    {
+        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.Family && string.IsNullOrWhiteSpace(dto.MainSupportPersonName))
+            return "Please provide the main support person's name.";
+        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.Independent && dto.LivesWithOthers == true && string.IsNullOrWhiteSpace(dto.WhoLivesWith))
+            return "Please specify who the participant lives with.";
+        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.SupportedAccommodation && string.IsNullOrWhiteSpace(dto.SilProviderName))
+            return "Please provide the SIL provider name.";
+        return null;
+    }
+
+    /// <summary>INTAKE-06: AU postcode is exactly 4 digits when supplied (optional field, so blank is fine).</summary>
+    private static string? ValidateAddressPostcode(CreateParticipantDto dto) =>
+        !string.IsNullOrWhiteSpace(dto.AddressPostcode) && !System.Text.RegularExpressions.Regex.IsMatch(dto.AddressPostcode, @"^\d{4}$")
+            ? "Postcode must be exactly 4 digits."
+            : null;
+
+    /// <summary>
+    /// LIVING-02/03/04 server-side clearing: defence in depth, mirroring FundingOrganisation's
+    /// pattern in Create/Update above — a field belonging to a non-selected arrangement type (or,
+    /// for WhoLivesWith, belonging to a LivesWithOthers=false Independent participant) is stored
+    /// as null regardless of what a stale client payload sent, rather than trusting the
+    /// frontend's INTAKE-07 payload exclusion alone.
+    /// </summary>
+    private static void ApplyLivingArrangementFields(Participant p, CreateParticipantDto dto)
+    {
+        var arrangement = dto.LivingArrangement;
+        p.LivingArrangement = arrangement;
+
+        var isFamily = arrangement == Domain.Enums.LivingArrangement.Family;
+        p.MainSupportPersonName = isFamily ? dto.MainSupportPersonName : null;
+        p.MainSupportPersonRelationship = isFamily ? dto.MainSupportPersonRelationship : null;
+        p.OthersLivingInAccommodation = isFamily ? dto.OthersLivingInAccommodation : null;
+        p.ResidentialInfo = isFamily ? dto.ResidentialInfo : null;
+
+        var isIndependent = arrangement == Domain.Enums.LivingArrangement.Independent;
+        p.LivesWithOthers = isIndependent ? dto.LivesWithOthers : null;
+        p.WhoLivesWith = isIndependent && dto.LivesWithOthers == true ? dto.WhoLivesWith : null;
+
+        var isSupported = arrangement == Domain.Enums.LivingArrangement.SupportedAccommodation;
+        p.SilProviderName = isSupported ? dto.SilProviderName : null;
+        p.SilProviderContactPhone = isSupported ? dto.SilProviderContactPhone : null;
+        p.AccommodationType = isSupported ? dto.AccommodationType : null;
+        p.OnSiteSupportHours = isSupported ? dto.OnSiteSupportHours : null;
+
+        // Shared across all three arrangement types (LIVING-01) — cleared only when no
+        // arrangement is selected at all.
+        p.LivingArrangementNotes = arrangement != null ? dto.LivingArrangementNotes : null;
+    }
+
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
@@ -112,6 +168,15 @@ public class ParticipantsController : ControllerBase
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
             PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region,
             FundingSource = p.FundingSource, FundingOrganisation = p.FundingOrganisation, IsRepeatClient = p.IsRepeatClient, IsActive = p.IsActive,
+            LivingArrangement = p.LivingArrangement,
+            MainSupportPersonName = p.MainSupportPersonName, MainSupportPersonRelationship = p.MainSupportPersonRelationship,
+            OthersLivingInAccommodation = p.OthersLivingInAccommodation, ResidentialInfo = p.ResidentialInfo,
+            LivesWithOthers = p.LivesWithOthers, WhoLivesWith = p.WhoLivesWith,
+            SilProviderName = p.SilProviderName, SilProviderContactPhone = p.SilProviderContactPhone,
+            AccommodationType = p.AccommodationType, OnSiteSupportHours = p.OnSiteSupportHours,
+            LivingArrangementNotes = p.LivingArrangementNotes,
+            AddressStreet = p.AddressStreet, AddressSuburb = p.AddressSuburb,
+            AddressState = p.AddressState, AddressPostcode = p.AddressPostcode,
             MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
             MobilitySupportOptions = p.MobilitySupportOptions,
@@ -151,6 +216,14 @@ public class ParticipantsController : ControllerBase
         if (fundingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
 
+        var livingError = ValidateLivingArrangement(dto);
+        if (livingError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
+
+        var postcodeError = ValidateAddressPostcode(dto);
+        if (postcodeError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
@@ -177,7 +250,11 @@ public class ParticipantsController : ControllerBase
             MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
             PreferredUserId = dto.PreferredStaffId,
             ServiceStreams = dto.ServiceStreams,
+            // INTAKE-06 — plain participant-level fields, not arrangement-conditional.
+            AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
+            AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
         };
+        ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
         // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
         // rostering compatibility matrix, in the same transaction as the participant insert.
@@ -205,6 +282,14 @@ public class ParticipantsController : ControllerBase
         if (fundingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
 
+        var livingError = ValidateLivingArrangement(dto);
+        if (livingError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
+
+        var postcodeError = ValidateAddressPostcode(dto);
+        if (postcodeError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -223,6 +308,9 @@ public class ParticipantsController : ControllerBase
         // server-side clearing as Create, so flipping Other -> Ndis actually clears stale text
         // rather than leaving it dormant on the row.
         p.FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null;
+        ApplyLivingArrangementFields(p, dto);
+        p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
+        p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.IsRepeatClient = dto.IsRepeatClient;
         p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;

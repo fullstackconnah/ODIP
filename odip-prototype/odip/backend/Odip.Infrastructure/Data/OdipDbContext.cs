@@ -91,6 +91,20 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Region).HasMaxLength(100);
             entity.Property(e => e.FundingOrganisation).HasMaxLength(200);
             entity.Property(e => e.MobilitySupportOptions).HasColumnType("text[]");
+            // LIVING-02/03/04
+            entity.Property(e => e.MainSupportPersonName).HasMaxLength(200);
+            entity.Property(e => e.MainSupportPersonRelationship).HasMaxLength(100);
+            entity.Property(e => e.WhoLivesWith).HasMaxLength(2000);
+            entity.Property(e => e.SilProviderName).HasMaxLength(200);
+            entity.Property(e => e.SilProviderContactPhone).HasMaxLength(20);
+            entity.Property(e => e.AccommodationType).HasMaxLength(100);
+            entity.Property(e => e.OnSiteSupportHours).HasMaxLength(100);
+            entity.Property(e => e.LivingArrangementNotes).HasMaxLength(2000);
+            // INTAKE-06
+            entity.Property(e => e.AddressStreet).HasMaxLength(200);
+            entity.Property(e => e.AddressSuburb).HasMaxLength(100);
+            entity.Property(e => e.AddressState).HasMaxLength(10);
+            entity.Property(e => e.AddressPostcode).HasMaxLength(4);
             entity.Ignore(e => e.FullName);
 
             entity.HasIndex(e => e.IsActive);

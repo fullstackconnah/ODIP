@@ -43,6 +43,24 @@ public record ParticipantDetailDto : ParticipantListDto
     public DateOnly? PlanEndDate { get; init; }
     public ParticipantFundingSource FundingSource { get; init; }
     public string? FundingOrganisation { get; init; }
+    /// <summary>LIVING-01.</summary>
+    public LivingArrangement? LivingArrangement { get; init; }
+    public string? MainSupportPersonName { get; init; }
+    public string? MainSupportPersonRelationship { get; init; }
+    public string? OthersLivingInAccommodation { get; init; }
+    public string? ResidentialInfo { get; init; }
+    public bool? LivesWithOthers { get; init; }
+    public string? WhoLivesWith { get; init; }
+    public string? SilProviderName { get; init; }
+    public string? SilProviderContactPhone { get; init; }
+    public string? AccommodationType { get; init; }
+    public string? OnSiteSupportHours { get; init; }
+    public string? LivingArrangementNotes { get; init; }
+    /// <summary>INTAKE-06.</summary>
+    public string? AddressStreet { get; init; }
+    public string? AddressSuburb { get; init; }
+    public string? AddressState { get; init; }
+    public string? AddressPostcode { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
     public SupportRatio OvernightRatio { get; init; }
     public bool RequiresHiLoBed { get; init; }
@@ -88,6 +106,44 @@ public record CreateParticipantDto
     /// ParticipantsController.ValidateFundingSource) iff FundingSource is Other; ignored when Ndis.</summary>
     [StringLength(200)]
     public string? FundingOrganisation { get; init; }
+    /// <summary>LIVING-01. Nullable — unset until intake captures it.</summary>
+    public LivingArrangement? LivingArrangement { get; init; }
+    /// <summary>LIVING-02 (Family). Required (server-side, see ValidateLivingArrangement) iff LivingArrangement is Family.</summary>
+    [StringLength(200)]
+    public string? MainSupportPersonName { get; init; }
+    [StringLength(100)]
+    public string? MainSupportPersonRelationship { get; init; }
+    [StringLength(2000)]
+    public string? OthersLivingInAccommodation { get; init; }
+    [StringLength(2000)]
+    public string? ResidentialInfo { get; init; }
+    /// <summary>LIVING-03 (Independent).</summary>
+    public bool? LivesWithOthers { get; init; }
+    /// <summary>Required (server-side) iff LivingArrangement is Independent and LivesWithOthers is true.</summary>
+    [StringLength(2000)]
+    public string? WhoLivesWith { get; init; }
+    /// <summary>LIVING-04 (Supported Accommodation). Required (server-side) iff LivingArrangement is SupportedAccommodation.</summary>
+    [StringLength(200)]
+    public string? SilProviderName { get; init; }
+    [StringLength(20)]
+    public string? SilProviderContactPhone { get; init; }
+    [StringLength(100)]
+    public string? AccommodationType { get; init; }
+    [StringLength(100)]
+    public string? OnSiteSupportHours { get; init; }
+    /// <summary>Shared across all three arrangement types — see Participant.LivingArrangementNotes.</summary>
+    [StringLength(2000)]
+    public string? LivingArrangementNotes { get; init; }
+    /// <summary>INTAKE-06 — structured address.</summary>
+    [StringLength(200)]
+    public string? AddressStreet { get; init; }
+    [StringLength(100)]
+    public string? AddressSuburb { get; init; }
+    [StringLength(10)]
+    public string? AddressState { get; init; }
+    /// <summary>4-digit AU postcode. Format validated server-side (see ValidateAddressPostcode), not via [RegularExpression], to match this codebase's controller-level custom-validator convention (mirrors ValidateGender/ValidateFundingSource) rather than ASP.NET's automatic DataAnnotations pipeline, which controller unit tests bypass.</summary>
+    [StringLength(4)]
+    public string? AddressPostcode { get; init; }
     public bool IsRepeatClient { get; init; }
     public bool MobilityAidWheelchair { get; init; }
     public bool MobilityAidWalker { get; init; }
