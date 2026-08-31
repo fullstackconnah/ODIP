@@ -123,13 +123,9 @@ export default function ParticipantDetailPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <Card title="Personal Information">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-              {/* INTAKE sub-wave A, PID-004 — only shown when set, same empty-state pattern as
-                  the other optional fields below. */}
-              {p.middleName && (
-                <>
-                  <span className="text-[var(--color-muted-foreground)]">Middle Name</span><span>{p.middleName}</span>
-                </>
-              )}
+              {/* INTAKE sub-wave A, PID-004 — same always-visible empty-state pattern as Place
+                  of Birth/Phone/Email below, not a hide-when-unset row. */}
+              <span className="text-[var(--color-muted-foreground)]">Middle Name</span><span>{p.middleName || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Date of Birth</span><span>{formatDateAu(p.dateOfBirth)}</span>
               <span className="text-[var(--color-muted-foreground)]">Gender</span>
               <span>

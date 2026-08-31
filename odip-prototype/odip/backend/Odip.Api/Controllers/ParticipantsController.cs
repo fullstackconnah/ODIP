@@ -122,6 +122,25 @@ public class ParticipantsController : ControllerBase
             : null;
 
     /// <summary>
+    /// INTAKE sub-wave A polish round: WeightKg is stored as numeric(5,2) (see OdipDbContext's
+    /// HasPrecision(5, 2)), so anything outside 0 &lt; value &lt;= 999.99 either can't fit or is
+    /// nonsensical for a participant's weight — reject it cleanly here rather than letting an
+    /// out-of-range value fall through to an unhandled Npgsql numeric-overflow exception at
+    /// SaveChangesAsync. Same "provided-value format check, absence never blocks" doctrine as
+    /// ValidatePhone/ValidateEmail.
+    /// </summary>
+    private static string? ValidateWeight(CreateParticipantDto dto) =>
+        dto.WeightKg.HasValue && (dto.WeightKg.Value <= 0 || dto.WeightKg.Value > 999.99m)
+            ? "Weight must be greater than 0 and no more than 999.99 kg."
+            : null;
+
+    /// <summary>Same shape/reasoning as <see cref="ValidateWeight"/>, for HeightCm.</summary>
+    private static string? ValidateHeight(CreateParticipantDto dto) =>
+        dto.HeightCm.HasValue && (dto.HeightCm.Value <= 0 || dto.HeightCm.Value > 999.99m)
+            ? "Height must be greater than 0 and no more than 999.99 cm."
+            : null;
+
+    /// <summary>
     /// DIAG-01: unlike ValidateGender/ValidateFundingSource/ValidateLivingArrangement (which
     /// enforce a required companion field), diagnoses are open text with a curated picklist as UI
     /// guidance only (see Diagnoses.cs's type doc) — so the only server-side rule is "not blank,
@@ -379,6 +398,14 @@ public class ParticipantsController : ControllerBase
         if (emailError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
 
+        var weightError = ValidateWeight(dto);
+        if (weightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
+
+        var heightError = ValidateHeight(dto);
+        if (heightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
+
         var diagnosesError = ValidateDiagnoses(dto);
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
@@ -531,6 +558,14 @@ public class ParticipantsController : ControllerBase
         var emailError = ValidateEmail(dto);
         if (emailError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
+
+        var weightError = ValidateWeight(dto);
+        if (weightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
+
+        var heightError = ValidateHeight(dto);
+        if (heightError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
 
         var diagnosesError = ValidateDiagnoses(dto);
         if (diagnosesError != null)

@@ -275,6 +275,21 @@ function contactMethodRefine(data: ContactMethodFields, ctx: z.RefinementCtx) {
   }
 }
 
+// INTAKE sub-wave A polish round: WeightKg/HeightCm are numeric(5,2) columns server-side — mirror
+// ParticipantsController.ValidateWeight/ValidateHeight's bounds (0 < value <= 999.99) exactly so a
+// full submit blocks with a message instead of only failing at the server. A blank input coerces
+// to 0 via z.coerce.number() (see weightKg/heightCm's schema doc) — treated as "not provided" here
+// too, same as buildPayload's numField loop, so leaving the field empty is never itself an error.
+type WeightHeightFields = { weightKg?: number; heightCm?: number }
+function weightHeightRefine(data: WeightHeightFields, ctx: z.RefinementCtx) {
+  if (data.weightKg && (data.weightKg <= 0 || data.weightKg > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weightKg'], message: 'Weight must be greater than 0 and no more than 999.99 kg.' })
+  }
+  if (data.heightCm && (data.heightCm <= 0 || data.heightCm > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['heightCm'], message: 'Height must be greater than 0 and no more than 999.99 cm.' })
+  }
+}
+
 // DIAG-01: primaryDiagnosis "Other — specify" requires the typed free-text field — same
 // standalone-function pattern as genderRefine/fundingSourceRefine.
 type DiagnosisFields = { primaryDiagnosis?: string; primaryDiagnosisOther?: string }
@@ -308,6 +323,7 @@ const participantSchema = baseParticipantSchema
   .superRefine(livingArrangementRefine)
   .superRefine(addressPostcodeRefine)
   .superRefine(contactMethodRefine)
+  .superRefine(weightHeightRefine)
   .superRefine(diagnosisOtherRefine)
   .superRefine(contactRolesRefine)
 
@@ -432,8 +448,8 @@ const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
 const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine).superRefine(contactMethodRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
-  // INTAKE sub-wave A — Key Identifiers: every field optional, no cross-field refine needed.
-  baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)),
+  // INTAKE sub-wave A — Key Identifiers: every field optional except the weight/height bounds.
+  baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
   baseParticipantSchema.pick(pickShape(STEP_CONTACTS_FIELDS)).superRefine(contactRolesRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
@@ -1614,11 +1630,11 @@ export default function ParticipantCreatePage() {
               <FormField label="Eye Colour">
                 <input id="eyeColour" {...register('eyeColour')} placeholder="e.g. Blue" />
               </FormField>
-              <FormField label="Weight (kg)">
-                <input id="weightKg" type="number" min="0" step="0.1" {...register('weightKg')} placeholder="e.g. 78.5" />
+              <FormField label="Weight (kg)" error={errors.weightKg?.message}>
+                <input id="weightKg" type="number" min="0" max="999.99" step="0.1" {...register('weightKg')} placeholder="e.g. 78.5" />
               </FormField>
-              <FormField label="Height (cm)">
-                <input id="heightCm" type="number" min="0" step="0.1" {...register('heightCm')} placeholder="e.g. 179" />
+              <FormField label="Height (cm)" error={errors.heightCm?.message}>
+                <input id="heightCm" type="number" min="0" max="999.99" step="0.1" {...register('heightCm')} placeholder="e.g. 179" />
               </FormField>
             </Card>
           </div>
