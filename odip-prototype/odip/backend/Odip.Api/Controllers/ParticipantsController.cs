@@ -124,6 +124,32 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// CONTACT-02: server-side gate + CONTACT-03 uniqueness for every contact role row submitted
+    /// transactionally with a new participant (mirrors RiskEntries' validate-before-save shape).
+    /// Checked against <paramref name="dto"/>'s own PlanType/DateOfBirth (the participant entity
+    /// doesn't exist yet at validation time) and against the other rows already in the same
+    /// submission (a brand-new participant has no pre-existing rows to check against).
+    /// </summary>
+    private static string? ValidateContactRoles(CreateParticipantDto dto)
+    {
+        var seen = new List<(ContactRoleType RoleType, bool IsPrimary, ContactRoleStatus Status)>();
+        foreach (var role in dto.ContactRoles)
+        {
+            if (role.PersonId == null && string.IsNullOrWhiteSpace(role.NewPersonFirstName) && string.IsNullOrWhiteSpace(role.NewPersonLastName))
+                return "Each contact needs either an existing person or a new person's name.";
+
+            var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag);
+            if (gateError != null) return gateError;
+
+            var uniquenessError = ContactRoleRules.ValidateUniqueness(role.RoleType, role.IsPrimary, role.Status, seen);
+            if (uniquenessError != null) return uniquenessError;
+
+            seen.Add((role.RoleType, role.IsPrimary, role.Status));
+        }
+        return null;
+    }
+
+    /// <summary>
     /// LIVING-02/03/04 server-side clearing: defence in depth, mirroring FundingOrganisation's
     /// pattern in Create/Update above — a field belonging to a non-selected arrangement type (or,
     /// for WhoLivesWith, belonging to a LivesWithOthers=false Independent participant) is stored
@@ -286,6 +312,10 @@ public class ParticipantsController : ControllerBase
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
+        var contactRolesError = ValidateContactRoles(dto);
+        if (contactRolesError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(contactRolesError));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
@@ -336,6 +366,38 @@ public class ParticipantsController : ControllerBase
                 IsActive = entry.IsActive,
             });
         }
+        // CONTACT-02: contact-role rows submitted alongside a new participant, in the same
+        // SaveChangesAsync call as the participant insert below — transactional with it, same
+        // pattern as the RiskEntries loop above. Validated (gating + uniqueness) up-front by
+        // ValidateContactRoles; a "new person" row creates its Person here, an "existing person"
+        // row looks it up by id (already tenant-scoped via _db.People's query filter).
+        foreach (var roleDto in dto.ContactRoles)
+        {
+            Person person;
+            if (roleDto.PersonId.HasValue)
+            {
+                var existingPerson = await _db.People.FirstOrDefaultAsync(p => p.Id == roleDto.PersonId.Value, ct);
+                if (existingPerson == null)
+                    return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Selected person not found"));
+                person = existingPerson;
+            }
+            else
+            {
+                person = new Person
+                {
+                    Id = Guid.NewGuid(),
+                    FirstName = (roleDto.NewPersonFirstName ?? "").Trim(), LastName = (roleDto.NewPersonLastName ?? "").Trim(),
+                    Phone = roleDto.NewPersonPhone, Mobile = roleDto.NewPersonMobile, Email = roleDto.NewPersonEmail,
+                    Organisation = roleDto.NewPersonOrganisation,
+                };
+                _db.People.Add(person);
+            }
+
+            var role = new ParticipantContactRole { Id = Guid.NewGuid(), ParticipantId = participant.Id, PersonId = person.Id };
+            ParticipantContactRolesController.ApplyRoleFields(role, roleDto);
+            _db.ParticipantContactRoles.Add(role);
+        }
+
         // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
         // rostering compatibility matrix, in the same transaction as the participant insert.
         // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
