@@ -96,8 +96,10 @@ public record PortalMedicationSummaryDto(
 /// Response of GET /api/v1/portal/shifts/{id} — everything a support worker needs for one
 /// shift: the shift itself, a participant summary, that participant's active routines (reuses
 /// <see cref="ParticipantRoutineDto"/> from Task 2 — the frontend's existing
-/// getRelevantRoutines() filters these down to the shift window), and an active-medications
-/// summary.
+/// getRelevantRoutines() filters these down to the shift window), the participant's active risk
+/// entries (INTAKE-09, reuses <see cref="ParticipantRiskEntryDto"/> — unlike routines these are
+/// not shift-window filtered, since a risk applies regardless of time of day), and an
+/// active-medications summary.
 /// </summary>
 public record PortalShiftDetailDto(
     Guid Id,
@@ -112,6 +114,7 @@ public record PortalShiftDetailDto(
     string? Notes,
     PortalParticipantSummaryDto Participant,
     List<ParticipantRoutineDto> Routines,
+    List<ParticipantRiskEntryDto> RiskEntries,
     List<PortalMedicationSummaryDto> Medications);
 
 /// <summary>

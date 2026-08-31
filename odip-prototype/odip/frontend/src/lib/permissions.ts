@@ -123,6 +123,13 @@ export function usePermissions() {
     canWriteRoutines: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
+     * INTAKE-09: participant risk entries are shift-facing in the same way routines/notes are —
+     * any role that works a shift can write one. Only ReadOnly is excluded. Mirrors the
+     * backend's ParticipantRiskEntriesController role gate exactly.
+     */
+    canWriteRisks: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
+
+    /**
      * Restrictive practice register entries carry authorisation/compliance information — same
      * clinical/coordination gate as medication management, narrower than routines/notes.
      */

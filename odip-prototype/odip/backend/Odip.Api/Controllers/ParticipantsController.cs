@@ -290,6 +290,22 @@ public class ParticipantsController : ControllerBase
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
+        // INTAKE-09: risk-entry rows submitted alongside a new participant are created in the
+        // same SaveChangesAsync call as the participant insert below — transactional with it.
+        // Edit-mode manages risk entries afterwards via the separate nested CRUD
+        // (ParticipantRiskEntriesController), not via this DTO's collection.
+        foreach (var entry in dto.RiskEntries)
+        {
+            _db.ParticipantRiskEntries.Add(new ParticipantRiskEntry
+            {
+                Id = Guid.NewGuid(),
+                ParticipantId = participant.Id,
+                AtRiskParty = entry.AtRiskParty,
+                Description = entry.Description.Trim(),
+                MitigationNotes = string.IsNullOrWhiteSpace(entry.MitigationNotes) ? null : entry.MitigationNotes.Trim(),
+                IsActive = entry.IsActive,
+            });
+        }
         // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
         // rostering compatibility matrix, in the same transaction as the participant insert.
         await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct);

@@ -274,6 +274,68 @@ public class ParticipantsControllerTests
         Assert.Equal(Domain.Enums.ServiceStreams.None, saved.ServiceStreams);
     }
 
+    // ── INTAKE-09: risk entries created transactionally with the participant ───────
+
+    [Fact]
+    public async Task Create_WithRiskEntries_CreatesThemTransactionallyWithParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            RiskEntries = new()
+            {
+                new CreateParticipantRiskEntryDto { AtRiskParty = Domain.Enums.AtRiskParty.Participant, Description = "Risk of falls.", MitigationNotes = "Use the hoist." },
+                new CreateParticipantRiskEntryDto { AtRiskParty = Domain.Enums.AtRiskParty.Staff, Description = "Risk of aggression towards staff." },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantRiskEntries.Where(r => r.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, r => r.AtRiskParty == Domain.Enums.AtRiskParty.Participant && r.Description == "Risk of falls." && r.MitigationNotes == "Use the hoist.");
+        Assert.Contains(saved, r => r.AtRiskParty == Domain.Enums.AtRiskParty.Staff && r.Description == "Risk of aggression towards staff." && r.MitigationNotes == null);
+    }
+
+    [Fact]
+    public async Task Create_WithRiskEntries_TenantScoped_RiskEntriesGetSameTenantIdAsParticipant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            RiskEntries = new() { new CreateParticipantRiskEntryDto { AtRiskParty = Domain.Enums.AtRiskParty.Public, Description = "Risk to the public in community outings." } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedEntry = await db.ParticipantRiskEntries.IgnoreQueryFilters().SingleAsync(r => r.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(tenantId, savedEntry.TenantId);
+    }
+
+    [Fact]
+    public async Task Create_NoRiskEntries_CreatesParticipantWithNoRiskEntries()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.False(await db.ParticipantRiskEntries.AnyAsync(r => r.ParticipantId == createdBody.Data!.Id));
+    }
+
     // ── DIAG-01/02: diagnoses (primary + other) and HIDPA support categories ────────
 
     [Fact]

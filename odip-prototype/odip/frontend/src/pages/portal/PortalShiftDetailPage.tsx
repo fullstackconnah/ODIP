@@ -4,6 +4,7 @@ import { usePortalShiftDetail } from '@/api/hooks'
 import { StatusBadge } from '@/components/StatusBadge'
 import { MedicationBadges } from '@/pages/medications/MedicationBadges'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
+import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { getRelevantRoutines } from '@/pages/rostering/lib/routines'
 import { formatShiftTimeRange, formatDayAccessibleName, RATIO_LABELS } from '@/pages/rostering/lib/roster'
 import { OVERNIGHT_SUPPORT_LABELS } from './lib/portal'
@@ -192,6 +193,29 @@ export default function PortalShiftDetailPage() {
                   {routine.startTime && routine.endTime ? formatShiftTimeRange(routine.startTime, routine.endTime) : 'Untimed'}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap">{routine.description}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Risks for this participant (INTAKE-09) — active entries only, same read-only pattern as
+          Routines above; not shift-window filtered, since a risk applies regardless of time of day. */}
+      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Risks</h2>
+        {shift.riskEntries.length === 0 ? (
+          <p className="text-sm text-[var(--color-muted-foreground)]">No risks recorded for this participant.</p>
+        ) : (
+          <ul className="space-y-2">
+            {shift.riskEntries.map(entry => (
+              <li key={entry.id} className="rounded-sm border border-[var(--color-border)] px-3 py-2 text-sm">
+                <Chip>{AT_RISK_PARTY_LABELS[entry.atRiskParty]}</Chip>
+                <p className="mt-1 whitespace-pre-wrap">{entry.description}</p>
+                {entry.mitigationNotes && (
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    <span className="font-medium">Mitigation:</span> {entry.mitigationNotes}
+                  </p>
+                )}
               </li>
             ))}
           </ul>

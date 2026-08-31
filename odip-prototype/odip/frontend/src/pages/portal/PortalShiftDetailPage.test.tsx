@@ -86,6 +86,18 @@ function makeDetail(overrides: Partial<PortalShiftDetailDto> = {}): PortalShiftD
         updatedAt: '2026-01-01T00:00:00Z',
       },
     ],
+    riskEntries: [
+      {
+        id: 'risk-1',
+        participantId: 'participant-1',
+        atRiskParty: 'Staff',
+        description: 'Risk of aggression towards support staff during transfers.',
+        mitigationNotes: 'Two-person support during personal care.',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
     medications: [
       {
         id: 'med-1',
@@ -129,6 +141,22 @@ describe('PortalShiftDetailPage', () => {
 
     expect(screen.getByText('Morning routine')).toBeInTheDocument()
     expect(screen.queryByText('Wednesday evening routine')).not.toBeInTheDocument()
+  })
+
+  it('renders active risk entries with a party badge and description', () => {
+    mockUsePortalShiftDetail.mockReturnValue({ data: makeDetail(), isLoading: false, isError: false })
+    renderAt('shift-1')
+
+    expect(screen.getByText(/aggression towards support staff/i)).toBeInTheDocument()
+    expect(screen.getByText('Staff')).toBeInTheDocument()
+    expect(screen.getByText(/two-person support during personal care/i)).toBeInTheDocument()
+  })
+
+  it('shows an empty-state message when there are no risk entries', () => {
+    mockUsePortalShiftDetail.mockReturnValue({ data: makeDetail({ riskEntries: [] }), isLoading: false, isError: false })
+    renderAt('shift-1')
+
+    expect(screen.getByText(/no risks recorded for this participant/i)).toBeInTheDocument()
   })
 
   it('renders the active medications summary with badges', () => {

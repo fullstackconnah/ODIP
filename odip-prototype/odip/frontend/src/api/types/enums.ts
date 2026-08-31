@@ -211,6 +211,10 @@ export type WitnessStatus = typeof WITNESS_STATUSES[number]
 export const ROUTINE_CATEGORIES = ['PersonalCare', 'Meals', 'Medication', 'Mobility', 'Communication', 'Behaviour', 'Sleep', 'Activity', 'Other'] as const
 export type RoutineCategory = typeof ROUTINE_CATEGORIES[number]
 
+// ── At-Risk Party (INTAKE-09) ─────────────────────────────
+export const AT_RISK_PARTIES = ['Participant', 'OtherParticipants', 'Public', 'Staff'] as const
+export type AtRiskParty = typeof AT_RISK_PARTIES[number]
+
 // ── Day of Week (System.DayOfWeek, JsonStringEnumConverter — Sunday-first) ─
 export const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 export type DayOfWeekName = typeof DAYS_OF_WEEK[number]

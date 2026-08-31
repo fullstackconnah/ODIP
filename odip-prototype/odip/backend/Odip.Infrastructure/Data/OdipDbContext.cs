@@ -33,6 +33,7 @@ public class OdipDbContext : DbContext
     public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
     public DbSet<ParticipantNote> ParticipantNotes => Set<ParticipantNote>();
     public DbSet<ParticipantRoutine> ParticipantRoutines => Set<ParticipantRoutine>();
+    public DbSet<ParticipantRiskEntry> ParticipantRiskEntries => Set<ParticipantRiskEntry>();
     public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
@@ -1034,6 +1035,24 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId);
         });
 
+        // ── ParticipantRiskEntry ──────────────────────────────────
+        modelBuilder.Entity<ParticipantRiskEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.MitigationNotes).HasMaxLength(2000);
+
+            // Restrict: same idiom as ParticipantNote/ParticipantRoutine/ParticipantMedication →
+            // Participant — a participant with risk-entry history must not be silently
+            // cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+        });
+
         // ── RestrictivePractice ───────────────────────────────────
         modelBuilder.Entity<RestrictivePractice>(entity =>
         {
@@ -1178,6 +1197,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantRoutine>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantRoutine>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantRiskEntry>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantRiskEntry>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RestrictivePractice>()
