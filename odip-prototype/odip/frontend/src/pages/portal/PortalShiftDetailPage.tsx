@@ -250,8 +250,16 @@ export default function PortalShiftDetailPage() {
         )}
       </div>
 
-      {/* NOTES-01 */}
-      <ShiftNotesSection shiftId={shift.id} />
+      {/* NOTES-01 / NOTES-02 */}
+      <ShiftNotesSection
+        shiftId={shift.id}
+        participantId={participant.id}
+        participantName={participant.fullName}
+        serviceDate={shift.serviceDate}
+        startTime={shift.startTime}
+        endTime={shift.endTime}
+        endsNextDay={shift.endsNextDay}
+      />
     </div>
   )
 }

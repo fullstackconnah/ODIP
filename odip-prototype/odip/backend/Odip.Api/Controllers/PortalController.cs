@@ -206,6 +206,8 @@ public class PortalController : ControllerBase
             AuthorName = GetCallerName(),
             Body = dto.Body.Trim(),
         };
+        // NOTES-02: scan at save time — client-advisory + server-recorded, never blocking.
+        note.FlaggedCategories = ShiftNoteKeywordScanner.Scan(note.Body);
         _db.ShiftNotes.Add(note);
         await _db.SaveChangesAsync(ct);
 
@@ -229,8 +231,42 @@ public class PortalController : ControllerBase
         if (note is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
-        note.Body = dto.Body.Trim();
+        var newBody = dto.Body.Trim();
+        // NOTES-02: re-scan on every edit. If the flagged-category set actually changes, clear
+        // any prior dismissal — see ShiftNote.FlagsAcknowledgedAt remarks on why a stale dismissal
+        // must not silently suppress the prompt for newly-introduced flagged content.
+        var newFlags = ShiftNoteKeywordScanner.Scan(newBody);
+        if (newFlags != note.FlaggedCategories)
+            note.FlagsAcknowledgedAt = null;
+
+        note.Body = newBody;
+        note.FlaggedCategories = newFlags;
         note.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+    }
+
+    /// <summary>
+    /// NOTES-02: dismisses the "consider filing an incident report?" prompt for one of the
+    /// caller's own flagged notes. Persisted server-side (see <see cref="ShiftNote.FlagsAcknowledgedAt"/>
+    /// remarks) rather than client-only, so the dismissal survives across devices/sessions. Same
+    /// author-only, 404-indistinguishable ownership scoping as <see cref="UpdateShiftNote"/>.
+    /// Idempotent — acknowledging an already-acknowledged (or never-flagged) note simply
+    /// re-stamps the timestamp rather than erroring.
+    /// </summary>
+    [HttpPost("notes/{noteId:guid}/acknowledge-flags")]
+    public async Task<ActionResult<ApiResponse<ShiftNoteDto>>> AcknowledgeShiftNoteFlags(Guid noteId, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
+
+        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        if (note is null)
+            return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
+
+        note.FlagsAcknowledgedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
@@ -367,7 +403,8 @@ public class PortalController : ControllerBase
         m.IsChemicalRestraint, m.DrugSchedule, m.SupportLevel, m.PrnIndication);
 
     private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
-        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt);
+        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
 
     /// <summary>Same "fullName claim, fall back to the Name claim" idiom as ParticipantNotesController.GetCreatedByName.</summary>
     private string GetCallerName() =>

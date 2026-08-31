@@ -3,15 +3,16 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
-import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
+import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 
 const {
-  mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices,
+  mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
 } = vi.hoisted(() => ({
   mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockUseRestrictivePractices: vi.fn(),
+  mockApiPost: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
@@ -31,6 +32,15 @@ vi.mock('@/api/hooks', () => ({
   // INC-04/INC-05
   useRestrictivePractices: mockUseRestrictivePractices,
 }))
+
+// NOTES-02: apiPost is only used here for the fire-and-forget acknowledge-flags call after a
+// shift-note-sourced submission — every other API interaction on this page goes through the
+// fully-mocked @/api/hooks above, so mocking just this one named export (keeping the rest of the
+// module real) is enough.
+vi.mock('@/api/client', async () => {
+  const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
+  return { ...actual, apiPost: mockApiPost }
+})
 
 // IncidentCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker —
 // that throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router
@@ -53,6 +63,7 @@ beforeEach(() => {
   mockUpdateMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-incident-1' } })
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
+  mockApiPost.mockReset().mockResolvedValue({ success: true, data: null })
 })
 
 describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
@@ -305,6 +316,75 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
 
     expect(screen.queryByText(/pre-filled from the medication record/i)).not.toBeInTheDocument()
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('Existing incident')
+  })
+})
+
+// NOTES-02: closing the loop on the shift-note-sourced prefill — a successful submission that
+// carried a shiftNoteId acknowledges that note's flags (fire-and-forget), so its banner doesn't
+// keep reappearing on the portal until a separate Dismiss. The filer is the note's own author by
+// construction, so the acknowledge endpoint's author-only ownership check holds without needing
+// to pass any extra identity here.
+describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags on submit', () => {
+  const shiftNotePrefill: ShiftNoteIncidentPrefillState = {
+    source: 'shift-note',
+    shiftNoteId: 'note-9',
+    categories: ['Falls'],
+    participantId: 'participant-1',
+    participantName: 'Sophie Brown',
+    noteBody: 'She had a fall near the bathroom.',
+    serviceDate: '2026-08-17',
+    startTime: '09:00:00',
+    endTime: '17:00:00',
+    endsNextDay: false,
+    reportedByUserId: 'staff-1',
+  }
+
+  it('shows the pre-fill banner and populates the form from the flagged note', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    expect(screen.getByText(/pre-filled from a flagged shift note/i)).toBeInTheDocument()
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
+      .toContain('Sophie Brown')
+    expect((screen.getByLabelText('Incident Type *') as HTMLSelectElement).value).toBe('Injury')
+  })
+
+  it('acknowledges the source note\'s flags after a successful submit', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText('Incidents list')).toBeInTheDocument()
+    expect(mockApiPost).toHaveBeenCalledTimes(1)
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/notes/note-9/acknowledge-flags')
+  })
+
+  it('does not call acknowledge-flags on a plain submit with no shift-note prefill', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Lost property')
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText('Incidents list')).toBeInTheDocument()
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+
+  it('still completes the submission (navigates away, no error shown) when acknowledging flags fails', async () => {
+    const user = userEvent.setup()
+    mockApiPost.mockRejectedValue(new Error('network error'))
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText('Incidents list')).toBeInTheDocument()
+    expect(screen.queryByText(/failed to (create|update) incident report/i)).not.toBeInTheDocument()
   })
 })
 

@@ -6,6 +6,9 @@ import { ADMIN_STATUS_LABELS, INCIDENT_TRIGGER_OUTCOMES } from '@/api/types/medi
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import { parseApiDate, formatWithTimeZone, formatDateAu } from '@/lib/utils'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
+import { formatFlaggedCategoryList, incidentTypeForFlaggedCategories, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import { formatShiftRange, formatDayAccessibleName } from '@/pages/rostering/lib/roster'
+import type { IncidentType } from '@/api/types/enums'
 
 export interface MarIncidentPrefillState {
   source: 'mar-administration'
@@ -138,4 +141,57 @@ export function buildRpIncidentDescriptionSkeleton(practice: Pick<RestrictivePra
   }
   lines.push('', '[Add further detail about what happened, immediate response and follow-up above.]')
   return lines.join('\n')
+}
+
+// ── NOTES-02: shift-note keyword-flagging hand-off ───────────────────────────
+// Same "drop into a draft incident, nothing persisted until submitted" prefill idiom as INC-03's
+// MAR hand-off above — the portal's ShiftNotesSection banner is this one's only producer.
+
+export interface ShiftNoteIncidentPrefillState {
+  source: 'shift-note'
+  shiftNoteId: string
+  categories: ShiftNoteFlagCategory[]
+  participantId: string
+  participantName: string
+  noteBody: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  /** The signed-in worker viewing this shift — same "reportedByStaffId = staff/User id space" idiom as MarIncidentPrefillState.recordedByUserId. */
+  reportedByUserId?: string | null
+}
+
+/** Narrows an unknown value (react-router location.state) down to a shift-note incident prefill. */
+export function isShiftNoteIncidentPrefillState(state: unknown): state is ShiftNoteIncidentPrefillState {
+  return !!state && typeof state === 'object' && (state as { source?: unknown }).source === 'shift-note'
+}
+
+export function buildShiftNoteIncidentTitleSkeleton(p: ShiftNoteIncidentPrefillState): string {
+  const categoryList = formatFlaggedCategoryList(p.categories)
+  return `Shift note flagged ${categoryList} — ${p.participantName}`
+}
+
+/** INC-03-style default incident type — see incidentTypeForFlaggedCategories for the priority rule when a note trips more than one category. */
+export function suggestedIncidentTypeForShiftNote(p: ShiftNoteIncidentPrefillState): IncidentType {
+  return incidentTypeForFlaggedCategories(p.categories)
+}
+
+/** Generates a description skeleton carrying the shift context + the flagged note's own text as a seed — the worker/coordinator still reviews/edits it before submitting. */
+export function buildShiftNoteIncidentDescriptionSkeleton(p: ShiftNoteIncidentPrefillState): string {
+  const categoryList = formatFlaggedCategoryList(p.categories)
+  const when = `${formatDayAccessibleName(p.serviceDate)}, ${formatShiftRange(p.startTime, p.endTime, p.endsNextDay)}`
+  const lines = [
+    `${p.participantName}'s shift note for ${when} mentioned ${categoryList} and may warrant an incident report:`,
+    '',
+    `"${p.noteBody}"`,
+    '',
+    '[Add further detail about what happened, immediate response and follow-up above.]',
+  ]
+  return lines.join('\n')
+}
+
+/** Best-effort incidentDateTime for the datetime-local field — the shift's own start time, in the same "no timezone context to correct for" shape as a portal-authored note. */
+export function buildShiftNoteIncidentDateTime(p: ShiftNoteIncidentPrefillState): string {
+  return `${p.serviceDate}T${p.startTime.slice(0, 5)}`
 }
