@@ -85,7 +85,11 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Slip near pool')
     await user.selectOptions(screen.getByLabelText(/Service Type/i), 'Trip')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -104,7 +108,11 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     // incidentType defaults to 'Other', which requires the specify field too.
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Slip and fall')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -137,7 +145,11 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -153,7 +165,11 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Lost property')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -199,13 +215,22 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
       .toContain('Sophie Brown')
     expect((screen.getByLabelText('Incident Type *') as HTMLSelectElement).value).toBe('MedicationError')
     expect((screen.getByLabelText('Severity *') as HTMLSelectElement).value).toBe('High')
-    expect((screen.getByLabelText('Involved Participant') as HTMLSelectElement).value).toBe('participant-1')
+    // Involved Participant is now a SearchableSelect combobox — its displayed value is the
+    // resolved item's label (derived from involvedParticipantId), not the raw id.
+    expect(screen.getByLabelText('Involved Participant')).toHaveValue('Sophie Brown')
   })
 
-  it('sets Reported By directly from the MAR record\'s recordedByUserId (Staff/User are unified — same id space)', () => {
+  it('sets Reported By directly from the MAR record\'s recordedByUserId (Staff/User are unified — same id space)', async () => {
+    const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
 
-    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('staff-1')
+    // staff-1 and staff-3 deliberately share the fullName "Alex Rivera" (see the useStaff mock
+    // above), so the combobox's displayed text alone can't prove *which* one resolved — open it
+    // and check which option is marked aria-selected, which is driven by id equality, not label.
+    await user.click(screen.getByLabelText('Reported By *'))
+    const options = screen.getAllByRole('option', { name: 'Alex Rivera' })
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    expect(options[1]).toHaveAttribute('aria-selected', 'false')
   })
 
   // Regression coverage for the audit-trail integrity fix: fullName has no uniqueness
@@ -218,10 +243,9 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
       state: { ...marPrefill, recordedByUserId: 'no-such-staff-id', recordedByName: 'Alex Rivera' },
     })
 
-    const select = screen.getByLabelText('Reported By *') as HTMLSelectElement
-    expect(select.value).not.toBe('staff-1')
-    expect(select.value).not.toBe('staff-3')
-    expect(select.value).toBe('')
+    // No item's value matches 'no-such-staff-id', so the combobox must show blank rather than
+    // ever resolving to a staff member sharing the recorded name.
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('')
   })
 
   it('leaves Reported By blank (never a wrong guess) when recordedByUserId is absent entirely', () => {
@@ -230,7 +254,7 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
       state: { ...marPrefill, recordedByUserId: null },
     })
 
-    expect((screen.getByLabelText('Reported By *') as HTMLSelectElement).value).toBe('')
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('')
   })
 
   it('sets serviceType to Trip and reveals the trip dropdown when the MAR record carries a tripInstanceId', () => {
@@ -307,7 +331,11 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -333,7 +361,8 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     renderCreatePage()
 
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
 
@@ -346,7 +375,8 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     renderCreatePage()
 
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
 
@@ -362,7 +392,11 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -385,7 +419,8 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
 
@@ -403,7 +438,8 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
     await user.click(screen.getByLabelText(/Link to an authorised practice/i))
@@ -421,7 +457,8 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Already typed details')
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
@@ -441,13 +478,18 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
     await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.selectOptions(screen.getByLabelText('Involved Participant'), 'participant-1')
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
     await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
     await user.click(screen.getByRole('option', { name: /^seclusion/i }))
     await user.click(screen.getByLabelText(/Link to an authorised practice/i))
     await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), ' Details here')
-    await user.selectOptions(screen.getByLabelText('Reported By *'), 'staff-1')
+    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
+    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
+    // staff-1 (item order mirrors the mocked staff array).
+    await user.click(screen.getByLabelText('Reported By *'))
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
@@ -502,5 +544,70 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     await user.click(screen.getByRole('option', { name: /^physical restraint/i }))
 
     expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+  })
+})
+
+// UX-01: the four staff/participant pickers migrated from native <select>/register() to
+// SearchableSelect — one keyboard-only smoke test per picker (open, arrow to an option, Enter).
+describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () => {
+  it('selects Reported By via keyboard only (ArrowDown + Enter)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const reportedBy = screen.getByLabelText('Reported By *')
+    await user.click(reportedBy)
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(reportedBy).toHaveValue('Alex Rivera')
+  })
+
+  it('selects Involved Participant via keyboard only (ArrowDown + Enter)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const involvedParticipant = screen.getByLabelText('Involved Participant')
+    await user.click(involvedParticipant)
+    // First enabled option is 'None' (value '') — one more ArrowDown reaches the participant.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+
+    expect(involvedParticipant).toHaveValue('Sophie Brown')
+  })
+
+  it('selects Involved Staff Member via keyboard only (ArrowDown + Enter)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const involvedStaff = screen.getByLabelText('Involved Staff Member')
+    await user.click(involvedStaff)
+    // First enabled option is 'None' (value '') — one more ArrowDown reaches the first staff entry.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+
+    expect(involvedStaff).toHaveValue('Alex Rivera')
+  })
+
+  it('selects Reviewed By via keyboard only (ArrowDown + Enter) on the edit form', async () => {
+    mockUseIncident.mockReturnValue({
+      data: {
+        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Injury', otherTypeSpecify: null,
+        severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+        location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+        involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+        participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
+        immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+        witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+        reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+        resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+        supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+      },
+    })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    const reviewedBy = await screen.findByLabelText('Reviewed By')
+    await user.click(reviewedBy)
+    // First enabled option is 'Not reviewed' (value '') — one more ArrowDown reaches staff-1.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+
+    expect(reviewedBy).toHaveValue('Alex Rivera')
   })
 })

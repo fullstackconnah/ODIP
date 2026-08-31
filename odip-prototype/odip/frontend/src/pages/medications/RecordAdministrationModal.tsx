@@ -6,7 +6,7 @@ import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField, labelClass } from '@/components/FormField'
-import { Dropdown } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { getClientTimeZone } from '@/lib/utils'
@@ -451,8 +451,7 @@ export function RecordAdministrationModal({
               </FormField>
             ) : (
               <FormField label="Witness" required error={fieldErrors.witnessStaffId} hint={!fieldErrors.witnessStaffId ? 'High-risk medication — select the staff member who witnessed this dose. They will need to approve it in their portal.' : undefined}>
-                <Dropdown
-                  variant="form"
+                <SearchableSelect
                   value={witnessStaffId}
                   onChange={v => { setWitnessStaffId(v); clearFieldError('witnessStaffId') }}
                   items={activeStaff.map(s => ({ value: s.id, label: s.fullName }))}

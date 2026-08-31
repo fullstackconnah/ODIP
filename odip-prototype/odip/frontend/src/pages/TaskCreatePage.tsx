@@ -1,6 +1,6 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateTask, useUpdateTask, useTrips, useStaff } from '@/api/hooks'
@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const taskSchema = z.object({
@@ -38,7 +39,7 @@ export default function TaskCreatePage() {
   // For edit mode, we load the task from the tasks list since there's no single-task endpoint
   // We'll pass task data via navigation state instead
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<TaskFormData>({
+  const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: {
       priority: 'Medium',
@@ -160,13 +161,24 @@ export default function TaskCreatePage() {
 
         {/* Assignment & Priority */}
         <Card title="Assignment & Priority" className="space-y-4">
+          {/* UX-01: staff-scale list — SearchableSelect, not a bounded native select. */}
           <FormField label="Owner">
-            <select {...register('ownerId')}>
-              <option value="">Unassigned</option>
-              {staff.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.fullName}</option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="ownerId"
+              render={({ field }) => (
+                <SearchableSelect
+                  id="ownerId"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={[
+                    { value: '', label: 'Unassigned' },
+                    ...staff.map((s: any) => ({ value: s.id, label: s.fullName })),
+                  ]}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Priority" required>

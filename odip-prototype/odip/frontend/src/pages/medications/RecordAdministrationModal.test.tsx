@@ -128,7 +128,7 @@ describe('RecordAdministrationModal witness picker', () => {
   it('shows a staff picker (not a free-text input) for a high-risk medication being newly recorded', () => {
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    expect(screen.getByRole('button', { name: /witness/i })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /witness/i })).toBeInTheDocument()
     // The legacy free-text witness input must not appear on the create flow.
     expect(screen.queryByRole('textbox', { name: /witness/i })).not.toBeInTheDocument()
   })
@@ -148,7 +148,7 @@ describe('RecordAdministrationModal witness picker', () => {
     mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    await user.click(screen.getByRole('button', { name: /witness/i }))
+    await user.click(screen.getByRole('combobox', { name: /witness/i }))
     await user.click(await screen.findByRole('option', { name: 'Jordan Lee' }))
     await user.click(screen.getByRole('button', { name: /^record dose$/i }))
 
@@ -158,12 +158,30 @@ describe('RecordAdministrationModal witness picker', () => {
     }))
   })
 
+  // UX-01: witness moved from Dropdown to SearchableSelect — one keyboard-only smoke test
+  // (open, arrow to an option, Enter) covering the new combobox interaction model.
+  it('selects a witness via keyboard only (ArrowDown + Enter)', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
+
+    const witness = screen.getByRole('combobox', { name: /witness/i })
+    await user.click(witness)
+    await user.keyboard('{ArrowDown}{Enter}')
+    await user.click(screen.getByRole('button', { name: /^record dose$/i }))
+
+    expect(mockRecordMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      medicationId: 'med-1',
+      data: expect.objectContaining({ witnessStaffId: 'staff-1' }),
+    }))
+  })
+
   it('excludes the signed-in user from the witness picker when their own id matches a picker entry', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1' }))
     const user = userEvent.setup()
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    await user.click(screen.getByRole('button', { name: /witness/i }))
+    await user.click(screen.getByRole('combobox', { name: /witness/i }))
 
     expect(screen.queryByRole('option', { name: 'Rachel Thompson' })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
@@ -174,7 +192,7 @@ describe('RecordAdministrationModal witness picker', () => {
     const user = userEvent.setup()
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    await user.click(screen.getByRole('button', { name: /witness/i }))
+    await user.click(screen.getByRole('combobox', { name: /witness/i }))
 
     expect(screen.getByRole('option', { name: 'Rachel Thompson' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
@@ -185,7 +203,7 @@ describe('RecordAdministrationModal witness picker', () => {
     const user = userEvent.setup()
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    await user.click(screen.getByRole('button', { name: /witness/i }))
+    await user.click(screen.getByRole('combobox', { name: /witness/i }))
 
     expect(screen.getByRole('option', { name: 'Rachel Thompson' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
@@ -200,14 +218,14 @@ describe('RecordAdministrationModal AnimatedField tab order', () => {
   it('marks the collapsed witness field inert so it is out of the tab order', () => {
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
 
-    const witnessTrigger = screen.getByRole('button', { name: /witness/i })
+    const witnessTrigger = screen.getByRole('combobox', { name: /witness/i })
     expect(witnessTrigger.closest('[inert]')).not.toBeNull()
   })
 
   it('removes inert from the witness field once it becomes visible', () => {
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} />)
 
-    const witnessTrigger = screen.getByRole('button', { name: /witness/i })
+    const witnessTrigger = screen.getByRole('combobox', { name: /witness/i })
     expect(witnessTrigger.closest('[inert]')).toBeNull()
   })
 })
