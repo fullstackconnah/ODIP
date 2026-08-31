@@ -48,6 +48,8 @@ public record MedicationDetailDto : MedicationListDto
     public bool IsHighIntensitySupport { get; init; }
     public string? PrescriberName { get; init; }
     public string? PharmacyName { get; init; }
+    /// <summary>MED-01: shown as a "call the pharmacy on ..." tap-to-call link in the missed-medication guidance when present.</summary>
+    public string? PharmacyPhone { get; init; }
     public bool ConsentObtained { get; init; }
     public string? ConsentGivenBy { get; init; }
     public DateTime? ConsentDate { get; init; }
@@ -114,6 +116,9 @@ public record CreateMedicationDto
 
     [StringLength(200)]
     public string? PharmacyName { get; init; }
+
+    [StringLength(30)]
+    public string? PharmacyPhone { get; init; }
     public PackagingType Packaging { get; init; } = PackagingType.OriginalPackaging;
 
     public DateTime StartDate { get; init; }
@@ -257,6 +262,10 @@ public record MarEntryDto
     public MedicationForm Form { get; init; }
     public MedicationRoute Route { get; init; }
     public PackagingType Packaging { get; init; }
+    /// <summary>MED-01: surfaced in the missed-medication guidance's "check the packaging /
+    /// call the pharmacy" step when present.</summary>
+    public string? PharmacyName { get; init; }
+    public string? PharmacyPhone { get; init; }
 
     /// <summary>"08:00" — the time-of-day slot this entry expands.</summary>
     public string ScheduledTime { get; init; } = string.Empty;
@@ -278,6 +287,11 @@ public record MarPrnDto
     public string? PrnIndication { get; init; }
     public int? PrnMaxDosesPer24h { get; init; }
     public int? PrnMinIntervalMinutes { get; init; }
+    public PackagingType Packaging { get; init; }
+    /// <summary>MED-01: same as <see cref="MarEntryDto.PharmacyName"/> — surfaced in the
+    /// missed-medication guidance when a PRN dose is recorded as refused/withheld/missed/wrong.</summary>
+    public string? PharmacyName { get; init; }
+    public string? PharmacyPhone { get; init; }
     public int DosesInLast24h { get; init; }
     public DateTime? LastDoseAt { get; init; }
 

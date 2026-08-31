@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831035458_AddParticipantMedicationPharmacyPhone")]
+    partial class AddParticipantMedicationPharmacyPhone
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1316,9 +1319,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("HasRestrictivePracticeFlag")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("HidpaSupportCategories")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -1381,10 +1381,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<List<string>>("OtherDiagnoses")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
                     b.Property<string>("OthersLivingInAccommodation")
                         .HasColumnType("text");
 
@@ -1412,10 +1408,6 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid?>("PreferredUserId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("PrimaryDiagnosis")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Region")
                         .HasMaxLength(100)

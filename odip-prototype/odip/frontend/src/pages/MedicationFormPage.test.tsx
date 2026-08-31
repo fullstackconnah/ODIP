@@ -113,7 +113,8 @@ describe('MedicationFormPage frequency controls', () => {
         complianceFlags: [], directions: null, prnIndication: null, prnMaxDosesPer24h: null,
         prnMinIntervalMinutes: null, purpose: null, bspInPlace: false,
         restrictivePracticeAuthorisationRef: null, isHighIntensitySupport: false, prescriberName: null,
-        pharmacyName: null, consentObtained: true, consentGivenBy: 'Guardian', consentDate: '2026-01-01',
+        pharmacyName: 'Chemist Warehouse', pharmacyPhone: '03 9123 4567', consentObtained: true,
+        consentGivenBy: 'Guardian', consentDate: '2026-01-01',
         storageRequirements: null, notes: null, prnDosesInLast24h: 0,
         createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
       },
@@ -125,5 +126,53 @@ describe('MedicationFormPage frequency controls', () => {
     expect(screen.getByText(/^Starting from/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('3')).toBeInTheDocument()
     expect(screen.getByDisplayValue('2026-02-15')).toBeInTheDocument()
+  })
+})
+
+// MED-01: PharmacyPhone is editable wherever PharmacyName is edited — this is the only place
+// (MedicationFormPage) that currently edits either field.
+describe('MedicationFormPage MED-01 pharmacy phone', () => {
+  it('prefills the Pharmacy Phone field from the existing medication', () => {
+    mockUseMedication.mockReturnValue({
+      data: {
+        id: 'med-1', participantId: 'participant-1', name: 'Levetiracetam', strength: '500mg',
+        form: 'Tablet', route: 'Oral', doseDescription: '1 tablet', type: 'Regular',
+        timesOfDay: '08:00', frequency: 'Daily', daysOfWeek: [], intervalDays: null,
+        anchorDate: null, status: 'Active', isHighRisk: false, isPsychotropic: false,
+        isChemicalRestraint: false, drugSchedule: 'Unscheduled', supportLevel: 'SelfAdministered',
+        packaging: 'OriginalPackaging', startDate: '2026-01-01', endDate: null, nextReviewDue: null,
+        complianceFlags: [], directions: null, prnIndication: null, prnMaxDosesPer24h: null,
+        prnMinIntervalMinutes: null, purpose: null, bspInPlace: false,
+        restrictivePracticeAuthorisationRef: null, isHighIntensitySupport: false, prescriberName: null,
+        pharmacyName: 'Chemist Warehouse', pharmacyPhone: '03 9123 4567', consentObtained: true,
+        consentGivenBy: null, consentDate: null,
+        storageRequirements: null, notes: null, prnDosesInLast24h: 0,
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      },
+      isLoading: false,
+    })
+
+    renderEditPage('med-1')
+
+    expect(screen.getByDisplayValue('03 9123 4567')).toBeInTheDocument()
+  })
+
+  it('submits the Pharmacy Phone value that was typed in, alongside Pharmacy Name', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-med' } })
+    renderCreatePage()
+
+    await user.type(screen.getByPlaceholderText('e.g. Paracetamol'), 'Levothyroxine')
+    await user.type(screen.getByPlaceholderText('e.g. 1 tablet'), '1 tablet')
+    await user.type(screen.getByPlaceholderText('e.g. Chemist Warehouse'), 'Chemist Warehouse')
+    await user.type(screen.getByPlaceholderText('e.g. 03 9123 4567'), '03 9123 4567')
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        pharmacyName: 'Chemist Warehouse',
+        pharmacyPhone: '03 9123 4567',
+      }),
+    }))
   })
 })

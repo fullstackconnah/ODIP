@@ -162,6 +162,8 @@ export interface MedicationDetailDto extends MedicationListDto {
   isHighIntensitySupport: boolean
   prescriberName: string | null
   pharmacyName: string | null
+  /** MED-01: shown as a "call the pharmacy on ..." tap-to-call link in the missed-medication guidance when present. */
+  pharmacyPhone: string | null
   consentObtained: boolean
   consentGivenBy: string | null
   consentDate: string | null
@@ -200,6 +202,7 @@ export interface CreateMedicationDto {
   packaging: PackagingType
   prescriberName?: string
   pharmacyName?: string
+  pharmacyPhone?: string
   consentObtained: boolean
   consentGivenBy?: string
   consentDate?: string
@@ -290,6 +293,9 @@ export interface MarEntryDto {
   form: MedicationForm
   route: MedicationRoute
   packaging: PackagingType
+  /** MED-01: surfaced in the missed-medication guidance's "check the packaging / call the pharmacy" step when present. */
+  pharmacyName: string | null
+  pharmacyPhone: string | null
   scheduledTime: string
   scheduledAt: string
   isHighRisk: boolean
@@ -308,6 +314,10 @@ export interface MarPrnDto {
   prnIndication: string | null
   prnMaxDosesPer24h: number | null
   prnMinIntervalMinutes: number | null
+  packaging: PackagingType
+  /** MED-01: same as MarEntryDto.pharmacyName. */
+  pharmacyName: string | null
+  pharmacyPhone: string | null
   dosesInLast24h: number
   lastDoseAt: string | null
   outcomePendingAdministrationId: string | null

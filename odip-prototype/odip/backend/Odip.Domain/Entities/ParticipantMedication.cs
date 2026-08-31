@@ -73,6 +73,14 @@ public class ParticipantMedication : ITenantEntity
     public string? PrescriberName { get; set; }
     public string? PharmacyName { get; set; }
 
+    /// <summary>
+    /// MED-01: shown in the missed-medication guidance so a "call the pharmacy on ..." tap-to-call
+    /// link can be offered instead of only telling the worker to check the packaging label.
+    /// Nullable/additive — <see cref="PharmacyName"/> predates this field and many existing rows
+    /// won't have a phone number recorded yet.
+    /// </summary>
+    public string? PharmacyPhone { get; set; }
+
     /// <summary>How this medication is physically packaged for administration.</summary>
     public PackagingType Packaging { get; set; } = PackagingType.OriginalPackaging;
 

@@ -93,6 +93,7 @@ public class MedicationsController : ControllerBase
             SupportLevel = dto.SupportLevel,
             PrescriberName = dto.PrescriberName,
             PharmacyName = dto.PharmacyName,
+            PharmacyPhone = dto.PharmacyPhone,
             Packaging = dto.Packaging,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
@@ -160,6 +161,7 @@ public class MedicationsController : ControllerBase
         med.SupportLevel = dto.SupportLevel;
         med.PrescriberName = dto.PrescriberName;
         med.PharmacyName = dto.PharmacyName;
+        med.PharmacyPhone = dto.PharmacyPhone;
         med.Packaging = dto.Packaging;
         med.StartDate = dto.StartDate;
         med.EndDate = dto.EndDate;
@@ -257,6 +259,8 @@ public class MedicationsController : ControllerBase
                     Form = m.Form,
                     Route = m.Route,
                     Packaging = m.Packaging,
+                    PharmacyName = m.PharmacyName,
+                    PharmacyPhone = m.PharmacyPhone,
                     ScheduledTime = t.ToString(@"hh\:mm"),
                     ScheduledAt = scheduledAt,
                     IsHighRisk = m.IsHighRisk,
@@ -306,6 +310,9 @@ public class MedicationsController : ControllerBase
                 PrnIndication = m.PrnIndication,
                 PrnMaxDosesPer24h = m.PrnMaxDosesPer24h,
                 PrnMinIntervalMinutes = m.PrnMinIntervalMinutes,
+                Packaging = m.Packaging,
+                PharmacyName = m.PharmacyName,
+                PharmacyPhone = m.PharmacyPhone,
                 DosesInLast24h = doses.Count,
                 LastDoseAt = doses.Count > 0 ? doses.Max(a => a.AdministeredAt) : null,
                 OutcomePendingAdministrationId = pending?.Id,
@@ -725,6 +732,7 @@ public class MedicationsController : ControllerBase
             IsHighIntensitySupport = m.IsHighIntensitySupport,
             PrescriberName = m.PrescriberName,
             PharmacyName = m.PharmacyName,
+            PharmacyPhone = m.PharmacyPhone,
             ConsentObtained = m.ConsentObtained,
             ConsentGivenBy = m.ConsentGivenBy,
             ConsentDate = m.ConsentDate,

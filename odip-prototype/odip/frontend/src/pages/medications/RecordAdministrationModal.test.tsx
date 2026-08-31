@@ -5,10 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import type { StaffListDto, AdministrationDto } from '@/api/types'
 
-const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
+const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockUseProviderSettings, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
   mockRecordMutateAsync: vi.fn(),
   mockAmendMutateAsync: vi.fn(),
   mockUseStaff: vi.fn(),
+  mockUseProviderSettings: vi.fn(),
   mockNavigate: vi.fn(),
   // INC-03: null means "use the real usePermissions()" (most tests exercise the genuine
   // localStorage-driven role logic) — a single test overrides just canCreateIncidents to cover
@@ -35,6 +36,9 @@ vi.mock('@/api/hooks', () => ({
   useRecordAdministration: () => ({ mutateAsync: mockRecordMutateAsync, isPending: false }),
   useAmendAdministration: () => ({ mutateAsync: mockAmendMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
+  // MissedMedicationGuidance (MED-01, rendered inside the INC-03 "report as incident?" prompt)
+  // reads provider settings for the manager contact and state-aware health advice line.
+  useProviderSettings: mockUseProviderSettings,
 }))
 
 // The modal navigates (INC-03) rather than persisting anything server-side, so only the
@@ -82,6 +86,15 @@ beforeEach(() => {
   permissionsOverride.canCreateIncidents = null
   mockUseStaff.mockReturnValue({
     data: [makeStaff(), makeStaff({ id: 'staff-2', firstName: 'Jordan', lastName: 'Lee', fullName: 'Jordan Lee' })],
+  })
+  mockUseProviderSettings.mockReset()
+  mockUseProviderSettings.mockReturnValue({
+    data: {
+      id: 'provider-1', registrationNumber: '123', abn: '456', organisationName: 'Test Org',
+      address: '1 Test St', state: 'VIC', gstRegistered: true, isPaceProvider: false,
+      bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
+      managerName: 'Priya Sharma', managerPhone: '0412 345 007',
+    },
   })
   localStorage.clear()
 })
@@ -435,6 +448,44 @@ describe('RecordAdministrationModal INC-03 drop into draft incident', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
       state: expect.objectContaining({ outcome: 'Refused', notes: null }),
     })
+  })
+
+  // MED-01: the missed-medication guidance is surfaced alongside the same "report as incident?"
+  // prompt, threaded through from the pharmacy/packaging props MarTab passes in.
+  it('surfaces the missed-medication guidance, using the pharmacy props passed in, alongside the incident prompt', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({
+      success: true,
+      data: makeAdministration({ status: 'Missed', reason: 'No stock available' }),
+    })
+    renderModal(
+      <RecordAdministrationModal
+        {...baseProps}
+        isHighRisk={false}
+        packaging="WebsterPack"
+        pharmacyName="Chemist Warehouse"
+        pharmacyPhone="03 9123 4567"
+      />,
+    )
+
+    await user.click(screen.getByRole('radio', { name: /^missed$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'No stock available')
+    await user.click(screen.getByRole('button', { name: /record missed dose/i }))
+
+    expect(await screen.findByText(/what to do now/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /priya sharma.*0412 345 007/i })).toBeInTheDocument()
+    expect(screen.getByText(/check the webster pack label/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /call the pharmacy on 03 9123 4567.*chemist warehouse/i })).toBeInTheDocument()
+  })
+
+  it('does not surface the missed-medication guidance for a plain Administered outcome', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Administered' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    await user.click(screen.getByRole('button', { name: /^record dose$/i }))
+
+    expect(screen.queryByText(/what to do now/i)).not.toBeInTheDocument()
   })
 
   it('tells a role without incident access to notify their coordinator instead of offering to navigate', async () => {
