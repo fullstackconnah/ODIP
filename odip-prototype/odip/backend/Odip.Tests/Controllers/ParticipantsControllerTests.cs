@@ -763,6 +763,219 @@ public class ParticipantsControllerTests
         Assert.Equal("None", body.Data.CommunicationAids);
     }
 
+    // ── INTAKE sub-wave C2: ADL-assessment grid rows upserted transactionally with the participant ───
+
+    [Fact]
+    public async Task Create_WithAdlAssessments_CreatesThemTransactionallyWithParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            AdlAssessments = new()
+            {
+                new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Dressing, Level = Domain.Enums.AdlLevel.Independent },
+                new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.CommunityAccess, Level = Domain.Enums.AdlLevel.Assistance, Notes = "1:1 supervision" },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantAdlAssessments.Where(a => a.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, a => a.AdlType == Domain.Enums.AdlType.Dressing && a.Level == Domain.Enums.AdlLevel.Independent);
+        Assert.Contains(saved, a => a.AdlType == Domain.Enums.AdlType.CommunityAccess && a.Level == Domain.Enums.AdlLevel.Assistance && a.Notes == "1:1 supervision");
+    }
+
+    [Fact]
+    public async Task GetById_NoAdlAssessmentRows_StillReturnsAllTwentyAsSynthesizedPlaceholders()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetById(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(20, body.Data!.AdlAssessments.Count);
+        Assert.All(body.Data.AdlAssessments, a => Assert.Null(a.Id));
+        Assert.Equal(Enum.GetValues<Domain.Enums.AdlType>().ToHashSet(), body.Data.AdlAssessments.Select(a => a.AdlType).ToHashSet());
+    }
+
+    [Fact]
+    public async Task Update_WithAdlAssessments_UpsertsSameRows_DoesNotDuplicate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            AdlAssessments = new() { new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Kitchen, Level = Domain.Enums.AdlLevel.Independent } },
+        };
+
+        await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        await controller.Update(participant.Id, updateDto with
+        {
+            AdlAssessments = new() { new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Kitchen, Level = Domain.Enums.AdlLevel.Assistance, Notes = "Reassessed" } },
+        }, CancellationToken.None);
+
+        var saved = await db.ParticipantAdlAssessments.Where(a => a.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.Equal(Domain.Enums.AdlLevel.Assistance, single.Level);
+        Assert.Equal("Reassessed", single.Notes);
+    }
+
+    /// <summary>Mirrors Update_WithoutHealthConditionsField_LeavesExistingRowsUntouched — the same load-bearing empty/null guard copied onto UpsertAdlAssessmentsAsync (this PR's brief).</summary>
+    [Fact]
+    public async Task Update_WithoutAdlAssessmentsField_LeavesExistingRowsUntouched()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var withAssessment = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            AdlAssessments = new() { new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Bathing, Level = Domain.Enums.AdlLevel.Supervision } },
+        };
+        await controller.Update(participant.Id, withAssessment, CancellationToken.None);
+
+        // A later, unrelated save (e.g. an isActive toggle) that never mentions AdlAssessments at
+        // all — same shape as any DTO caller built before this field existed.
+        var toggleOnly = withAssessment with { AdlAssessments = new(), IsActive = false };
+        await controller.Update(participant.Id, toggleOnly, CancellationToken.None);
+
+        var saved = await db.ParticipantAdlAssessments.Where(a => a.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.Equal(Domain.Enums.AdlLevel.Supervision, single.Level);
+    }
+
+    /// <summary>Mirrors Update_HealthConditionsExplicitlyNull_DoesNotThrow for the ADL-assessment guard.</summary>
+    [Fact]
+    public async Task Update_AdlAssessmentsExplicitlyNull_DoesNotThrow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            AdlAssessments = null!,
+        };
+
+        var result = await controller.Update(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantAdlAssessments.AnyAsync(a => a.ParticipantId == participant.Id));
+    }
+
+    [Fact]
+    public async Task Create_WithAdlAssessments_TenantScoped_RowsGetSameTenantIdAsParticipant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            AdlAssessments = new() { new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Shopping, Level = Domain.Enums.AdlLevel.Supervision } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedRow = await db.ParticipantAdlAssessments.IgnoreQueryFilters().SingleAsync(a => a.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(tenantId, savedRow.TenantId);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithPartialAdlAssessments_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            IsDraft = true,
+            AdlAssessments = new() { new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Toileting, Level = Domain.Enums.AdlLevel.FullSupport } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(1, await db.ParticipantAdlAssessments.CountAsync(a => a.ParticipantId == createdBody.Data!.Id));
+    }
+
+    /// <summary>
+    /// Covers the new flat Meals &amp; Diet / About Me columns' round-trip through
+    /// Create -&gt; GetById (research spec §4.9/§5, INTAKE sub-wave C2).
+    /// </summary>
+    [Fact]
+    public async Task Create_WithDailyLivingFields_RoundTripsThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            MealAssistanceDetail = "Independent",
+            ChokingRiskMealDetail = "No known risk",
+            ModifiedDietDetail = "Minced and moist",
+            PegRegimeMealDetail = "N/A",
+            SpecialUtensilsDetail = "Built-up handle spoon",
+            SpecialDietaryNeedsDetail = "Halal",
+            FavouriteBreakfast = "Eggs on toast", FavouriteLunch = "Chicken wrap", FavouriteDinner = "Roast dinner",
+            MedicationTricks = "With yoghurt",
+            FoodsAlwaysEaten = "Fresh fruit",
+            Goals = "Build independence with meal prep",
+            SupportAreas = "Meal prep, community access",
+            StrengthsFears = "Strength: social. Fear: crowds.",
+            ThingsToKnow = "Prefers advance notice of changes",
+            WhoIsImportant = "Family",
+            LikesDislikes = "Likes the beach, dislikes being rushed",
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal("Independent", body.Data!.MealAssistanceDetail);
+        Assert.Equal("Minced and moist", body.Data.ModifiedDietDetail);
+        Assert.Equal("Eggs on toast", body.Data.FavouriteBreakfast);
+        Assert.Equal("With yoghurt", body.Data.MedicationTricks);
+        Assert.Equal("Build independence with meal prep", body.Data.Goals);
+        Assert.Equal("Meal prep, community access", body.Data.SupportAreas);
+        Assert.Equal("Strength: social. Fear: crowds.", body.Data.StrengthsFears);
+        Assert.Equal("Prefers advance notice of changes", body.Data.ThingsToKnow);
+        Assert.Equal("Family", body.Data.WhoIsImportant);
+        Assert.Equal("Likes the beach, dislikes being rushed", body.Data.LikesDislikes);
+    }
+
     // ── CONTACT-01/02/03: contact roles created transactionally with the participant ────
 
     [Fact]

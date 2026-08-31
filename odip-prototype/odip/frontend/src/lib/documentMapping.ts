@@ -225,7 +225,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   },
   {
     field: 'choiceControlNotes', label: 'Choice & Control Notes', sources: ['profile'],
-    notes: 'NEW (sub-wave B). Maps to the Profile\'s "Participant Choice and Control" section (§1c-6, Support areas/Goals/Strengths-Fears free text) — Intake has no equivalent. Modelled as one free-text field here, not the Profile\'s 3-way split; a finer split is a later-wave design decision if needed.',
+    notes: 'NEW (sub-wave B). Maps to the Profile\'s "Participant Choice and Control" section (§1c-6, Support areas/Goals/Strengths-Fears free text) — Intake has no equivalent. Modelled as one free-text field here, not the Profile\'s 3-way split; a finer split is a later-wave design decision if needed. UPDATE (sub-wave C2): that finer split now exists as the dedicated goals/supportAreas/strengthsFears fields (Daily Living step) — see the goals entry\'s DEDUP note for the full reconciliation. This field is kept (existing data, general elaboration not otherwise captured) rather than removed or backfilled from it.',
   },
   {
     field: 'consents', label: 'Consent & Terms (photo/video, alcohol, OTC medication, emergency medical, privacy, travel insurance, T&Cs)', sources: ['profile'], dictionaryId: 'CNST-001..013',
@@ -256,6 +256,53 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { field: 'receptiveSkills', label: 'Receptive Skills', sources: ['profile'], dictionaryId: 'COM-002', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low.' },
   { field: 'readingAbility', label: 'Reading Ability', sources: ['profile'], dictionaryId: 'COM-003', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + Good/Med/Low.' },
   { field: 'communicationAids', label: 'Communication Aids', sources: ['profile'], dictionaryId: 'COM-004', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + specify.' },
+
+  // ── Daily Living step (NEW, sub-wave C2) — §4.9/§5. New step placed between "Behaviour &
+  // Communication" and "Risks & Hazards" (see ParticipantCreatePage.tsx's
+  // STEP_DAILY_LIVING_FIELDS doc for the placement rationale). All NEW per §4.9's gap table
+  // except the two dedup calls documented below. ──────────────────────────────────────────
+  {
+    field: 'adlAssessments', label: 'ADL Ratings (Personal + Community/Domestic, structured grid)', sources: ['profile'], dictionaryId: 'PADL-002..007, CADL-001..015',
+    notes: 'NEW (sub-wave C2). §4.9: "Personal-ADL I/S/A/F levels... NEW — no I/S/A/F level field anywhere"; "the entire Community/Domestic ADL domain — ALL NEW, complete gap, no ADL-level fields exist". Now backed by the ParticipantAdlAssessment entity (one row per AdlType, 20 values: 6 Personal §1c-15 + 14 Community/Domestic §1c-17). Level scale "I/S/A/F" is unexpanded in the source form — see the backend AdlLevel enum doc for the flagged plain-English-reading caveat, not a confirmed source expansion.',
+  },
+  {
+    field: 'mealAssistanceDetail', label: 'Meal Assistance', sources: ['profile'], dictionaryId: 'MEAL-001',
+    notes: 'NEW (sub-wave C2). §4.9/§1c-13: "Meal assistance [Y/N]" — collapsed to one free-text descriptive column, same deliberate simplification as the Mobility & Functional group\'s Orthotics/ContinenceSupportDetail (sub-wave C1).',
+  },
+  {
+    field: 'chokingRiskMealDetail', label: 'Choking Risk — Meal Management', sources: ['profile'], dictionaryId: 'MEAL-002',
+    notes: 'NEW (sub-wave C2). §1c-13: "Fluid intake/Choking risk [Y/N + Low/Med/High/Crit]". DEDUP/RECONCILIATION vs the health-condition grid\'s Dysphagia row (sub-wave C1, Medical step): this field is the day-to-day MEAL-MANAGEMENT detail; the grid row records WHETHER Dysphagia is a diagnosed support need. Deliberately not merged — see Participant.cs\'s field group doc and this PR\'s report.',
+  },
+  { field: 'modifiedDietDetail', label: 'Modified Diet', sources: ['profile'], dictionaryId: 'MEAL-003', notes: 'NEW (sub-wave C2). §1c-13: Y/N + A(Soft)/B(minced)/C(pureed)/Cut small — collapsed to one free-text column.' },
+  {
+    field: 'pegRegimeMealDetail', label: 'PEG Regime', sources: ['profile'], dictionaryId: 'MEAL-004',
+    notes: 'NEW (sub-wave C2). §1c-13: "PEG regime [plan Y/N + training]" — collapsed to one free-text column. Loosely related to HidpaSupportCategory.EnteralFeeding (DIAG-02) but not merged with it.',
+  },
+  { field: 'specialUtensilsDetail', label: 'Special Utensils', sources: ['profile'], dictionaryId: 'MEAL-005', notes: 'NEW (sub-wave C2). §1c-13: "Special utensils [Y/N]" — collapsed to one free-text column so which utensils can be described.' },
+  {
+    field: 'specialDietaryNeedsDetail', label: 'Special Dietary Needs', sources: ['profile'], dictionaryId: 'MEAL-006',
+    notes: 'NEW (sub-wave C2). §1c-13: "Special Dietary Needs [Y/N + allergy risk grid]" — the dietary-preference detail (e.g. vegetarian, halal, low-sodium), distinct from allergies (see the DEDUP note below).',
+  },
+  {
+    field: 'favouriteBreakfast', label: 'Favourite Breakfast', sources: ['profile'], dictionaryId: 'MEAL-008..010',
+    notes: 'NEW (sub-wave C2). §1c-14 Favourite Meals snapshot table follows the source\'s Breakfast/Lunch/Dinner shape — modelled as three named fields, not a generic "favourite meal 1/2/3" list.',
+  },
+  { field: 'favouriteLunch', label: 'Favourite Lunch', sources: ['profile'], dictionaryId: 'MEAL-008..010', notes: 'NEW (sub-wave C2). See favouriteBreakfast.' },
+  { field: 'favouriteDinner', label: 'Favourite Dinner', sources: ['profile'], dictionaryId: 'MEAL-008..010', notes: 'NEW (sub-wave C2). See favouriteBreakfast.' },
+  { field: 'medicationTricks', label: 'Medication Tricks', sources: ['profile'], dictionaryId: 'MEAL-011', notes: 'NEW (sub-wave C2). §1c-14: "Tricks for medication" — how medication is best given alongside food.' },
+  { field: 'foodsAlwaysEaten', label: 'Foods Always Eaten', sources: ['profile'], dictionaryId: 'MEAL-012', notes: 'NEW (sub-wave C2). §1c-14: "Foods always eaten".' },
+  {
+    field: 'goals', label: 'Goals', sources: ['profile'], dictionaryId: 'GOAL-002',
+    notes: 'NEW (sub-wave C2). DEDUP: sub-wave B\'s choiceControlNotes entry explicitly flagged this exact finer Support Areas/Goals/Strengths-Fears split as "a later-wave design decision if needed" — this IS that later wave. choiceControlNotes is kept (existing data, general elaboration) rather than removed or backfilled — see this PR\'s report.',
+  },
+  { field: 'supportAreas', label: 'Support Areas', sources: ['profile'], dictionaryId: 'GOAL-001', notes: 'NEW (sub-wave C2). See goals\' DEDUP note.' },
+  { field: 'strengthsFears', label: 'Strengths / Fears', sources: ['profile'], dictionaryId: 'GOAL-003', notes: 'NEW (sub-wave C2). See goals\' DEDUP note.' },
+  { field: 'thingsToKnow', label: 'Things to Know', sources: ['profile'], dictionaryId: 'GOAL-004', notes: 'NEW (sub-wave C2). §1c-16 "Things you need to know" — no prior field.' },
+  { field: 'whoIsImportant', label: 'Who/What Is Important', sources: ['profile'], dictionaryId: 'GOAL-005', notes: 'NEW (sub-wave C2). §1c-16 "Who/what is important" — no prior field.' },
+  {
+    field: 'likesDislikes', label: 'Likes & Dislikes', sources: ['profile'], dictionaryId: 'GOAL-007',
+    notes: 'NEW (sub-wave C2). §1c-16 "Likes and dislikes" — no prior field. GOAL-006 "Hobbies/interests" is DELIBERATELY NOT a new field: personalInterests (sub-wave B) already sources from this exact same source-form line (see that entry\'s notes) — adding a second Hobbies field would be a straight duplicate, not a finer split. See this PR\'s report for the dedup call.',
+  },
 
   // ── Risks & Hazards step — §4.10, INTAKE-09 (renamed from "Risks & Consents" in sub-wave B —
   // this step never carried any consent content; the Consent & Terms block above now has its own

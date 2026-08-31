@@ -355,6 +355,75 @@ public class Participant : ITenantEntity
     /// <summary>COM-004. Free text — source form combines Y/N + specify.</summary>
     public string? CommunicationAids { get; set; }
 
+    // ── Meals & Diet (INTAKE sub-wave C2, Master Data Dictionary MEAL-001..012) ────────────────
+    // New wizard step "Daily Living", placed between "Behaviour & Communication" and "Risks &
+    // Hazards" — see ParticipantCreatePage.tsx's WIZARD_STEPS. All optional. Source form shape
+    // (§1c-13/§1c-14) is Y/N + risk-grid detail for most items; collapsed to one free-text
+    // descriptive column per item, same deliberate simplification as the Mobility & Functional
+    // group above (Orthotics/ContinenceSupportDetail/BowelCareDetail) — flagged in this PR's
+    // report, not re-litigated per field here.
+    // DEDUP — allergies: the source form's Dietary Requirements table includes "Other
+    // Allergies/Alerts", but Participant already has AllergiesDetail/IsAnaphylaxisRisk/
+    // AllergyManagementNotes (INTAKE sub-wave C1, Medical step) — NOT duplicated here. A second
+    // allergies field was deliberately not added; see this PR's report.
+    /// <summary>MEAL-001. "Meal assistance [Y/N]" — collapsed to a free-text descriptive column.</summary>
+    public string? MealAssistanceDetail { get; set; }
+    /// <summary>
+    /// MEAL-002/003. "Fluid intake/Choking risk [Y/N + Low/Med/High/Crit]" / "Modified Diet [Y/N +
+    /// choking risk grid]" — the MEAL-specific choking/swallowing-management detail (how meals are
+    /// prepared/supervised to manage the risk day to day). Distinct from, but related to, the
+    /// <see cref="Entities.ParticipantHealthCondition"/> grid's Dysphagia row (INTAKE sub-wave C1,
+    /// Medical step): that row records WHETHER Dysphagia is a diagnosed support need (Has/Severity/
+    /// PlanProvided/TrainingRequired); this field records the day-to-day MEAL-MANAGEMENT detail
+    /// (what staff actually do at mealtimes) — deliberately not merged, same "detail vs. Has flag"
+    /// split as the health-condition-grid/diagnosis reconciliation. See this PR's report.
+    /// </summary>
+    public string? ChokingRiskMealDetail { get; set; }
+    /// <summary>MEAL-003. Modified Diet detail (e.g. Soft/Minced/Pureed/Cut small).</summary>
+    public string? ModifiedDietDetail { get; set; }
+    /// <summary>MEAL-004. PEG feeding regime detail — loosely related to <see cref="HidpaSupportCategory.EnteralFeeding"/> (DIAG-02), not merged with it.</summary>
+    public string? PegRegimeMealDetail { get; set; }
+    /// <summary>MEAL-005. Special utensils required, with a free-text description of which.</summary>
+    public string? SpecialUtensilsDetail { get; set; }
+    /// <summary>MEAL-006. Special dietary needs (e.g. vegetarian, halal, low-sodium) — distinct from allergies (see the DEDUP note above).</summary>
+    public string? SpecialDietaryNeedsDetail { get; set; }
+    /// <summary>MEAL-008..010. Favourite Meals snapshot table — follows the source's Breakfast/Lunch/Dinner shape rather than a generic "favourite 1/2/3" list.</summary>
+    public string? FavouriteBreakfast { get; set; }
+    public string? FavouriteLunch { get; set; }
+    public string? FavouriteDinner { get; set; }
+    /// <summary>MEAL-011. "Tricks for medication" — how medication is best given alongside food.</summary>
+    public string? MedicationTricks { get; set; }
+    /// <summary>MEAL-012. "Foods always eaten".</summary>
+    public string? FoodsAlwaysEaten { get; set; }
+
+    // ── About Me (INTAKE sub-wave C2, Master Data Dictionary GOAL-001..008) ────────────────────
+    // Same "Daily Living" wizard step as Meals & Diet above. All optional free text.
+    // DEDUP — Goals/Support Areas/Strengths & Fears: sub-wave B's ChoiceControlNotes doc explicitly
+    // flagged this exact finer split as "a later-wave design decision if needed" (see
+    // documentMapping.ts's choiceControlNotes entry) — this IS that later wave. ChoiceControlNotes
+    // is kept (existing data, and as a general elaboration field for anything not captured by the
+    // three dedicated fields below) rather than removed or backfilled from it; new intake now
+    // captures the finer-grained fields directly. See this PR's report.
+    /// <summary>GOAL-002. The finer-grained split of ChoiceControlNotes flagged in sub-wave B — see the DEDUP note above.</summary>
+    public string? Goals { get; set; }
+    /// <summary>GOAL-001. See the DEDUP note above.</summary>
+    public string? SupportAreas { get; set; }
+    /// <summary>GOAL-003. See the DEDUP note above.</summary>
+    public string? StrengthsFears { get; set; }
+    /// <summary>GOAL-004. "Things you need to know" — no prior field.</summary>
+    public string? ThingsToKnow { get; set; }
+    /// <summary>GOAL-005. "Who/what is important" — no prior field.</summary>
+    public string? WhoIsImportant { get; set; }
+    /// <summary>
+    /// GOAL-007. "Likes and dislikes" — no prior field. NOTE: GOAL-006 "Hobbies/interests" is
+    /// deliberately NOT a new field here — <see cref="PersonalInterests"/> (sub-wave B) already
+    /// sources from this exact same source-form line (see documentMapping.ts's personalInterests
+    /// entry: "Profile's Personal and Cultural Preferences 'Hobbies/interests' free text"). Adding
+    /// a second Hobbies field would be a straight duplicate, not a finer split — see this PR's
+    /// report for the dedup call.
+    /// </summary>
+    public string? LikesDislikes { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -372,4 +441,7 @@ public class Participant : ITenantEntity
 
     /// <summary>INTAKE sub-wave C1. See <see cref="Entities.ParticipantHealthCondition"/>'s type doc.</summary>
     public ICollection<ParticipantHealthCondition> HealthConditions { get; set; } = new List<ParticipantHealthCondition>();
+
+    /// <summary>INTAKE sub-wave C2. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
+    public ICollection<ParticipantAdlAssessment> AdlAssessments { get; set; } = new List<ParticipantAdlAssessment>();
 }

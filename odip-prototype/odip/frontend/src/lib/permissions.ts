@@ -161,6 +161,14 @@ export function usePermissions() {
     canWriteHealthConditions: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * INTAKE sub-wave C2: the structured ADL rating grid is support-planning clinical detail —
+     * same coordination-only gate as health conditions/consents/contacts/restrictive practices.
+     * Mirrors ParticipantAdlAssessmentsController.Upsert's Admin/Coordinator/SuperAdmin role gate
+     * exactly.
+     */
+    canWriteAdlAssessments: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).

@@ -164,6 +164,31 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? ReceptiveSkills { get; init; }
     public string? ReadingAbility { get; init; }
     public string? CommunicationAids { get; init; }
+
+    // ── INTAKE sub-wave C2 — the structured ADL rating grid (Daily Living step). See Participant.cs's field group doc.
+    /// <summary>Always all twenty <see cref="Domain.Enums.AdlType"/> entries — see ParticipantAdlAssessmentsController.GetForParticipant.</summary>
+    public List<ParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
+
+    // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step). See Participant.cs's field group doc.
+    public string? MealAssistanceDetail { get; init; }
+    public string? ChokingRiskMealDetail { get; init; }
+    public string? ModifiedDietDetail { get; init; }
+    public string? PegRegimeMealDetail { get; init; }
+    public string? SpecialUtensilsDetail { get; init; }
+    public string? SpecialDietaryNeedsDetail { get; init; }
+    public string? FavouriteBreakfast { get; init; }
+    public string? FavouriteLunch { get; init; }
+    public string? FavouriteDinner { get; init; }
+    public string? MedicationTricks { get; init; }
+    public string? FoodsAlwaysEaten { get; init; }
+
+    // ── INTAKE sub-wave C2 — About Me (Daily Living step). See Participant.cs's field group doc.
+    public string? Goals { get; init; }
+    public string? SupportAreas { get; init; }
+    public string? StrengthsFears { get; init; }
+    public string? ThingsToKnow { get; init; }
+    public string? WhoIsImportant { get; init; }
+    public string? LikesDislikes { get; init; }
 }
 
 public record CreateParticipantDto
@@ -430,6 +455,54 @@ public record CreateParticipantDto
     public string? ReadingAbility { get; init; }
     [StringLength(500)]
     public string? CommunicationAids { get; init; }
+
+    /// <summary>
+    /// INTAKE sub-wave C2 — the structured ADL rating grid, upserted transactionally with the
+    /// participant on both create and update (same read-on-both-paths convention as HealthConditions
+    /// above, for the same reason: this step stays editable in edit mode too) — see
+    /// ParticipantsController.UpsertAdlAssessmentsAsync.
+    /// </summary>
+    public List<CreateParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
+
+    // ── INTAKE sub-wave C2 — Meals & Diet (Master Data Dictionary MEAL-001..012, minus the
+    // allergies dedup — see Participant.cs's field group doc). All optional.
+    [StringLength(500)]
+    public string? MealAssistanceDetail { get; init; }
+    [StringLength(1000)]
+    public string? ChokingRiskMealDetail { get; init; }
+    [StringLength(500)]
+    public string? ModifiedDietDetail { get; init; }
+    [StringLength(500)]
+    public string? PegRegimeMealDetail { get; init; }
+    [StringLength(500)]
+    public string? SpecialUtensilsDetail { get; init; }
+    [StringLength(500)]
+    public string? SpecialDietaryNeedsDetail { get; init; }
+    [StringLength(200)]
+    public string? FavouriteBreakfast { get; init; }
+    [StringLength(200)]
+    public string? FavouriteLunch { get; init; }
+    [StringLength(200)]
+    public string? FavouriteDinner { get; init; }
+    [StringLength(1000)]
+    public string? MedicationTricks { get; init; }
+    [StringLength(1000)]
+    public string? FoodsAlwaysEaten { get; init; }
+
+    // ── INTAKE sub-wave C2 — About Me (Master Data Dictionary GOAL-001..008, minus the Hobbies
+    // dedup onto PersonalInterests — see Participant.cs's field group doc). All optional.
+    [StringLength(2000)]
+    public string? Goals { get; init; }
+    [StringLength(2000)]
+    public string? SupportAreas { get; init; }
+    [StringLength(2000)]
+    public string? StrengthsFears { get; init; }
+    [StringLength(2000)]
+    public string? ThingsToKnow { get; init; }
+    [StringLength(2000)]
+    public string? WhoIsImportant { get; init; }
+    [StringLength(2000)]
+    public string? LikesDislikes { get; init; }
 }
 
 public record UpdateParticipantDto : CreateParticipantDto
