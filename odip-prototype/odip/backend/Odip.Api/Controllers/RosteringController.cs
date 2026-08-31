@@ -410,6 +410,25 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
 
+    /// <summary>
+    /// Read-only shift notes for the roster slide-over (NOTES-01) — coordinators/admins read
+    /// via this surface; only the assigned support worker creates/edits their own, through
+    /// PortalController. Newest first.
+    /// </summary>
+    [HttpGet("shifts/{id:guid}/notes")]
+    public async Task<ActionResult<ApiResponse<List<ShiftNoteDto>>>> GetShiftNotes(Guid id, CancellationToken ct)
+    {
+        var shiftExists = await _db.Shifts.AnyAsync(s => s.Id == id, ct);
+        if (!shiftExists) return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
+
+        var notes = await _db.ShiftNotes
+            .Where(n => n.ShiftId == id)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync(ct);
+
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT PATTERNS
     // ══════════════════════════════════════════════════════════════
@@ -632,6 +651,9 @@ public class RosteringController : ControllerBase
     }
 
     private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message };
+
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+        n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt);
 
     private static ShiftPatternDto ToPatternDto(ShiftPattern p) => new()
     {

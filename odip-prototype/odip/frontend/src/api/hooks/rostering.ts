@@ -14,6 +14,7 @@ import type {
   GeneratePatternResultDto,
   CompatibilityRowDto,
   UpsertCompatibilityDto,
+  ShiftNoteDto,
 } from '../types'
 
 // ══════════════════════════════════════════════════════════════
@@ -71,6 +72,20 @@ export function useAssignShift() {
     mutationFn: ({ id, data }: { id: string; data: AssignShiftDto }) =>
       apiPost<ShiftDto>(`/rostering/shifts/${id}/assign`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/**
+ * Read-only shift notes (NOTES-01) for the roster slide-over — coordinators/admins read via
+ * this surface; only the assigned worker creates/edits their own, via the portal hooks.
+ * Only fetched once a shift actually exists (edit mode), same lazy pattern as
+ * useParticipantRoutines/useCompatibility above.
+ */
+export function useRosterShiftNotes(shiftId: string | undefined) {
+  return useQuery({
+    queryKey: ['roster-shift-notes', shiftId],
+    queryFn: () => apiGet<ShiftNoteDto[]>(`/rostering/shifts/${shiftId}/notes`),
+    enabled: !!shiftId,
   })
 }
 

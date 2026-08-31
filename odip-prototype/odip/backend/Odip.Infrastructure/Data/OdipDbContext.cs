@@ -76,6 +76,7 @@ public class OdipDbContext : DbContext
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
+    public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -922,6 +923,28 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.UserId, e.ParticipantId }).IsUnique();
         });
 
+        // ── ShiftNote (NOTES-01) ─────────────────────────────────
+        modelBuilder.Entity<ShiftNote>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AuthorName).HasMaxLength(200);
+            entity.Property(e => e.Body).HasMaxLength(1000);
+
+            // Restrict: same idiom as Shift's own Participant/User FKs — a shift's note history
+            // must not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.AuthorUser)
+                .WithMany()
+                .HasForeignKey(e => e.AuthorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftId });
+        });
+
         // ── ParticipantMedication ────────────────────────────────
         modelBuilder.Entity<ParticipantMedication>(entity =>
         {
@@ -1177,6 +1200,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<StaffParticipantCompatibility>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftNote>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftNote>()
             .HasIndex(e => e.TenantId);
 
         // ── Medication Management tenant query filters ────────────────────────────

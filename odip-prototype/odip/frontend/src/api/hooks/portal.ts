@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPostRaw } from '../client'
-import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto } from '../types'
+import { apiGet, apiPost, apiPostRaw, apiPut } from '../client'
+import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto } from '../types'
 
 export function useMyShifts(from?: string, to?: string) {
   return useQuery({
@@ -14,6 +14,34 @@ export function usePortalShiftDetail(id: string | undefined) {
     queryKey: ['portal-shift-detail', id],
     queryFn: () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`),
     enabled: !!id,
+  })
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHIFT NOTES (NOTES-01)
+// ══════════════════════════════════════════════════════════════
+
+export function useShiftNotes(shiftId: string | undefined) {
+  return useQuery({
+    queryKey: ['portal-shift-notes', shiftId],
+    queryFn: () => apiGet<ShiftNoteDto[]>(`/portal/shifts/${shiftId}/notes`),
+    enabled: !!shiftId,
+  })
+}
+
+export function useCreateShiftNote(shiftId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) => apiPost<ShiftNoteDto>(`/portal/shifts/${shiftId}/notes`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-shift-notes', shiftId] }),
+  })
+}
+
+export function useUpdateShiftNote(shiftId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => apiPut<ShiftNoteDto>(`/portal/notes/${id}`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-shift-notes', shiftId] }),
   })
 }
 

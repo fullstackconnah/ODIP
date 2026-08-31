@@ -28,6 +28,18 @@ export interface ShiftDto {
   findings: RosterFindingDto[]
 }
 
+// ── Shift Notes (NOTES-01) — shared shape read by both the portal (own-shift
+// create/read/author-edit) and the roster slide-over (coordinator-facing read-only list) ──
+export interface ShiftNoteDto {
+  id: string
+  shiftId: string
+  authorUserId: string
+  authorName: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ── Trip / Leave bars (read-only board material) ─────────
 export interface TripBarDto {
   tripInstanceId: string

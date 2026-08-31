@@ -651,4 +651,46 @@ public class RosteringControllerTests
         Assert.False(row.AutoLinked);
         Assert.Equal("Confirmed by coordinator", row.Reason);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // SHIFT NOTES (NOTES-01) — read-only coordinator surface
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetShiftNotes_ReturnsNotesNewestFirst()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        db.ShiftNotes.AddRange(
+            new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Older note", CreatedAt = DateTime.UtcNow.AddHours(-2) },
+            new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Newer note", CreatedAt = DateTime.UtcNow.AddHours(-1) });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Equal("Newer note", body.Data[0].Body);
+    }
+
+    [Fact]
+    public async Task GetShiftNotes_NonexistentShift_Returns404NotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+
+        var result = await controller.GetShiftNotes(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
 }

@@ -12,6 +12,12 @@ vi.mock('@/api/hooks', () => ({
   usePortalShiftDetail: mockUsePortalShiftDetail,
 }))
 
+// The Shift notes section is covered in its own test file (ShiftNotesSection.test.tsx) — stubbed
+// here so this page's tests stay about page composition, not notes hooks.
+vi.mock('./components/ShiftNotesSection', () => ({
+  ShiftNotesSection: ({ shiftId }: { shiftId: string }) => <div data-testid="shift-notes-section">{shiftId}</div>,
+}))
+
 function renderAt(id: string) {
   return render(
     <MemoryRouter initialEntries={[`/portal/shifts/${id}`]}>
@@ -133,6 +139,13 @@ describe('PortalShiftDetailPage', () => {
     expect(screen.getByText(/wheelchair/i)).toBeInTheDocument()
     expect(screen.getByText(/hoist/i)).toBeInTheDocument()
     expect(screen.getByText('Two-person transfer required.')).toBeInTheDocument()
+  })
+
+  it('renders the shift notes section for the current shift', () => {
+    mockUsePortalShiftDetail.mockReturnValue({ data: makeDetail(), isLoading: false, isError: false })
+    renderAt('shift-1')
+
+    expect(screen.getByTestId('shift-notes-section')).toHaveTextContent('shift-1')
   })
 
   it('shows only the shift-relevant routine (untimed critical), filtering out the unrelated one', () => {

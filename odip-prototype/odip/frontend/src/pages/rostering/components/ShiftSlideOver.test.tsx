@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
-import type { ParticipantRoutineDto, CompatibilityRowDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftNoteDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
-  mockUseParticipantRoutines, mockUseCompatibility,
+  mockUseParticipantRoutines, mockUseCompatibility, mockUseShiftNotes,
 } = vi.hoisted(() => ({
   mockCheckMutate: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
@@ -16,6 +16,7 @@ const {
   mockGetRosterFindings: vi.fn(() => null),
   mockUseParticipantRoutines: vi.fn(() => ({ data: [] as ParticipantRoutineDto[] })),
   mockUseCompatibility: vi.fn(() => ({ data: [] as CompatibilityRowDto[] })),
+  mockUseShiftNotes: vi.fn(() => ({ data: [] as ShiftNoteDto[] })),
 }))
 
 // Only the API layer is mocked — every other collaborator (FindingsList, useSlideOverA11y,
@@ -27,6 +28,7 @@ vi.mock('@/api/hooks', () => ({
   useDeleteShift: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
   useParticipantRoutines: mockUseParticipantRoutines,
   useCompatibility: mockUseCompatibility,
+  useRosterShiftNotes: mockUseShiftNotes,
   getRosterFindings: mockGetRosterFindings,
 }))
 
@@ -73,6 +75,7 @@ beforeEach(() => {
   mockDeleteMutateAsync.mockClear()
   mockUseParticipantRoutines.mockReturnValue({ data: [] as ParticipantRoutineDto[] })
   mockUseCompatibility.mockReturnValue({ data: [] as CompatibilityRowDto[] })
+  mockUseShiftNotes.mockReturnValue({ data: [] as ShiftNoteDto[] })
 })
 
 describe('ShiftSlideOver override gate', () => {
@@ -501,5 +504,84 @@ describe('ShiftSlideOver Staff field — SearchableSelect (DS-01/UX-01 migration
 
     expect(field).toHaveAttribute('aria-expanded', 'false')
     expect(field).toHaveValue('Alex Rivera')
+  })
+})
+
+describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
+  function makeNote(overrides: Partial<ShiftNoteDto> = {}): ShiftNoteDto {
+    return {
+      id: 'note-1',
+      shiftId: 'shift-1',
+      authorUserId: 'staff-1',
+      authorName: 'Alex Rivera',
+      body: 'Quiet shift, no concerns.',
+      createdAt: '2026-08-17T09:30:00Z',
+      updatedAt: '2026-08-17T09:30:00Z',
+      ...overrides,
+    }
+  }
+
+  it('renders no notes section for a brand-new (unsaved) shift', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.queryByText('Shift notes')).not.toBeInTheDocument()
+  })
+
+  it('renders each note with its author and no disclosure toggle for two or fewer notes', () => {
+    mockUseShiftNotes.mockReturnValue({
+      data: [makeNote({ id: 'note-1', body: 'First note.' }), makeNote({ id: 'note-2', body: 'Second note.' })],
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift() }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText('Shift notes')).toBeInTheDocument()
+    expect(screen.getByText('First note.')).toBeInTheDocument()
+    expect(screen.getByText('Second note.')).toBeInTheDocument()
+    expect(screen.getAllByText('Alex Rivera').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument()
+  })
+
+  it('collapses beyond two notes behind a disclosure toggle', async () => {
+    const user = userEvent.setup()
+    mockUseShiftNotes.mockReturnValue({
+      data: [
+        makeNote({ id: 'note-1', body: 'First note.' }),
+        makeNote({ id: 'note-2', body: 'Second note.' }),
+        makeNote({ id: 'note-3', body: 'Third note.' }),
+      ],
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift() }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText('First note.')).toBeInTheDocument()
+    expect(screen.getByText('Second note.')).toBeInTheDocument()
+    expect(screen.queryByText('Third note.')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show all 3 notes' }))
+
+    expect(screen.getByText('Third note.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show fewer notes' })).toBeInTheDocument()
   })
 })

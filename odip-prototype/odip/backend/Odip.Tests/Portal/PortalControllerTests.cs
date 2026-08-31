@@ -330,4 +330,164 @@ public class PortalControllerTests
         var shift = Assert.Single(body.Data!.Shifts);
         Assert.Equal(viewedShift.Id, shift.Id);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // SHIFT NOTES (NOTES-01)
+    // ══════════════════════════════════════════════════════════════
+
+    private static PortalController MakeControllerWithName(OdipDbContext db, ICurrentTenant tenant, Guid callerUserId, string fullName)
+    {
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, callerUserId.ToString()), new Claim("fullName", fullName)], "Test");
+        return new PortalController(db, tenant)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+    }
+
+    [Fact]
+    public async Task CreateShiftNote_OwnShift_CreatesNoteStampedWithCallerIdentity()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeControllerWithName(db, tenant.Object, user.Id, "Ben Turner");
+
+        var result = await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "Quiet shift, no concerns." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value);
+        Assert.True(body.Success);
+        var dto = body.Data!;
+        Assert.Equal(shift.Id, dto.ShiftId);
+        Assert.Equal(user.Id, dto.AuthorUserId);
+        Assert.Equal("Ben Turner", dto.AuthorName);
+        Assert.Equal("Quiet shift, no concerns.", dto.Body);
+
+        var stored = Assert.Single(db.ShiftNotes.IgnoreQueryFilters());
+        Assert.Equal(shift.Id, stored.ShiftId);
+    }
+
+    [Fact]
+    public async Task CreateShiftNote_ForeignShift_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        var foreignShift = SeedShift(db, participant.Id, otherUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.CreateShiftNote(foreignShift.Id, new CreateShiftNoteDto { Body = "Should not be created." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Empty(db.ShiftNotes.IgnoreQueryFilters());
+    }
+
+    [Fact]
+    public async Task CreateShiftNote_NonexistentShift_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.CreateShiftNote(Guid.NewGuid(), new CreateShiftNoteDto { Body = "Should not be created." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetShiftNotes_OwnShift_ReturnsNotesNewestFirst()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        db.ShiftNotes.AddRange(
+            new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "First note", CreatedAt = DateTime.UtcNow.AddHours(-2) },
+            new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Second note", CreatedAt = DateTime.UtcNow.AddHours(-1) });
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Equal("Second note", body.Data[0].Body); // newest first
+    }
+
+    [Fact]
+    public async Task GetShiftNotes_ForeignShift_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        var foreignShift = SeedShift(db, participant.Id, otherUser.Id);
+        db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), ShiftId = foreignShift.Id, AuthorUserId = otherUser.Id, AuthorName = "Cara Lee", Body = "Not yours to read." });
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.GetShiftNotes(foreignShift.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_Author_UpdatesBody()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Original body." };
+        db.ShiftNotes.Add(note);
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "Corrected body." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftNoteDto>>(ok.Value);
+        Assert.Equal("Corrected body.", body.Data!.Body);
+        Assert.Equal("Corrected body.", db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).Body);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_NotTheAuthor_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var author = SeedUser(db, "Ben", "Turner");
+        var otherUser = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, author.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = author.Id, AuthorName = "Ben Turner", Body = "Original body." };
+        db.ShiftNotes.Add(note);
+        db.SaveChanges();
+        // The other user is on a different shift entirely (isn't even the assigned worker on
+        // this one) — the point under test is edit is author-scoped, not shift-ownership-scoped.
+        var controller = MakeController(db, tenant.Object, otherUser.Id);
+
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "Attempted tamper." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("Original body.", db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).Body);
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_NonexistentNote_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.UpdateShiftNote(Guid.NewGuid(), new UpdateShiftNoteDto { Body = "Doesn't matter." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
 }
