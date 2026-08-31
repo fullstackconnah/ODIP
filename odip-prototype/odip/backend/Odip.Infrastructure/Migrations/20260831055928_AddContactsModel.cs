@@ -281,11 +281,25 @@ namespace Odip.Infrastructure.Migrations
                 """);
 
             // Step 3: one PlanManager role per Participant.PlanManagerContactId, skipped where
-            // Step 2 already created an equivalent active PlanManager role for the same
+            // Step 2 already created an equivalent ACTIVE PlanManager role for the same
             // (participant, person) pair (a Contact double-linked via both PlanManagerContactId
             // and a PlanManager-typed ParticipantContacts row) — avoids seeding data that
             // immediately violates ContactRoleRules.ValidateUniqueness's "max 1 active Plan
             // Manager" rule the moment this migration lands.
+            //
+            // Fix-round follow-up (finding 3, re-review): the guard below explicitly checks
+            // Status = 0 (Active), NOT any status — Step 2's own dedup can now land a matching
+            // (participant, person, PlanManager) row as Status = 2 (Superseded) when it wasn't
+            // that participant's earliest PlanManager-type row. If the guard ignored status, a
+            // Superseded row from Step 2 would wrongly suppress Step 3's insert here, leaving
+            // that participant with ZERO active PlanManagers. Requiring Status = 0 means Step 3
+            // still inserts its own active PlanManager role whenever the matching Step 2 row was
+            // itself superseded. Should Step 3 then insert an active PlanManager alongside Step
+            // 2's superseded one for the same participant, that's safe against
+            // ContactRoleRules.ValidateUniqueness: its "max 1 active Plan Manager" check only
+            // counts rows with Status == Active, so one active (Step 3) + one superseded (Step 2)
+            // row together never trip it — exactly the same accepted shape Step 2's own dedup
+            // already produces for a participant with >= 2 PlanManager-type ParticipantContacts.
             migrationBuilder.Sql(
                 """
                 INSERT INTO "ParticipantContactRoles"
@@ -301,6 +315,7 @@ namespace Odip.Infrastructure.Migrations
                   AND NOT EXISTS (
                       SELECT 1 FROM "ParticipantContactRoles" r
                       WHERE r."ParticipantId" = p."Id" AND r."PersonId" = c."Id" AND r."RoleType" = 6
+                        AND r."Status" = 0
                   );
                 """);
         }
