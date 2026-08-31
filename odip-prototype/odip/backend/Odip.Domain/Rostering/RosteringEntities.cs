@@ -187,6 +187,25 @@ public class ShiftNote : ITenantEntity
 
     public string Body { get; set; } = string.Empty;
 
+    /// <summary>
+    /// NOTES-02: keyword categories <see cref="ShiftNoteKeywordScanner"/> matched in
+    /// <see cref="Body"/> as of the last save (create or edit) — recomputed on every save, not
+    /// just once at creation. Client-advisory only: never blocks the save, only drives the
+    /// "consider filing an incident report" prompt on the portal.
+    /// </summary>
+    public ShiftNoteFlagCategory FlaggedCategories { get; set; } = ShiftNoteFlagCategory.None;
+
+    /// <summary>
+    /// NOTES-02: when the author dismissed the "file an incident report?" prompt for the CURRENT
+    /// <see cref="FlaggedCategories"/> value. Server-persisted (not client/localStorage-only) so
+    /// the dismissal survives across devices and sessions — same compliance-adjacent posture as
+    /// the rest of this entity. Null while unflagged or not yet acknowledged. Cleared back to null
+    /// by <c>PortalController.UpdateShiftNote</c> whenever an edit changes the computed
+    /// <see cref="FlaggedCategories"/> value, so a stale dismissal never silently suppresses the
+    /// prompt for newly-introduced flagged content.
+    /// </summary>
+    public DateTime? FlagsAcknowledgedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
