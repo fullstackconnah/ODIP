@@ -264,7 +264,7 @@ describe('ParticipantCreatePage Review step', () => {
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'country', 'dateOfBirth', 'email', 'equipmentRequirements', 'eyeColour', 'firstName',
-        'fundingSource', 'gender', 'hairColour', 'heightCm', 'hidpaSupportCategories', 'isDraft', 'isDsoa', 'isHighSupport',
+        'fundingSource', 'gender', 'hairColour', 'heightCm', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isDsoa', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'medicareExpiry', 'medicareNumber',
         'middleName', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -638,7 +638,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
+        'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
@@ -696,7 +696,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
+        'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region',
@@ -753,7 +753,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'mainSupportPersonName', 'mainSupportPersonRelationship', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -840,7 +840,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livesWithOthers', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -913,7 +913,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'accommodationType', 'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'hidpaNotes', 'checklistItems', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',

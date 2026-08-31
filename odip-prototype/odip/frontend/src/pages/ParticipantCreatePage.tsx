@@ -13,8 +13,8 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel, ChecklistItemType } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
@@ -114,6 +114,9 @@ const baseParticipantSchema = z.object({
   otherDiagnoses: z.array(z.string()).optional(),
   // DIAG-02. hidpaSupportCategories mirrors serviceStreams' array-of-flag-names shape/handling.
   hidpaSupportCategories: z.array(z.string()).optional(),
+  // DIAG-02/INTAKE-03 reconciliation — ungated free-text HIDPA notes, same visibility as
+  // hidpaSupportCategories itself (not CommunityAccessDailyLiving-conditional).
+  hidpaNotes: z.string().optional(),
   medicalSummary: z.string().optional(),
   behaviourRiskSummary: z.string().optional(),
   notes: z.string().optional(),
@@ -236,6 +239,20 @@ const baseParticipantSchema = z.object({
     adlType: z.string(),
     level: z.string().optional(),
     notes: z.string().optional(),
+    // INTAKE-03, CommunityAccessDailyLiving stream-specific per-ADL-row "how to help me"
+    // instruction (research spec §3) — distinct from the always-visible `notes` above.
+    howToHelpNotes: z.string().optional(),
+  })).optional(),
+  // INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &
+  // Transport Risk / Community Behaviours of Concern checklist grid. Fixed 21-row array (one per
+  // ChecklistItemType, never user-add/remove — same convention as adlAssessments/healthConditions
+  // above), always all 21 rows, submitted on both create and edit saves. `value` is the tri-state
+  // string ('No'|'Yes'|'NotApplicable'|'' for not-assessed), same ToggleGroup "unmatched value"
+  // idiom as adlAssessments' `level`.
+  checklistItems: z.array(z.object({
+    itemType: z.string(),
+    value: z.string().optional(),
+    notes: z.string().optional(),
   })).optional(),
   // INTAKE sub-wave C2 — Meals & Diet (Daily Living step, research spec §4.9/§5, Master Data
   // Dictionary MEAL-001..012 minus the allergies dedup onto allergiesDetail/isAnaphylaxisRisk on
@@ -259,6 +276,19 @@ const baseParticipantSchema = z.object({
   thingsToKnow: z.string().optional(),
   whoIsImportant: z.string().optional(),
   likesDislikes: z.string().optional(),
+  // INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving stream,
+  // research spec §3). CA-gated via CONDITIONAL_FIELDS below (communityAccessGate) — hidden +
+  // unregistered whenever CommunityAccessDailyLiving isn't one of the selected serviceStreams.
+  signsHappyAndSettled: z.string().optional(),
+  whatHelpsMeCalmDown: z.string().optional(),
+  bocTriggers: z.string().optional(),
+  bocEarlyWarningSigns: z.string().optional(),
+  bocDeEscalationStrategies: z.string().optional(),
+  bocWhatNotToDo: z.string().optional(),
+  supportsLookLikeMorning: z.string().optional(),
+  supportsLookLikeDay: z.string().optional(),
+  supportsLookLikeAfternoonEvening: z.string().optional(),
+  supportsLookLikeOvernight: z.string().optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -593,6 +623,44 @@ function AdlLevelToggleField({ control, name, ariaLabel }: {
   )
 }
 
+// INTAKE-03/04 — the two Community Access checklists' per-item value control. Same idiom as
+// ADL_LEVEL_OPTIONS/YES_NO_UNANSWERED_OPTIONS: an explicit "Not assessed" option, not just an
+// implicit "no match" state.
+const CHECKLIST_VALUE_OPTIONS = [
+  { key: 'No', label: 'No' },
+  { key: 'Yes', label: 'Yes' },
+  { key: 'NotApplicable', label: 'N/A' },
+  { key: '', label: 'Not assessed' },
+]
+
+/**
+ * INTAKE-03/04 — the Community Access checklists' per-row Value control. Same row-qualified
+ * ariaLabel requirement as AdlLevelToggleField above (21 rows all rendering an identically-labelled
+ * "Value" radiogroup otherwise).
+ */
+function ChecklistValueToggleField({ control, name, ariaLabel }: {
+  control: Control<ParticipantFormData>
+  name: FieldPath<ParticipantFormData>
+  ariaLabel: string
+}) {
+  return (
+    <FormField label="Value" className="mb-0">
+      <Controller
+        control={control}
+        name={name}
+        render={({ field }) => (
+          <ToggleGroup
+            options={CHECKLIST_VALUE_OPTIONS}
+            value={(field.value as string) ?? ''}
+            onChange={field.onChange}
+            ariaLabel={ariaLabel}
+          />
+        )}
+      />
+    </FormField>
+  )
+}
+
 // Living arrangements (LIVING-01..04) and address (INTAKE-06) live on the Identity step rather
 // than a new wizard step or the Support Needs step: neither depends on funding/support-need
 // answers, and where/how a participant lives is core identity/intake context — putting them here
@@ -636,6 +704,11 @@ const STEP_CULTURAL_CONSENT_FIELDS = [
 // below from "Support Needs & Equipment" to "Support Needs & Mobility": "Equipment" no longer
 // honestly covers content like Falls Risk Rating, Level of Personal Care, or Skin Integrity that
 // has nothing to do with equipment. See this PR's report for the fuller reasoning.
+// INTAKE-03: `checklistItems` also appears in STEP_BEHAVIOUR_COMMUNICATION_FIELDS below — the one
+// top-level field is rendered split across two steps (rows 0-8, Community Mobility & Transport
+// Risk, here; rows 9-20, Community Behaviours of Concern, on Behaviour & Communication), so both
+// steps' Next-validation schemas pick it. Harmless duplication: every row is optional, so which
+// step "owns" the field for STEP_SCHEMAS/fieldToStepIndex purposes has no validation consequence.
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -644,6 +717,7 @@ const STEP_SUPPORT_FIELDS = [
   'mobilityNotes', 'equipmentRequirements', 'transportRequirements',
   'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
   'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+  'checklistItems',
 ] as const
 // DIAG-01/02: diagnoses (primary + other), then HIDPA directly below them (a direct derivation —
 // see the epilepsy rule — so they must share this step/schema), then the pre-existing free-text
@@ -654,18 +728,22 @@ const STEP_SUPPORT_FIELDS = [
 // grid stays on this step too rather than opening yet another one, since it's the same
 // "structured clinical detail" content family as diagnoses/HIDPA/allergies.
 const STEP_MEDICAL_FIELDS = [
-  'primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'medicalSummary',
+  'primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'hidpaNotes', 'medicalSummary',
   'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
 ] as const
 // INTAKE sub-wave C1 — NEW step, placed between "Medical" and "Risks & Hazards" (research spec
 // §5 "Behaviour & Communication"): the Medical step above already carries diagnoses/HIDPA/
 // allergies/the 10-row health-condition grid, and folding these 14 further fields in would push
 // that step well past a reasonable single-screen length — see this PR's report.
+// INTAKE-03: the CA-gated fields (signsHappyAndSettled..bocWhatNotToDo) plus `checklistItems`
+// (rows 9-20, Community Behaviours of Concern — see STEP_SUPPORT_FIELDS' doc for the other half).
 const STEP_BEHAVIOUR_COMMUNICATION_FIELDS = [
   'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
   'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
   'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
   'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+  'signsHappyAndSettled', 'whatHelpsMeCalmDown', 'checklistItems',
+  'bocTriggers', 'bocEarlyWarningSigns', 'bocDeEscalationStrategies', 'bocWhatNotToDo',
 ] as const
 // INTAKE sub-wave C2 — NEW step "Daily Living", placed between "Behaviour & Communication" and
 // "Risks & Hazards" per this PR's brief (research spec §4.9/§5's "Daily Living / ADLs" step):
@@ -678,6 +756,8 @@ const STEP_DAILY_LIVING_FIELDS = [
   'specialUtensilsDetail', 'specialDietaryNeedsDetail',
   'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
   'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
+  // INTAKE-03 — CA-gated "What My Supports Look Like" shift-window blocks (research spec §3, Section 9).
+  'supportsLookLikeMorning', 'supportsLookLikeDay', 'supportsLookLikeAfternoonEvening', 'supportsLookLikeOvernight',
 ] as const
 const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const
 const STEP_REVIEW_FIELDS = [] as const
@@ -748,6 +828,11 @@ const PLAN_TYPE_LABELS: Record<string, string> = {
 // gender self-description (migrated ad-hoc conditional, INTAKE-05) and FUND-02's funding-source
 // gating (the first "real" consumer this capability was built for). Later waves (diagnoses
 // gating, living arrangements, service-specific fields) extend this same array.
+// INTAKE-03 — gates every Community Access-specific field on whether CommunityAccessDailyLiving
+// is one of the currently-selected serviceStreams. Shared by CONDITIONAL_FIELDS below and the
+// stream-removal confirm dialog (communityAccessDataEntered/handleCommunityAccessStreamChange).
+const communityAccessGate: ConditionPredicate<ParticipantFormData> = (v) => !!v.serviceStreams?.includes('CommunityAccessDailyLiving')
+
 const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
   {
     fields: ['genderSelfDescription'],
@@ -812,6 +897,35 @@ const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
     fields: ['primaryDiagnosisOther'],
     visibleWhen: (v) => v.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL,
     focusFallback: 'primaryDiagnosis',
+  },
+  {
+    // INTAKE-03 — the 10 flat Community Access Behaviour & Support Detail fields (Behaviour &
+    // Communication / Daily Living steps). HIDPA's 5 new categories + hidpaNotes are NOT here —
+    // they're ungated (see the Medical step's HIDPA card).
+    fields: [
+      'signsHappyAndSettled', 'whatHelpsMeCalmDown', 'bocTriggers', 'bocEarlyWarningSigns',
+      'bocDeEscalationStrategies', 'bocWhatNotToDo',
+      'supportsLookLikeMorning', 'supportsLookLikeDay', 'supportsLookLikeAfternoonEvening', 'supportsLookLikeOvernight',
+    ],
+    visibleWhen: communityAccessGate,
+    focusFallback: 'serviceStreams-CommunityAccessDailyLiving',
+  },
+  {
+    // INTAKE-03 — the 21-row checklist grid (Community Mobility & Transport Risk + Community
+    // Behaviours of Concern). Every row's value/notes pair is gated as one unit — the engine's
+    // isVisible signature already accepts arbitrary dotted-index paths via `(string & {})`
+    // (see conditionalFields.ts), so this is a supported usage; `as never` casts the plain
+    // string[] this produces down to whatever literal-union `fields` expects, same idiom
+    // useUnregisterHiddenFields already uses internally for react-hook-form's unregister() call.
+    fields: CHECKLIST_ITEM_TYPES.flatMap((_, i) => [`checklistItems.${i}.value`, `checklistItems.${i}.notes`]) as never,
+    visibleWhen: communityAccessGate,
+    focusFallback: 'serviceStreams-CommunityAccessDailyLiving',
+  },
+  {
+    // INTAKE-03 — the per-ADL-row "how to help me" column, one field per AdlType index.
+    fields: ADL_TYPES.map((_, i) => `adlAssessments.${i}.howToHelpNotes`) as never,
+    visibleWhen: communityAccessGate,
+    focusFallback: 'serviceStreams-CommunityAccessDailyLiving',
   },
 ]
 
@@ -909,7 +1023,9 @@ export default function ParticipantCreatePage() {
       behavioursOfConcernCurrent: '', behavioursOfConcernFiveYearHistory: '',
       ridsLogged: '', bspPlanProvided: '', bocChartProvided: '',
       // INTAKE sub-wave C2 — fixed 20-row array, one per AdlType, all unassessed by default.
-      adlAssessments: ADL_TYPES.map((type) => ({ adlType: type, level: '' as const, notes: '' })),
+      adlAssessments: ADL_TYPES.map((type) => ({ adlType: type, level: '' as const, notes: '', howToHelpNotes: '' })),
+      // INTAKE-03/04 — fixed 21-row array, one per ChecklistItemType, all unassessed by default.
+      checklistItems: CHECKLIST_ITEM_TYPES.map((type) => ({ itemType: type, value: '' as const, notes: '' })),
     },
   })
   // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
@@ -1077,6 +1193,54 @@ export default function ParticipantCreatePage() {
   }
   const cancelFundingSourceChange = () => setPendingFundingSourceValue(null)
 
+  // INTAKE-03 — same "don't silently clear entered data" protective pattern FUND-02 pioneered
+  // above (pendingFundingSourceValue/confirm dialog), adapted for a checkbox-array toggle rather
+  // than a single-select. Community Access can accumulate substantial entered data — the 10 flat
+  // fields, 21 checklist items, and per-ADL-row howToHelpNotes — meaningfully more than FUND-02's
+  // single text field, so it gets the same treatment. LIVING-01/02/03 deliberately does NOT get
+  // this treatment (switching arrangement types still clears silently via the engine) — that's a
+  // separate product decision, out of scope for this PR to revisit.
+  function communityAccessDataEntered(v: ParticipantFormData): boolean {
+    const flatFields = [
+      'signsHappyAndSettled', 'whatHelpsMeCalmDown', 'bocTriggers', 'bocEarlyWarningSigns',
+      'bocDeEscalationStrategies', 'bocWhatNotToDo',
+      'supportsLookLikeMorning', 'supportsLookLikeDay', 'supportsLookLikeAfternoonEvening', 'supportsLookLikeOvernight',
+    ] as const
+    if (flatFields.some((f) => !!v[f]?.trim())) return true
+    if (v.adlAssessments?.some((a) => !!a.howToHelpNotes?.trim())) return true
+    if (v.checklistItems?.some((c) => !!c.value || !!c.notes?.trim())) return true
+    return false
+  }
+  const [pendingServiceStreamRemoval, setPendingServiceStreamRemoval] = useState<ServiceStream | null>(null)
+  // Intercepts ONLY the CommunityAccessDailyLiving checkbox's own change handler — every other
+  // service stream in the SERVICE_STREAMS.map() below still toggles freely with no confirm.
+  const handleCommunityAccessStreamChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked
+    const current = (getValues('serviceStreams') ?? []) as ServiceStream[]
+    if (checked) {
+      setValue('serviceStreams', [...current, 'CommunityAccessDailyLiving'], { shouldDirty: true })
+      return
+    }
+    if (communityAccessDataEntered(getValues())) {
+      // Hold the checkbox visually checked (it's controlled off field.value, which we haven't
+      // touched) and stash the pending removal instead of applying it immediately.
+      setPendingServiceStreamRemoval('CommunityAccessDailyLiving')
+      return
+    }
+    // Nothing entered — let the uncheck proceed normally, no dialog needed.
+    setValue('serviceStreams', current.filter((s) => s !== 'CommunityAccessDailyLiving'), { shouldDirty: true })
+  }
+  const confirmServiceStreamRemoval = () => {
+    if (pendingServiceStreamRemoval) {
+      const current = (getValues('serviceStreams') ?? []) as ServiceStream[]
+      // The engine's useUnregisterHiddenFields does the actual field-clearing once this commits
+      // and the CA-gated fields become hidden.
+      setValue('serviceStreams', current.filter((s) => s !== pendingServiceStreamRemoval), { shouldDirty: true, shouldValidate: true })
+    }
+    setPendingServiceStreamRemoval(null)
+  }
+  const cancelServiceStreamRemoval = () => setPendingServiceStreamRemoval(null)
+
   useEffect(() => {
     if (overnightSupportValue === 'None') {
       setValue('overnightRatio', 'OneToOne')
@@ -1153,6 +1317,7 @@ export default function ParticipantCreatePage() {
           : '',
         otherDiagnoses: existing.otherDiagnoses ?? [],
         hidpaSupportCategories: parseHidpaCategories(existing.hidpaSupportCategories),
+        hidpaNotes: existing.hidpaNotes ?? '',
         isHighSupport: existing.isHighSupport ?? false,
         isIntensiveSupport: existing.isIntensiveSupport ?? false,
         overnightSupport: existing.overnightSupport ?? 'None',
@@ -1269,6 +1434,18 @@ export default function ParticipantCreatePage() {
             adlType: type,
             level: a?.level ?? '',
             notes: a?.notes ?? '',
+            howToHelpNotes: a?.howToHelpNotes ?? '',
+          }
+        }),
+        // INTAKE-03/04 — the checklist grid. Same round-trip convention as adlAssessments above:
+        // always all 21 CHECKLIST_ITEM_TYPES rows, in that fixed order, regardless of what order
+        // the server returned them in.
+        checklistItems: CHECKLIST_ITEM_TYPES.map((type) => {
+          const c = existing.checklistItems?.find((row) => row.itemType === type)
+          return {
+            itemType: type,
+            value: c?.value ?? '',
+            notes: c?.notes ?? '',
           }
         }),
         // INTAKE sub-wave C2 — Meals & Diet.
@@ -1290,6 +1467,17 @@ export default function ParticipantCreatePage() {
         thingsToKnow: existing.thingsToKnow ?? '',
         whoIsImportant: existing.whoIsImportant ?? '',
         likesDislikes: existing.likesDislikes ?? '',
+        // INTAKE-03 — Community Access Behaviour & Support Detail.
+        signsHappyAndSettled: existing.signsHappyAndSettled ?? '',
+        whatHelpsMeCalmDown: existing.whatHelpsMeCalmDown ?? '',
+        bocTriggers: existing.bocTriggers ?? '',
+        bocEarlyWarningSigns: existing.bocEarlyWarningSigns ?? '',
+        bocDeEscalationStrategies: existing.bocDeEscalationStrategies ?? '',
+        bocWhatNotToDo: existing.bocWhatNotToDo ?? '',
+        supportsLookLikeMorning: existing.supportsLookLikeMorning ?? '',
+        supportsLookLikeDay: existing.supportsLookLikeDay ?? '',
+        supportsLookLikeAfternoonEvening: existing.supportsLookLikeAfternoonEvening ?? '',
+        supportsLookLikeOvernight: existing.supportsLookLikeOvernight ?? '',
       })
     }
   }, [existing, reset])
@@ -1396,6 +1584,18 @@ export default function ParticipantCreatePage() {
       adlType: a.adlType,
       level: a.level || null,
       notes: a.level ? (a.notes || null) : null,
+      // INTAKE-03: same "only travels once level is set" rule as notes above — the JSX only
+      // ever renders this field once a level is set (see the ADL grid's {level && ...} block),
+      // so a stale value from a level the user has since cleared is dropped here too.
+      howToHelpNotes: a.level ? (a.howToHelpNotes || null) : null,
+    }))
+    // INTAKE-03/04 — collapse the fixed 21-row checklist grid's ''-for-unassessed UI shape down
+    // to the backend's ChecklistItemValue|null shape, same pattern as adlAssessments above. Notes
+    // only travels with the payload once the row has an assessed value.
+    payload.checklistItems = (data.checklistItems ?? []).map((c) => ({
+      itemType: c.itemType,
+      value: c.value || null,
+      notes: c.value ? (c.notes || null) : null,
     }))
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
@@ -1653,6 +1853,14 @@ export default function ParticipantCreatePage() {
         { label: 'Colostomy / Catheter / Enema / Suppository', value: watchedValues.bowelCareDetail || '—' },
         { label: 'Menstruation Support', value: watchedValues.menstruationSupport || '—' },
         { label: 'Skin Integrity', value: watchedValues.skinIntegrity || '—' },
+        // INTAKE-03 — Community Mobility & Transport Risk checklist, only rows with a recorded
+        // value (same "only answered rows" convention as the ADL/health-condition grids).
+        ...(isVisible('checklistItems.0.value') ? COMMUNITY_MOBILITY_RISK_ITEM_TYPES.map((type) => {
+          const index = CHECKLIST_ITEM_TYPES.indexOf(type)
+          const row = watchedValues.checklistItems?.[index]
+          if (!row?.value) return null
+          return { label: CHECKLIST_ITEM_TYPE_LABELS[type as ChecklistItemType], value: `${row.value}${row.notes ? ` — ${row.notes}` : ''}` }
+        }).filter((row): row is { label: string; value: string } => row !== null) : []),
       ],
     },
     {
@@ -1671,6 +1879,7 @@ export default function ParticipantCreatePage() {
             ? watchedValues.hidpaSupportCategories.map((c) => HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c).join(', ')
             : 'None',
         },
+        { label: 'HIDPA Notes', value: watchedValues.hidpaNotes || '—' },
         { label: 'Medical Summary', value: watchedValues.medicalSummary || '—' },
         // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
         { label: 'Allergies', value: watchedValues.allergiesDetail || '—' },
@@ -1702,6 +1911,21 @@ export default function ParticipantCreatePage() {
         { label: 'Receptive Skills', value: watchedValues.receptiveSkills || '—' },
         { label: 'Reading Ability', value: watchedValues.readingAbility || '—' },
         { label: 'Communication Aids', value: watchedValues.communicationAids || '—' },
+        // INTAKE-03 — Community Access Behaviour & Support Detail.
+        ...(isVisible('signsHappyAndSettled') ? [
+          { label: 'Signs I Am Happy and Settled', value: watchedValues.signsHappyAndSettled || '—' },
+          { label: 'What Helps Me Calm Down', value: watchedValues.whatHelpsMeCalmDown || '—' },
+          ...COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES.map((type) => {
+            const index = CHECKLIST_ITEM_TYPES.indexOf(type)
+            const row = watchedValues.checklistItems?.[index]
+            if (!row?.value) return null
+            return { label: CHECKLIST_ITEM_TYPE_LABELS[type as ChecklistItemType], value: `${row.value}${row.notes ? ` — ${row.notes}` : ''}` }
+          }).filter((row): row is { label: string; value: string } => row !== null),
+          { label: 'BOC Triggers', value: watchedValues.bocTriggers || '—' },
+          { label: 'BOC Early Warning Signs', value: watchedValues.bocEarlyWarningSigns || '—' },
+          { label: 'BOC De-Escalation Strategies', value: watchedValues.bocDeEscalationStrategies || '—' },
+          { label: 'BOC What Not To Do', value: watchedValues.bocWhatNotToDo || '—' },
+        ] : []),
       ],
     },
     {
@@ -1713,7 +1937,10 @@ export default function ParticipantCreatePage() {
         ...ADL_TYPES.map((type, index) => {
           const row = watchedValues.adlAssessments?.[index]
           if (!row?.level) return null
-          return { label: ADL_TYPE_LABELS[type], value: `${ADL_LEVEL_LABELS[row.level as AdlLevel]}${row.notes ? ` — ${row.notes}` : ''}` }
+          // INTAKE-03: howToHelpNotes only ever has a value when CA is selected (CONDITIONAL_FIELDS
+          // hides+unregisters it otherwise), so no extra isVisible check is needed here.
+          const helpNote = row.howToHelpNotes ? ` (How to help: ${row.howToHelpNotes})` : ''
+          return { label: ADL_TYPE_LABELS[type], value: `${ADL_LEVEL_LABELS[row.level as AdlLevel]}${row.notes ? ` — ${row.notes}` : ''}${helpNote}` }
         }).filter((row): row is { label: string; value: string } => row !== null),
         { label: 'Meal Assistance', value: watchedValues.mealAssistanceDetail || '—' },
         { label: 'Choking Risk — Meal Management', value: watchedValues.chokingRiskMealDetail || '—' },
@@ -1732,6 +1959,13 @@ export default function ParticipantCreatePage() {
         { label: 'Things to Know', value: watchedValues.thingsToKnow || '—' },
         { label: 'Who/What Is Important', value: watchedValues.whoIsImportant || '—' },
         { label: 'Likes & Dislikes', value: watchedValues.likesDislikes || '—' },
+        // INTAKE-03 — "What My Supports Look Like".
+        ...(isVisible('supportsLookLikeMorning') ? [
+          { label: 'Supports — Morning', value: watchedValues.supportsLookLikeMorning || '—' },
+          { label: 'Supports — Day', value: watchedValues.supportsLookLikeDay || '—' },
+          { label: 'Supports — Afternoon-Evening', value: watchedValues.supportsLookLikeAfternoonEvening || '—' },
+          { label: 'Supports — Overnight', value: watchedValues.supportsLookLikeOvernight || '—' },
+        ] : []),
       ],
     },
     {
@@ -1760,6 +1994,15 @@ export default function ParticipantCreatePage() {
         title="Switch away from Other funding source?"
         message="The funding organisation you specified will be cleared when you save this participant. Switching back to Other later won't bring it back."
         confirmLabel="Switch and clear"
+        variant="danger"
+      />
+      <ConfirmDialog
+        open={pendingServiceStreamRemoval !== null}
+        onCancel={cancelServiceStreamRemoval}
+        onConfirm={confirmServiceStreamRemoval}
+        title="Remove Community Access?"
+        message="This participant has Community Access-specific data entered (checklist items, ADL notes, and/or the behaviour & support fields). Removing this service stream will clear that data when you save — re-adding the stream later won't bring it back."
+        confirmLabel="Remove and clear"
         variant="danger"
       />
       <div className="flex items-center gap-4">
@@ -2108,12 +2351,19 @@ export default function ParticipantCreatePage() {
                       {SERVICE_STREAMS.map((stream) => {
                         const selected = field.value ?? []
                         const checked = selected.includes(stream)
+                        // INTAKE-03: CommunityAccessDailyLiving's own checkbox is intercepted by
+                        // handleCommunityAccessStreamChange (the stream-removal confirm dialog,
+                        // see its doc above) instead of field.onChange directly — every other
+                        // stream keeps the plain toggle. The id is also this checkbox's
+                        // CONDITIONAL_FIELDS focusFallback anchor.
+                        const isCommunityAccess = stream === 'CommunityAccessDailyLiving'
                         return (
                           <label key={stream} className="flex items-center gap-3 py-1 min-h-[44px]">
                             <input
                               type="checkbox"
+                              id={isCommunityAccess ? 'serviceStreams-CommunityAccessDailyLiving' : undefined}
                               checked={checked}
-                              onChange={(e) => {
+                              onChange={isCommunityAccess ? handleCommunityAccessStreamChange : (e) => {
                                 field.onChange(
                                   e.target.checked
                                     ? [...selected, stream]
@@ -2612,6 +2862,39 @@ export default function ParticipantCreatePage() {
                 <textarea id="skinIntegrity" {...register('skinIntegrity')} rows={2} placeholder="Skin integrity notes..." />
               </FormField>
             </Card>
+
+            {/* INTAKE-03 — Community Mobility & Transport Risk checklist (research spec §3,
+                Section 7), CA-gated: only shown when CommunityAccessDailyLiving is one of the
+                selected service streams (see the NDIS & Funding step). */}
+            {isVisible('checklistItems.0.value') && (
+              <Card title="Community Access — additional" className="space-y-4 md:col-span-2">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Community Mobility &amp; Transport Risk checklist. Shown because Community Access / Daily Living is selected as a service stream.
+                </p>
+                <div className="space-y-3">
+                  {COMMUNITY_MOBILITY_RISK_ITEM_TYPES.map((type) => {
+                    const index = CHECKLIST_ITEM_TYPES.indexOf(type)
+                    const value = watchedValues.checklistItems?.[index]?.value
+                    const label = CHECKLIST_ITEM_TYPE_LABELS[type as ChecklistItemType]
+                    return (
+                      <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                        <h4 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h4>
+                        <ChecklistValueToggleField
+                          control={control}
+                          name={`checklistItems.${index}.value` as FieldPath<ParticipantFormData>}
+                          ariaLabel={`Value — ${label}`}
+                        />
+                        {value && (
+                          <FormField label="Notes" className="mb-0">
+                            <textarea {...register(`checklistItems.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                          </FormField>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+            )}
           </div>
         )}
 
@@ -2766,6 +3049,13 @@ export default function ParticipantCreatePage() {
                   )}
                 />
               </fieldset>
+              {/* INTAKE-03: the 5 new HIDPA categories above are appended straight into
+                  HIDPA_SUPPORT_CATEGORIES/the map above — same visibility as the original 9,
+                  UNGATED (not CommunityAccessDailyLiving-conditional). hidpaNotes below is
+                  likewise ungated. */}
+              <FormField label="HIDPA Notes" hint="Free-text elaboration, e.g. why 'None of the above' applies, or detail alongside a ticked category.">
+                <textarea id="hidpaNotes" {...register('hidpaNotes')} rows={2} placeholder="Additional HIDPA notes..." />
+              </FormField>
             </Card>
 
             <Card title="Medical" className="space-y-4 md:col-span-2">
@@ -2900,6 +3190,64 @@ export default function ParticipantCreatePage() {
                 </FormField>
               </div>
             </Card>
+
+            {/* INTAKE-03 — Community Access Behaviour & Support Detail (research spec §3, Section
+                7/8), CA-gated. Structured Community Behaviours of Concern checklist first (a
+                distinct concept from the narrative Triggers/De-Escalation fields below it — see
+                that sub-heading), then the narrative fields. */}
+            {isVisible('signsHappyAndSettled') && (
+              <Card title="Community Access — additional" className="space-y-4 md:col-span-2">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Shown because Community Access / Daily Living is selected as a service stream.
+                </p>
+                <FormField label="Signs I Am Happy and Settled">
+                  <textarea id="signsHappyAndSettled" {...register('signsHappyAndSettled')} rows={2} placeholder="What it looks like when this participant is happy and settled..." />
+                </FormField>
+                <FormField label="What Helps Me Calm Down">
+                  <textarea id="whatHelpsMeCalmDown" {...register('whatHelpsMeCalmDown')} rows={2} placeholder="Calming strategies that work..." />
+                </FormField>
+
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-[var(--color-foreground)]">Community Behaviours of Concern</h4>
+                  {COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES.map((type) => {
+                    const index = CHECKLIST_ITEM_TYPES.indexOf(type)
+                    const value = watchedValues.checklistItems?.[index]?.value
+                    const label = CHECKLIST_ITEM_TYPE_LABELS[type as ChecklistItemType]
+                    return (
+                      <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                        <h5 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h5>
+                        <ChecklistValueToggleField
+                          control={control}
+                          name={`checklistItems.${index}.value` as FieldPath<ParticipantFormData>}
+                          ariaLabel={`Value — ${label}`}
+                        />
+                        {value && (
+                          <FormField label="Notes" className="mb-0">
+                            <textarea {...register(`checklistItems.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                          </FormField>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-[var(--color-foreground)]">Triggers &amp; De-Escalation</h4>
+                  <FormField label="Triggers">
+                    <textarea id="bocTriggers" {...register('bocTriggers')} rows={2} placeholder="What triggers a behaviour of concern..." />
+                  </FormField>
+                  <FormField label="Early Warning Signs">
+                    <textarea id="bocEarlyWarningSigns" {...register('bocEarlyWarningSigns')} rows={2} placeholder="Early warning signs to watch for..." />
+                  </FormField>
+                  <FormField label="De-Escalation Strategies">
+                    <textarea id="bocDeEscalationStrategies" {...register('bocDeEscalationStrategies')} rows={2} placeholder="What works to de-escalate..." />
+                  </FormField>
+                  <FormField label="What Not To Do">
+                    <textarea id="bocWhatNotToDo" {...register('bocWhatNotToDo')} rows={2} placeholder="What NOT to do..." />
+                  </FormField>
+                </div>
+              </Card>
+            )}
           </div>
         )}
 
@@ -2940,6 +3288,14 @@ export default function ParticipantCreatePage() {
                           <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
                         </FormField>
                       )}
+                      {/* INTAKE-03: CA-gated per-row "how to help me" instruction, nested inside
+                          the same {level && ...} local conditional as Notes above — only shown
+                          once a level is set. */}
+                      {level && isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
+                        <FormField label="How To Help Me" className="mb-0">
+                          <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
+                        </FormField>
+                      )}
                     </div>
                   )
                 })}
@@ -2966,6 +3322,11 @@ export default function ParticipantCreatePage() {
                       {level && (
                         <FormField label="Notes" className="mb-0">
                           <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                        </FormField>
+                      )}
+                      {level && isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
+                        <FormField label="How To Help Me" className="mb-0">
+                          <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
                         </FormField>
                       )}
                     </div>
@@ -3038,6 +3399,27 @@ export default function ParticipantCreatePage() {
                 <textarea id="likesDislikes" {...register('likesDislikes')} rows={2} placeholder="Likes and dislikes..." />
               </FormField>
             </Card>
+
+            {/* INTAKE-03 — "What My Supports Look Like" (research spec §3, Section 9), CA-gated. */}
+            {isVisible('supportsLookLikeMorning') && (
+              <Card title="Community Access — additional" className="space-y-4 md:col-span-2">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  What My Supports Look Like — only complete where Oassist staff are providing support in that window.
+                </p>
+                <FormField label="Morning">
+                  <textarea id="supportsLookLikeMorning" {...register('supportsLookLikeMorning')} rows={2} placeholder="What support looks like in the morning..." />
+                </FormField>
+                <FormField label="Day">
+                  <textarea id="supportsLookLikeDay" {...register('supportsLookLikeDay')} rows={2} placeholder="What support looks like during the day..." />
+                </FormField>
+                <FormField label="Afternoon-Evening">
+                  <textarea id="supportsLookLikeAfternoonEvening" {...register('supportsLookLikeAfternoonEvening')} rows={2} placeholder="What support looks like in the afternoon/evening..." />
+                </FormField>
+                <FormField label="Overnight">
+                  <textarea id="supportsLookLikeOvernight" {...register('supportsLookLikeOvernight')} rows={2} placeholder="What support looks like overnight..." />
+                </FormField>
+              </Card>
+            )}
           </div>
         )}
 
