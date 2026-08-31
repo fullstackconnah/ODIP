@@ -1,5 +1,5 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement } from './enums'
-import { SERVICE_STREAMS } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from './enums'
+import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -35,6 +35,33 @@ export const MOBILITY_SUPPORT_OPTIONS = [
   'Standing frame',
 ] as const
 export type MobilitySupportOption = typeof MOBILITY_SUPPORT_OPTIONS[number]
+
+/**
+ * DIAG-01: curated diagnoses picklist, mirroring the backend's Odip.Domain.Enums.Diagnoses.All
+ * (SeedData/DataDictionarySeed.json, fieldId MED-016) — the spreadsheet is the source of truth.
+ * Unlike MOBILITY_SUPPORT_OPTIONS (a closed picklist), diagnoses fields are open text — this list
+ * drives the curated dropdown/checkbox UI only; DIAGNOSIS_OTHER_SENTINEL is the "Other — specify"
+ * escape hatch offered alongside it (never itself a stored value — see the primary-diagnosis
+ * select handling in ParticipantCreatePage.tsx).
+ */
+export const DIAGNOSIS_OPTIONS = [
+  'Intellectual Disability',
+  'Autism Spectrum Disorder',
+  'Cerebral Palsy',
+  'Down Syndrome',
+  'Epilepsy',
+  'Acquired Brain Injury',
+  'Psychosocial Disability',
+  'Vision Impairment',
+  'Hearing Impairment',
+  'Multiple Sclerosis',
+  'Muscular Dystrophy',
+  'Spina Bifida',
+  'Stroke',
+  'Dementia',
+] as const
+export type DiagnosisOption = typeof DIAGNOSIS_OPTIONS[number]
+export const DIAGNOSIS_OTHER_SENTINEL = 'Other — specify'
 
 export const OVERNIGHT_SUPPORT_LABELS: Record<OvernightSupportType, string> = {
   None: 'None',
@@ -74,6 +101,54 @@ export const SERVICE_STREAM_TITLES: Record<ServiceStream, string> = {
   HIDPA: 'High Intensity Daily Personal Activities',
   CommunityAccessDailyLiving: 'Community Access / Daily Living',
   CommunityNursing: 'Community Nursing',
+}
+
+/**
+ * DIAG-02. Short labels for the HIDPA multi-select checkboxes.
+ *
+ * CAVEAT: sourced from 3 corroborating secondary sources (NDS, Team DSC, CentroQMS), not the
+ * primary NDIS Quality & Safeguards Commission PDF (fetch failed repeatedly during research —
+ * see Odip.Domain.Enums.HidpaSupportCategory's backend doc comment for the link). Treat category
+ * names as reliable; verify exact wording before it ships as end-user-facing copy elsewhere.
+ */
+export const HIDPA_CATEGORY_LABELS: Record<HidpaSupportCategory, string> = {
+  ComplexBowelCare: 'Complex Bowel Care',
+  EnteralFeeding: 'Enteral Feeding Support',
+  DysphagiaManagement: 'Dysphagia Support',
+  TracheostomyCare: 'Tracheostomy Support',
+  VentilatorSupport: 'Ventilator Support',
+  UrinaryCatheterManagement: 'Urinary Catheter Support',
+  SubcutaneousInjections: 'Subcutaneous Injections',
+  ComplexWoundCare: 'Complex Wound Care',
+  EpilepsyManagement: 'Epilepsy and Seizure Management',
+}
+
+/** Full descriptor-style titles — surfaced as a title tooltip on the HIDPA checkboxes, same pattern as SERVICE_STREAM_TITLES. */
+export const HIDPA_CATEGORY_TITLES: Record<HidpaSupportCategory, string> = {
+  ComplexBowelCare: 'Manual/assisted bowel management, incl. enemas, suppositories, and ostomy/stoma bowel care.',
+  EnteralFeeding: 'Delivering nutrition/fluids/medication via feeding tube (PEG, NG, jejunostomy), incl. site and equipment care.',
+  DysphagiaManagement: 'Safe mealtime assistance and swallowing-risk management for a diagnosed severe swallowing disorder.',
+  TracheostomyCare: 'Care of a surgical airway (tube, stoma site, suctioning) for participants who breathe via tracheostomy.',
+  VentilatorSupport: 'Operating/monitoring mechanical ventilation equipment and responding to alarms/emergencies.',
+  UrinaryCatheterManagement: 'Managing indwelling/suprapubic catheters — bag changes, hygiene, blockage/infection risk monitoring.',
+  SubcutaneousInjections: 'Administering prescribed subcutaneous injections (incl. insulin).',
+  ComplexWoundCare: 'Managing wounds requiring specialised dressing/monitoring beyond basic first aid.',
+  EpilepsyManagement: "Recognising and responding to seizures per the participant's seizure-management plan.",
+}
+
+/**
+ * Same comma-separated-flags-names wire format as ServiceStreams (see parseServiceStreams'
+ * doc above) — HidpaSupportCategories is a [Flags] enum column with the same global
+ * JsonStringEnumConverter behaviour.
+ */
+export function parseHidpaCategories(value: string | null | undefined): HidpaSupportCategory[] {
+  if (!value || value === 'None') return []
+  const known: readonly string[] = HIDPA_SUPPORT_CATEGORIES
+  return value.split(',').map((s) => s.trim()).filter((s): s is HidpaSupportCategory => known.includes(s))
+}
+
+export function formatHidpaCategories(categories: HidpaSupportCategory[] | undefined): string {
+  return categories && categories.length ? categories.join(', ') : 'None'
 }
 
 /**
@@ -153,6 +228,11 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   addressSuburb: string | null
   addressState: string | null
   addressPostcode: string | null
+  /** DIAG-01. */
+  primaryDiagnosis: string | null
+  otherDiagnoses: string[]
+  /** DIAG-02. Wire format: comma-separated HidpaSupportCategory flag names, or "None" — see parseHidpaCategories. */
+  hidpaSupportCategories: string
   hasRestrictivePracticeFlag: boolean
   mobilityNotes: string | null
   equipmentRequirements: string | null
@@ -211,6 +291,11 @@ export interface CreateParticipantDto {
   mobilityAidWheelchair: boolean
   mobilityAidWalker: boolean
   mobilitySupportOptions: string[]
+  /** DIAG-01. Free text — selected from DIAGNOSIS_OPTIONS or typed via the "Other — specify" escape hatch (collapsed to this one field before submit; see ParticipantCreatePage.tsx). */
+  primaryDiagnosis?: string | null
+  otherDiagnoses: string[]
+  /** DIAG-02. Wire format: comma-separated HidpaSupportCategory flag names, or "None" — see formatHidpaCategories. */
+  hidpaSupportCategories: string
   isHighSupport: boolean
   isIntensiveSupport: boolean
   overnightSupport: OvernightSupportType

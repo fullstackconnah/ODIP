@@ -1,7 +1,7 @@
 {
   "source": "ODIP Master Data Dictionary.xlsx",
   "generated": "2026-08-02",
-  "fieldCount": 285,
+  "fieldCount": 287,
   "fields": [
     {
       "fieldId": "ORG-001",
@@ -1228,6 +1228,30 @@
       "dataType": "Boolean",
       "allowedValues": "Yes/No",
       "notes": "High Intensity Daily Personal Activities flag (per condition)",
+      "appearsIn": [
+        "Participant Profile"
+      ]
+    },
+    {
+      "fieldId": "MED-016",
+      "name": "Diagnoses",
+      "domain": "Health & Medical",
+      "comments": "DIAG-01. Primary diagnosis (single) plus any number of other diagnoses (multi-select), each drawn from this curated list with an 'Other — specify' escape hatch. Supplements the free-text MED-001 summary field rather than replacing it.",
+      "dataType": "Multi-select",
+      "allowedValues": "Intellectual Disability/Autism Spectrum Disorder/Cerebral Palsy/Down Syndrome/Epilepsy/Acquired Brain Injury/Psychosocial Disability/Vision Impairment/Hearing Impairment/Multiple Sclerosis/Muscular Dystrophy/Spina Bifida/Stroke/Dementia/Other — specify",
+      "notes": "Sourced by Odip.Domain.Enums.Diagnoses.All (backend) / DIAGNOSIS_OPTIONS (frontend) — this spreadsheet entry is the source of truth for that curated set, mirroring MOB-004's relationship to MobilitySupportOptions.",
+      "appearsIn": [
+        "Participant Profile"
+      ]
+    },
+    {
+      "fieldId": "MED-017",
+      "name": "HIDPA Support Categories",
+      "domain": "Health & Medical",
+      "comments": "DIAG-02. High Intensity Daily Personal Activities support categories, per NDIS Quality & Safeguards Commission Supplementary Module 1 (High Intensity Support Skills Descriptors, effective 1 Feb 2024). An Epilepsy diagnosis (MED-016) pre-selects Epilepsy Management by default (de-selectable) — see conditionalFields.ts's useDeriveFieldValues.",
+      "dataType": "Multi-select",
+      "allowedValues": "Complex Bowel Care/Enteral Feeding Support/Dysphagia Support/Tracheostomy Support/Ventilator Support/Urinary Catheter Support/Subcutaneous Injections/Complex Wound Care/Epilepsy and Seizure Management",
+      "notes": "Category list corroborated across 3 secondary sources (NDS, Team DSC, CentroQMS) — verbatim descriptor wording not yet checked against the primary Commission PDF; see Odip.Domain.Enums.HidpaSupportCategory's doc comment. Distinct from the ServiceStreams.HIDPA business-stream tag (MOB/NDIS domain elsewhere) — this records WHICH support categories, not whether the participant engages the HIDPA service line.",
       "appearsIn": [
         "Participant Profile"
       ]

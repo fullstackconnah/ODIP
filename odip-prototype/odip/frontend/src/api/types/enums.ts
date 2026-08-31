@@ -227,3 +227,17 @@ export type LivingArrangement = typeof LIVING_ARRANGEMENTS[number]
 // entity/DTO field is a plain string, same convention as the existing Contact.State column) ──
 export const AU_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] as const
 export type AuState = typeof AU_STATES[number]
+
+// ── HIDPA Support Category (DIAG-02 — High Intensity Daily Personal Activities) ──
+// Backend is a [Flags] int enum on Participant.HidpaSupportCategories, same
+// JsonStringEnumConverter comma-separated-names wire format as ServiceStreams (see
+// parseHidpaCategories/formatHidpaCategories in participants.ts). NOT the same concept as
+// ServiceStream's 'HIDPA' member above — that tags a participant as engaging the HIDPA
+// business/service line in general; this records WHICH specific high-intensity support
+// categories they need. See Odip.Domain.Enums.HidpaSupportCategory's doc comment (backend) for
+// the sourcing/caveat on the descriptor wording.
+export const HIDPA_SUPPORT_CATEGORIES = [
+  'ComplexBowelCare', 'EnteralFeeding', 'DysphagiaManagement', 'TracheostomyCare', 'VentilatorSupport',
+  'UrinaryCatheterManagement', 'SubcutaneousInjections', 'ComplexWoundCare', 'EpilepsyManagement',
+] as const
+export type HidpaSupportCategory = typeof HIDPA_SUPPORT_CATEGORIES[number]

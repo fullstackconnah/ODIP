@@ -91,6 +91,9 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Region).HasMaxLength(100);
             entity.Property(e => e.FundingOrganisation).HasMaxLength(200);
             entity.Property(e => e.MobilitySupportOptions).HasColumnType("text[]");
+            // DIAG-01
+            entity.Property(e => e.PrimaryDiagnosis).HasMaxLength(200);
+            entity.Property(e => e.OtherDiagnoses).HasColumnType("text[]");
             // LIVING-02/03/04
             entity.Property(e => e.MainSupportPersonName).HasMaxLength(200);
             entity.Property(e => e.MainSupportPersonRelationship).HasMaxLength(100);

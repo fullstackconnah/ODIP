@@ -11,8 +11,8 @@ import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, List
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
-import type { Gender, FundingSource, LivingArrangement } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories } from '@/api/types/participants'
+import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
 import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
@@ -54,6 +54,9 @@ export default function ParticipantDetailPage() {
     p.requiresCommode && 'Commode',
     p.requiresStandingMachine && 'Standing Machine',
   ].filter((v): v is string => !!v)
+
+  // DIAG-02.
+  const hidpaCategories = parseHidpaCategories(p.hidpaSupportCategories)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -195,6 +198,30 @@ export default function ParticipantDetailPage() {
               <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
             </div>
           </Card>
+          {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.medicalSummary) && (
+            <Card title="Medical" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                <span className="text-[var(--color-muted-foreground)]">Primary Diagnosis</span>
+                <span>{p.primaryDiagnosis || '—'}</span>
+                <span className="text-[var(--color-muted-foreground)]">Other Diagnoses</span>
+                <span className="flex flex-wrap gap-1">
+                  {p.otherDiagnoses?.length ? p.otherDiagnoses.map((d) => <Tag key={d} label={d} />) : '—'}
+                </span>
+                <span className="text-[var(--color-muted-foreground)]">HIDPA Support Categories</span>
+                <span className="flex flex-wrap gap-1">
+                  {hidpaCategories.length
+                    ? hidpaCategories.map((c) => <Tag key={c} label={HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c} />)
+                    : '—'}
+                </span>
+                {p.medicalSummary && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Medical Summary</span>
+                    <span className="whitespace-pre-line">{p.medicalSummary}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
           {(p.mobilityNotes || p.transportRequirements || p.equipmentRequirements || p.notes) && (
             <Card title="Notes" className="md:col-span-2">
               <div className="text-sm space-y-2 text-[var(--color-muted-foreground)]">

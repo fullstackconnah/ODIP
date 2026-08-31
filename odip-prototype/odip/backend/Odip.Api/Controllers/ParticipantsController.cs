@@ -77,6 +77,23 @@ public class ParticipantsController : ControllerBase
             : null;
 
     /// <summary>
+    /// DIAG-01: unlike ValidateGender/ValidateFundingSource/ValidateLivingArrangement (which
+    /// enforce a required companion field), diagnoses are open text with a curated picklist as UI
+    /// guidance only (see Diagnoses.cs's type doc) — so the only server-side rule is "not blank,
+    /// not absurdly long" per entry, applied to both PrimaryDiagnosis and every OtherDiagnoses row.
+    /// </summary>
+    private static string? ValidateDiagnoses(CreateParticipantDto dto)
+    {
+        if (dto.PrimaryDiagnosis != null && dto.PrimaryDiagnosis.Trim().Length == 0)
+            return "Primary diagnosis cannot be blank.";
+        if (dto.OtherDiagnoses.Any(d => string.IsNullOrWhiteSpace(d)))
+            return "Other diagnoses cannot contain a blank entry.";
+        if (dto.OtherDiagnoses.Any(d => d.Length > 200))
+            return "Each diagnosis must be 200 characters or fewer.";
+        return null;
+    }
+
+    /// <summary>
     /// LIVING-02/03/04 server-side clearing: defence in depth, mirroring FundingOrganisation's
     /// pattern in Create/Update above — a field belonging to a non-selected arrangement type (or,
     /// for WhoLivesWith, belonging to a LivesWithOthers=false Independent participant) is stored
@@ -180,6 +197,7 @@ public class ParticipantsController : ControllerBase
             MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
             MobilitySupportOptions = p.MobilitySupportOptions,
+            PrimaryDiagnosis = p.PrimaryDiagnosis, OtherDiagnoses = p.OtherDiagnoses, HidpaSupportCategories = p.HidpaSupportCategories,
             OvernightSupport = p.OvernightSupport, OvernightRatio = p.OvernightRatio,
             RequiresHiLoBed = p.RequiresHiLoBed, RequiresHoist = p.RequiresHoist, RequiresShowerChair = p.RequiresShowerChair,
             RequiresCommode = p.RequiresCommode, RequiresStandingMachine = p.RequiresStandingMachine,
@@ -224,6 +242,10 @@ public class ParticipantsController : ControllerBase
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
+        var diagnosesError = ValidateDiagnoses(dto);
+        if (diagnosesError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
+
         if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
@@ -240,6 +262,7 @@ public class ParticipantsController : ControllerBase
             IsRepeatClient = dto.IsRepeatClient,
             MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
             MobilitySupportOptions = dto.MobilitySupportOptions,
+            PrimaryDiagnosis = dto.PrimaryDiagnosis, OtherDiagnoses = dto.OtherDiagnoses, HidpaSupportCategories = dto.HidpaSupportCategories,
             IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
             OvernightSupport = dto.OvernightSupport, OvernightRatio = dto.OvernightRatio,
             RequiresHiLoBed = dto.RequiresHiLoBed, RequiresHoist = dto.RequiresHoist, RequiresShowerChair = dto.RequiresShowerChair,
@@ -314,6 +337,7 @@ public class ParticipantsController : ControllerBase
         p.IsRepeatClient = dto.IsRepeatClient;
         p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;
+        p.PrimaryDiagnosis = dto.PrimaryDiagnosis; p.OtherDiagnoses = dto.OtherDiagnoses; p.HidpaSupportCategories = dto.HidpaSupportCategories;
         p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
         p.OvernightSupport = dto.OvernightSupport; p.OvernightRatio = dto.OvernightRatio;
         p.RequiresHiLoBed = dto.RequiresHiLoBed; p.RequiresHoist = dto.RequiresHoist; p.RequiresShowerChair = dto.RequiresShowerChair;

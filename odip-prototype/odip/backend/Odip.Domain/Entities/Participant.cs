@@ -143,6 +143,33 @@ public class Participant : ITenantEntity
     /// backfill is performed for participants that existed before this field was added.
     /// </summary>
     public ServiceStreams ServiceStreams { get; set; } = ServiceStreams.None;
+
+    /// <summary>
+    /// DIAG-01: the participant's single primary diagnosis. Free text bounded to 200 chars —
+    /// selected from the curated <see cref="Enums.Diagnoses.All"/> picklist in the wizard, or
+    /// typed via the "Other — specify" escape hatch; either way the same plain string is stored
+    /// (see <see cref="Enums.Diagnoses"/>'s type doc for why this is not validated as a closed
+    /// set server-side). Null/unset until intake captures it.
+    /// </summary>
+    public string? PrimaryDiagnosis { get; set; }
+
+    /// <summary>
+    /// DIAG-01: any number of additional diagnoses beyond <see cref="PrimaryDiagnosis"/>. Same
+    /// multi-value-as-array-column convention as <see cref="MobilitySupportOptions"/> (a
+    /// Postgres text[] column via EF, see OdipDbContext), and the same open-set/curated-plus-other
+    /// entries as PrimaryDiagnosis.
+    /// </summary>
+    public List<string> OtherDiagnoses { get; set; } = new();
+
+    /// <summary>
+    /// DIAG-02: HIDPA (High Intensity Daily Personal Activities) support categories the
+    /// participant needs. See <see cref="Enums.HidpaSupportCategory"/>'s doc for the full
+    /// rationale, the epilepsy-derivation rule, and why this is a distinct concept from
+    /// <see cref="ServiceStreams.HIDPA"/>. Defaults to <see cref="Enums.HidpaSupportCategory.None"/>
+    /// — no backfill for pre-existing participants.
+    /// </summary>
+    public HidpaSupportCategory HidpaSupportCategories { get; set; } = HidpaSupportCategory.None;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
