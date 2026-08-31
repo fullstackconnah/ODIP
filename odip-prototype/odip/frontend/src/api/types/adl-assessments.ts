@@ -13,6 +13,13 @@ export interface ParticipantAdlAssessmentDto {
   /** Nullable: null = not yet assessed. */
   level: AdlLevel | null
   notes: string | null
+  /**
+   * INTAKE-03, CommunityAccessDailyLiving stream-specific: per-ADL-row "how to help me" free-text
+   * instruction (research spec §3). Distinct from `notes` (generic, always-visible elaboration) —
+   * see the backend ParticipantAdlAssessment entity's INTAKE-03 RECONCILIATION doc for why this is
+   * a separate column rather than a reuse of Notes.
+   */
+  howToHelpNotes: string | null
   createdAt: string | null
   updatedAt: string | null
 }
@@ -25,11 +32,15 @@ export interface CreateParticipantAdlAssessmentDto {
   adlType: AdlType
   level: AdlLevel | null
   notes?: string | null
+  /** INTAKE-03, CommunityAccessDailyLiving stream-specific. See ParticipantAdlAssessmentDto's doc. */
+  howToHelpNotes?: string | null
 }
 
 export interface UpsertParticipantAdlAssessmentDto {
   level: AdlLevel | null
   notes?: string | null
+  /** INTAKE-03, CommunityAccessDailyLiving stream-specific. See ParticipantAdlAssessmentDto's doc. */
+  howToHelpNotes?: string | null
 }
 
 /**

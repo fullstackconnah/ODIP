@@ -244,9 +244,20 @@ export type AuState = typeof AU_STATES[number]
 // business/service line in general; this records WHICH specific high-intensity support
 // categories they need. See Odip.Domain.Enums.HidpaSupportCategory's doc comment (backend) for
 // the sourcing/caveat on the descriptor wording.
+//
+// INTAKE-03 RECONCILIATION: the Community Access service-stream variant's 14-item HIDPA
+// checklist (research spec §3, Section 3) was checked against this enum's original 9 members —
+// 9 of the 14 already existed (added by DIAG-02) and matched near-verbatim, so this member list
+// was extended (StomaColostomyCare..ComplexMedicationAdministration below) rather than replaced
+// or duplicated. The checklist's "None of the above" item is covered by the array simply being
+// empty; its free-text HIDPA-notes item is Participant.HidpaNotes (see HIDPA_CATEGORY_LABELS'
+// sibling notes field, hidpaNotes, on the wizard's Medical step — ungated, same visibility as
+// this whole category list).
 export const HIDPA_SUPPORT_CATEGORIES = [
   'ComplexBowelCare', 'EnteralFeeding', 'DysphagiaManagement', 'TracheostomyCare', 'VentilatorSupport',
   'UrinaryCatheterManagement', 'SubcutaneousInjections', 'ComplexWoundCare', 'EpilepsyManagement',
+  'StomaColostomyCare', 'DiabetesManagementInsulin', 'PressureCare', 'HighIntensityBehaviourSupport',
+  'ComplexMedicationAdministration',
 ] as const
 export type HidpaSupportCategory = typeof HIDPA_SUPPORT_CATEGORIES[number]
 
@@ -326,3 +337,88 @@ export type AdlLevel = typeof ADL_LEVELS[number]
 // ── Contact Role Status ───────────────────────────────────
 export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
 export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]
+
+// ── Checklist Item Type (INTAKE-03/04, CommunityAccessDailyLiving service-stream variant) ──
+// One member per checklist item across BOTH new Community Access checklists (research spec §3):
+// the 9-item Community Mobility & Transport Risk checklist (Section 7) and the 12-item Community
+// Behaviours of Concern checklist (Section 8's checkbox list, distinct from the free-text
+// bocTriggers/bocEarlyWarningSigns/bocDeEscalationStrategies/bocWhatNotToDo fields on the
+// participant). Modelled as ONE array (not two), exactly like ADL_TYPES spans Personal and
+// Community/Domestic ADLs — fixed declaration order matches the backend's
+// Enum.GetValues<ChecklistItemType>() order exactly: first 9 are Community Mobility & Transport
+// Risk, remaining 12 are Community Behaviours of Concern. See CHECKLIST_ITEM_TYPE_GROUPS below
+// for the grouping this order backs (mirrors the backend's ChecklistItemTypeGroups).
+//
+// COMMUNITY MOBILITY & TRANSPORT RISK (first 9, research spec §3 Section 7, quoted verbatim):
+// "Uses wheelchair, Wheelchair accessible vehicle required, Walking frame/ aids, Issues with
+// uneven ground, Falls risk, Fatigues easily, Seatbelt must be checked, Sensory sensitivities
+// (noise/crowds), Communication aid/device used".
+// COMMUNITY BEHAVIOURS OF CONCERN (remaining 12, research spec §3 Section 8, quoted verbatim):
+// "Harm to self, Harm to others, Property damage, Absconding/running away, Verbal
+// aggression/yelling, Physical aggression, Refusal to move/ transition, Inappropriate public
+// behaviour, Taking others' property, Removing clothing in public, Removing seatbelt in vehicle,
+// Other".
+export const CHECKLIST_ITEM_TYPES = [
+  // Community Mobility & Transport Risk checklist (research spec §3, Section 7)
+  'UsesWheelchair', 'WheelchairAccessibleVehicleRequired', 'WalkingFrameOrAids', 'IssuesWithUnevenGround',
+  'FallsRisk', 'FatiguesEasily', 'SeatbeltMustBeChecked', 'SensorySensitivities', 'CommunicationAidOrDeviceUsed',
+  // Community Behaviours of Concern checklist (research spec §3, Section 8)
+  'HarmToSelf', 'HarmToOthers', 'PropertyDamage', 'AbscondingRunningAway', 'VerbalAggressionYelling',
+  'PhysicalAggression', 'RefusalToMoveTransition', 'InappropriatePublicBehaviour', 'TakingOthersProperty',
+  'RemovingClothingInPublic', 'RemovingSeatbeltInVehicle', 'Other',
+] as const
+export type ChecklistItemType = typeof CHECKLIST_ITEM_TYPES[number]
+
+/** The Community Mobility & Transport Risk subset of CHECKLIST_ITEM_TYPES — the first 9 declaration-order entries. */
+export const COMMUNITY_MOBILITY_RISK_ITEM_TYPES = CHECKLIST_ITEM_TYPES.slice(0, 9)
+/** The Community Behaviours of Concern subset of CHECKLIST_ITEM_TYPES — the remaining 12 declaration-order entries. */
+export const COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES = CHECKLIST_ITEM_TYPES.slice(9)
+
+export const CHECKLIST_TYPES = ['CommunityMobilityRisk', 'CommunityBehaviourOfConcern'] as const
+export type ChecklistType = typeof CHECKLIST_TYPES[number]
+
+/** ChecklistItemType -> ChecklistType lookup, derived from CHECKLIST_ITEM_TYPES' fixed order — mirrors the backend's ChecklistItemTypeGroups.CategoryOf. Not a stored field on either side. Same "category derived, not stored" shape as adlCategoryOf/ADL_TYPES above. */
+export function getChecklistItemGroup(type: ChecklistItemType): ChecklistType {
+  return (COMMUNITY_MOBILITY_RISK_ITEM_TYPES as readonly string[]).includes(type) ? 'CommunityMobilityRisk' : 'CommunityBehaviourOfConcern'
+}
+
+/** Plain-English labels for the 21 CHECKLIST_ITEM_TYPES, per the quoted item lists in this const's doc comment above. */
+export const CHECKLIST_ITEM_TYPE_LABELS: Record<ChecklistItemType, string> = {
+  UsesWheelchair: 'Uses wheelchair',
+  WheelchairAccessibleVehicleRequired: 'Wheelchair accessible vehicle required',
+  WalkingFrameOrAids: 'Walking frame / aids',
+  IssuesWithUnevenGround: 'Issues with uneven ground',
+  FallsRisk: 'Falls risk',
+  FatiguesEasily: 'Fatigues easily',
+  SeatbeltMustBeChecked: 'Seatbelt must be checked',
+  SensorySensitivities: 'Sensory sensitivities (noise/crowds)',
+  CommunicationAidOrDeviceUsed: 'Communication aid/device used',
+  HarmToSelf: 'Harm to self',
+  HarmToOthers: 'Harm to others',
+  PropertyDamage: 'Property damage',
+  AbscondingRunningAway: 'Absconding / running away',
+  VerbalAggressionYelling: 'Verbal aggression / yelling',
+  PhysicalAggression: 'Physical aggression',
+  RefusalToMoveTransition: 'Refusal to move / transition',
+  InappropriatePublicBehaviour: 'Inappropriate public behaviour',
+  TakingOthersProperty: "Taking others' property",
+  RemovingClothingInPublic: 'Removing clothing in public',
+  RemovingSeatbeltInVehicle: 'Removing seatbelt in vehicle',
+  Other: 'Other',
+}
+
+/**
+ * Tri-state checklist item answer. Null on a ParticipantChecklistItemDto's `value` = not yet
+ * assessed (mirrors AdlLevel's nullable convention above). Backend is a plain (non-flags) int
+ * enum with the same global JsonStringEnumConverter wire format as AdlLevel — a bare string, not
+ * comma-joined.
+ */
+export const CHECKLIST_ITEM_VALUES = ['No', 'Yes', 'NotApplicable'] as const
+export type ChecklistItemValue = typeof CHECKLIST_ITEM_VALUES[number]
+
+/** Mirrors ADL_LEVEL_LABELS' convention (a label map alongside the value's own const) — see adl-assessments.ts. */
+export const CHECKLIST_ITEM_VALUE_LABELS: Record<ChecklistItemValue, string> = {
+  No: 'No',
+  Yes: 'Yes',
+  NotApplicable: 'N/A',
+}
