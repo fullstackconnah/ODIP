@@ -20,10 +20,12 @@ public class ParticipantsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly StaffCompatibilityLinkService _compatLink;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink)
+    private readonly ParticipantDocumentService _documentService;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService)
     {
         _db = db;
         _compatLink = compatLink;
+        _documentService = documentService;
     }
 
     /// <summary>
@@ -1004,6 +1006,24 @@ public class ParticipantsController : ControllerBase
         sp.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<SupportProfileDto>.Ok(new SupportProfileDto { Id = sp.Id, ParticipantId = sp.ParticipantId }));
+    }
+
+    /// <summary>DOC-01: download the Intake Form PDF for a participant.</summary>
+    [HttpGet("{id:guid}/documents/intake")]
+    public async Task<IActionResult> DownloadIntakeFormPdf(Guid id, CancellationToken ct)
+    {
+        var result = await _documentService.GenerateIntakeFormAsync(id, ct);
+        if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        return File(result.Value.Content, "application/pdf", result.Value.FileName);
+    }
+
+    /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>
+    [HttpGet("{id:guid}/documents/profile")]
+    public async Task<IActionResult> DownloadParticipantProfilePdf(Guid id, CancellationToken ct)
+    {
+        var result = await _documentService.GenerateParticipantProfileAsync(id, ct);
+        if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
 
     /// <summary>Archive (soft-delete) a participant.</summary>

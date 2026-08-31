@@ -161,6 +161,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimGenerationService>(
 builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>();
+// DOC-01 — Intake Form / Participant Profile PDF exports.
+builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 
 // ── Participant Risk Alerts (task 6c) — computed, not persisted ──
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();

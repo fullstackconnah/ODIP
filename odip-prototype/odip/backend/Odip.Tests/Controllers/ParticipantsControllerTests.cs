@@ -61,7 +61,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -80,7 +80,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -99,7 +99,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -119,7 +119,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -131,7 +131,7 @@ public class ParticipantsControllerTests
     public async Task Create_ServiceStreamsFlags_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { ServiceStreams = Domain.Enums.ServiceStreams.STA | Domain.Enums.ServiceStreams.Trip };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -151,7 +151,7 @@ public class ParticipantsControllerTests
     public async Task Create_GenderAndPlanDates_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -175,7 +175,7 @@ public class ParticipantsControllerTests
     public async Task Create_GenderOtherWithoutSelfDescription_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { Gender = Domain.Enums.Gender.Other, GenderSelfDescription = null };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -189,7 +189,7 @@ public class ParticipantsControllerTests
     public async Task Create_GenderOtherWithSelfDescription_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { Gender = Domain.Enums.Gender.Other, GenderSelfDescription = "Genderfluid" };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -209,7 +209,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -264,7 +264,7 @@ public class ParticipantsControllerTests
     public async Task Create_DefaultServiceStreams_IsNone()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
@@ -280,7 +280,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithRiskEntries_CreatesThemTransactionallyWithParticipant()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -309,7 +309,7 @@ public class ParticipantsControllerTests
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -327,7 +327,7 @@ public class ParticipantsControllerTests
     public async Task Create_NoRiskEntries_CreatesParticipantWithNoRiskEntries()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
@@ -342,7 +342,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithConsents_CreatesThemTransactionallyWithParticipant()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -366,7 +366,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithPartialConsents_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -384,7 +384,7 @@ public class ParticipantsControllerTests
     public async Task Create_GrantedFalseVsNull_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -412,7 +412,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -428,7 +428,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -458,7 +458,7 @@ public class ParticipantsControllerTests
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -487,7 +487,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var withConsent = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -522,7 +522,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var dto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -543,7 +543,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithHealthConditions_CreatesThemTransactionallyWithParticipant()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -571,7 +571,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -588,7 +588,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -622,7 +622,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var withCondition = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -652,7 +652,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var dto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -676,7 +676,7 @@ public class ParticipantsControllerTests
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -694,7 +694,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithPartialHealthConditions_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -717,7 +717,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithClinicalEnrichmentFields_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -769,7 +769,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithAdlAssessments_CreatesThemTransactionallyWithParticipant()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -797,7 +797,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetById(participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -814,7 +814,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -844,7 +844,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var withAssessment = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -873,7 +873,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var dto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -897,7 +897,7 @@ public class ParticipantsControllerTests
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -915,7 +915,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithPartialAdlAssessments_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -947,7 +947,7 @@ public class ParticipantsControllerTests
     public async Task Create_FullAdlAssessmentsArrayAllNull_PersistsZeroRows()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { AdlAssessments = FullNullAdlArray() };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -961,7 +961,7 @@ public class ParticipantsControllerTests
     public async Task Create_FullAdlAssessmentsArrayWithTwoAnswered_PersistsExactlyTwoRows()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var items = FullNullAdlArray();
         var dressingIdx = items.FindIndex(i => i.AdlType == Domain.Enums.AdlType.Dressing);
@@ -991,7 +991,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var withAssessments = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1021,7 +1021,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithDailyLivingFields_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1066,7 +1066,7 @@ public class ParticipantsControllerTests
     public async Task Create_WithNewPersonContactRole_CreatesPersonAndRoleTransactionally()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1099,7 +1099,7 @@ public class ParticipantsControllerTests
         var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson" };
         db.People.Add(person);
         db.SaveChanges();
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1121,7 +1121,7 @@ public class ParticipantsControllerTests
     public async Task Create_PlanManagerRoleForSelfManagedParticipant_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         // MinimalCreateDto defaults PlanType to SelfManaged — CONTACT-02: Plan Manager is only
         // available for plan-managed participants (ContactRoleRules.Validate).
@@ -1144,7 +1144,7 @@ public class ParticipantsControllerTests
     public async Task Create_PlanNomineeRoleForUnder18Participant_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1165,7 +1165,7 @@ public class ParticipantsControllerTests
     public async Task Create_TwoActivePrimaryNextOfKinRoles_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1191,7 +1191,7 @@ public class ParticipantsControllerTests
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1216,7 +1216,7 @@ public class ParticipantsControllerTests
     public async Task Create_DiagnosesAndHidpa_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1242,7 +1242,7 @@ public class ParticipantsControllerTests
     public async Task Create_DefaultDiagnosesAndHidpa_AreEmptyAndNone()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
         var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
@@ -1262,7 +1262,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1287,7 +1287,7 @@ public class ParticipantsControllerTests
     public async Task Create_BlankPrimaryDiagnosis_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { PrimaryDiagnosis = "   " };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1301,7 +1301,7 @@ public class ParticipantsControllerTests
     public async Task Create_BlankOtherDiagnosisEntry_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { OtherDiagnoses = new() { "Epilepsy", "  " } };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1315,7 +1315,7 @@ public class ParticipantsControllerTests
     public async Task Create_OtherDiagnosisEntryTooLong_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { OtherDiagnoses = new() { new string('x', 201) } };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1337,7 +1337,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1365,7 +1365,7 @@ public class ParticipantsControllerTests
         // exact-string epilepsy-derivation match (primaryDiagnosis === 'Epilepsy' /
         // otherDiagnoses.includes('Epilepsy')).
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1389,7 +1389,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1454,7 +1454,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -1470,7 +1470,7 @@ public class ParticipantsControllerTests
         // HasRestrictivePracticeFlag — this test exists so a future re-add would need to touch
         // this file (and its accompanying comment) rather than slipping back in silently.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
@@ -1489,7 +1489,7 @@ public class ParticipantsControllerTests
         db.Users.Add(staff);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var dto = MinimalCreateDto() with { PreferredStaffId = staff.Id };
 
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1511,7 +1511,7 @@ public class ParticipantsControllerTests
         db.Users.AddRange(oldStaff, newStaff);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var createDto = MinimalCreateDto() with { PreferredStaffId = oldStaff.Id };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
@@ -1539,7 +1539,7 @@ public class ParticipantsControllerTests
         db.Users.Add(staff);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var createDto = MinimalCreateDto() with { PreferredStaffId = staff.Id };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
@@ -1573,7 +1573,7 @@ public class ParticipantsControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1594,7 +1594,7 @@ public class ParticipantsControllerTests
     public async Task Create_DefaultFundingSource_IsNdis()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
@@ -1608,7 +1608,7 @@ public class ParticipantsControllerTests
     public async Task Create_FundingSourceOtherWithoutSpecify_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = null };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1622,7 +1622,7 @@ public class ParticipantsControllerTests
     public async Task Create_FundingSourceOtherWithSpecify_Succeeds_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Other, FundingOrganisation = "Self-funded" };
         var createResult = await controller.Create(dto, CancellationToken.None);
@@ -1643,7 +1643,7 @@ public class ParticipantsControllerTests
         // client-side before the INTAKE-07 engine's payload exclusion kicks in), the server never
         // persists it — Ndis ignores the field entirely, mirroring the frontend's exclusion rule.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { FundingSource = Domain.Enums.ParticipantFundingSource.Ndis, FundingOrganisation = "Stray Plan Manager" };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1662,7 +1662,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1690,7 +1690,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1713,7 +1713,7 @@ public class ParticipantsControllerTests
     public async Task Create_DefaultLivingArrangement_IsNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
@@ -1727,7 +1727,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementFamilyWithoutSupportPersonName_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { LivingArrangement = Domain.Enums.LivingArrangement.Family, MainSupportPersonName = null };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1741,7 +1741,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementFamily_Succeeds_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1772,7 +1772,7 @@ public class ParticipantsControllerTests
         // Defence in depth (mirrors FundingOrganisation): a stray payload carrying fields for
         // OTHER arrangement types alongside Family must not persist them.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1801,7 +1801,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementIndependentLivesWithOthersWithoutWho_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1820,7 +1820,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementIndependentNotLivingWithOthers_Succeeds_WhoLivesWithNotRequired()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1842,7 +1842,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementIndependentLivesWithOthers_Succeeds_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1865,7 +1865,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementSupportedAccommodationWithoutSilProviderName_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { LivingArrangement = Domain.Enums.LivingArrangement.SupportedAccommodation, SilProviderName = null };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1879,7 +1879,7 @@ public class ParticipantsControllerTests
     public async Task Create_LivingArrangementSupportedAccommodation_Succeeds_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -1917,7 +1917,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -1946,7 +1946,7 @@ public class ParticipantsControllerTests
     public async Task Create_AddressPostcodeNotFourDigits_ReturnsBadRequest(string postcode)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { AddressPostcode = postcode };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1960,7 +1960,7 @@ public class ParticipantsControllerTests
     public async Task Create_AddressPostcodeBlank_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
@@ -1976,7 +1976,7 @@ public class ParticipantsControllerTests
     public async Task Create_InvalidPhone_ReturnsBadRequest(string phone)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { Phone = phone };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -1994,7 +1994,7 @@ public class ParticipantsControllerTests
     public async Task Create_AuTolerantPhoneFormats_Succeed(string phone)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { Phone = phone };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2009,7 +2009,7 @@ public class ParticipantsControllerTests
     public async Task Create_InvalidEmail_ReturnsBadRequest(string email)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { Email = email };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2023,7 +2023,7 @@ public class ParticipantsControllerTests
     public async Task Create_PhoneAndEmailBlank_Succeeds()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var result = await controller.Create(MinimalCreateDto(), CancellationToken.None);
 
@@ -2036,7 +2036,7 @@ public class ParticipantsControllerTests
         // Format checks on whatever WAS provided are never relaxed for a draft — same doctrine
         // as Create_DraftWithInvalidPostcode_StillReturnsBadRequest.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, Email = "not-an-email" };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2053,7 +2053,7 @@ public class ParticipantsControllerTests
         // Format checks on whatever WAS provided are never relaxed for a draft — same doctrine
         // as Create_DraftWithInvalidEmail_StillReturnsBadRequest/Create_DraftWithInvalidPostcode_StillReturnsBadRequest.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, Phone = "not a phone" };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2070,7 +2070,7 @@ public class ParticipantsControllerTests
         // Absence of the new optional fields never blocks a draft — matches every other
         // optional field's draft behaviour.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2084,7 +2084,7 @@ public class ParticipantsControllerTests
         // A draft may fill in only SOME of the Key Identifiers step's fields — the rest stay
         // null, and nothing about that partial fill blocks the save.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto
         {
@@ -2111,7 +2111,7 @@ public class ParticipantsControllerTests
         // — this covers the other half: a real, non-null decimal value actually persists and
         // reads back exactly, not just "doesn't error."
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { WeightKg = 78.5m, HeightCm = 179m };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2133,7 +2133,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var updateDto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -2158,7 +2158,7 @@ public class ParticipantsControllerTests
     public async Task Create_WeightOutOfRange_ReturnsBadRequest(decimal weight)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { WeightKg = weight };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2176,7 +2176,7 @@ public class ParticipantsControllerTests
     public async Task Create_HeightOutOfRange_ReturnsBadRequest(decimal height)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { HeightCm = height };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2192,7 +2192,7 @@ public class ParticipantsControllerTests
     {
         // 999.99 is the exact numeric(5,2) ceiling — must be accepted, not rejected off-by-one.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { WeightKg = 999.99m, HeightCm = 999.99m };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2206,7 +2206,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithOnlyFirstName_Succeeds_PersistsPartialData()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         // Deliberately bare: no LastName, no PlanType/OvernightSupport/OvernightRatio/
         // SupportRatio — none of MinimalCreateDto's usual minimums. A draft must persist
@@ -2230,7 +2230,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithBothNamesBlank_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto { IsDraft = true };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2247,7 +2247,7 @@ public class ParticipantsControllerTests
         // IsDraft=false (the default, including a final wizard submission) keeps requiring
         // both names — same floor [Required] used to enforce.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with { LastName = "  " };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2263,7 +2263,7 @@ public class ParticipantsControllerTests
         // Format/consistency checks on whatever WAS provided are never relaxed for a draft —
         // only the FirstName/LastName floor is.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto { FirstName = "Priya", IsDraft = true, AddressPostcode = "12" };
         var result = await controller.Create(dto, CancellationToken.None);
@@ -2278,7 +2278,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithFundingSourceOtherButNoOrganisation_StillReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto
         {
@@ -2301,7 +2301,7 @@ public class ParticipantsControllerTests
         // "Add contact" and then abandon it (no person picked/typed) before "Save as draft" —
         // that row must be silently dropped rather than 400ing the whole draft save.
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto
         {
@@ -2319,7 +2319,7 @@ public class ParticipantsControllerTests
     public async Task Create_DraftWithEmptyAndFullyValidContactRows_PersistsOnlyTheValidRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = new CreateParticipantDto
         {
@@ -2348,7 +2348,7 @@ public class ParticipantsControllerTests
     public async Task Create_NonDraftWithEmptyContactRow_StillReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
@@ -2370,7 +2370,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(draft);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var finalDto = new UpdateParticipantDto
         {
             FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -2398,7 +2398,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(finalised);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var dto = new UpdateParticipantDto
         {
             FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
@@ -2424,7 +2424,7 @@ public class ParticipantsControllerTests
         db.Participants.Add(draft);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         // Still no LastName — a later wizard step's draft save, still missing required fields.
         var updateDto = new UpdateParticipantDto { FirstName = "Priya", Region = "South East QLD", IsDraft = true, IsActive = true };
 
@@ -2446,7 +2446,7 @@ public class ParticipantsControllerTests
         db.Participants.AddRange(normal, draft);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetAll(null, null, null, null, null, true, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -2464,7 +2464,7 @@ public class ParticipantsControllerTests
         db.Participants.AddRange(normal, draft);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetAll(null, null, null, null, null, false, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -2483,7 +2483,7 @@ public class ParticipantsControllerTests
         db.Participants.AddRange(normal, draft);
         db.SaveChanges();
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
         var result = await controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -2496,7 +2496,7 @@ public class ParticipantsControllerTests
     public async Task Create_AddressFields_Succeeds_RoundTripsThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
 
         var dto = MinimalCreateDto() with
         {
