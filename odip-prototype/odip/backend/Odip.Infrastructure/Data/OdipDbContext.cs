@@ -114,6 +114,23 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.AddressSuburb).HasMaxLength(100);
             entity.Property(e => e.AddressState).HasMaxLength(10);
             entity.Property(e => e.AddressPostcode).HasMaxLength(4);
+            // INTAKE sub-wave A — Participant Details additions.
+            entity.Property(e => e.MiddleName).HasMaxLength(100);
+            entity.Property(e => e.PlaceOfBirth).HasMaxLength(200);
+            entity.Property(e => e.Country).HasMaxLength(100);
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            // INTAKE sub-wave A — Key Identifiers step.
+            entity.Property(e => e.PensionCardNumber).HasMaxLength(50);
+            entity.Property(e => e.MedicareNumber).HasMaxLength(50);
+            entity.Property(e => e.CompanionCardNumber).HasMaxLength(50);
+            entity.Property(e => e.PrivateHealthFund).HasMaxLength(100);
+            entity.Property(e => e.PrivateHealthMembershipNumber).HasMaxLength(50);
+            entity.Property(e => e.TaxiCardNumber).HasMaxLength(50);
+            entity.Property(e => e.HairColour).HasMaxLength(50);
+            entity.Property(e => e.EyeColour).HasMaxLength(50);
+            entity.Property(e => e.WeightKg).HasPrecision(5, 2);
+            entity.Property(e => e.HeightCm).HasPrecision(5, 2);
             entity.Ignore(e => e.FullName);
 
             entity.HasIndex(e => e.IsActive);
