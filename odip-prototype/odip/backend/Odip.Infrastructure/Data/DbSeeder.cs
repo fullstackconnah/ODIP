@@ -320,6 +320,147 @@ public static class DbSeeder
         // never distinguished the two), empty/null defaults to "Ndis".
         foreach (var p in participants)
             p.FundingSource = string.IsNullOrWhiteSpace(p.FundingOrganisation) ? ParticipantFundingSource.Ndis : ParticipantFundingSource.Other;
+
+        // ── Coherence pass (seed-expansion task) ─────────────────
+        // Participants[0..3] already carry address/living-arrangement data from earlier waves
+        // (LIVING-01..04, INTAKE-06) — backfill address/living-arrangement for the remaining 16
+        // below. No participant had PlanStartDate/PlanEndDate set before this task, so the ??=
+        // loop backfills plan dates for all 20, giving every demo participant a plan date so the
+        // dashboard's plan-expiry alerts (ParticipantAlertsService rule 4) have something to key
+        // off. Gender is already set on every seed row above, so it needs no backfill here.
+        var planToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        foreach (var p in participants)
+        {
+            p.PlanStartDate ??= planToday.AddMonths(-6);
+            p.PlanEndDate ??= planToday.AddMonths(6);
+        }
+
+        void SetAddress(Participant p, string street, string suburb, string state, string postcode)
+        {
+            p.AddressStreet = street; p.AddressSuburb = suburb; p.AddressState = state; p.AddressPostcode = postcode;
+        }
+
+        // Ethan Davis — Independent, lives with housemates.
+        participants[4].LivingArrangement = LivingArrangement.Independent;
+        participants[4].LivesWithOthers = true;
+        participants[4].WhoLivesWith = "Two housemates";
+        SetAddress(participants[4], "9 Currumbin Court", "Robina", "QLD", "4226");
+
+        // Mia Anderson — Family arrangement.
+        participants[5].LivingArrangement = LivingArrangement.Family;
+        participants[5].MainSupportPersonName = "Karen Anderson";
+        participants[5].MainSupportPersonRelationship = "Mother";
+        participants[5].OthersLivingInAccommodation = "Two younger siblings";
+        participants[5].ResidentialInfo = "Single-storey family home";
+        SetAddress(participants[5], "21 Jacaranda Avenue", "Sunnybank", "QLD", "4109");
+
+        // Jack Thomas — Independent, lives alone.
+        participants[6].LivingArrangement = LivingArrangement.Independent;
+        participants[6].LivesWithOthers = false;
+        SetAddress(participants[6], "56 Glebe Point Road", "Glebe", "NSW", "2037");
+
+        // Charlotte White — Supported accommodation (group home), matches her SIL-style support profile.
+        participants[7].LivingArrangement = LivingArrangement.SupportedAccommodation;
+        participants[7].SilProviderName = "Yarra Living Supports";
+        participants[7].SilProviderContactPhone = "(03) 9555 2211";
+        participants[7].AccommodationType = "Group home";
+        participants[7].OnSiteSupportHours = "24/7";
+        SetAddress(participants[7], "10/48 Hoddle Street", "Richmond", "VIC", "3121");
+
+        // William Martin — Independent, lives with partner.
+        participants[8].LivingArrangement = LivingArrangement.Independent;
+        participants[8].LivesWithOthers = true;
+        participants[8].WhoLivesWith = "Partner";
+        SetAddress(participants[8], "3 Ipswich Road", "Woodridge", "QLD", "4114");
+
+        // Amelia Garcia — Independent, lives alone. Deliberately given an EXPIRED plan while
+        // remaining IsActive=true — the plan-expired Critical alert demo (ParticipantAlertsService
+        // excludes only inactive participants from the aggregate, so a genuinely active client
+        // with a lapsed plan is exactly the scenario that alert exists to surface).
+        participants[9].LivingArrangement = LivingArrangement.Independent;
+        participants[9].LivesWithOthers = false;
+        SetAddress(participants[9], "88 Chapel Street", "Windsor", "VIC", "3181");
+        participants[9].PlanStartDate = planToday.AddYears(-1).AddDays(-5);
+        participants[9].PlanEndDate = planToday.AddDays(-5);
+
+        // Isabella Clarke — Family arrangement.
+        participants[10].LivingArrangement = LivingArrangement.Family;
+        participants[10].MainSupportPersonName = "Anne Clarke";
+        participants[10].MainSupportPersonRelationship = "Mother";
+        participants[10].ResidentialInfo = "Townhouse, ground floor unit";
+        SetAddress(participants[10], "17 Vulture Street", "West End", "QLD", "4101");
+
+        // Mason Nguyen — Family arrangement.
+        participants[11].LivingArrangement = LivingArrangement.Family;
+        participants[11].MainSupportPersonName = "Linh Nguyen";
+        participants[11].MainSupportPersonRelationship = "Mother";
+        participants[11].OthersLivingInAccommodation = "Younger brother";
+        participants[11].ResidentialInfo = "Single-storey home with ramp access";
+        SetAddress(participants[11], "42 Logan Road", "Mount Gravatt", "QLD", "4122");
+
+        // Chloe Robinson — Supported accommodation (group home).
+        participants[12].LivingArrangement = LivingArrangement.SupportedAccommodation;
+        participants[12].SilProviderName = "Harbourview SIL Services";
+        participants[12].SilProviderContactPhone = "(02) 9555 8890";
+        participants[12].AccommodationType = "Group home";
+        participants[12].OnSiteSupportHours = "24/7";
+        SetAddress(participants[12], "6/120 Oxford Street", "Bondi Junction", "NSW", "2022");
+
+        // Thomas Patel — Independent, lives with a housemate.
+        participants[13].LivingArrangement = LivingArrangement.Independent;
+        participants[13].LivesWithOthers = true;
+        participants[13].WhoLivesWith = "Housemate";
+        SetAddress(participants[13], "29 Church Street", "Brighton", "VIC", "3186");
+
+        // Grace O'Sullivan — Independent, lives alone.
+        participants[14].LivingArrangement = LivingArrangement.Independent;
+        participants[14].LivesWithOthers = false;
+        SetAddress(participants[14], "15 Nerang Street", "Nerang", "QLD", "4211");
+
+        // Harrison Lee — Supported accommodation (group home).
+        participants[15].LivingArrangement = LivingArrangement.SupportedAccommodation;
+        participants[15].SilProviderName = "Riverstone SIL";
+        participants[15].SilProviderContactPhone = "(07) 3555 4410";
+        participants[15].AccommodationType = "Group home";
+        participants[15].OnSiteSupportHours = "Overnight sleepover support";
+        SetAddress(participants[15], "80 Vulture Street", "Woolloongabba", "QLD", "4102");
+
+        // Zoe Campbell — churned: marked inactive with an already-lapsed plan. This is the
+        // "genuinely expired plan on an inactive participant" case the alerts aggregate's
+        // activeOnly filter correctly excludes (still visible on her own detail page).
+        participants[16].IsActive = false;
+        participants[16].LivingArrangement = LivingArrangement.Independent;
+        participants[16].LivesWithOthers = false;
+        SetAddress(participants[16], "5 King Street", "Erskineville", "NSW", "2043");
+        participants[16].PlanStartDate = planToday.AddYears(-1).AddDays(-60);
+        participants[16].PlanEndDate = planToday.AddDays(-60);
+
+        // Ryan Murphy — Family arrangement (spouse/carer).
+        participants[17].LivingArrangement = LivingArrangement.Family;
+        participants[17].MainSupportPersonName = "Sandra Lee";
+        participants[17].MainSupportPersonRelationship = "Spouse / Carer";
+        participants[17].ResidentialInfo = "Single-storey home, modified bathroom";
+        SetAddress(participants[17], "11 Station Street", "Camberwell", "VIC", "3124");
+
+        // Natalie Walsh — Independent, lives with partner. Warning-band plan demo: expires within
+        // the 30-day plan-expiring-soon window.
+        participants[18].LivingArrangement = LivingArrangement.Independent;
+        participants[18].LivesWithOthers = true;
+        participants[18].WhoLivesWith = "Partner";
+        SetAddress(participants[18], "34 Wellington Road", "East Brisbane", "QLD", "4169");
+        participants[18].PlanStartDate = planToday.AddYears(-1).AddDays(12);
+        participants[18].PlanEndDate = planToday.AddDays(12);
+
+        // Dylan Foster — Family arrangement. Second Warning-band plan demo, further out than
+        // Natalie's so the two don't read as duplicates of the same date.
+        participants[19].LivingArrangement = LivingArrangement.Family;
+        participants[19].MainSupportPersonName = "Local guardian";
+        participants[19].MainSupportPersonRelationship = "Father";
+        participants[19].ResidentialInfo = "Family home";
+        SetAddress(participants[19], "22 Riverside Parade", "Kangaroo Point", "QLD", "4169");
+        participants[19].PlanStartDate = planToday.AddYears(-1).AddDays(24);
+        participants[19].PlanEndDate = planToday.AddDays(24);
+
         context.Participants.AddRange(participants);
 
         // ── Support Profiles (8) ─────────────────────────────────
@@ -880,8 +1021,23 @@ public static class DbSeeder
         var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
         var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
         var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+        // Seed-expansion task: additional demo participants that now carry their own medication charts.
+        var liamId = Guid.Parse("d1000000-0000-0000-0000-000000000001");
+        var oliviaId = Guid.Parse("d1000000-0000-0000-0000-000000000004");
+        var miaId = Guid.Parse("d1000000-0000-0000-0000-000000000006");
+        var williamId = Guid.Parse("d1000000-0000-0000-0000-000000000009");
+        var isabellaId = Guid.Parse("d2000000-0000-0000-0000-000000000001");
+        var chloeId = Guid.Parse("d2000000-0000-0000-0000-000000000003");
+        var graceId = Guid.Parse("d2000000-0000-0000-0000-000000000005");
+        var zoeId = Guid.Parse("d2000000-0000-0000-0000-000000000007");
+        var ryanId = Guid.Parse("d2000000-0000-0000-0000-000000000008");
+        var natalieId = Guid.Parse("d2000000-0000-0000-0000-000000000009");
 
-        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var targetIds = new[]
+        {
+            sophieId, charlotteId, harrisonId,
+            liamId, oliviaId, miaId, williamId, isabellaId, chloeId, graceId, zoeId, ryanId, natalieId,
+        };
         var existingParticipants = await context.Participants.IgnoreQueryFilters()
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
@@ -894,6 +1050,18 @@ public static class DbSeeder
         var risperidoneId = Guid.Parse("70000000-0000-0000-0000-000000000003");
         var sertralineId = Guid.Parse("70000000-0000-0000-0000-000000000004");
         var insulinId = Guid.Parse("70000000-0000-0000-0000-000000000005");
+        // Seed-expansion task — new medication charts covering the remaining schedule/packaging
+        // variety the brief calls out (SpecificDays, EveryNDays, extra PRN/high-risk/forms).
+        var prednisoloneId = Guid.Parse("70000000-0000-0000-0000-000000000006");
+        var ferrousSulfateId = Guid.Parse("70000000-0000-0000-0000-000000000007");
+        var warfarinId = Guid.Parse("70000000-0000-0000-0000-000000000008");
+        var omeprazoleId = Guid.Parse("70000000-0000-0000-0000-000000000009");
+        var movicolId = Guid.Parse("70000000-0000-0000-0000-00000000000a");
+        var digoxinId = Guid.Parse("70000000-0000-0000-0000-00000000000b");
+        var salbutamolId = Guid.Parse("70000000-0000-0000-0000-00000000000c");
+        var betamethasoneId = Guid.Parse("70000000-0000-0000-0000-00000000000d");
+        var latanoprostId = Guid.Parse("70000000-0000-0000-0000-00000000000e");
+        var miaSertralineId = Guid.Parse("70000000-0000-0000-0000-00000000000f");
 
         var medications = new List<ParticipantMedication>();
 
@@ -989,15 +1157,228 @@ public static class DbSeeder
             });
         }
 
+        // ── Seed-expansion task: additional medication charts ──
+        if (existingParticipants.Contains(williamId))
+        {
+            // EveryNDays — alternate-day dosing to minimise side effects, anchored 40 days back.
+            medications.Add(new ParticipantMedication
+            {
+                Id = prednisoloneId, TenantId = demoTenantId, ParticipantId = williamId,
+                Name = "Prednisolone", Strength = "5mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (5mg)", Directions = "Take with breakfast on dosing days only.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Frequency = MedicationFrequency.EveryNDays, IntervalDays = 2, AnchorDate = DateOnly.FromDateTime(today.AddDays(-40)),
+                Purpose = "Chronic inflammatory condition maintenance — alternate-day regimen to minimise long-term corticosteroid side effects.",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.PromptOnly,
+                PrescriberName = "Dr. Sanjay Mehta", PharmacyName = "Woodridge Family Pharmacy", Packaging = PackagingType.WebsterPack,
+                StartDate = today.AddMonths(-3), NextReviewDue = today.AddMonths(3),
+                ConsentObtained = true, ConsentGivenBy = "William Martin (self)", ConsentDate = today.AddMonths(-3),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(graceId))
+        {
+            // SpecificDays — Mon/Wed/Fri alternate-day iron dosing (reduces GI side effects vs daily).
+            medications.Add(new ParticipantMedication
+            {
+                Id = ferrousSulfateId, TenantId = demoTenantId, ParticipantId = graceId,
+                Name = "Ferrous Sulfate", Strength = "325mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (325mg)", Directions = "Take on an empty stomach where tolerated.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Frequency = MedicationFrequency.SpecificDays, DaysOfWeek = Weekdays.Monday | Weekdays.Wednesday | Weekdays.Friday,
+                Purpose = "Iron-deficiency anaemia — alternate-day dosing per current GP guidance.",
+                DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.PromptOnly,
+                PrescriberName = "Dr. Wendy Cho", PharmacyName = "Underwood Pharmacy", Packaging = PackagingType.DosetteBox,
+                StartDate = today.AddMonths(-2), NextReviewDue = today.AddMonths(4),
+                ConsentObtained = true, ConsentGivenBy = "Grace O'Sullivan (self)", ConsentDate = today.AddMonths(-2),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(ryanId))
+        {
+            // High-risk (witness required) — post-stroke anticoagulation.
+            medications.Add(new ParticipantMedication
+            {
+                Id = warfarinId, TenantId = demoTenantId, ParticipantId = ryanId,
+                Name = "Warfarin", Strength = "3mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (3mg)", Directions = "Take at the same time each evening. Do not double up if a dose is missed.",
+                Type = MedicationType.Regular, TimesOfDay = "18:00",
+                Purpose = "Anticoagulation — atrial fibrillation following ischaemic stroke.",
+                IsHighRisk = true,
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr. Farid Haidari", PharmacyName = "Box Hill Amcal Pharmacy", Packaging = PackagingType.OriginalPackaging,
+                StartDate = today.AddMonths(-9), NextReviewDue = today.AddMonths(1),
+                ConsentObtained = true, ConsentGivenBy = "Sandra Lee (spouse/carer)", ConsentDate = today.AddMonths(-9),
+                StorageRequirements = "Store below 25°C, away from light. Bleeding risk — report any unusual bruising immediately.",
+                Status = MedicationStatus.Active,
+            });
+
+            medications.Add(new ParticipantMedication
+            {
+                Id = omeprazoleId, TenantId = demoTenantId, ParticipantId = ryanId,
+                Name = "Omeprazole", Strength = "20mg", Form = MedicationForm.Capsule, Route = MedicationRoute.Oral,
+                DoseDescription = "1 capsule (20mg)", Directions = "Take before breakfast.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Gastroprotection alongside anticoagulant therapy.",
+                DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.PromptOnly,
+                PrescriberName = "Dr. Farid Haidari", PharmacyName = "Box Hill Amcal Pharmacy", Packaging = PackagingType.OriginalPackaging,
+                StartDate = today.AddMonths(-9), NextReviewDue = today.AddMonths(3),
+                ConsentObtained = true, ConsentGivenBy = "Sandra Lee (spouse/carer)", ConsentDate = today.AddMonths(-9),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(oliviaId))
+        {
+            // Enteral route/Powder form — matches Olivia's existing "PEG feeding schedule" support-profile note.
+            medications.Add(new ParticipantMedication
+            {
+                Id = movicolId, TenantId = demoTenantId, ParticipantId = oliviaId,
+                Name = "Movicol (Macrogol)", Strength = "13.7g/sachet", Form = MedicationForm.Powder, Route = MedicationRoute.Enteral,
+                DoseDescription = "1 sachet dissolved in 125mL water, via PEG", Directions = "Flush PEG line before and after administration.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Bowel management — chronic constipation prophylaxis.",
+                DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr. Amina Yusuf", PharmacyName = "Box Hill Amcal Pharmacy", Packaging = PackagingType.Sachet,
+                StartDate = today.AddMonths(-11), NextReviewDue = today.AddMonths(2),
+                ConsentObtained = true, ConsentGivenBy = "Robert White (father)", ConsentDate = today.AddMonths(-11),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(chloeId))
+        {
+            medications.Add(new ParticipantMedication
+            {
+                Id = digoxinId, TenantId = demoTenantId, ParticipantId = chloeId,
+                Name = "Digoxin", Strength = "0.25mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (0.25mg)", Directions = "Take with breakfast. No missed doses — contact GP if a dose is missed.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Congenital heart condition — rate control.",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+                PrescriberName = "Dr Jason Park", PharmacyName = "Bondi Junction Chemist", Packaging = PackagingType.Other,
+                StartDate = today.AddYears(-3), NextReviewDue = today.AddMonths(6),
+                ConsentObtained = true, ConsentGivenBy = "Peter Robinson (father/guardian)", ConsentDate = today.AddYears(-3),
+                StorageRequirements = "Narrow therapeutic index — double-check dose against the MAR before every administration.",
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(zoeId))
+        {
+            // PRN with max/24h + min-interval, Inhaler form.
+            medications.Add(new ParticipantMedication
+            {
+                Id = salbutamolId, TenantId = demoTenantId, ParticipantId = zoeId,
+                Name = "Salbutamol", Strength = "100mcg/actuation", Form = MedicationForm.Inhaler, Route = MedicationRoute.Inhaled,
+                DoseDescription = "2 puffs via spacer", Directions = "Use spacer device. Rinse mouth after use if more than occasional.",
+                Type = MedicationType.Prn, PrnIndication = "Wheeze or shortness of breath (asthma)",
+                PrnMaxDosesPer24h = 8, PrnMinIntervalMinutes = 240,
+                Purpose = "Reliever for mild intermittent asthma.",
+                DrugSchedule = DrugSchedule.Unscheduled, SupportLevel = MedicationSupportLevel.SelfAdministered,
+                PrescriberName = "Dr. Wendy Cho", PharmacyName = "Newtown Community Pharmacy", Packaging = PackagingType.OriginalPackaging,
+                StartDate = today.AddYears(-1), NextReviewDue = today.AddMonths(6),
+                ConsentObtained = true, ConsentGivenBy = "Zoe Campbell (self)", ConsentDate = today.AddYears(-1),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(natalieId))
+        {
+            // Daily multi-time, Cream/Topical form.
+            medications.Add(new ParticipantMedication
+            {
+                Id = betamethasoneId, TenantId = demoTenantId, ParticipantId = natalieId,
+                Name = "Betamethasone", Strength = "0.05%", Form = MedicationForm.Cream, Route = MedicationRoute.Topical,
+                DoseDescription = "Thin layer to affected areas", Directions = "Apply sparingly, avoid face and skin folds.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00,20:00",
+                Purpose = "Eczema flare management.",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Assist,
+                PrescriberName = "Dr. Wendy Cho", PharmacyName = "Underwood Pharmacy", Packaging = PackagingType.OriginalPackaging,
+                StartDate = today.AddMonths(-1), NextReviewDue = today.AddMonths(2),
+                ConsentObtained = true, ConsentGivenBy = "Natalie Walsh (self)", ConsentDate = today.AddMonths(-1),
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(isabellaId))
+        {
+            // Drops/Ocular form.
+            medications.Add(new ParticipantMedication
+            {
+                Id = latanoprostId, TenantId = demoTenantId, ParticipantId = isabellaId,
+                Name = "Latanoprost", Strength = "0.005%", Form = MedicationForm.Drops, Route = MedicationRoute.Ocular,
+                DoseDescription = "1 drop each eye", Directions = "Instil at night. Wait 5 minutes if using other eye drops.",
+                Type = MedicationType.Regular, TimesOfDay = "21:00",
+                Purpose = "Open-angle glaucoma — intraocular pressure control.",
+                DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.PromptOnly,
+                PrescriberName = "Dr Jason Park", PharmacyName = "Kangaroo Point Pharmacy", Packaging = PackagingType.OriginalPackaging,
+                StartDate = today.AddMonths(-4), NextReviewDue = today.AddMonths(5),
+                ConsentObtained = true, ConsentGivenBy = "Isabella Clarke (self)", ConsentDate = today.AddMonths(-4),
+                StorageRequirements = "Refrigerate unopened bottle; discard 4 weeks after opening.",
+                Status = MedicationStatus.Active,
+            });
+        }
+
+        if (existingParticipants.Contains(miaId))
+        {
+            // Structured record backing Mia's existing SupportProfile free text ("Sertraline 50mg morning").
+            medications.Add(new ParticipantMedication
+            {
+                Id = miaSertralineId, TenantId = demoTenantId, ParticipantId = miaId,
+                Name = "Sertraline", Strength = "50mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+                DoseDescription = "1 tablet (50mg)", Directions = "Take each morning with breakfast.",
+                Type = MedicationType.Regular, TimesOfDay = "08:00",
+                Purpose = "Ongoing management of mild anxiety.",
+                IsPsychotropic = true, DrugSchedule = DrugSchedule.Schedule4,
+                SupportLevel = MedicationSupportLevel.PromptOnly, PrescriberName = "Dr. Wendy Cho",
+                PharmacyName = "Sunnybank Community Pharmacy", Packaging = PackagingType.WebsterPack,
+                StartDate = today.AddMonths(-7), NextReviewDue = today.AddMonths(5),
+                ConsentObtained = true, ConsentGivenBy = "Mia Anderson (self)", ConsentDate = today.AddMonths(-7),
+                Status = MedicationStatus.Active,
+            });
+        }
+
         if (medications.Count == 0)
             return;
 
         context.ParticipantMedications.AddRange(medications);
         await context.SaveChangesAsync(ct);
 
-        // ── Sample administration history (yesterday) — mix of Administered and one Refused ──
+        // ── Sample administration history — a two-week scatter across Administered/Refused/
+        // Withheld/Missed/WrongMedication, witness states across NotRequired/Pending/Approved/
+        // Declined, RecordedByUserId set from the seeded demo users, and a couple of records with
+        // AdministeredAtTimeZone set (seed-expansion task). The original "yesterday" records above
+        // this comment (IDs ...0001-...0004) are left exactly as they were.
         var yesterday = today.AddDays(-1);
         var administrations = new List<MedicationAdministration>();
+
+        // Fixed demo-user ids (see SeedAsync) — used directly rather than re-querying, since this
+        // method only runs after SeedAsync has already created them.
+        var jamesUserId = Guid.Parse("b1000000-0000-0000-0000-000000000003");
+        var emilyUserId = Guid.Parse("b2000000-0000-0000-0000-000000000002");
+        var danielUserId = Guid.Parse("b2000000-0000-0000-0000-000000000003");
+        var rachelUserId = Guid.Parse("b2000000-0000-0000-0000-000000000001");
+        var sarahUserId = Guid.Parse("b1000000-0000-0000-0000-000000000002");
+        var marcusUserId = Guid.Parse("a2000000-0000-0000-0000-000000000001");
+        var priyaUserId = Guid.Parse("a2000000-0000-0000-0000-000000000002");
+        var lachlanUserId = Guid.Parse("a2000000-0000-0000-0000-000000000003");
+        var jadeUserId = Guid.Parse("a2000000-0000-0000-0000-000000000004");
+        var brendanUserId = Guid.Parse("a2000000-0000-0000-0000-000000000005");
+
+        // Most recent Monday/Wednesday/Friday on or before today — used for Grace's SpecificDays
+        // (Mon/Wed/Fri) Ferrous Sulfate history so the dates line up with her actual schedule
+        // regardless of what day the seeder happens to run on.
+        DateTime MostRecentWeekday(DateTime from, DayOfWeek day)
+        {
+            var diff = ((int)from.DayOfWeek - (int)day + 7) % 7;
+            return from.AddDays(-diff);
+        }
+        var recentMonday = MostRecentWeekday(today, DayOfWeek.Monday);
+        var recentWednesday = MostRecentWeekday(today, DayOfWeek.Wednesday);
+        var recentFriday = MostRecentWeekday(today, DayOfWeek.Friday);
 
         if (existingParticipants.Contains(sophieId))
         {
@@ -1041,6 +1422,302 @@ public static class DbSeeder
                 Status = MedicationAdministrationStatus.Administered, DoseGiven = "18 units",
                 RecordedByName = "Daniel Williams", WitnessName = "Rachel Thompson",
             });
+
+            // Two more, further back — one Approved witness, one Declined (the compliance queue
+            // demo: a witness that raised a discrepancy rather than rubber-stamping it).
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000000d"), TenantId = demoTenantId,
+                ParticipantMedicationId = insulinId, ParticipantId = harrisonId,
+                ScheduledAt = today.AddDays(-6).AddHours(8), AdministeredAt = today.AddDays(-6).AddHours(8).AddMinutes(3),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "18 units",
+                RecordedByName = "Daniel Williams", RecordedByUserId = danielUserId,
+                WitnessName = "Rachel Thompson", WitnessUserId = rachelUserId,
+                WitnessStatus = WitnessStatus.Approved,
+                WitnessRequestedAt = today.AddDays(-6).AddHours(8).AddMinutes(3), WitnessRespondedAt = today.AddDays(-6).AddHours(8).AddMinutes(6),
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000000e"), TenantId = demoTenantId,
+                ParticipantMedicationId = insulinId, ParticipantId = harrisonId,
+                ScheduledAt = today.AddDays(-13).AddHours(8), AdministeredAt = today.AddDays(-13).AddHours(8).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "18 units",
+                RecordedByName = "Marcus Papadopoulos", RecordedByUserId = marcusUserId,
+                WitnessName = "Priya Sharma", WitnessUserId = priyaUserId,
+                WitnessStatus = WitnessStatus.Declined,
+                WitnessRequestedAt = today.AddDays(-13).AddHours(8).AddMinutes(4), WitnessRespondedAt = today.AddDays(-13).AddHours(8).AddMinutes(11),
+                Notes = "Witness queried the pen dial reading against the MAR before declining to confirm; recount matched the prescribed dose and was resolved with the coordinator same day.",
+            });
+        }
+
+        if (existingParticipants.Contains(sophieId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000000f"), TenantId = demoTenantId,
+                ParticipantMedicationId = levetiracetamId, ParticipantId = sophieId,
+                ScheduledAt = today.AddDays(-3).AddHours(8), AdministeredAt = today.AddDays(-3).AddHours(8).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (500mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000010"), TenantId = demoTenantId,
+                ParticipantMedicationId = levetiracetamId, ParticipantId = sophieId,
+                ScheduledAt = today.AddDays(-3).AddHours(20), AdministeredAt = today.AddDays(-3).AddHours(20).AddMinutes(6),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (500mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000011"), TenantId = demoTenantId,
+                ParticipantMedicationId = levetiracetamId, ParticipantId = sophieId,
+                ScheduledAt = today.AddDays(-7).AddHours(8), Status = MedicationAdministrationStatus.Missed,
+                RecordedByName = "Emily Nguyen", RecordedByUserId = emilyUserId,
+                Reason = "Staff shift changeover — dose not given within the window; escalated to the on-call coordinator and given late once identified.",
+            });
+
+            // PRN Paracetamol — no fixed schedule, so ScheduledAt is null.
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000012"), TenantId = demoTenantId,
+                ParticipantMedicationId = paracetamolId, ParticipantId = sophieId,
+                AdministeredAt = today.AddDays(-2).AddHours(11), Status = MedicationAdministrationStatus.Administered,
+                DoseGiven = "2 tablets (1000mg)", PrnReason = "Mild headache reported after a busy morning.", PrnOutcome = "Resolved within an hour.",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000013"), TenantId = demoTenantId,
+                ParticipantMedicationId = paracetamolId, ParticipantId = sophieId,
+                AdministeredAt = today.AddDays(-9).AddHours(15), Status = MedicationAdministrationStatus.Administered,
+                DoseGiven = "2 tablets (1000mg)", PrnReason = "Reported mild fever.", PrnOutcome = "Settled by evening; no further doses needed that day.",
+                RecordedByName = "Emily Nguyen", RecordedByUserId = emilyUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(charlotteId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000014"), TenantId = demoTenantId,
+                ParticipantMedicationId = sertralineId, ParticipantId = charlotteId,
+                ScheduledAt = today.AddDays(-8).AddHours(8), AdministeredAt = today.AddDays(-8).AddHours(8).AddMinutes(8),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (50mg)",
+                RecordedByName = "Emily Nguyen", RecordedByUserId = emilyUserId,
+                AdministeredAtTimeZone = "Australia/Melbourne",
+            });
+
+            // PRN Risperidone (chemical restraint) — one Administered, one Withheld.
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000015"), TenantId = demoTenantId,
+                ParticipantMedicationId = risperidoneId, ParticipantId = charlotteId,
+                AdministeredAt = today.AddDays(-4).AddHours(16), Status = MedicationAdministrationStatus.Administered,
+                DoseGiven = "1 tablet (0.5mg)",
+                PrnReason = "Became distressed and attempted to leave the property unsupervised.",
+                PrnOutcome = "Settled within 20 minutes with quiet space and noise-cancelling headphones.",
+                RecordedByName = "Daniel Williams", RecordedByUserId = danielUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000016"), TenantId = demoTenantId,
+                ParticipantMedicationId = risperidoneId, ParticipantId = charlotteId,
+                Status = MedicationAdministrationStatus.Withheld,
+                Reason = "Participant was asleep when the escalation resolved on its own before symptoms met the PRN threshold — dose withheld on RN phone advice.",
+                RecordedByName = "Daniel Williams", RecordedByUserId = danielUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(ryanId))
+        {
+            // High-risk med, recent Administered dose with an outstanding (Pending) witness —
+            // deliberately triggers ParticipantAlertsService's high-risk-medication-witness-gap
+            // Critical alert for Ryan.
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000017"), TenantId = demoTenantId,
+                ParticipantMedicationId = warfarinId, ParticipantId = ryanId,
+                ScheduledAt = today.AddDays(-2).AddHours(18), AdministeredAt = today.AddDays(-2).AddHours(18).AddMinutes(5),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (3mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+                WitnessName = "Sarah Mitchell", WitnessUserId = sarahUserId, WitnessStatus = WitnessStatus.Pending,
+                WitnessRequestedAt = today.AddDays(-2).AddHours(18).AddMinutes(5),
+                AdministeredAtTimeZone = "Australia/Melbourne",
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000018"), TenantId = demoTenantId,
+                ParticipantMedicationId = warfarinId, ParticipantId = ryanId,
+                ScheduledAt = today.AddDays(-9).AddHours(18), AdministeredAt = today.AddDays(-9).AddHours(18).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (3mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+                WitnessName = "Sarah Mitchell", WitnessUserId = sarahUserId, WitnessStatus = WitnessStatus.Approved,
+                WitnessRequestedAt = today.AddDays(-9).AddHours(18).AddMinutes(4), WitnessRespondedAt = today.AddDays(-9).AddHours(18).AddMinutes(9),
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000019"), TenantId = demoTenantId,
+                ParticipantMedicationId = warfarinId, ParticipantId = ryanId,
+                ScheduledAt = today.AddDays(-14).AddHours(18), Status = MedicationAdministrationStatus.Missed,
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+                Reason = "Participant unwell overnight — GP consulted next morning, dose resumed as normal from the following day.",
+            });
+
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001a"), TenantId = demoTenantId,
+                ParticipantMedicationId = omeprazoleId, ParticipantId = ryanId,
+                ScheduledAt = today.AddDays(-2).AddHours(8), AdministeredAt = today.AddDays(-2).AddHours(8).AddMinutes(3),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 capsule (20mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001b"), TenantId = demoTenantId,
+                ParticipantMedicationId = omeprazoleId, ParticipantId = ryanId,
+                ScheduledAt = today.AddDays(-9).AddHours(8), AdministeredAt = today.AddDays(-9).AddHours(8).AddMinutes(2),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 capsule (20mg)",
+                RecordedByName = "James O'Brien", RecordedByUserId = jamesUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(oliviaId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001c"), TenantId = demoTenantId,
+                ParticipantMedicationId = movicolId, ParticipantId = oliviaId,
+                ScheduledAt = today.AddDays(-4).AddHours(8), AdministeredAt = today.AddDays(-4).AddHours(8).AddMinutes(12),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 sachet via PEG",
+                RecordedByName = "Lachlan Robertson", RecordedByUserId = lachlanUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001d"), TenantId = demoTenantId,
+                ParticipantMedicationId = movicolId, ParticipantId = oliviaId,
+                ScheduledAt = today.AddDays(-11).AddHours(8), Status = MedicationAdministrationStatus.Withheld,
+                RecordedByName = "Lachlan Robertson", RecordedByUserId = lachlanUserId,
+                Reason = "Participant reported nausea overnight; RN phone advice was to withhold and reassess before the next dose. GP updated same day.",
+            });
+        }
+
+        if (existingParticipants.Contains(chloeId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001e"), TenantId = demoTenantId,
+                ParticipantMedicationId = digoxinId, ParticipantId = chloeId,
+                ScheduledAt = today.AddDays(-3).AddHours(8), AdministeredAt = today.AddDays(-3).AddHours(8).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (0.25mg)",
+                RecordedByName = "Priya Sharma", RecordedByUserId = priyaUserId,
+            });
+
+            // MED-03 wrong-medication demo — Reason (required for non-Administered) and Notes
+            // (required for WrongMedication) both populated.
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-00000000001f"), TenantId = demoTenantId,
+                ParticipantMedicationId = digoxinId, ParticipantId = chloeId,
+                ScheduledAt = today.AddDays(-10).AddHours(8), AdministeredAt = today.AddDays(-10).AddHours(8).AddMinutes(6),
+                Status = MedicationAdministrationStatus.WrongMedication,
+                DoseGiven = "1 Paracetamol tablet (500mg) — given in error",
+                Reason = "Incorrect blister-pack row administered — participant received a Paracetamol tablet instead of the scheduled Digoxin dose.",
+                Notes = "Error identified within 10 minutes when checking the MAR against the blister pack. GP phoned for advice — monitor only, no intervention required. Digoxin given once confirmed safe, 45 minutes later. Incident report completed.",
+                RecordedByName = "Priya Sharma", RecordedByUserId = priyaUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(graceId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000020"), TenantId = demoTenantId,
+                ParticipantMedicationId = ferrousSulfateId, ParticipantId = graceId,
+                ScheduledAt = recentMonday.AddHours(8), AdministeredAt = recentMonday.AddHours(8).AddMinutes(5),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (325mg)",
+                RecordedByName = "Sarah Mitchell", RecordedByUserId = sarahUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000021"), TenantId = demoTenantId,
+                ParticipantMedicationId = ferrousSulfateId, ParticipantId = graceId,
+                ScheduledAt = recentWednesday.AddHours(8), AdministeredAt = recentWednesday.AddHours(8).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (325mg)",
+                RecordedByName = "Sarah Mitchell", RecordedByUserId = sarahUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000022"), TenantId = demoTenantId,
+                ParticipantMedicationId = ferrousSulfateId, ParticipantId = graceId,
+                ScheduledAt = recentFriday.AddHours(8), Status = MedicationAdministrationStatus.Missed,
+                RecordedByName = "Sarah Mitchell", RecordedByUserId = sarahUserId,
+                Reason = "Missed during a full-day community outing — dose box wasn't packed; resumed on the next scheduled day.",
+            });
+        }
+
+        if (existingParticipants.Contains(williamId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000023"), TenantId = demoTenantId,
+                ParticipantMedicationId = prednisoloneId, ParticipantId = williamId,
+                ScheduledAt = today.AddDays(-2).AddHours(8), AdministeredAt = today.AddDays(-2).AddHours(8).AddMinutes(3),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 tablet (5mg)",
+                RecordedByName = "Brendan Nguyen", RecordedByUserId = brendanUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000024"), TenantId = demoTenantId,
+                ParticipantMedicationId = prednisoloneId, ParticipantId = williamId,
+                ScheduledAt = today.AddDays(-12).AddHours(8), Status = MedicationAdministrationStatus.Missed,
+                RecordedByName = "Jade Watkins", RecordedByUserId = jadeUserId,
+                Reason = "Dosing day missed while William was away with family — resumed on schedule from the next dosing day.",
+            });
+        }
+
+        if (existingParticipants.Contains(natalieId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000025"), TenantId = demoTenantId,
+                ParticipantMedicationId = betamethasoneId, ParticipantId = natalieId,
+                ScheduledAt = today.AddDays(-3).AddHours(8), AdministeredAt = today.AddDays(-3).AddHours(8).AddMinutes(5),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "Thin layer to affected areas",
+                RecordedByName = "Jade Watkins", RecordedByUserId = jadeUserId,
+            });
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000026"), TenantId = demoTenantId,
+                ParticipantMedicationId = betamethasoneId, ParticipantId = natalieId,
+                ScheduledAt = today.AddDays(-3).AddHours(20), AdministeredAt = today.AddDays(-3).AddHours(20).AddMinutes(4),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "Thin layer to affected areas",
+                RecordedByName = "Jade Watkins", RecordedByUserId = jadeUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(isabellaId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000027"), TenantId = demoTenantId,
+                ParticipantMedicationId = latanoprostId, ParticipantId = isabellaId,
+                ScheduledAt = today.AddDays(-5).AddHours(21), AdministeredAt = today.AddDays(-5).AddHours(21).AddMinutes(3),
+                Status = MedicationAdministrationStatus.Administered, DoseGiven = "1 drop each eye",
+                RecordedByName = "Marcus Papadopoulos", RecordedByUserId = marcusUserId,
+            });
+        }
+
+        if (existingParticipants.Contains(zoeId))
+        {
+            administrations.Add(new MedicationAdministration
+            {
+                Id = Guid.Parse("71000000-0000-0000-0000-000000000028"), TenantId = demoTenantId,
+                ParticipantMedicationId = salbutamolId, ParticipantId = zoeId,
+                AdministeredAt = today.AddDays(-6).AddHours(10), Status = MedicationAdministrationStatus.Administered,
+                DoseGiven = "2 puffs via spacer", PrnReason = "Wheeze noted after morning walk.", PrnOutcome = "Resolved within 5 minutes.",
+                RecordedByName = "Jade Watkins", RecordedByUserId = jadeUserId,
+            });
         }
 
         if (administrations.Count > 0)
@@ -1069,8 +1746,15 @@ public static class DbSeeder
         var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
         var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
         var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+        // Seed-expansion task — additional demo participants that now carry their own notes.
+        var liamId = Guid.Parse("d1000000-0000-0000-0000-000000000001");
+        var oliviaId = Guid.Parse("d1000000-0000-0000-0000-000000000004");
+        var jackId = Guid.Parse("d1000000-0000-0000-0000-000000000007");
+        var williamId = Guid.Parse("d1000000-0000-0000-0000-000000000009");
+        var graceId = Guid.Parse("d2000000-0000-0000-0000-000000000005");
+        var ryanId = Guid.Parse("d2000000-0000-0000-0000-000000000008");
 
-        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var targetIds = new[] { sophieId, charlotteId, harrisonId, liamId, oliviaId, jackId, williamId, graceId, ryanId };
         var existingParticipants = await context.Participants.IgnoreQueryFilters()
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
@@ -1120,6 +1804,73 @@ public static class DbSeeder
             });
         }
 
+        // ── Seed-expansion task: additional notes ──
+        if (existingParticipants.Contains(liamId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, ParticipantId = liamId,
+                Title = "Beach access preference", Description = "Liam prefers the beach wheelchair kept at Surfers Paradise SLSC over the Broadwater Parklands one — the tyres are better maintained. Ring ahead to reserve it on busy weekends.",
+                IsPinned = false, IsArchived = false, CreatedByName = "James O'Brien",
+                CreatedAt = now.AddMonths(-4), UpdatedAt = now.AddMonths(-4),
+            });
+        }
+
+        if (existingParticipants.Contains(oliviaId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, ParticipantId = oliviaId,
+                Title = "Gallery visit preparation", Description = "Confirm venue accessibility (hoist/accessible bathroom) at least a week ahead for any gallery or live-music outing, and build in extra time either side for her PEG feeding schedule.",
+                IsPinned = true, IsArchived = false, CreatedByName = "Rachel Thompson",
+                CreatedAt = now.AddMonths(-5), UpdatedAt = now.AddMonths(-5),
+            });
+        }
+
+        if (existingParticipants.Contains(jackId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, ParticipantId = jackId,
+                Title = "Photography equipment", Description = "Jack carries his own camera bag on the back of his wheelchair — no need to offer to carry it for him. He's fully independent with his wheelchair; let him lead rather than push.",
+                IsPinned = false, IsArchived = false, CreatedByName = "Sarah Mitchell",
+                CreatedAt = now.AddMonths(-3), UpdatedAt = now.AddMonths(-3),
+            });
+        }
+
+        if (existingParticipants.Contains(williamId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, ParticipantId = williamId,
+                Title = "Sports viewing preference", Description = "William follows the NRL closely — where the trip schedule allows, try to keep weekend afternoons free for him to catch live games on TV or at a local pub screening.",
+                IsPinned = false, IsArchived = false, CreatedByName = "Marcus Papadopoulos",
+                CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(graceId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, ParticipantId = graceId,
+                Title = "Cooking involvement", Description = "Grace loves being included in group meal prep — give her a real task (chopping, stirring, plating) rather than having meals done for her. She's proud of her cooking and likes to be asked for tips.",
+                IsPinned = false, IsArchived = false, CreatedByName = "Sarah Mitchell",
+                CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (existingParticipants.Contains(ryanId))
+        {
+            notes.Add(new ParticipantNote
+            {
+                Id = Guid.Parse("73000000-0000-0000-0000-00000000000a"), TenantId = demoTenantId, ParticipantId = ryanId,
+                Title = "Communication support — allow response time", Description = "Ryan has expressive aphasia and uses a word board alongside speech. Allow at least 20 seconds for him to respond before repeating or rephrasing a question, and never finish his sentences for him.",
+                IsPinned = true, IsArchived = false, CreatedByName = "James O'Brien",
+                CreatedAt = now.AddMonths(-3), UpdatedAt = now.AddMonths(-3),
+            });
+        }
+
         if (notes.Count == 0)
             return;
 
@@ -1146,8 +1897,26 @@ public static class DbSeeder
         var sophieId = Guid.Parse("d1000000-0000-0000-0000-000000000002");
         var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
         var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
+        // Seed-expansion task — additional demo participants that now carry their own routines.
+        // Chloe Robinson (d2-3) is deliberately NOT given a routine here despite being
+        // high-support/overnight — see SeedRestrictivePracticesAsync's note on her flag — so
+        // ParticipantAlertsService's routine-coverage-gap rule has one real instance to surface
+        // rather than the register being suspiciously complete everywhere.
+        var liamId = Guid.Parse("d1000000-0000-0000-0000-000000000001");
+        var oliviaId = Guid.Parse("d1000000-0000-0000-0000-000000000004");
+        var jackId = Guid.Parse("d1000000-0000-0000-0000-000000000007");
+        var williamId = Guid.Parse("d1000000-0000-0000-0000-000000000009");
+        var graceId = Guid.Parse("d2000000-0000-0000-0000-000000000005");
+        var natalieId = Guid.Parse("d2000000-0000-0000-0000-000000000009");
+        var isabellaId = Guid.Parse("d2000000-0000-0000-0000-000000000001");
+        var zoeId = Guid.Parse("d2000000-0000-0000-0000-000000000007");
+        var ryanId = Guid.Parse("d2000000-0000-0000-0000-000000000008");
 
-        var targetIds = new[] { sophieId, charlotteId, harrisonId };
+        var targetIds = new[]
+        {
+            sophieId, charlotteId, harrisonId,
+            liamId, oliviaId, jackId, williamId, graceId, natalieId, isabellaId, zoeId, ryanId,
+        };
         var existingParticipants = await context.Participants.IgnoreQueryFilters()
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
@@ -1213,6 +1982,108 @@ public static class DbSeeder
             });
         }
 
+        // ── Seed-expansion task: additional routines ──
+        if (existingParticipants.Contains(liamId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, ParticipantId = liamId,
+                Title = "Bedtime wind-down", Description = "Prefers a quiet 30 minutes before lights-out — no screens, TV off. A short chat about the day's activities helps him settle.",
+                Category = RoutineCategory.Sleep, DayOfWeek = null, StartTime = new TimeOnly(21, 0), EndTime = new TimeOnly(22, 0),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-4), UpdatedAt = now.AddMonths(-4),
+            });
+        }
+
+        if (existingParticipants.Contains(oliviaId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, ParticipantId = oliviaId,
+                Title = "Hoist transfer routine", Description = "Requires a ceiling hoist or mobile hoist for every transfer — never attempt a manual transfer. Two staff must be present. Check sling fit before each use.",
+                Category = RoutineCategory.PersonalCare, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-5), UpdatedAt = now.AddMonths(-5),
+            });
+        }
+
+        if (existingParticipants.Contains(jackId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, ParticipantId = jackId,
+                Title = "Weekly photography outing", Description = "Sunday morning outing to a local spot of Jack's choosing to take photos — he plans the location himself; staff just provide transport and are on hand if needed.",
+                Category = RoutineCategory.Activity, DayOfWeek = DayOfWeek.Sunday, StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(12, 0),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-3), UpdatedAt = now.AddMonths(-3),
+            });
+        }
+
+        if (existingParticipants.Contains(williamId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000a"), TenantId = demoTenantId, ParticipantId = williamId,
+                Title = "Breakfast preference", Description = "Prefers a cooked breakfast (eggs on toast) over cereal where the venue allows it — happy with cereal on travel days, just checks first.",
+                Category = RoutineCategory.Meals, DayOfWeek = null, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(8, 0),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(graceId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000b"), TenantId = demoTenantId, ParticipantId = graceId,
+                Title = "Meal prep involvement", Description = "Always offer Grace a role in group meal prep — she especially enjoys planning the menu the day before.",
+                Category = RoutineCategory.Meals, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (existingParticipants.Contains(natalieId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000c"), TenantId = demoTenantId, ParticipantId = natalieId,
+                Title = "Skin cream application", Description = "Betamethasone cream applied morning and evening for eczema — apply sparingly to affected areas only, avoiding the face.",
+                Category = RoutineCategory.PersonalCare, DayOfWeek = null, StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(8, 15),
+                IsCritical = false, IsActive = true, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddMonths(-1),
+            });
+        }
+
+        if (existingParticipants.Contains(isabellaId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000d"), TenantId = demoTenantId, ParticipantId = isabellaId,
+                Title = "Evening eye drops", Description = "Latanoprost eye drops each night for glaucoma — must not be skipped. If a dose is missed, do not double up the next night; note it in the medication chart instead.",
+                Category = RoutineCategory.Medication, DayOfWeek = null, StartTime = new TimeOnly(21, 0), EndTime = new TimeOnly(21, 15),
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-4), UpdatedAt = now.AddMonths(-4),
+            });
+        }
+
+        if (existingParticipants.Contains(zoeId))
+        {
+            // Deliberately inactive — demonstrates a retired routine (the register keeps history
+            // via IsActive rather than deleting it).
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000e"), TenantId = demoTenantId, ParticipantId = zoeId,
+                Title = "Weekly photography walk — discontinued", Description = "Previously a standing Thursday photography walk; discontinued when Zoe's engagement with the service changed. Kept for history only.",
+                Category = RoutineCategory.Activity, DayOfWeek = DayOfWeek.Thursday, StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(11, 30),
+                IsCritical = false, IsActive = false, CreatedAt = now.AddMonths(-10), UpdatedAt = now.AddMonths(-2),
+            });
+        }
+
+        if (existingParticipants.Contains(ryanId))
+        {
+            routines.Add(new ParticipantRoutine
+            {
+                Id = Guid.Parse("74000000-0000-0000-0000-00000000000f"), TenantId = demoTenantId, ParticipantId = ryanId,
+                Title = "Allow processing/response time", Description = "Ryan has expressive aphasia — allow at least 20 seconds for him to respond before repeating or rephrasing. Frustration is more likely when staff finish sentences for him or rush the conversation.",
+                Category = RoutineCategory.Behaviour, DayOfWeek = null, StartTime = null, EndTime = null,
+                IsCritical = true, IsActive = true, CreatedAt = now.AddMonths(-3), UpdatedAt = now.AddMonths(-3),
+            });
+        }
+
         if (routines.Count == 0)
             return;
 
@@ -1250,14 +2121,24 @@ public static class DbSeeder
         var charlotteId = Guid.Parse("d1000000-0000-0000-0000-000000000008");
         // Fixed ID from SeedMedicationsAsync — Charlotte's Risperidone PRN (IsChemicalRestraint = true).
         var risperidoneId = Guid.Parse("70000000-0000-0000-0000-000000000003");
+        // Seed-expansion task — Chloe Robinson and Ryan Murphy's Participant rows already carry
+        // HasRestrictivePracticeFlag = true from SeedAsync (their behaviour-risk narrative implies
+        // an in-place restrictive practice) but had no backing register row until now — this
+        // method is what makes that flag consistent (see the entity's remarks on the flag being
+        // derived, never independently writable, going forward). Harrison Lee gets a new
+        // MechanicalRestraint row and is newly flagged here for the same reason.
+        var chloeId = Guid.Parse("d2000000-0000-0000-0000-000000000003");
+        var ryanId = Guid.Parse("d2000000-0000-0000-0000-000000000008");
+        var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
 
-        var targetIds = new[] { sophieId, charlotteId };
+        var targetIds = new[] { sophieId, charlotteId, chloeId, ryanId, harrisonId };
         var participants = await context.Participants.IgnoreQueryFilters()
             .Where(p => targetIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
         if (participants.Count == 0)
             return;
 
         var now = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(now);
         var practices = new List<RestrictivePractice>();
 
         if (participants.TryGetValue(sophieId, out var sophie))
@@ -1295,7 +2176,61 @@ public static class DbSeeder
                 });
             }
 
+            // Seed-expansion task — Seclusion, and the "recently reviewed" demo: freshly
+            // authorised/reviewed rather than overdue, so the register shows a healthy example
+            // alongside the two deliberately-overdue ones below.
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, ParticipantId = charlotteId,
+                Type = RestrictivePracticeType.Seclusion,
+                Description = "Brief supervised time in a low-stimulus room (door unlocked, staff immediately outside) used only when Charlotte is at risk of harm to self during acute sensory overload. Least-restrictive option confirmed with BSP.",
+                AuthorisedBy = "Dr. Farid Haidari (Behaviour Support Practitioner)", AuthorisationDate = today.AddDays(-10), ReviewDate = today.AddMonths(6),
+                IsActive = true, CreatedAt = now.AddDays(-10), UpdatedAt = now.AddDays(-10),
+            });
+
             charlotte.HasRestrictivePracticeFlag = true;
+        }
+
+        if (participants.TryGetValue(chloeId, out var chloe))
+        {
+            // Overdue review (#1 of 2) — exercises ParticipantAlertsService's
+            // restrictive-practice-review-overdue rule.
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, ParticipantId = chloeId,
+                Type = RestrictivePracticeType.EnvironmentalRestraint,
+                Description = "Bedroom door alarm fitted — alerts staff if Chloe leaves her room overnight, due to elopement risk when her routine is disrupted.",
+                AuthorisedBy = "NDIS Quality and Safeguards Commission", AuthorisationDate = today.AddMonths(-8), ReviewDate = today.AddDays(-10),
+                IsActive = true, CreatedAt = now.AddMonths(-8), UpdatedAt = now.AddMonths(-8),
+            });
+            chloe.HasRestrictivePracticeFlag = true;
+        }
+
+        if (participants.TryGetValue(ryanId, out var ryan))
+        {
+            // Overdue review (#2 of 2).
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, ParticipantId = ryanId,
+                Type = RestrictivePracticeType.PhysicalRestraint,
+                Description = "Two-person supported physical guiding technique, used only during acute frustration episodes affecting safety when communication support alone hasn't de-escalated. Authorised per BSP.",
+                AuthorisedBy = "Dr. Farid Haidari (Behaviour Support Practitioner)", AuthorisationDate = today.AddMonths(-9), ReviewDate = today.AddDays(-25),
+                IsActive = true, CreatedAt = now.AddMonths(-9), UpdatedAt = now.AddMonths(-9),
+            });
+            ryan.HasRestrictivePracticeFlag = true;
+        }
+
+        if (participants.TryGetValue(harrisonId, out var harrison))
+        {
+            practices.Add(new RestrictivePractice
+            {
+                Id = Guid.Parse("75000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, ParticipantId = harrisonId,
+                Type = RestrictivePracticeType.MechanicalRestraint,
+                Description = "Postural support harness used during vehicle transport due to risk of releasing the seatbelt when fatigued/unwell. Reviewed with OT — least restrictive option identified for transport safety.",
+                AuthorisedBy = "Dr. Priya Chandran", AuthorisationDate = today.AddMonths(-4), ReviewDate = today.AddMonths(4),
+                IsActive = true, CreatedAt = now.AddMonths(-4), UpdatedAt = now.AddMonths(-4),
+            });
+            harrison.HasRestrictivePracticeFlag = true;
         }
 
         if (practices.Count == 0)
@@ -1376,6 +2311,12 @@ public static class DbSeeder
         context.MedicationAdministrations.RemoveRange(context.MedicationAdministrations);
         context.ParticipantMedications.RemoveRange(context.ParticipantMedications);
         context.ParticipantNotes.RemoveRange(context.ParticipantNotes);
+        // RestrictivePractice/ParticipantRoutine → Participant is Restrict (see OdipDbContext),
+        // so both must be cleared before Participants.RemoveRange below or SaveChangesAsync would
+        // throw an FK violation on any DB that already has rows in either table (seed-expansion
+        // task fix — these two were previously missing from the delete list).
+        context.RestrictivePractices.RemoveRange(context.RestrictivePractices);
+        context.ParticipantRoutines.RemoveRange(context.ParticipantRoutines);
         context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
         context.TripDays.RemoveRange(context.TripDays);
         context.BookingTasks.RemoveRange(context.BookingTasks);
@@ -1399,6 +2340,11 @@ public static class DbSeeder
         await SeedAsync(context, ct);
         await SeedMedicationsAsync(context, ct);
         await SeedParticipantNotesAsync(context, ct);
+        // Seed-expansion task fix — these two were previously missing here, so a Reseed via the
+        // dev endpoint silently dropped routines and the restrictive-practices register even
+        // though Program.cs seeds both on every normal startup.
+        await SeedParticipantRoutinesAsync(context, ct);
+        await SeedRestrictivePracticesAsync(context, ct);
     }
 
 }
