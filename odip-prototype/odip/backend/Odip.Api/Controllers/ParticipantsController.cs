@@ -79,6 +79,32 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// INTAKE sub-wave C1 — upserts every health-condition row submitted with a create/update
+    /// payload, keyed by <see cref="Domain.Enums.HealthConditionType"/>. Copies
+    /// <see cref="UpsertConsentsAsync"/>'s documented pattern exactly, including the load-bearing
+    /// empty/null guard below (same reasoning: an Update caller that never mentions
+    /// HealthConditions round-trips an empty list, which must mean "leave existing rows alone", not
+    /// "clear every condition answer"). Called before SaveChangesAsync so every row lands in the
+    /// same transaction as the participant insert/update.
+    /// </summary>
+    private async Task UpsertHealthConditionsAsync(Guid participantId, List<CreateParticipantHealthConditionDto> conditions, CancellationToken ct)
+    {
+        if (conditions is null || conditions.Count == 0) return;
+        var existing = await _db.ParticipantHealthConditions.Where(c => c.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(c => c.ConditionType);
+        foreach (var dto in conditions)
+        {
+            if (!byType.TryGetValue(dto.ConditionType, out var row))
+            {
+                row = new ParticipantHealthCondition { Id = Guid.NewGuid(), ParticipantId = participantId, ConditionType = dto.ConditionType };
+                _db.ParticipantHealthConditions.Add(row);
+                byType[dto.ConditionType] = row;
+            }
+            ParticipantHealthConditionsController.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
+        }
+    }
+
+    /// <summary>
     /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
     /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
     /// enough to be findable in the list (at least one of the two names), while a full
@@ -348,6 +374,7 @@ public class ParticipantsController : ControllerBase
             .Include(x => x.PreferredUser)
             .Include(x => x.RestrictivePractices)
             .Include(x => x.Consents)
+            .Include(x => x.HealthConditions)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -409,6 +436,25 @@ public class ParticipantsController : ControllerBase
             ReceivedAdvocacyInfo = p.ReceivedAdvocacyInfo,
             PersonalInterests = p.PersonalInterests, ChoiceControlNotes = p.ChoiceControlNotes,
             Consents = ParticipantConsentsController.MaterializeAll(p.Id, p.Consents.ToList()),
+            // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
+            AllergiesDetail = p.AllergiesDetail, IsAnaphylaxisRisk = p.IsAnaphylaxisRisk,
+            AllergyManagementNotes = p.AllergyManagementNotes,
+            HealthConditions = ParticipantHealthConditionsController.MaterializeAll(p.Id, p.HealthConditions.ToList()),
+            // INTAKE sub-wave C1 — Mobility & Functional.
+            AmbulantStatus = p.AmbulantStatus, FallsRiskRating = p.FallsRiskRating,
+            UnevenGroundFlag = p.UnevenGroundFlag, LevelOfPersonalCare = p.LevelOfPersonalCare,
+            Orthotics = p.Orthotics, ContinenceSupportDetail = p.ContinenceSupportDetail,
+            BowelCareDetail = p.BowelCareDetail, MenstruationSupport = p.MenstruationSupport,
+            SkinIntegrity = p.SkinIntegrity,
+            // INTAKE sub-wave C1 — Behaviour & Communication.
+            Memory = p.Memory, MemoryAids = p.MemoryAids,
+            ImpairedUnderstanding = p.ImpairedUnderstanding, ImpairedJudgementReasoning = p.ImpairedJudgementReasoning,
+            BehavioursOfConcernCurrent = p.BehavioursOfConcernCurrent,
+            BehavioursOfConcernFiveYearHistory = p.BehavioursOfConcernFiveYearHistory,
+            BehaviourRiskRating = p.BehaviourRiskRating,
+            RidsLogged = p.RidsLogged, BspPlanProvided = p.BspPlanProvided, BocChartProvided = p.BocChartProvided,
+            ExpressiveSkills = p.ExpressiveSkills, ReceptiveSkills = p.ReceptiveSkills,
+            ReadingAbility = p.ReadingAbility, CommunicationAids = p.CommunicationAids,
         }));
     }
 
@@ -514,6 +560,24 @@ public class ParticipantsController : ControllerBase
             ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo, ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo,
             ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo,
             PersonalInterests = dto.PersonalInterests, ChoiceControlNotes = dto.ChoiceControlNotes,
+            // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
+            AllergiesDetail = dto.AllergiesDetail, IsAnaphylaxisRisk = dto.IsAnaphylaxisRisk,
+            AllergyManagementNotes = dto.AllergyManagementNotes,
+            // INTAKE sub-wave C1 — Mobility & Functional.
+            AmbulantStatus = dto.AmbulantStatus, FallsRiskRating = dto.FallsRiskRating,
+            UnevenGroundFlag = dto.UnevenGroundFlag, LevelOfPersonalCare = dto.LevelOfPersonalCare,
+            Orthotics = dto.Orthotics, ContinenceSupportDetail = dto.ContinenceSupportDetail,
+            BowelCareDetail = dto.BowelCareDetail, MenstruationSupport = dto.MenstruationSupport,
+            SkinIntegrity = dto.SkinIntegrity,
+            // INTAKE sub-wave C1 — Behaviour & Communication.
+            Memory = dto.Memory, MemoryAids = dto.MemoryAids,
+            ImpairedUnderstanding = dto.ImpairedUnderstanding, ImpairedJudgementReasoning = dto.ImpairedJudgementReasoning,
+            BehavioursOfConcernCurrent = dto.BehavioursOfConcernCurrent,
+            BehavioursOfConcernFiveYearHistory = dto.BehavioursOfConcernFiveYearHistory,
+            BehaviourRiskRating = dto.BehaviourRiskRating,
+            RidsLogged = dto.RidsLogged, BspPlanProvided = dto.BspPlanProvided, BocChartProvided = dto.BocChartProvided,
+            ExpressiveSkills = dto.ExpressiveSkills, ReceptiveSkills = dto.ReceptiveSkills,
+            ReadingAbility = dto.ReadingAbility, CommunicationAids = dto.CommunicationAids,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -579,6 +643,9 @@ public class ParticipantsController : ControllerBase
         // INTAKE sub-wave B — consent rows submitted alongside a new/drafted participant, in the
         // same SaveChangesAsync call as the participant insert below.
         await UpsertConsentsAsync(participant.Id, dto.Consents, ct);
+        // INTAKE sub-wave C1 — health-condition grid rows submitted alongside a new/drafted
+        // participant, in the same SaveChangesAsync call as the participant insert below.
+        await UpsertHealthConditionsAsync(participant.Id, dto.HealthConditions, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -697,6 +764,24 @@ public class ParticipantsController : ControllerBase
         p.ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo; p.ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo;
         p.ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo;
         p.PersonalInterests = dto.PersonalInterests; p.ChoiceControlNotes = dto.ChoiceControlNotes;
+        // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
+        p.AllergiesDetail = dto.AllergiesDetail; p.IsAnaphylaxisRisk = dto.IsAnaphylaxisRisk;
+        p.AllergyManagementNotes = dto.AllergyManagementNotes;
+        // INTAKE sub-wave C1 — Mobility & Functional.
+        p.AmbulantStatus = dto.AmbulantStatus; p.FallsRiskRating = dto.FallsRiskRating;
+        p.UnevenGroundFlag = dto.UnevenGroundFlag; p.LevelOfPersonalCare = dto.LevelOfPersonalCare;
+        p.Orthotics = dto.Orthotics; p.ContinenceSupportDetail = dto.ContinenceSupportDetail;
+        p.BowelCareDetail = dto.BowelCareDetail; p.MenstruationSupport = dto.MenstruationSupport;
+        p.SkinIntegrity = dto.SkinIntegrity;
+        // INTAKE sub-wave C1 — Behaviour & Communication.
+        p.Memory = dto.Memory; p.MemoryAids = dto.MemoryAids;
+        p.ImpairedUnderstanding = dto.ImpairedUnderstanding; p.ImpairedJudgementReasoning = dto.ImpairedJudgementReasoning;
+        p.BehavioursOfConcernCurrent = dto.BehavioursOfConcernCurrent;
+        p.BehavioursOfConcernFiveYearHistory = dto.BehavioursOfConcernFiveYearHistory;
+        p.BehaviourRiskRating = dto.BehaviourRiskRating;
+        p.RidsLogged = dto.RidsLogged; p.BspPlanProvided = dto.BspPlanProvided; p.BocChartProvided = dto.BocChartProvided;
+        p.ExpressiveSkills = dto.ExpressiveSkills; p.ReceptiveSkills = dto.ReceptiveSkills;
+        p.ReadingAbility = dto.ReadingAbility; p.CommunicationAids = dto.CommunicationAids;
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
@@ -710,6 +795,8 @@ public class ParticipantsController : ControllerBase
         // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
         // ContactRoles, this is read on Update too (not create-mode-only).
         await UpsertConsentsAsync(p.Id, dto.Consents, ct);
+        // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
+        await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }

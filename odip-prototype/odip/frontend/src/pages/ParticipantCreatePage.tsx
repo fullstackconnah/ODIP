@@ -13,15 +13,17 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
+import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
   GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams,
   DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS, HIDPA_CATEGORY_TITLES,
   parseHidpaCategories, formatHidpaCategories,
+  AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
 } from '@/api/types/participants'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -184,6 +186,45 @@ const baseParticipantSchema = z.object({
     signedByName: z.string().optional(),
     signedDate: z.string().optional(),
   })).optional(),
+  // INTAKE sub-wave C1 — Allergies/Anaphylaxis (Medical step, research spec §5).
+  allergiesDetail: z.string().optional(),
+  isAnaphylaxisRisk: z.enum(['true', 'false', '']).optional(),
+  allergyManagementNotes: z.string().optional(),
+  // Fixed 10-row array (one per HealthConditionType, never user-add/remove — same convention as
+  // consents above), always all 10 rows, submitted on both create and edit saves.
+  healthConditions: z.array(z.object({
+    conditionType: z.string(),
+    has: z.enum(['true', 'false', '']).optional(),
+    severity: z.string().optional(),
+    planProvided: z.enum(['true', 'false', '']).optional(),
+    trainingRequired: z.enum(['true', 'false', '']).optional(),
+    notes: z.string().optional(),
+  })).optional(),
+  // INTAKE sub-wave C1 — Mobility & Functional (Support Needs & Mobility step, research spec §5).
+  ambulantStatus: z.string().optional(),
+  fallsRiskRating: z.string().optional(),
+  unevenGroundFlag: z.enum(['true', 'false', '']).optional(),
+  levelOfPersonalCare: z.string().optional(),
+  orthotics: z.string().optional(),
+  continenceSupportDetail: z.string().optional(),
+  bowelCareDetail: z.string().optional(),
+  menstruationSupport: z.string().optional(),
+  skinIntegrity: z.string().optional(),
+  // INTAKE sub-wave C1 — Behaviour & Communication (new step, research spec §5).
+  memory: z.string().optional(),
+  memoryAids: z.enum(['true', 'false', '']).optional(),
+  impairedUnderstanding: z.enum(['true', 'false', '']).optional(),
+  impairedJudgementReasoning: z.enum(['true', 'false', '']).optional(),
+  behavioursOfConcernCurrent: z.enum(['true', 'false', '']).optional(),
+  behavioursOfConcernFiveYearHistory: z.enum(['true', 'false', '']).optional(),
+  behaviourRiskRating: z.string().optional(),
+  ridsLogged: z.enum(['true', 'false', '']).optional(),
+  bspPlanProvided: z.enum(['true', 'false', '']).optional(),
+  bocChartProvided: z.enum(['true', 'false', '']).optional(),
+  expressiveSkills: z.string().optional(),
+  receptiveSkills: z.string().optional(),
+  readingAbility: z.string().optional(),
+  communicationAids: z.string().optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -435,11 +476,22 @@ const YES_NO_UNANSWERED_OPTIONS = [
   { key: '', label: 'Not recorded' },
 ]
 
-function YesNoToggleField({ control, name, label, hint }: {
+function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
   control: Control<ParticipantFormData>
   name: FieldPath<ParticipantFormData>
   label: string
   hint?: string
+  /**
+   * Overrides the radiogroup's accessible name without changing the visible FormField label —
+   * needed wherever the same short visible label (e.g. "Plan Provided") repeats across several
+   * rows of a list (the health-condition grid's per-row sub-toggles): a screen reader user
+   * navigating by role would otherwise hear several indistinguishable "Plan Provided" radiogroups
+   * with no way to tell which condition each belongs to. Pass a longer, row-qualified string
+   * (e.g. "Plan Provided — Epilepsy") here while `label` stays the short visible text. Defaults
+   * to `label` — every other caller (a field that's the only one of its kind on the page) is
+   * unaffected.
+   */
+  ariaLabel?: string
 }) {
   return (
     <FormField label={label} hint={hint} className="mb-0">
@@ -454,7 +506,7 @@ function YesNoToggleField({ control, name, label, hint }: {
             // FormField's cloneElement labelling can't reach through this Controller (see
             // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
             // the radiogroup has a real accessible name instead of none at all.
-            ariaLabel={label}
+            ariaLabel={ariaLabel ?? label}
           />
         )}
       />
@@ -500,18 +552,42 @@ const STEP_CULTURAL_CONSENT_FIELDS = [
   'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
   'personalInterests', 'choiceControlNotes', 'consents',
 ] as const
+// INTAKE sub-wave C1: 9 Mobility & Functional fields (research spec §4.7/§5) folded into this
+// step alongside the pre-existing equipment/mobility-aid fields — this is why the step is renamed
+// below from "Support Needs & Equipment" to "Support Needs & Mobility": "Equipment" no longer
+// honestly covers content like Falls Risk Rating, Level of Personal Care, or Skin Integrity that
+// has nothing to do with equipment. See this PR's report for the fuller reasoning.
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
   'overnightSupport', 'overnightRatio',
   'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
   'mobilityNotes', 'equipmentRequirements', 'transportRequirements',
+  'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+  'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
 ] as const
 // DIAG-01/02: diagnoses (primary + other), then HIDPA directly below them (a direct derivation —
 // see the epilepsy rule — so they must share this step/schema), then the pre-existing free-text
-// summary last as overflow for anything the structured fields don't capture. See the HIDPA
-// research note on wizard placement for the fuller reasoning against opening a new step.
-const STEP_MEDICAL_FIELDS = ['primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'medicalSummary'] as const
+// summary, then INTAKE sub-wave C1's Allergies/Anaphylaxis fields and the structured
+// healthConditions grid (research spec §5 "Health & Medical" — Yes-No + severity + plan-provided
+// + training-required shape) as the step's final overflow content. See the HIDPA research note on
+// wizard placement for the fuller reasoning against opening a new step for diagnoses/HIDPA; the
+// grid stays on this step too rather than opening yet another one, since it's the same
+// "structured clinical detail" content family as diagnoses/HIDPA/allergies.
+const STEP_MEDICAL_FIELDS = [
+  'primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'medicalSummary',
+  'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+] as const
+// INTAKE sub-wave C1 — NEW step, placed between "Medical" and "Risks & Hazards" (research spec
+// §5 "Behaviour & Communication"): the Medical step above already carries diagnoses/HIDPA/
+// allergies/the 10-row health-condition grid, and folding these 14 further fields in would push
+// that step well past a reasonable single-screen length — see this PR's report.
+const STEP_BEHAVIOUR_COMMUNICATION_FIELDS = [
+  'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+  'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating',
+  'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+  'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids',
+] as const
 const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const
 const STEP_REVIEW_FIELDS = [] as const
 
@@ -531,8 +607,12 @@ const WIZARD_STEPS: WizardStep[] = [
   { key: 'contacts', label: 'Contacts', fields: STEP_CONTACTS_FIELDS },
   // INTAKE sub-wave B — see STEP_CULTURAL_CONSENT_FIELDS's doc comment above for placement.
   { key: 'culturalConsent', label: 'Cultural & Consent', fields: STEP_CULTURAL_CONSENT_FIELDS },
-  { key: 'support', label: 'Support Needs & Equipment', fields: STEP_SUPPORT_FIELDS },
+  // INTAKE sub-wave C1: renamed from "Support Needs & Equipment" — see STEP_SUPPORT_FIELDS' doc
+  // comment above for why.
+  { key: 'support', label: 'Support Needs & Mobility', fields: STEP_SUPPORT_FIELDS },
   { key: 'medical', label: 'Medical', fields: STEP_MEDICAL_FIELDS },
+  // INTAKE sub-wave C1 — see STEP_BEHAVIOUR_COMMUNICATION_FIELDS' doc comment above for placement.
+  { key: 'behaviourCommunication', label: 'Behaviour & Communication', fields: STEP_BEHAVIOUR_COMMUNICATION_FIELDS },
   // INTAKE sub-wave B: renamed from "Risks & Consents" — consent content now has its own step
   // (this one carried none to begin with: just Behaviour Risk Summary/General Notes/INTAKE-09
   // risk entries, nothing consent-shaped), so the two step names no longer overlap.
@@ -556,6 +636,8 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_CULTURAL_CONSENT_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
+  // INTAKE sub-wave C1 — every field optional, no cross-field requirement.
+  baseParticipantSchema.pick(pickShape(STEP_BEHAVIOUR_COMMUNICATION_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
   null,
 ]
@@ -644,6 +726,11 @@ const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
 // otherDiagnoses entry equals the curated "Epilepsy" value — matches on that exact string
 // regardless of whether it arrived via the curated dropdown/checkboxes or (in principle) a custom
 // "Epilepsy"-spelled other-diagnosis entry.
+// INTAKE sub-wave C1: index of the Epilepsy row within the fixed healthConditions array — the
+// array is always in HEALTH_CONDITION_TYPES order (see defaultValues/reset's healthConditions
+// mapping below), so this is a stable constant, not a runtime search per keystroke.
+const EPILEPSY_CONDITION_INDEX = HEALTH_CONDITION_TYPES.indexOf('Epilepsy')
+
 const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
   {
     when: (v) => v.primaryDiagnosis === 'Epilepsy' || !!v.otherDiagnoses?.includes('Epilepsy'),
@@ -651,6 +738,23 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
       const current = (v.hidpaSupportCategories ?? []) as string[]
       if (!current.includes('EpilepsyManagement')) {
         setValue('hidpaSupportCategories', [...current, 'EpilepsyManagement'], { shouldDirty: true })
+      }
+    },
+  },
+  // INTAKE sub-wave C1 — epilepsy grid/diagnosis reconciliation (see
+  // ParticipantHealthCondition's backend type doc for the full "one way, grid does not auto-set
+  // diagnoses" reasoning): an Epilepsy diagnosis pre-selects the health-condition grid's Epilepsy
+  // row's `has` to true, as a DEFAULT not a lock — same transition-only/user-override-survives
+  // contract as the HIDPA derivation above, just targeting a fixed-array row instead of a
+  // multi-select. Only fires when that row is still unanswered ('') — never overrides an
+  // explicit "No" the user already recorded on the grid itself.
+  {
+    when: (v) => v.primaryDiagnosis === 'Epilepsy' || !!v.otherDiagnoses?.includes('Epilepsy'),
+    apply: (v, setValue) => {
+      const rows = v.healthConditions as ParticipantFormData['healthConditions']
+      const current = rows?.[EPILEPSY_CONDITION_INDEX]?.has
+      if (current === '' || current === undefined) {
+        setValue(`healthConditions.${EPILEPSY_CONDITION_INDEX}.has`, 'true', { shouldDirty: true })
       }
     },
   },
@@ -700,6 +804,15 @@ export default function ParticipantCreatePage() {
       contactRoles: [],
       // INTAKE sub-wave B — fixed 7-row array, one per ConsentType, all unanswered by default.
       consents: CONSENT_TYPES.map((type) => ({ consentType: type, granted: '' as const, signedByName: '', signedDate: '' })),
+      isAnaphylaxisRisk: '',
+      // INTAKE sub-wave C1 — fixed 10-row array, one per HealthConditionType, all unanswered by default.
+      healthConditions: HEALTH_CONDITION_TYPES.map((type) => ({
+        conditionType: type, has: '' as const, severity: '', planProvided: '' as const, trainingRequired: '' as const, notes: '',
+      })),
+      unevenGroundFlag: '',
+      memoryAids: '', impairedUnderstanding: '', impairedJudgementReasoning: '',
+      behavioursOfConcernCurrent: '', behavioursOfConcernFiveYearHistory: '',
+      ridsLogged: '', bspPlanProvided: '', bocChartProvided: '',
     },
   })
   // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
@@ -1007,6 +1120,49 @@ export default function ParticipantCreatePage() {
             signedDate: c?.signedDate ? c.signedDate.split('T')[0] : '',
           }
         }),
+        // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
+        allergiesDetail: existing.allergiesDetail ?? '',
+        isAnaphylaxisRisk: boolToTriState(existing.isAnaphylaxisRisk),
+        allergyManagementNotes: existing.allergyManagementNotes ?? '',
+        // INTAKE sub-wave C1 — the health-condition grid. Same round-trip convention as
+        // consents above: always all 10 HEALTH_CONDITION_TYPES rows, in that fixed order,
+        // regardless of what order the server returned them in.
+        healthConditions: HEALTH_CONDITION_TYPES.map((type) => {
+          const c = existing.healthConditions?.find((row) => row.conditionType === type)
+          return {
+            conditionType: type,
+            has: boolToTriState(c?.has ?? null),
+            severity: c?.severity ?? '',
+            planProvided: boolToTriState(c?.planProvided ?? null),
+            trainingRequired: boolToTriState(c?.trainingRequired ?? null),
+            notes: c?.notes ?? '',
+          }
+        }),
+        // INTAKE sub-wave C1 — Mobility & Functional.
+        ambulantStatus: existing.ambulantStatus ?? '',
+        fallsRiskRating: existing.fallsRiskRating ?? '',
+        unevenGroundFlag: boolToTriState(existing.unevenGroundFlag),
+        levelOfPersonalCare: existing.levelOfPersonalCare ?? '',
+        orthotics: existing.orthotics ?? '',
+        continenceSupportDetail: existing.continenceSupportDetail ?? '',
+        bowelCareDetail: existing.bowelCareDetail ?? '',
+        menstruationSupport: existing.menstruationSupport ?? '',
+        skinIntegrity: existing.skinIntegrity ?? '',
+        // INTAKE sub-wave C1 — Behaviour & Communication.
+        memory: existing.memory ?? '',
+        memoryAids: boolToTriState(existing.memoryAids),
+        impairedUnderstanding: boolToTriState(existing.impairedUnderstanding),
+        impairedJudgementReasoning: boolToTriState(existing.impairedJudgementReasoning),
+        behavioursOfConcernCurrent: boolToTriState(existing.behavioursOfConcernCurrent),
+        behavioursOfConcernFiveYearHistory: boolToTriState(existing.behavioursOfConcernFiveYearHistory),
+        behaviourRiskRating: existing.behaviourRiskRating ?? '',
+        ridsLogged: boolToTriState(existing.ridsLogged),
+        bspPlanProvided: boolToTriState(existing.bspPlanProvided),
+        bocChartProvided: boolToTriState(existing.bocChartProvided),
+        expressiveSkills: existing.expressiveSkills ?? '',
+        receptiveSkills: existing.receptiveSkills ?? '',
+        readingAbility: existing.readingAbility ?? '',
+        communicationAids: existing.communicationAids ?? '',
       })
     }
   }, [existing, reset])
@@ -1083,6 +1239,27 @@ export default function ParticipantCreatePage() {
       granted: triStateToBool(c.granted),
       signedByName: c.granted === 'true' ? (c.signedByName || null) : null,
       signedDate: c.granted === 'true' ? (c.signedDate || null) : null,
+    }))
+    // INTAKE sub-wave C1: same tri-state-to-boolean|null collapse as the cultural fields above.
+    for (const clinicalField of [
+      'isAnaphylaxisRisk', 'unevenGroundFlag', 'memoryAids', 'impairedUnderstanding',
+      'impairedJudgementReasoning', 'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory',
+      'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+    ] as const) {
+      payload[clinicalField] = triStateToBool(data[clinicalField])
+    }
+    // INTAKE sub-wave C1 — collapse the fixed 10-row health-condition grid's tri-state UI shape
+    // down to the backend's boolean|null shape, same pattern as consents above. Severity/notes
+    // only travel with the payload once the row is answered "Yes" (mirrors consents' signed-by/
+    // date behaviour) — a user who typed detail then flipped back to unanswered/No doesn't leave
+    // stale text sitting in form state.
+    payload.healthConditions = (data.healthConditions ?? []).map((c) => ({
+      conditionType: c.conditionType,
+      has: triStateToBool(c.has),
+      severity: c.has === 'true' ? (c.severity || null) : null,
+      planProvided: c.has === 'true' ? triStateToBool(c.planProvided) : null,
+      trainingRequired: c.has === 'true' ? triStateToBool(c.trainingRequired) : null,
+      notes: c.has === 'true' ? (c.notes || null) : null,
     }))
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
@@ -1330,6 +1507,16 @@ export default function ParticipantCreatePage() {
         { label: 'Mobility Notes', value: watchedValues.mobilityNotes || '—' },
         { label: 'Equipment Requirements', value: watchedValues.equipmentRequirements || '—' },
         { label: 'Transport Requirements', value: watchedValues.transportRequirements || '—' },
+        // INTAKE sub-wave C1 — Mobility & Functional.
+        { label: 'Ambulant Status', value: watchedValues.ambulantStatus ? (AMBULANT_STATUS_LABELS[watchedValues.ambulantStatus as AmbulantStatus] ?? watchedValues.ambulantStatus) : '—' },
+        { label: 'Falls Risk Rating', value: watchedValues.fallsRiskRating ? (RISK_RATING_LEVEL_LABELS[watchedValues.fallsRiskRating as RiskRatingLevel] ?? watchedValues.fallsRiskRating) : '—' },
+        { label: 'Uneven Ground', value: yesNoUnknown(watchedValues.unevenGroundFlag) },
+        { label: 'Level of Personal Care', value: watchedValues.levelOfPersonalCare ? (PERSONAL_CARE_LEVEL_LABELS[watchedValues.levelOfPersonalCare as PersonalCareLevel] ?? watchedValues.levelOfPersonalCare) : '—' },
+        { label: 'Orthotics', value: watchedValues.orthotics || '—' },
+        { label: 'Continence Support', value: watchedValues.continenceSupportDetail || '—' },
+        { label: 'Colostomy / Catheter / Enema / Suppository', value: watchedValues.bowelCareDetail || '—' },
+        { label: 'Menstruation Support', value: watchedValues.menstruationSupport || '—' },
+        { label: 'Skin Integrity', value: watchedValues.skinIntegrity || '—' },
       ],
     },
     {
@@ -1349,10 +1536,40 @@ export default function ParticipantCreatePage() {
             : 'None',
         },
         { label: 'Medical Summary', value: watchedValues.medicalSummary || '—' },
+        // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
+        { label: 'Allergies', value: watchedValues.allergiesDetail || '—' },
+        { label: 'Anaphylaxis Risk', value: yesNoUnknown(watchedValues.isAnaphylaxisRisk) },
+        { label: 'Allergy Management Notes', value: watchedValues.allergyManagementNotes || '—' },
+        // The structured health-condition grid — only rows answered "Yes" are worth summarising here.
+        ...HEALTH_CONDITION_TYPES.map((type, index) => {
+          const row = watchedValues.healthConditions?.[index]
+          if (row?.has !== 'true') return null
+          const detail = [row.severity, row.planProvided === 'true' ? 'plan provided' : undefined, row.trainingRequired === 'true' ? 'training required' : undefined].filter(Boolean).join(' — ')
+          return { label: HEALTH_CONDITION_TYPE_LABELS[type], value: detail || 'Yes' }
+        }).filter((row): row is { label: string; value: string } => row !== null),
       ],
     },
     {
       step: 7,
+      rows: [
+        { label: 'Memory', value: watchedValues.memory ? (MEMORY_LEVEL_LABELS[watchedValues.memory as MemoryLevel] ?? watchedValues.memory) : '—' },
+        { label: 'Memory Aids', value: yesNoUnknown(watchedValues.memoryAids) },
+        { label: 'Impaired Understanding', value: yesNoUnknown(watchedValues.impairedUnderstanding) },
+        { label: 'Impaired Judgement / Reasoning', value: yesNoUnknown(watchedValues.impairedJudgementReasoning) },
+        { label: 'Behaviours of Concern (Current)', value: yesNoUnknown(watchedValues.behavioursOfConcernCurrent) },
+        { label: 'Behaviours of Concern (5-Year History)', value: yesNoUnknown(watchedValues.behavioursOfConcernFiveYearHistory) },
+        { label: 'Behaviour Risk Rating', value: watchedValues.behaviourRiskRating ? (RISK_RATING_LEVEL_LABELS[watchedValues.behaviourRiskRating as RiskRatingLevel] ?? watchedValues.behaviourRiskRating) : '—' },
+        { label: 'RIDS Logged', value: yesNoUnknown(watchedValues.ridsLogged) },
+        { label: 'BSP Plan Provided', value: yesNoUnknown(watchedValues.bspPlanProvided) },
+        { label: 'BOC Chart Provided', value: yesNoUnknown(watchedValues.bocChartProvided) },
+        { label: 'Expressive Skills', value: watchedValues.expressiveSkills || '—' },
+        { label: 'Receptive Skills', value: watchedValues.receptiveSkills || '—' },
+        { label: 'Reading Ability', value: watchedValues.readingAbility || '—' },
+        { label: 'Communication Aids', value: watchedValues.communicationAids || '—' },
+      ],
+    },
+    {
+      step: 8,
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -2175,6 +2392,60 @@ export default function ParticipantCreatePage() {
                 <textarea id="transportRequirements" {...register('transportRequirements')} rows={2} placeholder="Transport needs..." />
               </FormField>
             </Card>
+
+            {/* INTAKE sub-wave C1 — Mobility & Functional (research spec §4.7/§5). All optional. */}
+            <Card title="Mobility & Functional" className="space-y-4 md:col-span-2">
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField label="Ambulant Status">
+                  <select id="ambulantStatus" {...register('ambulantStatus')}>
+                    <option value="">Not recorded</option>
+                    {AMBULANT_STATUSES.map((s) => (
+                      <option key={s} value={s}>{AMBULANT_STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Falls Risk Rating">
+                  <select id="fallsRiskRating" {...register('fallsRiskRating')}>
+                    <option value="">Not recorded</option>
+                    {RISK_RATING_LEVELS.map((r) => (
+                      <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Level of Personal Care">
+                  <select id="levelOfPersonalCare" {...register('levelOfPersonalCare')}>
+                    <option value="">Not recorded</option>
+                    {PERSONAL_CARE_LEVELS.map((l) => (
+                      <option key={l} value={l}>{PERSONAL_CARE_LEVEL_LABELS[l]}</option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <YesNoToggleField control={control} name="unevenGroundFlag" label="Uneven Ground" />
+              </div>
+
+              <FormField label="Orthotics" hint="Y/N/Plan and equipment list, e.g. 'AFO both feet, worn daily'.">
+                <textarea id="orthotics" {...register('orthotics')} rows={2} placeholder="Orthotics required, plan, and equipment..." />
+              </FormField>
+
+              <FormField label="Continence Support" hint="Support type, aids, and any night routine.">
+                <textarea id="continenceSupportDetail" {...register('continenceSupportDetail')} rows={2} placeholder="Continence support detail..." />
+              </FormField>
+
+              <FormField label="Colostomy / Catheter / Enema / Suppository" hint="Which applies, equipment, support required, and training.">
+                <textarea id="bowelCareDetail" {...register('bowelCareDetail')} rows={2} placeholder="Bowel/continence care detail..." />
+              </FormField>
+
+              <FormField label="Menstruation Support">
+                <textarea id="menstruationSupport" {...register('menstruationSupport')} rows={2} placeholder="Menstruation support detail..." />
+              </FormField>
+
+              <FormField label="Skin Integrity">
+                <textarea id="skinIntegrity" {...register('skinIntegrity')} rows={2} placeholder="Skin integrity notes..." />
+              </FormField>
+            </Card>
           </div>
         )}
 
@@ -2336,10 +2607,137 @@ export default function ParticipantCreatePage() {
                 <textarea id="medicalSummary" {...register('medicalSummary')} rows={4} placeholder="Medical information..." />
               </FormField>
             </Card>
+
+            {/* INTAKE sub-wave C1 — Allergies/Anaphylaxis (Master Data Dictionary MED-012). */}
+            <Card title="Allergies & Anaphylaxis" className="space-y-4 md:col-span-2">
+              <FormField label="Allergies">
+                <textarea id="allergiesDetail" {...register('allergiesDetail')} rows={2} placeholder="Known allergies..." />
+              </FormField>
+              <YesNoToggleField control={control} name="isAnaphylaxisRisk" label="Anaphylaxis Risk" />
+              <FormField label="Allergy Management Notes">
+                <textarea id="allergyManagementNotes" {...register('allergyManagementNotes')} rows={2} placeholder="EpiPen location, action plan..." />
+              </FormField>
+            </Card>
+
+            {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5:
+                Yes-No + severity + plan-provided + training-required shape). Fixed 10-row array,
+                never user-add/remove — same rendering convention as the Consent & Terms grid on
+                the Cultural & Consent step above (local per-row conditional render, not the
+                INTAKE-07 conditionalFields engine — same reasoning as that step's comment).
+                RECONCILIATION: this grid is support-planning detail, not a replacement for the
+                Diagnoses card above — see ParticipantHealthCondition's backend type doc. An
+                Epilepsy diagnosis pre-selects this grid's Epilepsy row to "Yes" by default (see
+                FIELD_DERIVATIONS above) — untick it if support planning doesn't actually need it. */}
+            <Card title="Health Conditions" className="space-y-4 md:col-span-2">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Structured support-planning detail for each condition below — distinct from the
+                Diagnoses card above, which records the participant's clinical diagnosis labels.
+              </p>
+              <div className="space-y-3">
+                {HEALTH_CONDITION_TYPES.map((type, index) => {
+                  const has = watchedValues.healthConditions?.[index]?.has
+                  const conditionLabel = HEALTH_CONDITION_TYPE_LABELS[type as HealthConditionType]
+                  return (
+                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                      <YesNoToggleField
+                        control={control}
+                        name={`healthConditions.${index}.has` as FieldPath<ParticipantFormData>}
+                        label={conditionLabel}
+                      />
+                      {has === 'true' && (
+                        <div className="space-y-3">
+                          <FormField label="Severity" className="mb-0">
+                            <input {...register(`healthConditions.${index}.severity` as const)} placeholder="e.g. Mild, Type 2, GrandMal..." />
+                          </FormField>
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Review-round a11y fix: with 2+ rows answered "Yes", several
+                                radiogroups would otherwise all share the plain "Plan Provided" /
+                                "Training Required" accessible name — indistinguishable to a
+                                screen reader user navigating by role. ariaLabel carries the
+                                row-qualified name; the visible FormField label (via `label`)
+                                stays the short, unqualified text since sighted users already see
+                                which condition's card they're in. */}
+                            <YesNoToggleField
+                              control={control}
+                              name={`healthConditions.${index}.planProvided` as FieldPath<ParticipantFormData>}
+                              label="Plan Provided"
+                              ariaLabel={`Plan Provided — ${conditionLabel}`}
+                            />
+                            <YesNoToggleField
+                              control={control}
+                              name={`healthConditions.${index}.trainingRequired` as FieldPath<ParticipantFormData>}
+                              label="Training Required"
+                              ariaLabel={`Training Required — ${conditionLabel}`}
+                            />
+                          </div>
+                          <FormField label="Notes" className="mb-0">
+                            <textarea {...register(`healthConditions.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                          </FormField>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
           </div>
         )}
 
+        {/* INTAKE sub-wave C1 — Behaviour & Communication (new step, research spec §5). All
+            optional — placed between Medical and Risks & Hazards, see STEP_BEHAVIOUR_COMMUNICATION_FIELDS'
+            doc comment above for why this is its own step rather than folded into Medical. */}
         {stepIndex === 7 && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Cognitive" className="space-y-4">
+              <FormField label="Memory">
+                <select id="memory" {...register('memory')}>
+                  <option value="">Not recorded</option>
+                  {MEMORY_LEVELS.map((m) => (
+                    <option key={m} value={m}>{MEMORY_LEVEL_LABELS[m]}</option>
+                  ))}
+                </select>
+              </FormField>
+              <YesNoToggleField control={control} name="memoryAids" label="Memory Aids" />
+              <YesNoToggleField control={control} name="impairedUnderstanding" label="Impaired Understanding" />
+              <YesNoToggleField control={control} name="impairedJudgementReasoning" label="Impaired Judgement / Reasoning" />
+            </Card>
+
+            <Card title="Behaviours of Concern" className="space-y-4">
+              <YesNoToggleField control={control} name="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" />
+              <YesNoToggleField control={control} name="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" />
+              <FormField label="Behaviour Risk Rating">
+                <select id="behaviourRiskRating" {...register('behaviourRiskRating')}>
+                  <option value="">Not recorded</option>
+                  {RISK_RATING_LEVELS.map((r) => (
+                    <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>
+                  ))}
+                </select>
+              </FormField>
+              <YesNoToggleField control={control} name="ridsLogged" label="RIDS Logged" />
+              <YesNoToggleField control={control} name="bspPlanProvided" label="BSP Plan Provided" />
+              <YesNoToggleField control={control} name="bocChartProvided" label="BOC Chart Provided" />
+            </Card>
+
+            <Card title="Communication" className="space-y-4 md:col-span-2">
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField label="Expressive Skills">
+                  <textarea id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." />
+                </FormField>
+                <FormField label="Receptive Skills">
+                  <textarea id="receptiveSkills" {...register('receptiveSkills')} rows={2} placeholder="e.g. High..." />
+                </FormField>
+                <FormField label="Reading Ability">
+                  <textarea id="readingAbility" {...register('readingAbility')} rows={2} placeholder="e.g. Good..." />
+                </FormField>
+                <FormField label="Communication Aids">
+                  <textarea id="communicationAids" {...register('communicationAids')} rows={2} placeholder="e.g. AAC device, communication board..." />
+                </FormField>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {stepIndex === 8 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Risks & Hazards" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (

@@ -129,6 +129,41 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? ChoiceControlNotes { get; init; }
     /// <summary>Always all seven <see cref="Domain.Enums.ConsentType"/> entries — see ParticipantConsentsController.GetForParticipant.</summary>
     public List<ParticipantConsentDto> Consents { get; init; } = new();
+
+    // ── INTAKE sub-wave C1 — Allergies/Anaphylaxis (Medical step). See Participant.cs's field group doc.
+    public string? AllergiesDetail { get; init; }
+    public bool? IsAnaphylaxisRisk { get; init; }
+    public string? AllergyManagementNotes { get; init; }
+
+    /// <summary>Always all ten <see cref="Domain.Enums.HealthConditionType"/> entries — see ParticipantHealthConditionsController.GetForParticipant.</summary>
+    public List<ParticipantHealthConditionDto> HealthConditions { get; init; } = new();
+
+    // ── INTAKE sub-wave C1 — Mobility & Functional (Support Needs & Mobility step). See Participant.cs's field group doc.
+    public AmbulantStatus? AmbulantStatus { get; init; }
+    public RiskRatingLevel? FallsRiskRating { get; init; }
+    public bool? UnevenGroundFlag { get; init; }
+    public PersonalCareLevel? LevelOfPersonalCare { get; init; }
+    public string? Orthotics { get; init; }
+    public string? ContinenceSupportDetail { get; init; }
+    public string? BowelCareDetail { get; init; }
+    public string? MenstruationSupport { get; init; }
+    public string? SkinIntegrity { get; init; }
+
+    // ── INTAKE sub-wave C1 — Behaviour & Communication (new step). See Participant.cs's field group doc.
+    public MemoryLevel? Memory { get; init; }
+    public bool? MemoryAids { get; init; }
+    public bool? ImpairedUnderstanding { get; init; }
+    public bool? ImpairedJudgementReasoning { get; init; }
+    public bool? BehavioursOfConcernCurrent { get; init; }
+    public bool? BehavioursOfConcernFiveYearHistory { get; init; }
+    public RiskRatingLevel? BehaviourRiskRating { get; init; }
+    public bool? RidsLogged { get; init; }
+    public bool? BspPlanProvided { get; init; }
+    public bool? BocChartProvided { get; init; }
+    public string? ExpressiveSkills { get; init; }
+    public string? ReceptiveSkills { get; init; }
+    public string? ReadingAbility { get; init; }
+    public string? CommunicationAids { get; init; }
 }
 
 public record CreateParticipantDto
@@ -344,6 +379,57 @@ public record CreateParticipantDto
     /// additional, always-available write path for the same data.
     /// </summary>
     public List<CreateParticipantConsentDto> Consents { get; init; } = new();
+
+    // ── INTAKE sub-wave C1 — Allergies/Anaphylaxis (Medical step, Master Data Dictionary MED-012). All optional.
+    [StringLength(2000)]
+    public string? AllergiesDetail { get; init; }
+    public bool? IsAnaphylaxisRisk { get; init; }
+    [StringLength(2000)]
+    public string? AllergyManagementNotes { get; init; }
+
+    /// <summary>
+    /// INTAKE sub-wave C1 — the structured health-condition grid, upserted transactionally with
+    /// the participant on both create and update (same read-on-both-paths convention as Consents
+    /// above, for the same reason: this step stays editable in edit mode too) — see
+    /// ParticipantsController.UpsertHealthConditionsAsync.
+    /// </summary>
+    public List<CreateParticipantHealthConditionDto> HealthConditions { get; init; } = new();
+
+    // ── INTAKE sub-wave C1 — Mobility & Functional (Master Data Dictionary MOB-002/003/005..010/012). All optional.
+    public AmbulantStatus? AmbulantStatus { get; init; }
+    public RiskRatingLevel? FallsRiskRating { get; init; }
+    public bool? UnevenGroundFlag { get; init; }
+    public PersonalCareLevel? LevelOfPersonalCare { get; init; }
+    [StringLength(500)]
+    public string? Orthotics { get; init; }
+    [StringLength(2000)]
+    public string? ContinenceSupportDetail { get; init; }
+    [StringLength(2000)]
+    public string? BowelCareDetail { get; init; }
+    [StringLength(500)]
+    public string? MenstruationSupport { get; init; }
+    [StringLength(2000)]
+    public string? SkinIntegrity { get; init; }
+
+    // ── INTAKE sub-wave C1 — Behaviour & Communication (Master Data Dictionary COG-*/COM-*). All optional.
+    public MemoryLevel? Memory { get; init; }
+    public bool? MemoryAids { get; init; }
+    public bool? ImpairedUnderstanding { get; init; }
+    public bool? ImpairedJudgementReasoning { get; init; }
+    public bool? BehavioursOfConcernCurrent { get; init; }
+    public bool? BehavioursOfConcernFiveYearHistory { get; init; }
+    public RiskRatingLevel? BehaviourRiskRating { get; init; }
+    public bool? RidsLogged { get; init; }
+    public bool? BspPlanProvided { get; init; }
+    public bool? BocChartProvided { get; init; }
+    [StringLength(500)]
+    public string? ExpressiveSkills { get; init; }
+    [StringLength(500)]
+    public string? ReceptiveSkills { get; init; }
+    [StringLength(500)]
+    public string? ReadingAbility { get; init; }
+    [StringLength(500)]
+    public string? CommunicationAids { get; init; }
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

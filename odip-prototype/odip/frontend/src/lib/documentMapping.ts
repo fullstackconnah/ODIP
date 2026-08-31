@@ -151,7 +151,9 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
     notes: 'Maps loosely to both forms\' contact blocks (Intake\'s Residence/Support Coordinator/NDIS Funds Manager/Family/Administrator/Authorised Signatory rows; Profile\'s NOK/Financial Administrator/Nominated Decision Maker/Support Coordinator/Plan Manager/Plan Nominee blocks) — the merged CONTACT-01/02/03 typed-contact model already satisfies §5\'s "Plan Nominee contact type" call-out; see this PR\'s report. Field-set deltas between the two forms are NOT re-litigated here — see the research spec §2 for that detail.',
   },
 
-  // ── Support Needs & Equipment step — §4.7 ────────────────────────────────
+  // ── Support Needs & Mobility step — §4.7 (renamed from "Support Needs & Equipment" in
+  // sub-wave C1 — see ParticipantCreatePage.tsx's STEP_SUPPORT_FIELDS doc for the rename
+  // rationale) ───────────────────────────────────────────────────────────
   { field: 'mobilityAidWheelchair', label: 'Wheelchair', sources: ['shared'], dictionaryId: 'MOB-004' },
   { field: 'mobilityAidWalker', label: 'Walker', sources: ['intake'], notes: 'Intake\'s equipment checklist includes Walker; the base Profile only lists it as a Non-Ambulant aid, not an equipment checkbox — a flagged delta, not a straight dupe (§2).' },
   { field: 'mobilitySupportOptions', label: 'Mobility Support Options', sources: ['profile'], dictionaryId: 'MOB-004', notes: 'Profile\'s Non-Ambulant Equipment/Transfers picklist; Intake\'s wheelchair sub-checks (Travel in Vehicle/Transfers/etc.) cover similar ground under a different shape.' },
@@ -169,11 +171,34 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { field: 'equipmentRequirements', label: 'Equipment Requirements', sources: ['profile'], notes: 'Free-text elaboration alongside the equipment checkboxes above.' },
   { field: 'transportRequirements', label: 'Transport Requirements', sources: ['profile'], notes: 'Free-text elaboration; loosely maps to Profile\'s Transportation/wheelchair-in-vehicle notes.' },
 
+  // ── Mobility & Functional (NEW, sub-wave C1) — §4.7/§5. Step renamed "Support Needs &
+  // Mobility" to honestly cover this content (see ParticipantCreatePage.tsx's STEP_SUPPORT_FIELDS
+  // doc for the rename rationale). All NEW per §4.7's gap table — no backing field existed. ──
+  { field: 'ambulantStatus', label: 'Ambulant Status', sources: ['profile'], dictionaryId: 'MOB-002', notes: 'NEW (sub-wave C1). Profile\'s Ambulant sub-grid (§1c-9): No Assist/Unsteady/Frame/Short Distance.' },
+  { field: 'fallsRiskRating', label: 'Falls Risk Rating', sources: ['profile'], dictionaryId: 'MOB-003', notes: 'NEW (sub-wave C1). Source-supported Low/Med/High/Critical values only — Profile\'s richer 4-value vocabulary, not Intake\'s 3-value Low/Med/High/NA variant (§2\'s flagged value-set delta).' },
+  { field: 'unevenGroundFlag', label: 'Uneven Ground', sources: ['profile'], dictionaryId: 'MOB-002', notes: 'NEW (sub-wave C1). Profile\'s Ambulant sub-grid "Uneven ground Y/N" sub-field.' },
+  { field: 'levelOfPersonalCare', label: 'Level of Personal Care', sources: ['profile'], dictionaryId: 'MOB-006', notes: 'NEW (sub-wave C1). Independent/Supervision/One-person/Two-person.' },
+  { field: 'orthotics', label: 'Orthotics', sources: ['profile'], dictionaryId: 'MOB-007', notes: 'NEW (sub-wave C1). Source shows Y/N/Plan + list; collapsed to one free-text column here — see Participant.cs\'s field-group doc for why.' },
+  { field: 'continenceSupportDetail', label: 'Continence Support', sources: ['profile'], dictionaryId: 'MOB-008', notes: 'NEW (sub-wave C1). Source shows Y/NA/Plan + Prompt/Assist + aids + Pull-up/Pads + night support; collapsed to one free-text column.' },
+  { field: 'bowelCareDetail', label: 'Colostomy / Catheter / Enema / Suppository', sources: ['profile'], dictionaryId: 'MOB-009', notes: 'NEW (sub-wave C1). Source shows Y/No/Plan + equipment note + support-required note + training; collapsed to one free-text column.' },
+  { field: 'menstruationSupport', label: 'Menstruation Support', sources: ['profile'], dictionaryId: 'MOB-012', notes: 'NEW (sub-wave C1). Source shows Y/No/Plan + Independent/Verbal/Physical; collapsed to one free-text column.' },
+  { field: 'skinIntegrity', label: 'Skin Integrity', sources: [], notes: 'NEW (sub-wave C1). Not further enumerated in the source form — free text.' },
+
   // ── Medical step — §4.6, DIAG-01/02 ──────────────────────────────────────
   { field: 'primaryDiagnosis', label: 'Primary Diagnosis', sources: ['profile'], dictionaryId: 'MED-016', notes: 'DIAG-01. Profile\'s structured Diagnoses & Medical Conditions table; the Intake coversheet only has free-text "Health Conditions/Diagnoses" (see medicalSummary below).' },
   { field: 'otherDiagnoses', label: 'Other Diagnoses', sources: ['profile'], dictionaryId: 'MED-016' },
   { field: 'hidpaSupportCategories', label: 'HIDPA Support Categories', sources: ['profile'], notes: 'DIAG-02. The base Profile scatters HIDPA-training-required flags per-condition rather than a single field; the Community Access variant (§3, INTAKE-03 territory) centralises a proper HIDPA checklist instead. Tagged profile pending that later reconciliation.' },
   { field: 'medicalSummary', label: 'Medical Summary', sources: ['shared'], notes: 'Both forms carry a free-text "Health Conditions/Diagnoses" field — one of §2\'s explicit shared-set entries.' },
+  {
+    field: 'allergiesDetail', label: 'Allergies', sources: ['profile'], dictionaryId: 'MED-012',
+    notes: 'NEW (sub-wave C1). §4.6: "Allergies/Anaphylaxis — NEW". Profile\'s Dietary Requirements table\'s "Other Allergies/Alerts" field (§1c-13).',
+  },
+  { field: 'isAnaphylaxisRisk', label: 'Anaphylaxis Risk', sources: ['profile'], dictionaryId: 'MED-012', notes: 'NEW (sub-wave C1).' },
+  { field: 'allergyManagementNotes', label: 'Allergy Management Notes', sources: [], notes: 'NEW (sub-wave C1). ODIP elaboration (EpiPen location, action plan) — no direct source-form field, judged alongside the allergy detail/risk flag.' },
+  {
+    field: 'healthConditions', label: 'Health Conditions (structured grid)', sources: ['profile'], dictionaryId: 'MED-002..011',
+    notes: 'NEW (sub-wave C1). §4.6: structured per-condition fields for Intellectual Disability/Visual/Hearing Impairment/Mental Health/High BP/Wound Care/Epilepsy/Diabetes/Asthma/Dysphagia (Yes-No + severity + plan-provided + training-required shape) — "ALL NEW... none of the structured shape is modelled" per the gap analysis, now backed by the ParticipantHealthCondition entity (one row per HealthConditionType). This grid is support-planning DETAIL — the pre-existing primaryDiagnosis/otherDiagnoses fields (DIAG-01) remain the participant\'s clinical diagnosis labels; the two are deliberately not merged (see ParticipantHealthCondition\'s backend type doc for the full reconciliation, including the one-way, transition-only Epilepsy-diagnosis-to-grid derivation).',
+  },
 
   // ── Cultural & Consent step (NEW, sub-wave B) — §4.5/§5 ──────────────────
   {
@@ -206,6 +231,31 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
     field: 'consents', label: 'Consent & Terms (photo/video, alcohol, OTC medication, emergency medical, privacy, travel insurance, T&Cs)', sources: ['profile'], dictionaryId: 'CNST-001..013',
     notes: 'NEW (sub-wave B). §4.5: "the entire Consent & Terms block... NEW, and notably there is no consent-tracking entity/field anywhere in the domain model. This is the single largest structural gap for a compliance-sensitive area" — now backed by the ParticipantConsent entity (one row per ConsentType). Profile-only per §2 (§1c-19/§1c-20) — the Intake coversheet has no consent block at all, only the shared Cultural table\'s own Client/Rep signature line (not modelled here — see this PR\'s report). No drawn-signature capture (SignedByName is typed, not a canvas image) — deferred.',
   },
+
+  // ── Behaviour & Communication step (NEW, sub-wave C1) — §4.8/§5. New step placed between
+  // Medical and Risks & Hazards (see ParticipantCreatePage.tsx's STEP_BEHAVIOUR_COMMUNICATION_FIELDS
+  // doc for the placement rationale). All NEW per §4.8's gap table except the two EXISTS-DIFFERENTLY
+  // entries called out below. ──────────────────────────────────────────────
+  { field: 'memory', label: 'Memory', sources: ['profile'], dictionaryId: 'COG-001', notes: 'NEW (sub-wave C1). Excellent/Fair/Poor.' },
+  { field: 'memoryAids', label: 'Memory Aids', sources: ['profile'], dictionaryId: 'COG-002', notes: 'NEW (sub-wave C1).' },
+  { field: 'impairedUnderstanding', label: 'Impaired Understanding', sources: ['profile'], dictionaryId: 'COG-003', notes: 'NEW (sub-wave C1). Split from Impaired Judgement/Reasoning below — the source form has these as two separate Y/N fields, not one combined item.' },
+  { field: 'impairedJudgementReasoning', label: 'Impaired Judgement / Reasoning', sources: ['profile'], dictionaryId: 'COG-004', notes: 'NEW (sub-wave C1).' },
+  {
+    field: 'behavioursOfConcernCurrent', label: 'Behaviours of Concern (Current)', sources: ['shared'], dictionaryId: 'COG-005',
+    notes: 'EXISTS-DIFFERENTLY, now closed (sub-wave C1). §4.8: previously only Participant.BehaviourRiskSummary free text, no discrete Y/N flag — now a dedicated bool? column. behaviourRiskSummary (Risks & Hazards step) remains the free-text elaboration.',
+  },
+  { field: 'behavioursOfConcernFiveYearHistory', label: 'Behaviours of Concern (5-Year History)', sources: ['shared'], notes: 'NEW (sub-wave C1). Both source forms\' "BOC 5yrs+" rating row (§2 shared set) — this is the discrete Y/N companion to that rating, see behaviourRiskRating below.' },
+  {
+    field: 'behaviourRiskRating', label: 'Behaviour Risk Rating', sources: ['profile'], dictionaryId: 'COG-011',
+    notes: 'EXISTS-DIFFERENTLY, now closed (sub-wave C1). §4.8: previously only free-text BehaviourRiskSummary, no Low/Med/High/Critical enum field — now a dedicated RiskRatingLevel? column, sharing the enum with fallsRiskRating (§4.7).',
+  },
+  { field: 'ridsLogged', label: 'RIDS Logged', sources: ['profile'], dictionaryId: 'COG-008', notes: 'NEW (sub-wave C1).' },
+  { field: 'bspPlanProvided', label: 'BSP Plan Provided', sources: ['profile'], dictionaryId: 'COG-009', notes: 'NEW (sub-wave C1).' },
+  { field: 'bocChartProvided', label: 'BOC Chart Provided', sources: ['profile'], dictionaryId: 'COG-010', notes: 'NEW (sub-wave C1).' },
+  { field: 'expressiveSkills', label: 'Expressive Skills', sources: ['shared'], dictionaryId: 'COM-001', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low + Verbal/Non-verbal/Restrictions/Sign, too varied for one enum. Intake\'s free-text "Expressive and Receptive Skills" is the shared-set companion (§2).' },
+  { field: 'receptiveSkills', label: 'Receptive Skills', sources: ['profile'], dictionaryId: 'COM-002', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low.' },
+  { field: 'readingAbility', label: 'Reading Ability', sources: ['profile'], dictionaryId: 'COM-003', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + Good/Med/Low.' },
+  { field: 'communicationAids', label: 'Communication Aids', sources: ['profile'], dictionaryId: 'COM-004', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + specify.' },
 
   // ── Risks & Hazards step — §4.10, INTAKE-09 (renamed from "Risks & Consents" in sub-wave B —
   // this step never carried any consent content; the Consent & Terms block above now has its own

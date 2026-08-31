@@ -685,3 +685,82 @@ public enum AlertSeverity
     Warning = 1,
     Info = 2,
 }
+
+/// <summary>
+/// INTAKE sub-wave C1 — the ten structured health/medical conditions the Participant Profile
+/// source form's "Diagnoses &amp; Medical Conditions" table (research spec §1c-8, Master Data
+/// Dictionary MED-002..011) tracks per participant, one <see cref="Entities.ParticipantHealthCondition"/>
+/// row each: Intellectual Disability, Visual Impairment, Hearing Impairment, Mental Health, High
+/// Blood Pressure, Wound Care, Epilepsy, Diabetes, Asthma, Dysphagia. This is a support-planning
+/// detail grid, NOT a replacement for <see cref="Entities.Participant.PrimaryDiagnosis"/>/
+/// <see cref="Entities.Participant.OtherDiagnoses"/> (DIAG-01's clinical diagnosis labels) — see
+/// <see cref="Entities.ParticipantHealthCondition"/>'s type doc for the full reconciliation between
+/// the two, including the one-way Epilepsy-diagnosis-to-grid derivation rule.
+/// </summary>
+public enum HealthConditionType
+{
+    IntellectualDisability,
+    VisualImpairment,
+    HearingImpairment,
+    MentalHealth,
+    HighBloodPressure,
+    WoundCare,
+    Epilepsy,
+    Diabetes,
+    Asthma,
+    Dysphagia,
+}
+
+/// <summary>
+/// INTAKE sub-wave C1, Master Data Dictionary MOB-002/003 — the Participant Profile source form's
+/// Ambulant sub-grid (§1c-9 "Client Functional Information"): "No Assist/Unsteady/Frame/Short
+/// Distance". Nullable on <see cref="Entities.Participant.AmbulantStatus"/> — unset until intake
+/// captures it. Deliberately these four source-form values only, not a wider invented scale.
+/// </summary>
+public enum AmbulantStatus
+{
+    NoAssist,
+    Unsteady,
+    Frame,
+    ShortDistance,
+}
+
+/// <summary>
+/// INTAKE sub-wave C1, Master Data Dictionary MOB-006 — the Participant Profile source form's
+/// "Level of Personal Care" field (§1c-9): "Independent/Supervision/One-person/Two-person".
+/// </summary>
+public enum PersonalCareLevel
+{
+    Independent,
+    Supervision,
+    OnePerson,
+    TwoPerson,
+}
+
+/// <summary>
+/// INTAKE sub-wave C1 — shared Low/Medium/High/Critical rating vocabulary reused by both
+/// <see cref="Entities.Participant.FallsRiskRating"/> (MOB-003, §1c-9's Ambulant sub-grid "Falls
+/// Risk Low/Med/High/Crit") and <see cref="Entities.Participant.BehaviourRiskRating"/> (COG-011,
+/// §1c-10's "Risk Assessment 5-years-ago/Current [Low/Med/High/Critical each]") — the richer
+/// 4-value Participant Profile vocabulary, not the Intake coversheet's 3-value Low/Med/High/NA
+/// variant (§2's flagged value-set delta; a null value on the nullable column already covers the
+/// "not applicable/not rated" case without a separate NA member).
+/// </summary>
+public enum RiskRatingLevel
+{
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// <summary>
+/// INTAKE sub-wave C1, Master Data Dictionary COG-001 — the Participant Profile source form's
+/// "Memory" field (§1c-10 "Cognitive and Behavioural"): "Excellent/Fair/Poor".
+/// </summary>
+public enum MemoryLevel
+{
+    Excellent,
+    Fair,
+    Poor,
+}

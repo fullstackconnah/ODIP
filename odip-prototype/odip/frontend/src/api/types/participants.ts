@@ -1,7 +1,8 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel } from './enums'
 import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
 import type { CreateParticipantRiskEntryDto } from './risk-entries'
 import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
+import type { ParticipantHealthConditionDto, CreateParticipantHealthConditionDto } from './health-conditions'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -172,6 +173,37 @@ export function formatServiceStreams(streams: ServiceStream[] | undefined): stri
   return streams && streams.length ? streams.join(', ') : 'None'
 }
 
+/** INTAKE sub-wave C1, Mobility & Functional (MOB-002). */
+export const AMBULANT_STATUS_LABELS: Record<AmbulantStatus, string> = {
+  NoAssist: 'No Assist',
+  Unsteady: 'Unsteady',
+  Frame: 'Frame',
+  ShortDistance: 'Short Distance',
+}
+
+/** INTAKE sub-wave C1, Mobility & Functional (MOB-006). */
+export const PERSONAL_CARE_LEVEL_LABELS: Record<PersonalCareLevel, string> = {
+  Independent: 'Independent',
+  Supervision: 'Supervision',
+  OnePerson: 'One-Person Assist',
+  TwoPerson: 'Two-Person Assist',
+}
+
+/** INTAKE sub-wave C1 — shared by Falls Risk (MOB-003) and Behaviour Risk (COG-011) ratings. */
+export const RISK_RATING_LEVEL_LABELS: Record<RiskRatingLevel, string> = {
+  Low: 'Low',
+  Medium: 'Medium',
+  High: 'High',
+  Critical: 'Critical',
+}
+
+/** INTAKE sub-wave C1, Behaviour & Communication (COG-001). */
+export const MEMORY_LEVEL_LABELS: Record<MemoryLevel, string> = {
+  Excellent: 'Excellent',
+  Fair: 'Fair',
+  Poor: 'Poor',
+}
+
 export interface ParticipantListDto {
   id: string
   firstName: string
@@ -288,6 +320,40 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   choiceControlNotes: string | null
   /** Always all seven ConsentType entries — see ParticipantConsentsController.GetForParticipant. */
   consents: ParticipantConsentDto[]
+
+  // INTAKE sub-wave C1 — Allergies/Anaphylaxis (Medical step, Master Data Dictionary MED-012).
+  allergiesDetail: string | null
+  isAnaphylaxisRisk: boolean | null
+  allergyManagementNotes: string | null
+  /** Always all ten HealthConditionType entries — see ParticipantHealthConditionsController.GetForParticipant. */
+  healthConditions: ParticipantHealthConditionDto[]
+
+  // INTAKE sub-wave C1 — Mobility & Functional (Support Needs & Mobility step).
+  ambulantStatus: AmbulantStatus | null
+  fallsRiskRating: RiskRatingLevel | null
+  unevenGroundFlag: boolean | null
+  levelOfPersonalCare: PersonalCareLevel | null
+  orthotics: string | null
+  continenceSupportDetail: string | null
+  bowelCareDetail: string | null
+  menstruationSupport: string | null
+  skinIntegrity: string | null
+
+  // INTAKE sub-wave C1 — Behaviour & Communication step.
+  memory: MemoryLevel | null
+  memoryAids: boolean | null
+  impairedUnderstanding: boolean | null
+  impairedJudgementReasoning: boolean | null
+  behavioursOfConcernCurrent: boolean | null
+  behavioursOfConcernFiveYearHistory: boolean | null
+  behaviourRiskRating: RiskRatingLevel | null
+  ridsLogged: boolean | null
+  bspPlanProvided: boolean | null
+  bocChartProvided: boolean | null
+  expressiveSkills: string | null
+  receptiveSkills: string | null
+  readingAbility: string | null
+  communicationAids: string | null
 }
 
 export interface CreateParticipantDto {
@@ -425,6 +491,44 @@ export interface CreateParticipantDto {
    * CreateParticipantDto's backend doc for the fuller reasoning.
    */
   consents: CreateParticipantConsentDto[]
+
+  // INTAKE sub-wave C1 — Allergies/Anaphylaxis (Master Data Dictionary MED-012). All optional.
+  allergiesDetail?: string
+  isAnaphylaxisRisk?: boolean | null
+  allergyManagementNotes?: string
+
+  /**
+   * The structured health-condition grid, upserted transactionally with the participant on both
+   * create and update — same read-on-both-paths convention as consents above.
+   */
+  healthConditions: CreateParticipantHealthConditionDto[]
+
+  // INTAKE sub-wave C1 — Mobility & Functional (Master Data Dictionary MOB-002/003/005..010/012). All optional.
+  ambulantStatus?: AmbulantStatus | null
+  fallsRiskRating?: RiskRatingLevel | null
+  unevenGroundFlag?: boolean | null
+  levelOfPersonalCare?: PersonalCareLevel | null
+  orthotics?: string
+  continenceSupportDetail?: string
+  bowelCareDetail?: string
+  menstruationSupport?: string
+  skinIntegrity?: string
+
+  // INTAKE sub-wave C1 — Behaviour & Communication (Master Data Dictionary COG-*/COM-*). All optional.
+  memory?: MemoryLevel | null
+  memoryAids?: boolean | null
+  impairedUnderstanding?: boolean | null
+  impairedJudgementReasoning?: boolean | null
+  behavioursOfConcernCurrent?: boolean | null
+  behavioursOfConcernFiveYearHistory?: boolean | null
+  behaviourRiskRating?: RiskRatingLevel | null
+  ridsLogged?: boolean | null
+  bspPlanProvided?: boolean | null
+  bocChartProvided?: boolean | null
+  expressiveSkills?: string
+  receptiveSkills?: string
+  readingAbility?: string
+  communicationAids?: string
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {
