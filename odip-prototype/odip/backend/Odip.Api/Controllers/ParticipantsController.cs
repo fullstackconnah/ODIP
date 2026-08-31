@@ -105,6 +105,31 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// INTAKE sub-wave C2 — upserts every ADL-assessment row submitted with a create/update
+    /// payload, keyed by <see cref="Domain.Enums.AdlType"/>. Copies UpsertHealthConditionsAsync's
+    /// documented pattern exactly, including the load-bearing empty/null guard below (same
+    /// reasoning: an Update caller that never mentions AdlAssessments round-trips an empty list,
+    /// which must mean "leave existing rows alone", not "clear every ADL answer"). Called before
+    /// SaveChangesAsync so every row lands in the same transaction as the participant insert/update.
+    /// </summary>
+    private async Task UpsertAdlAssessmentsAsync(Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
+    {
+        if (assessments is null || assessments.Count == 0) return;
+        var existing = await _db.ParticipantAdlAssessments.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(a => a.AdlType);
+        foreach (var dto in assessments)
+        {
+            if (!byType.TryGetValue(dto.AdlType, out var row))
+            {
+                row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = dto.AdlType };
+                _db.ParticipantAdlAssessments.Add(row);
+                byType[dto.AdlType] = row;
+            }
+            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes);
+        }
+    }
+
+    /// <summary>
     /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
     /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
     /// enough to be findable in the list (at least one of the two names), while a full
@@ -375,6 +400,7 @@ public class ParticipantsController : ControllerBase
             .Include(x => x.RestrictivePractices)
             .Include(x => x.Consents)
             .Include(x => x.HealthConditions)
+            .Include(x => x.AdlAssessments)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -455,6 +481,17 @@ public class ParticipantsController : ControllerBase
             RidsLogged = p.RidsLogged, BspPlanProvided = p.BspPlanProvided, BocChartProvided = p.BocChartProvided,
             ExpressiveSkills = p.ExpressiveSkills, ReceptiveSkills = p.ReceptiveSkills,
             ReadingAbility = p.ReadingAbility, CommunicationAids = p.CommunicationAids,
+            // INTAKE sub-wave C2 — the structured ADL rating grid (Daily Living step).
+            AdlAssessments = ParticipantAdlAssessmentsController.MaterializeAll(p.Id, p.AdlAssessments.ToList()),
+            // INTAKE sub-wave C2 — Meals & Diet.
+            MealAssistanceDetail = p.MealAssistanceDetail, ChokingRiskMealDetail = p.ChokingRiskMealDetail,
+            ModifiedDietDetail = p.ModifiedDietDetail, PegRegimeMealDetail = p.PegRegimeMealDetail,
+            SpecialUtensilsDetail = p.SpecialUtensilsDetail, SpecialDietaryNeedsDetail = p.SpecialDietaryNeedsDetail,
+            FavouriteBreakfast = p.FavouriteBreakfast, FavouriteLunch = p.FavouriteLunch, FavouriteDinner = p.FavouriteDinner,
+            MedicationTricks = p.MedicationTricks, FoodsAlwaysEaten = p.FoodsAlwaysEaten,
+            // INTAKE sub-wave C2 — About Me.
+            Goals = p.Goals, SupportAreas = p.SupportAreas, StrengthsFears = p.StrengthsFears,
+            ThingsToKnow = p.ThingsToKnow, WhoIsImportant = p.WhoIsImportant, LikesDislikes = p.LikesDislikes,
         }));
     }
 
@@ -578,6 +615,15 @@ public class ParticipantsController : ControllerBase
             RidsLogged = dto.RidsLogged, BspPlanProvided = dto.BspPlanProvided, BocChartProvided = dto.BocChartProvided,
             ExpressiveSkills = dto.ExpressiveSkills, ReceptiveSkills = dto.ReceptiveSkills,
             ReadingAbility = dto.ReadingAbility, CommunicationAids = dto.CommunicationAids,
+            // INTAKE sub-wave C2 — Meals & Diet.
+            MealAssistanceDetail = dto.MealAssistanceDetail, ChokingRiskMealDetail = dto.ChokingRiskMealDetail,
+            ModifiedDietDetail = dto.ModifiedDietDetail, PegRegimeMealDetail = dto.PegRegimeMealDetail,
+            SpecialUtensilsDetail = dto.SpecialUtensilsDetail, SpecialDietaryNeedsDetail = dto.SpecialDietaryNeedsDetail,
+            FavouriteBreakfast = dto.FavouriteBreakfast, FavouriteLunch = dto.FavouriteLunch, FavouriteDinner = dto.FavouriteDinner,
+            MedicationTricks = dto.MedicationTricks, FoodsAlwaysEaten = dto.FoodsAlwaysEaten,
+            // INTAKE sub-wave C2 — About Me.
+            Goals = dto.Goals, SupportAreas = dto.SupportAreas, StrengthsFears = dto.StrengthsFears,
+            ThingsToKnow = dto.ThingsToKnow, WhoIsImportant = dto.WhoIsImportant, LikesDislikes = dto.LikesDislikes,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -646,6 +692,9 @@ public class ParticipantsController : ControllerBase
         // INTAKE sub-wave C1 — health-condition grid rows submitted alongside a new/drafted
         // participant, in the same SaveChangesAsync call as the participant insert below.
         await UpsertHealthConditionsAsync(participant.Id, dto.HealthConditions, ct);
+        // INTAKE sub-wave C2 — ADL-assessment grid rows submitted alongside a new/drafted
+        // participant, in the same SaveChangesAsync call as the participant insert below.
+        await UpsertAdlAssessmentsAsync(participant.Id, dto.AdlAssessments, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -782,6 +831,15 @@ public class ParticipantsController : ControllerBase
         p.RidsLogged = dto.RidsLogged; p.BspPlanProvided = dto.BspPlanProvided; p.BocChartProvided = dto.BocChartProvided;
         p.ExpressiveSkills = dto.ExpressiveSkills; p.ReceptiveSkills = dto.ReceptiveSkills;
         p.ReadingAbility = dto.ReadingAbility; p.CommunicationAids = dto.CommunicationAids;
+        // INTAKE sub-wave C2 — Meals & Diet.
+        p.MealAssistanceDetail = dto.MealAssistanceDetail; p.ChokingRiskMealDetail = dto.ChokingRiskMealDetail;
+        p.ModifiedDietDetail = dto.ModifiedDietDetail; p.PegRegimeMealDetail = dto.PegRegimeMealDetail;
+        p.SpecialUtensilsDetail = dto.SpecialUtensilsDetail; p.SpecialDietaryNeedsDetail = dto.SpecialDietaryNeedsDetail;
+        p.FavouriteBreakfast = dto.FavouriteBreakfast; p.FavouriteLunch = dto.FavouriteLunch; p.FavouriteDinner = dto.FavouriteDinner;
+        p.MedicationTricks = dto.MedicationTricks; p.FoodsAlwaysEaten = dto.FoodsAlwaysEaten;
+        // INTAKE sub-wave C2 — About Me.
+        p.Goals = dto.Goals; p.SupportAreas = dto.SupportAreas; p.StrengthsFears = dto.StrengthsFears;
+        p.ThingsToKnow = dto.ThingsToKnow; p.WhoIsImportant = dto.WhoIsImportant; p.LikesDislikes = dto.LikesDislikes;
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
@@ -797,6 +855,8 @@ public class ParticipantsController : ControllerBase
         await UpsertConsentsAsync(p.Id, dto.Consents, ct);
         // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
         await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
+        // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions above.
+        await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }

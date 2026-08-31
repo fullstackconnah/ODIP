@@ -764,3 +764,104 @@ public enum MemoryLevel
     Fair,
     Poor,
 }
+
+/// <summary>
+/// INTAKE sub-wave C2 — the 20 activities-of-daily-living rows the Participant Profile source
+/// form's §1c-15 "Personal Activities of Daily Living" table (6 rows) and §1c-17 "Community and
+/// Domestic ADL" table (14 rows) track per participant, one <see cref="Entities.ParticipantAdlAssessment"/>
+/// row each. Modelled as ONE enum (not two) so the entity/controller/materialization code is a
+/// single fixed-enumerated-set grid, exactly like <see cref="HealthConditionType"/> — see
+/// <see cref="Entities.ParticipantAdlAssessment"/>'s type doc for why a Category discriminator is
+/// NOT stored as its own database column, and <see cref="AdlTypeGroups"/> for the grouping this
+/// enum's single declaration order backs.
+///
+/// PERSONAL ADLs (first 6, research spec §1c-15): Dressing, Bathing/Showering, Oral Care,
+/// Grooming, Toileting/Bowel Care, Medication Administration.
+/// COMMUNITY/DOMESTIC ADLs (remaining 14, research spec §1c-17): Community Access, Socialising,
+/// Money Handling, Attending Appointments, Work/Study, Transportation, Public Transport, Road
+/// Awareness, Kitchen, Laundry, Cleaning, Gardening, Shopping, Banking.
+/// </summary>
+public enum AdlType
+{
+    // ── Personal ADLs (§1c-15) ──────────────────────────────
+    Dressing,
+    Bathing,
+    OralCare,
+    Grooming,
+    Toileting,
+    MedicationAdministration,
+
+    // ── Community / Domestic ADLs (§1c-17) ──────────────────
+    CommunityAccess,
+    Socialising,
+    MoneyHandling,
+    Appointments,
+    WorkStudy,
+    Transportation,
+    PublicTransport,
+    RoadAwareness,
+    Kitchen,
+    Laundry,
+    Cleaning,
+    Gardening,
+    Shopping,
+    Banking,
+}
+
+/// <summary>
+/// INTAKE sub-wave C2 — the discriminator grouping <see cref="AdlType"/> into the two source-form
+/// tables it came from (Personal vs Community/Domestic), used to render the wizard/detail-page grid
+/// as two visually grouped sections without a stored database column — see
+/// <see cref="AdlTypeGroups"/> for the lookup and <see cref="Entities.ParticipantAdlAssessment"/>'s
+/// type doc for why this is derived rather than persisted.
+/// </summary>
+public enum AdlCategory
+{
+    Personal,
+    CommunityDomestic,
+}
+
+/// <summary>
+/// Static <see cref="AdlType"/> -&gt; <see cref="AdlCategory"/> lookup, derived from
+/// <see cref="AdlType"/>'s fixed declaration order (the first 6 members are Personal, the
+/// remaining 14 are Community/Domestic) rather than a stored column — see
+/// <see cref="Entities.ParticipantAdlAssessment"/>'s type doc for the reasoning. Both the backend
+/// (MaterializeAll's grid) and the frontend (ADL_TYPE_CATEGORIES in api/types/enums.ts) group rows
+/// this same way; keep the two in sync if this list ever changes.
+/// </summary>
+public static class AdlTypeGroups
+{
+    public static readonly IReadOnlyList<AdlType> Personal = new[]
+    {
+        AdlType.Dressing, AdlType.Bathing, AdlType.OralCare, AdlType.Grooming, AdlType.Toileting, AdlType.MedicationAdministration,
+    };
+
+    public static readonly IReadOnlyList<AdlType> CommunityDomestic = new[]
+    {
+        AdlType.CommunityAccess, AdlType.Socialising, AdlType.MoneyHandling, AdlType.Appointments, AdlType.WorkStudy,
+        AdlType.Transportation, AdlType.PublicTransport, AdlType.RoadAwareness, AdlType.Kitchen, AdlType.Laundry,
+        AdlType.Cleaning, AdlType.Gardening, AdlType.Shopping, AdlType.Banking,
+    };
+
+    public static AdlCategory CategoryOf(AdlType type) => Personal.Contains(type) ? AdlCategory.Personal : AdlCategory.CommunityDomestic;
+}
+
+/// <summary>
+/// INTAKE sub-wave C2 — the Personal ADL table's rating scale, shown on the source form only as
+/// the column header letters "I/S/A/F" (research spec §1c-15/§1c-17) with NO expansion given
+/// anywhere in the 4 analysed source documents (confirmed absent from the extracted text — see
+/// the research spec's §6 "ambiguous/illegible" doctrine for how this codebase treats an
+/// unconfirmed source reading). "Independent/Supervision/Assistance/FullSupport" is this PR's
+/// best-effort plain-English expansion of the industry-standard ADL rating scale the letters
+/// almost certainly stand for — NOT a confirmed source-document expansion. Flagged in this PR's
+/// report rather than silently assumed; verify against the original Oassist form/staff training
+/// material before this ships as end-user-facing copy that claims to quote the source verbatim.
+/// Nullable on <see cref="Entities.ParticipantAdlAssessment.Level"/> — null = not yet assessed.
+/// </summary>
+public enum AdlLevel
+{
+    Independent,
+    Supervision,
+    Assistance,
+    FullSupport,
+}
