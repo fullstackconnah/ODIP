@@ -196,11 +196,11 @@ owner decision (collected under Open Flags at the end).
 
 ### I. Participant Details & Documents
 
-- [ ] **PDETAIL-01 — More comprehensive participant details tab.** Expand the Details
+- [x] **PDETAIL-01 — More comprehensive participant details tab.** Expand the Details
   tab to present the fuller picture this backlog adds (gender, address, diagnoses,
   living arrangements, funding, contacts, risks). Best done after the intake/profile
   data model settles.
-- [ ] **RP-01 — Restrictive practice bulk-add via editable table.** Rework the RP add
+- [x] **RP-01 — Restrictive practice bulk-add via editable table.** Rework the RP add
   modal: pick an RP type and enter how many practices of that type, producing an
   editable table with that many rows — columns: description, authorised by,
   authorisation date, review date — plus an add-row control. On save each row becomes
