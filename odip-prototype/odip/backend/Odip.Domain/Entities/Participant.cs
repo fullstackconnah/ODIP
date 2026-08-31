@@ -47,10 +47,13 @@ public class Participant : ITenantEntity
     public LivingArrangement? LivingArrangement { get; set; }
 
     // LIVING-02 (Family arrangement). MainSupportPersonName plausibly links to a future
-    // CONTACT-01 typed contact rather than free text ("decide during design", per the backlog) —
-    // CONTACT-01 isn't built yet (this wave precedes it), so these ship as free-text fields now.
-    // When CONTACT-01 lands, consider replacing MainSupportPersonName/Relationship with a FK to a
-    // "Family/Other" typed contact instead of duplicating name/relationship as plain strings here.
+    // CONTACT-01 typed contact rather than free text ("decide during design", per the backlog).
+    // CONTACT-01/02/03 have now landed (see Person/ParticipantContactRole) — but per that task's
+    // brief this linkage is deliberately NOT made yet: these two fields stay free text, and no
+    // data migration from here into a Person/ParticipantContactRole row is performed. A future
+    // pass can replace MainSupportPersonName/Relationship with a FK to a ParticipantContactRole
+    // (there is no dedicated "family/other" role type in ContactRoleType — NextOfKin is the
+    // closest existing fit) instead of duplicating name/relationship as plain strings here.
     public string? MainSupportPersonName { get; set; }
     public string? MainSupportPersonRelationship { get; set; }
     public string? OthersLivingInAccommodation { get; set; }
@@ -192,4 +195,7 @@ public class Participant : ITenantEntity
     public ICollection<ParticipantBooking> Bookings { get; set; } = new List<ParticipantBooking>();
     public ICollection<ParticipantContact> ParticipantContacts { get; set; } = new List<ParticipantContact>();
     public ICollection<RestrictivePractice> RestrictivePractices { get; set; } = new List<RestrictivePractice>();
+
+    /// <summary>CONTACT-01/02/03. See <see cref="Entities.ParticipantContactRole"/>'s type doc.</summary>
+    public ICollection<ParticipantContactRole> ContactRoles { get; set; } = new List<ParticipantContactRole>();
 }

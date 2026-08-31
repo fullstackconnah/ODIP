@@ -245,3 +245,23 @@ export const HIDPA_SUPPORT_CATEGORIES = [
   'UrinaryCatheterManagement', 'SubcutaneousInjections', 'ComplexWoundCare', 'EpilepsyManagement',
 ] as const
 export type HidpaSupportCategory = typeof HIDPA_SUPPORT_CATEGORIES[number]
+
+// ── Contact Role Type (CONTACT-01/02/03 — the 14 NDIS/disability-practice contact
+// roles a Person can hold for a Participant; see Odip.Domain.Enums.ContactRoleType's doc for the
+// nominee-scope modelling note). Backend is a plain int enum, same JsonStringEnumConverter
+// wire format as every other enum on this page — NOT the same concept as the pre-existing,
+// unused CONTACT_TYPES above (that's the legacy Contact entity's 8-value type, untouched). ──
+export const CONTACT_ROLE_TYPES = [
+  'NextOfKin', 'EmergencyContact', 'Guardian', 'PlanNominee', 'ChildRepresentative',
+  'SupportCoordinator', 'PlanManager', 'Gp', 'Specialist', 'Pharmacy', 'ProviderContact',
+  'Advocate', 'Interpreter', 'Solicitor',
+] as const
+export type ContactRoleType = typeof CONTACT_ROLE_TYPES[number]
+
+// ── Nominee Scope (PlanNominee role only) ────────────────
+export const NOMINEE_SCOPES = ['Plan', 'Correspondence'] as const
+export type NomineeScope = typeof NOMINEE_SCOPES[number]
+
+// ── Contact Role Status ───────────────────────────────────
+export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
+export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]

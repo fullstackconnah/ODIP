@@ -28,6 +28,10 @@ public class OdipDbContext : DbContext
     public DbSet<Participant> Participants => Set<Participant>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ParticipantContact> ParticipantContacts => Set<ParticipantContact>();
+    // CONTACT-01/02/03 — see Person/ParticipantContactRole's type docs for why this is a separate
+    // model from Contact/ParticipantContact above rather than a replacement of it.
+    public DbSet<Person> People => Set<Person>();
+    public DbSet<ParticipantContactRole> ParticipantContactRoles => Set<ParticipantContactRole>();
     public DbSet<SupportProfile> SupportProfiles => Set<SupportProfile>();
     public DbSet<ParticipantMedication> ParticipantMedications => Set<ParticipantMedication>();
     public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
@@ -151,6 +155,67 @@ public class OdipDbContext : DbContext
                 .WithMany(c => c.ParticipantContacts)
                 .HasForeignKey(e => e.ContactId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Person (CONTACT-01/02/03) ─────────────────────────────
+        modelBuilder.Entity<Person>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Mobile).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.AddressLine).HasMaxLength(200);
+            entity.Property(e => e.Suburb).HasMaxLength(100);
+            entity.Property(e => e.State).HasMaxLength(10);
+            entity.Property(e => e.Postcode).HasMaxLength(4);
+            entity.Property(e => e.Organisation).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Ignore(e => e.FullName);
+
+            entity.HasIndex(e => e.LastName);
+        });
+
+        // ── ParticipantContactRole (CONTACT-01/02/03) ─────────────
+        modelBuilder.Entity<ParticipantContactRole>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RelationshipToParticipant).HasMaxLength(100);
+            entity.Property(e => e.AppointingTribunal).HasMaxLength(50);
+            entity.Property(e => e.OrderScopeDomains).HasColumnType("text[]");
+            entity.Property(e => e.ReasonForAppointment).HasMaxLength(500);
+            entity.Property(e => e.AlternateRepresentativeName).HasMaxLength(200);
+            entity.Property(e => e.FundingLineItemType).HasMaxLength(100);
+            entity.Property(e => e.OrganisationName).HasMaxLength(200);
+            entity.Property(e => e.RegistrationNumber).HasMaxLength(100);
+            entity.Property(e => e.Discipline).HasMaxLength(100);
+            entity.Property(e => e.FrequencyOfContact).HasMaxLength(200);
+            entity.Property(e => e.RoleTitle).HasMaxLength(100);
+            entity.Property(e => e.ScopeNotes).HasMaxLength(500);
+            entity.Property(e => e.AuthorisationDocumentReference).HasMaxLength(200);
+            entity.Property(e => e.PreferredLanguage).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            // Restrict, same idiom as ParticipantNote/ParticipantRoutine/ParticipantRiskEntry →
+            // Participant — a participant with contact-role history must not be silently
+            // cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany(p => p.ContactRoles)
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Restrict, not Cascade: a Person referenced by role rows must not silently disappear
+            // rows out from under an audit trail — the frontend blocks deleting a Person still in
+            // use instead (there is no Person delete endpoint at all for CONTACT-01's MVP).
+            entity.HasOne(e => e.Person)
+                .WithMany(p => p.ContactRoles)
+                .HasForeignKey(e => e.PersonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => e.PersonId);
+            entity.HasIndex(e => e.RoleType);
         });
 
         // ── SupportProfile (1:1 with Participant) ────────────────
@@ -1236,6 +1301,17 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<RestrictivePractice>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RestrictivePractice>()
+            .HasIndex(e => e.TenantId);
+
+        // ── Contacts (CONTACT-01/02/03) tenant query filters ───────────────────────
+        modelBuilder.Entity<Person>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<Person>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantContactRole>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantContactRole>()
             .HasIndex(e => e.TenantId);
     }
 

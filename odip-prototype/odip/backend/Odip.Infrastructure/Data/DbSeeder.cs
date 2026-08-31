@@ -522,6 +522,64 @@ public static class DbSeeder
         };
         context.ParticipantContacts.AddRange(participantContacts);
 
+        // ── People / ParticipantContactRoles (CONTACT-01/02/03) ──
+        // Independent of the legacy Contacts/ParticipantContacts block above (see the
+        // AddContactsModel migration's data-copy for how *existing* legacy rows migrate — this is
+        // separately-seeded demo data for the new model, not a re-seeding of the same contacts).
+        // Deliberately covers 13 of the 14 ContactRoleType values and several multi-role-per-person
+        // examples (research §5's core CONTACT-03 scenario): ChildRepresentative is the one type
+        // NOT seeded — every seeded participant is an adult (see the DateOfBirth values above), and
+        // ContactRoleRules.Validate would reject a ChildRepresentative row for an 18+ participant's
+        // DOB if it ever reached the controller, so seeding one here (which bypasses that
+        // validator entirely via a direct EF add) would model a state the API itself refuses.
+        var people = new List<Person>
+        {
+            // Liam Johnson (participants[0], PlanManaged) — one person, two roles.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Karen", LastName = "Johnson", Phone = "07 3456 1001", Mobile = "0412 345 001", Email = "karen.johnson@email.com.au", Organisation = null },
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, FirstName = "Diane", LastName = "Cooper", Mobile = "0412 345 002", Email = "diane.cooper@mapleplan.com.au", Organisation = "Maple Plan Management" },
+            // Olivia Wilson (participants[3], PlanManaged) — one person holding both Guardian and
+            // Plan Nominee (research §5: "the same person may be appointed as both guardian and
+            // nominee"), plus a separate Plan Manager contact.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, FirstName = "Denise", LastName = "Wilson", Phone = "03 9123 1003", Mobile = "0412 345 003", Email = "denise.wilson@email.com.au", Organisation = null },
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, FirstName = "Farah", LastName = "Nasser", Mobile = "0412 345 004", Email = "farah.nasser@mycarespace.com.au", Organisation = "MyCareSpace Plan Management" },
+            // Sophie Brown (participants[1], AgencyManaged) — Support Coordinator, GP, and a
+            // registered Provider Contact (RegisteredProviderFlag required for Agency-managed).
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, FirstName = "Karen", LastName = "Wilson", Mobile = "0412 345 005", Email = "karen.wilson@iss.com.au", Organisation = "Inclusive Support Solutions" },
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, FirstName = "Dr Jason", LastName = "Park", Phone = "07 3211 5555", Email = "j.park@southsidemedical.com.au", Organisation = "Southside Medical Centre" },
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, FirstName = "Amanda", LastName = "Ho", Mobile = "0412 345 007", Email = "amanda.ho@sunrisecs.com.au", Organisation = "Sunrise Community Services" },
+            // Charlotte White (participants[7]) — Specialist.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, FirstName = "Dr Priya", LastName = "Singh", Phone = "03 9555 1008", Email = "p.singh@mindcarepsych.com.au", Organisation = "Mindcare Psychiatry" },
+            // Amelia Garcia (participants[9]) — Pharmacy (person-record standing in for the org,
+            // per Person.cs's type doc — pharmacy contacts don't quite have an individual name).
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, FirstName = "Riverside", LastName = "Pharmacy", Phone = "03 9555 1009", Organisation = "Riverside Pharmacy" },
+            // William Martin (participants[8]) — Solicitor.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, FirstName = "David", LastName = "Osei", Phone = "07 3555 1010", Email = "d.osei@baysidelegal.com.au", Organisation = "Bayside Legal" },
+            // Isabella Clarke (participants[10]) — Advocate.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000011"), TenantId = demoTenantId, FirstName = "Tanya", LastName = "Brooks", Mobile = "0412 345 011", Email = "tanya.brooks@communityvoices.org.au", Organisation = "Community Voices Advocacy" },
+            // Mason Nguyen (participants[11]) — Interpreter/language support.
+            new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000012"), TenantId = demoTenantId, FirstName = "Miguel", LastName = "Torres", Phone = "1300 655 010", Organisation = "TIS National" },
+        };
+        context.People.AddRange(people);
+
+        var contactRoles = new List<ParticipantContactRole>
+        {
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, ParticipantId = participants[0].Id, PersonId = people[0].Id, RoleType = ContactRoleType.NextOfKin, RelationshipToParticipant = "Mother", IsPrimary = true },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, ParticipantId = participants[0].Id, PersonId = people[0].Id, RoleType = ContactRoleType.EmergencyContact, RelationshipToParticipant = "Mother", PriorityOrder = 1, AuthorisedForMedicalInfo = true },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = participants[0].Id, PersonId = people[1].Id, RoleType = ContactRoleType.PlanManager, OrganisationName = "Maple Plan Management", StartDate = new DateOnly(2024, 1, 1) },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, ParticipantId = participants[3].Id, PersonId = people[2].Id, RoleType = ContactRoleType.Guardian, RelationshipToParticipant = "Mother", AppointingTribunal = "QCAT", OrderScopeDomains = new() { "Health", "Accommodation" }, OrderStartDate = new DateOnly(2022, 6, 1), OrderReviewDate = new DateOnly(2027, 6, 1) },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, ParticipantId = participants[3].Id, PersonId = people[2].Id, RoleType = ContactRoleType.PlanNominee, RelationshipToParticipant = "Mother", NomineeScope = NomineeScope.Plan, AppointmentDate = new DateOnly(2022, 7, 15) },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, ParticipantId = participants[3].Id, PersonId = people[3].Id, RoleType = ContactRoleType.PlanManager, OrganisationName = "MyCareSpace Plan Management", StartDate = new DateOnly(2023, 3, 1) },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, ParticipantId = participants[1].Id, PersonId = people[4].Id, RoleType = ContactRoleType.SupportCoordinator, OrganisationName = "Inclusive Support Solutions", FundingLineItemType = "Coordination of Supports", StartDate = new DateOnly(2024, 2, 1) },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, ParticipantId = participants[1].Id, PersonId = people[5].Id, RoleType = ContactRoleType.Gp, OrganisationName = "Southside Medical Centre", ConsentToShare = true },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, ParticipantId = participants[1].Id, PersonId = people[6].Id, RoleType = ContactRoleType.ProviderContact, RoleTitle = "Support Worker", OrganisationName = "Sunrise Community Services", RegisteredProviderFlag = true },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000a"), TenantId = demoTenantId, ParticipantId = participants[7].Id, PersonId = people[7].Id, RoleType = ContactRoleType.Specialist, Discipline = "Psychiatry", OrganisationName = "Mindcare Psychiatry", FrequencyOfContact = "Monthly" },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000b"), TenantId = demoTenantId, ParticipantId = participants[9].Id, PersonId = people[8].Id, RoleType = ContactRoleType.Pharmacy, OrganisationName = "Riverside Pharmacy", WebsterPackFlag = true },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000c"), TenantId = demoTenantId, ParticipantId = participants[8].Id, PersonId = people[9].Id, RoleType = ContactRoleType.Solicitor, OrganisationName = "Bayside Legal", ScopeNotes = "Financial administration order", AuthorisationDocumentReference = "QCAT Order 2023/4471" },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000d"), TenantId = demoTenantId, ParticipantId = participants[10].Id, PersonId = people[10].Id, RoleType = ContactRoleType.Advocate, OrganisationName = "Community Voices Advocacy", ScopeNotes = "Formal" },
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000e"), TenantId = demoTenantId, ParticipantId = participants[11].Id, PersonId = people[11].Id, RoleType = ContactRoleType.Interpreter, PreferredLanguage = "Vietnamese", OrganisationName = "TIS National" },
+        };
+        context.ParticipantContactRoles.AddRange(contactRoles);
+
         // ── Accommodation Properties (6) ─────────────────────────
         var properties = new List<AccommodationProperty>
         {

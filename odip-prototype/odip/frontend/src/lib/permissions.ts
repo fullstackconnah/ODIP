@@ -136,6 +136,15 @@ export function usePermissions() {
     canWriteRestrictivePractices: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * CONTACT-01/02/03: contact roles can carry sensitive information (guardian tribunal orders,
+     * solicitor/financial-administration references) — same coordination-only gate as restrictive
+     * practices, narrower than routines/notes/risks. Mirrors
+     * ParticipantContactRolesController/PersonsController's Admin/Coordinator/SuperAdmin role gate
+     * exactly.
+     */
+    canWriteContacts: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).

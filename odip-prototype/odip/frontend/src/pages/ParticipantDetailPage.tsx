@@ -7,13 +7,13 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { Card } from '@/components/Card'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2 } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories } from '@/api/types/participants'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ContactsTab } from './participant-detail'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -27,10 +27,10 @@ export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts } = usePermissions()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
-  type Tab = 'details' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'history'
+  type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'history'
   const initialTab = searchParams.get('tab')
   const [tab, setTab] = useState<Tab>(
-    initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'history' ? initialTab : 'details'
+    initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'history' ? initialTab : 'details'
   )
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
@@ -106,6 +106,7 @@ export default function ParticipantDetailPage() {
       <TabNav
         tabs={[
           { key: 'details', label: 'Details', icon: Users },
+          { key: 'contacts', label: 'Contacts', icon: Contact2 },
           { key: 'bookings', label: 'Bookings', icon: ClipboardList },
           { key: 'support', label: 'Support Profile', icon: Shield },
           { key: 'medications', label: 'Medications', icon: Pill },
@@ -257,6 +258,10 @@ export default function ParticipantDetailPage() {
             <RiskEntriesSection participantId={id} />
           </Card>
         </div>
+      )}
+
+      {tab === 'contacts' && (
+        <ContactsTab participantId={id} />
       )}
 
       {tab === 'bookings' && (

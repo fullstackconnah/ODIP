@@ -24,6 +24,12 @@ vi.mock('@/api/hooks', () => ({
       { id: 'staff-2', firstName: 'Jo', lastName: 'Lee', fullName: 'Jo Lee', isActive: true },
     ],
   }),
+  // CONTACT-02 — the Contacts step's "existing person" picker data source.
+  usePersons: () => ({
+    data: [
+      { id: 'person-1', firstName: 'Karen', lastName: 'Johnson', fullName: 'Karen Johnson', organisation: null, activeRoleCount: 0 },
+    ],
+  }),
 }))
 
 // ParticipantCreatePage calls useUnsavedChangesWarning, which uses react-router 7's
@@ -61,7 +67,7 @@ describe('ParticipantCreatePage wizard navigation', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    // Step 0 (Identity & Contacts) is current.
+    // Step 0 (Identity) is current.
     expect(within(stepNav()).getByRole('button', { name: /step 1|identity/i, current: 'step' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Next' }))
@@ -138,6 +144,7 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
 
     await user.type(screen.getByLabelText('Region'), 'QLD')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
     // Trigger the cross-field equipment error: check a box (this un-disables the notes
@@ -149,9 +156,10 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/select an equipment item/i)
 
-    // Go back to the NDIS step — its own field is still editable and shows no error, even
-    // though the Support step above it currently has an outstanding validation error.
-    await user.click(screen.getByRole('button', { name: 'Back' }))
+    // Go back to the NDIS step (via Contacts) — its own field is still editable and shows no
+    // error, even though the Support step above it currently has an outstanding validation error.
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> NDIS & Funding
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     const regionInput = screen.getByLabelText('Region')
@@ -168,6 +176,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
 
     await user.type(screen.getByLabelText('NDIS Number'), '431234567')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
@@ -189,11 +198,12 @@ describe('ParticipantCreatePage Review step', () => {
     expect(screen.queryByLabelText('NDIS Number')).not.toBeInTheDocument()
 
     // Each group's Edit button carries a distinct accessible name (aria-label) even though
-    // they all show the same "Edit" visible text — five identical "Edit" accessible names
+    // they all show the same "Edit" visible text — six identical "Edit" accessible names
     // would be indistinguishable to screen reader users navigating by role.
-    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(5)
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(6)
 
-    // Review groups render in step order: Identity(0), NDIS(1), Support(2), Medical(3), Risks(4).
+    // Review groups render in step order: Identity(0), NDIS(1), Contacts(2), Support(3),
+    // Medical(4), Risks(5).
     await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
@@ -244,7 +254,7 @@ describe('ParticipantCreatePage Review step', () => {
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -273,6 +283,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -286,6 +297,7 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByDisplayValue('Alex Rivera'))
     await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -347,6 +359,7 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
     await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -372,6 +385,7 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
 
     await user.type(screen.getByLabelText('Plan Start Date'), '2026-01-01')
     await user.type(screen.getByLabelText('Plan End Date'), '2026-12-31')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -447,6 +461,7 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
 
     await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -519,6 +534,7 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
     expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument() // now Ndis
     expect(screen.queryByLabelText(/Funding Organisation/i)).not.toBeInTheDocument()
 
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -549,6 +565,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Gender'), 'Other')
     await user.type(screen.getByLabelText(/Gender Self-Description/i), 'Genderfluid')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -560,7 +577,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
@@ -582,6 +599,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
 
     await user.selectOptions(screen.getByLabelText('Funding Source *'), 'Other')
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -593,7 +611,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
         'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes', 'otherDiagnoses',
@@ -613,6 +631,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Family')
     await user.type(screen.getByLabelText(/Main Support Person/i), 'Jane Citizen')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -625,7 +644,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'mainSupportPersonName', 'mainSupportPersonRelationship', 'medicalSummary', 'mobilityAidWalker',
@@ -646,6 +665,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'Independent')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -670,6 +690,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByLabelText('Lives With Others'))
     await user.type(screen.getByLabelText(/Who They Live With/i), 'Housemates')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -682,7 +703,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(Object.keys(payload).sort()).toEqual(
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livesWithOthers', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
@@ -718,6 +739,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('Living Arrangement'), 'SupportedAccommodation')
     await user.type(screen.getByLabelText(/SIL Provider Name/i), 'Sunrise SIL Services')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -730,7 +752,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(Object.keys(payload).sort()).toEqual(
       [
         'accommodationType', 'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
-        'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
+        'behaviourRiskSummary', 'contactRoles', 'dateOfBirth', 'equipmentRequirements', 'firstName',
         'fundingSource', 'gender', 'hidpaSupportCategories', 'isDraft', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
@@ -766,6 +788,7 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.selectOptions(screen.getByLabelText('State'), 'QLD')
     await user.type(screen.getByLabelText('Postcode'), '4006')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
@@ -783,6 +806,7 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('First Name *'), 'Jamie')
   await user.type(screen.getByLabelText('Last Name *'), 'Smith')
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
 }
@@ -1067,6 +1091,129 @@ describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () =>
   })
 })
 
+describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () => {
+  async function advanceToContacts(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+  }
+
+  async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+  }
+
+  it('adds a new-person contact row and submits it as part of the create payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('radio', { name: 'New person' }))
+    await user.type(screen.getByLabelText('First name *'), 'Karen')
+    await user.type(screen.getByLabelText('Last name'), 'Johnson')
+    await user.type(screen.getByLabelText('Relationship to participant'), 'Mother')
+    await user.click(screen.getByLabelText('Primary'))
+
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.contactRoles).toHaveLength(1)
+    expect(payload.contactRoles[0]).toMatchObject({
+      newPersonFirstName: 'Karen', newPersonLastName: 'Johnson', personId: null,
+      roleType: 'NextOfKin', relationshipToParticipant: 'Mother', isPrimary: true,
+    })
+  })
+
+  it('adds an existing-person contact row and submits it with the selected personId', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    // personMode defaults to 'existing' — the mocked usePersons() returns one person (Karen Johnson).
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
+
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.contactRoles).toHaveLength(1)
+    expect(payload.contactRoles[0]).toMatchObject({ personId: 'person-1', newPersonFirstName: null })
+  })
+
+  it('blocks Next when a row is added with no person selected', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    // A row-level error renders inline under that row's person picker (FormField's own error
+    // text, not the top-of-step alert summary — same nested-array-item shape as riskEntries).
+    expect(screen.getByText('Select a person.')).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('rows are optional overall — submitting with zero rows sends an empty array', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0].contactRoles).toEqual([])
+  })
+
+  // INTAKE-08 fix round 2 (Finding 1): an added-but-never-filled-in contact row must not block
+  // "Save as draft" — the server silently skips a personless row for a draft (see
+  // ParticipantsController.ValidateContactRoles); this only needs to prove the frontend's
+  // existing raw-getValues() draft payload reaches the mutation and succeeds, not that the
+  // server accepts it (that's the backend test suite's job).
+  it('an added-but-empty contact row does not block Save as draft', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    // Leave the row entirely untouched — no person selected/typed.
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.contactRoles).toHaveLength(1)
+    expect(payload.contactRoles[0]).toMatchObject({ personId: null, newPersonFirstName: null })
+  })
+
+  // CONTACT-02: Plan Manager is only available when Plan Type is Plan Managed — the default
+  // wizard answer is SelfManaged (see ParticipantCreatePage's defaultValues), so the option is
+  // disabled and its explanatory hint is shown as soon as a row is added.
+  it('disables the Plan Manager role option for a non-plan-managed participant', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('button', { name: /role type/i }))
+    expect(screen.getByRole('option', { name: 'Plan Manager' })).toHaveAttribute('aria-disabled', 'true')
+    // A role type the newly-added row is NOT currently pointed at (NextOfKin, the first
+    // available type) stays disabled without a gate-error hint cluttering the row — the hint
+    // only appears once a since-invalidated role is actually selected (see ContactRoleRules'
+    // Update-path equivalent for that scenario).
+    expect(screen.queryByText(/plan manager contacts are only available/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
   it('is available on the very first step and bypasses that step\'s zod validation', async () => {
     const user = userEvent.setup()
@@ -1112,7 +1259,7 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
 
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
-    for (let i = 0; i < 5; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    for (let i = 0; i < 6; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
