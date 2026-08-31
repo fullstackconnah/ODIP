@@ -111,6 +111,10 @@ public class ParticipantsController : ControllerBase
     /// reasoning: an Update caller that never mentions AdlAssessments round-trips an empty list,
     /// which must mean "leave existing rows alone", not "clear every ADL answer"). Called before
     /// SaveChangesAsync so every row lands in the same transaction as the participant insert/update.
+    /// Sparse on creation (see the guard inside the loop below): the wizard always submits the
+    /// full fixed twenty-row array with every hidden/unanswered row already null (see
+    /// <see cref="CreateParticipantAdlAssessmentDto"/>'s doc), so a blank incoming row must not
+    /// become a permanent database row just because it was present in the payload.
     /// </summary>
     private async Task UpsertAdlAssessmentsAsync(Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
     {
@@ -121,6 +125,18 @@ public class ParticipantsController : ControllerBase
         {
             if (!byType.TryGetValue(dto.AdlType, out var row))
             {
+                // Load-bearing skip, not just an optimisation: the client (both the wizard's
+                // create/draft submissions and any Update caller) always sends the full
+                // fixed-length AdlAssessments array — every AdlType, every time — with
+                // hidden/never-assessed rows carrying Level/Notes/HowToHelpNotes all null (see
+                // CreateParticipantAdlAssessmentDto's doc). Without this skip, EVERY participant
+                // would get all twenty ParticipantAdlAssessment rows persisted permanently on
+                // first save, even for streams that never show the ADL grid at all. Only skip when
+                // there both is no existing row for this type AND the incoming dto carries no
+                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
+                // to ApplyAnswer below and keeps the row, same clear-to-null-keeps-the-row
+                // convention as UpsertConsentsAsync.
+                if (dto.Level is null && string.IsNullOrWhiteSpace(dto.Notes) && string.IsNullOrWhiteSpace(dto.HowToHelpNotes)) continue;
                 row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = dto.AdlType };
                 _db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
@@ -136,7 +152,11 @@ public class ParticipantsController : ControllerBase
     /// empty/null guard below (same reasoning: an Update caller that never mentions ChecklistItems
     /// round-trips an empty list, which must mean "leave existing rows alone", not "clear every
     /// checklist answer"). Called before SaveChangesAsync so every row lands in the same
-    /// transaction as the participant insert/update.
+    /// transaction as the participant insert/update. Sparse on creation (see the guard inside the
+    /// loop below): the wizard always submits the full fixed twenty-one-row array with every
+    /// hidden/unanswered row already null (see <see cref="CreateParticipantChecklistItemDto"/>'s
+    /// doc), so a blank incoming row must not become a permanent database row just because it was
+    /// present in the payload.
     /// </summary>
     private async Task UpsertChecklistItemsAsync(Guid participantId, List<CreateParticipantChecklistItemDto> items, CancellationToken ct)
     {
@@ -147,6 +167,18 @@ public class ParticipantsController : ControllerBase
         {
             if (!byType.TryGetValue(dto.ItemType, out var row))
             {
+                // Load-bearing skip, not just an optimisation: the client (both the wizard's
+                // create/draft submissions and any Update caller) always sends the full
+                // fixed-length ChecklistItems array — every ChecklistItemType, every time — with
+                // hidden/never-assessed rows carrying Value/Notes both null (see
+                // CreateParticipantChecklistItemDto's doc). Without this skip, EVERY participant
+                // would get all twenty-one ParticipantChecklistItem rows persisted permanently on
+                // first save, even for participants with no CommunityAccessDailyLiving stream at
+                // all. Only skip when there both is no existing row for this type AND the incoming
+                // dto carries no answer whatsoever; a dto that clears an EXISTING row to null
+                // still falls through to ApplyAnswer below and keeps the row, same
+                // clear-to-null-keeps-the-row convention as UpsertConsentsAsync.
+                if (dto.Value is null && string.IsNullOrWhiteSpace(dto.Notes)) continue;
                 row = new ParticipantChecklistItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
                 _db.ParticipantChecklistItems.Add(row);
                 byType[dto.ItemType] = row;

@@ -929,6 +929,90 @@ public class ParticipantsControllerTests
         Assert.Equal(1, await db.ParticipantAdlAssessments.CountAsync(a => a.ParticipantId == createdBody.Data!.Id));
     }
 
+    // ── Review-round fix: the wizard's REAL contract is the full fixed 20-row AdlAssessments
+    // array on every save (see CreateParticipantAdlAssessmentDto's doc and
+    // ParticipantCreatePage.test.tsx's "fixed-length arrays that are ALWAYS submitted in full"
+    // assertion), with hidden/unanswered rows shaped as {Level: null, Notes: null,
+    // HowToHelpNotes: null} — NOT a hand-picked subset like the tests above use.
+    // UpsertAdlAssessmentsAsync must therefore skip creating a row for a null-answer item with no
+    // existing row, rather than persisting all 20 as permanent unanswered rows (identical bug and
+    // identical fix to UpsertChecklistItemsAsync). ──────────────────────────────────────────────
+
+    private static List<CreateParticipantAdlAssessmentDto> FullNullAdlArray() =>
+        Enum.GetValues<Domain.Enums.AdlType>()
+            .Select(t => new CreateParticipantAdlAssessmentDto { AdlType = t, Level = null, Notes = null, HowToHelpNotes = null })
+            .ToList();
+
+    [Fact]
+    public async Task Create_FullAdlAssessmentsArrayAllNull_PersistsZeroRows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { AdlAssessments = FullNullAdlArray() };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(0, await db.ParticipantAdlAssessments.CountAsync(a => a.ParticipantId == createdBody.Data!.Id));
+    }
+
+    [Fact]
+    public async Task Create_FullAdlAssessmentsArrayWithTwoAnswered_PersistsExactlyTwoRows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var items = FullNullAdlArray();
+        var dressingIdx = items.FindIndex(i => i.AdlType == Domain.Enums.AdlType.Dressing);
+        var communityAccessIdx = items.FindIndex(i => i.AdlType == Domain.Enums.AdlType.CommunityAccess);
+        items[dressingIdx] = items[dressingIdx] with { Level = Domain.Enums.AdlLevel.Independent };
+        items[communityAccessIdx] = items[communityAccessIdx] with { Level = Domain.Enums.AdlLevel.Assistance, Notes = "1:1 supervision" };
+
+        var dto = MinimalCreateDto() with { AdlAssessments = items };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantAdlAssessments.Where(a => a.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, a => a.AdlType == Domain.Enums.AdlType.Dressing && a.Level == Domain.Enums.AdlLevel.Independent);
+        Assert.Contains(saved, a => a.AdlType == Domain.Enums.AdlType.CommunityAccess && a.Level == Domain.Enums.AdlLevel.Assistance && a.Notes == "1:1 supervision");
+    }
+
+    /// <summary>The clear-to-null-keeps-the-row half of the ruling, mirrored from the checklist-item
+    /// coverage — once a row exists, a later full all-null array applies the incoming null values
+    /// but does NOT delete the rows.</summary>
+    [Fact]
+    public async Task Update_FullAdlAssessmentsArrayAllNullAfterRowsExist_RowsRemainClearedToNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var withAssessments = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            AdlAssessments = new()
+            {
+                new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Kitchen, Level = Domain.Enums.AdlLevel.Independent },
+                new CreateParticipantAdlAssessmentDto { AdlType = Domain.Enums.AdlType.Bathing, Level = Domain.Enums.AdlLevel.Supervision },
+            },
+        };
+        await controller.Update(participant.Id, withAssessments, CancellationToken.None);
+
+        await controller.Update(participant.Id, withAssessments with { AdlAssessments = FullNullAdlArray() }, CancellationToken.None);
+
+        var saved = await db.ParticipantAdlAssessments.Where(a => a.ParticipantId == participant.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, a => Assert.Null(a.Level));
+        Assert.All(saved, a => Assert.Null(a.Notes));
+    }
+
     /// <summary>
     /// Covers the new flat Meals &amp; Diet / About Me columns' round-trip through
     /// Create -&gt; GetById (research spec §4.9/§5, INTAKE sub-wave C2).

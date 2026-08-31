@@ -201,6 +201,94 @@ public class ParticipantsControllerCommunityAccessTests
         Assert.All(untouchedChecklistItems, c => Assert.Null(c.Id));
     }
 
+    // ── Review-round fix: the wizard's REAL contract is the full fixed 21-row ChecklistItems
+    // array on every save (see CreateParticipantChecklistItemDto's doc and
+    // ParticipantCreatePage.test.tsx's "fixed-length arrays that are ALWAYS submitted in full"
+    // assertion), with hidden/unanswered rows shaped as {Value: null, Notes: null} — NOT a
+    // hand-picked subset like the Task 2/4/8 tests above use. UpsertChecklistItemsAsync must
+    // therefore skip creating a row for a null-answer item with no existing row, rather than
+    // persisting all 21 as permanent unanswered rows. ──────────────────────────────────────────
+
+    private static List<CreateParticipantChecklistItemDto> FullNullChecklistArray() =>
+        Enum.GetValues<ChecklistItemType>()
+            .Select(t => new CreateParticipantChecklistItemDto { ItemType = t, Value = null, Notes = null })
+            .ToList();
+
+    [Fact]
+    public async Task Create_FullChecklistArrayAllNull_PersistsZeroRows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { ChecklistItems = FullNullChecklistArray() };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(0, await db.ParticipantChecklistItems.CountAsync(c => c.ParticipantId == createdBody.Data!.Id));
+    }
+
+    [Fact]
+    public async Task Create_FullChecklistArrayWithTwoAnswered_PersistsExactlyTwoRows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var items = FullNullChecklistArray();
+        var wheelchairIdx = items.FindIndex(i => i.ItemType == ChecklistItemType.UsesWheelchair);
+        var harmIdx = items.FindIndex(i => i.ItemType == ChecklistItemType.HarmToSelf);
+        items[wheelchairIdx] = items[wheelchairIdx] with { Value = ChecklistItemValue.Yes, Notes = "Power wheelchair." };
+        items[harmIdx] = items[harmIdx] with { Value = ChecklistItemValue.No };
+
+        var dto = MinimalCreateDto() with { ChecklistItems = items };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantChecklistItems.Where(c => c.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, c => c.ItemType == ChecklistItemType.UsesWheelchair && c.Value == ChecklistItemValue.Yes && c.Notes == "Power wheelchair.");
+        Assert.Contains(saved, c => c.ItemType == ChecklistItemType.HarmToSelf && c.Value == ChecklistItemValue.No);
+    }
+
+    /// <summary>The clear-to-null-keeps-the-row half of the ruling: once a row exists, a later full
+    /// all-null array (e.g. every field cleared out in the UI, or a save from a step that never
+    /// revisited these two answers) applies the incoming null values but does NOT delete the rows —
+    /// same convention as UpsertConsentsAsync.</summary>
+    [Fact]
+    public async Task Update_FullChecklistArrayAllNullAfterRowsExist_RowsRemainClearedToNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var createDto = MinimalCreateDto() with
+        {
+            ChecklistItems = new List<CreateParticipantChecklistItemDto>
+            {
+                new() { ItemType = ChecklistItemType.UsesWheelchair, Value = ChecklistItemValue.Yes, Notes = "Power wheelchair." },
+                new() { ItemType = ChecklistItemType.HarmToSelf, Value = ChecklistItemValue.No, Notes = "No current self-harm behaviours." },
+            },
+        };
+        var createResult = await controller.Create(createDto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        var participantId = createdBody.Data!.Id;
+
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = createDto.FirstName, LastName = createDto.LastName, IsActive = true,
+            PlanType = createDto.PlanType, OvernightSupport = createDto.OvernightSupport,
+            OvernightRatio = createDto.OvernightRatio, SupportRatio = createDto.SupportRatio,
+            ChecklistItems = FullNullChecklistArray(),
+        };
+        await controller.Update(participantId, updateDto, CancellationToken.None);
+
+        var saved = await db.ParticipantChecklistItems.Where(c => c.ParticipantId == participantId).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, c => Assert.Null(c.Value));
+        Assert.All(saved, c => Assert.Null(c.Notes));
+    }
+
     /// <summary>Task 9 — HIDPA extended categories round-trip: a combination including at least one
     /// of the 5 new members plus one pre-existing member persists and reloads with the exact flag
     /// combination (bitwise combination correctly stored/read, no truncation).</summary>
