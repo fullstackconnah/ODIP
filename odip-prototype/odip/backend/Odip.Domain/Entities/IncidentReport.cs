@@ -41,6 +41,37 @@ public class IncidentReport
 
     /// <summary>Required specify text when <see cref="IncidentType"/> is <see cref="Enums.IncidentType.Other"/> (INC-02).</summary>
     public string? OtherTypeSpecify { get; set; }
+
+    /// <summary>
+    /// INC-04: required when <see cref="IncidentType"/> is <see cref="Enums.IncidentType.RestrictivePracticeUse"/> —
+    /// which of the register's 6 categories was used, same value set as
+    /// <see cref="RestrictivePractice.Type"/>. Null for every other incident type.
+    /// </summary>
+    public RestrictivePracticeType? RestrictivePracticeType { get; set; }
+
+    /// <summary>
+    /// INC-05: the specific register entry this incident was matched against, when the
+    /// coordinator/support worker picked one from the involved participant's active practices of
+    /// <see cref="RestrictivePracticeType"/>. Optional even on an RP incident — the participant may
+    /// have no matching entry (that's exactly the unauthorised case), or the reporter may not have
+    /// linked one. Tenant-scoped like every other <see cref="Entities.RestrictivePractice"/> FK.
+    /// </summary>
+    public Guid? RestrictivePracticeId { get; set; }
+    public RestrictivePractice? RestrictivePractice { get; set; }
+
+    /// <summary>
+    /// INC-04: the authorised-vs-unauthorised determination, computed once at Create from whether
+    /// the involved participant had an ACTIVE register entry of <see cref="RestrictivePracticeType"/>
+    /// at that moment — true = authorised (a matching active entry existed), false = unauthorised
+    /// (no matching active entry — reportable-incident territory), null = not determinable (not an
+    /// RP incident, or no participant was selected). Deliberately frozen at creation and never
+    /// recomputed by Update: an incident's authorised/unauthorised finding is a fact about what the
+    /// register looked like at the time, not a live join that should silently change if the
+    /// register is edited later or if the incident's own participant/type fields are corrected
+    /// after the fact. The Update flow can still display it and let the fields it derived from be
+    /// edited, but the stored determination itself only ever changes by creating a fresh incident.
+    /// </summary>
+    public bool? IsRestrictivePracticeAuthorised { get; set; }
     public IncidentSeverity Severity { get; set; }
     public IncidentStatus Status { get; set; } = IncidentStatus.Draft;
     public string Title { get; set; } = string.Empty;

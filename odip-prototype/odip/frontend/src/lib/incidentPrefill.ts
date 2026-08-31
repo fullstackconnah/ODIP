@@ -4,7 +4,8 @@
 // support worker never submits the incident form, nothing exists (no ghost drafts).
 import { ADMIN_STATUS_LABELS, INCIDENT_TRIGGER_OUTCOMES } from '@/api/types/medications'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
-import { parseApiDate, formatWithTimeZone } from '@/lib/utils'
+import { parseApiDate, formatWithTimeZone, formatDateAu } from '@/lib/utils'
+import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
 export interface MarIncidentPrefillState {
   source: 'mar-administration'
@@ -102,4 +103,39 @@ export function buildIncidentDateTime(p: MarIncidentPrefillState): string {
  * a refused/withheld/missed dose by default; the coordinator can still change it before submitting. */
 export function suggestedIncidentSeverity(outcome: MedicationAdministrationStatus): 'Medium' | 'High' {
   return outcome === 'WrongMedication' ? 'High' : 'Medium'
+}
+
+// ── INC-04 / INC-05: restrictive-practice incident helpers ──────────────────
+
+/**
+ * INC-04 client-side preview of the authorised/unauthorised determination — mirrors
+ * IncidentsController.DetermineRestrictivePracticeAuthorisationAsync exactly (active entries of
+ * the reported type for the involved participant, same tenant-scoped register the picker reads),
+ * so the banner on the create form updates live as the coordinator changes the participant or
+ * type, before the backend computes and freezes the real value at submit. 'unknown' — not yet
+ * determinable — when either the participant or the type hasn't been chosen yet.
+ */
+export type RpAuthorisationPreview = 'authorised' | 'unauthorised' | 'unknown'
+
+export function previewRpAuthorisation(
+  involvedParticipantId: string | undefined | null,
+  restrictivePracticeType: string | undefined | null,
+  participantActivePractices: Pick<RestrictivePracticeDto, 'type'>[],
+): RpAuthorisationPreview {
+  if (!involvedParticipantId || !restrictivePracticeType) return 'unknown'
+  return participantActivePractices.some(p => p.type === restrictivePracticeType) ? 'authorised' : 'unauthorised'
+}
+
+/** INC-05: prepopulation skeleton once the coordinator links a specific register entry — saves
+ * re-typing what's already on record, same "skeleton the reporter still edits" idiom as
+ * buildIncidentDescriptionSkeleton (INC-03). */
+export function buildRpIncidentDescriptionSkeleton(practice: Pick<RestrictivePracticeDto, 'description' | 'reviewDate'>): string {
+  const lines = [
+    `Linked to the participant's authorised restrictive practice on file: ${practice.description}`,
+  ]
+  if (practice.reviewDate) {
+    lines.push(`(Register entry review due ${formatDateAu(practice.reviewDate)}.)`)
+  }
+  lines.push('', '[Add further detail about what happened, immediate response and follow-up above.]')
+  return lines.join('\n')
 }

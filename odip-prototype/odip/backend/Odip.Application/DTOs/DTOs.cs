@@ -1238,6 +1238,20 @@ public record IncidentDetailDto : IncidentListDto
     public Guid? InvolvedStaffId { get; init; }
     public string? InvolvedStaffName { get; init; }
     public Guid ReportedByStaffId { get; init; }
+    /// <summary>INC-04: which of the register's 6 categories was used. Null unless <see cref="IncidentListDto.IncidentType"/> is <see cref="IncidentType.RestrictivePracticeUse"/>.</summary>
+    public RestrictivePracticeType? RestrictivePracticeType { get; init; }
+    /// <summary>INC-05: the linked register entry, if the reporter picked one of the involved participant's authorised practices.</summary>
+    public Guid? RestrictivePracticeId { get; init; }
+    public string? RestrictivePracticeDescription { get; init; }
+    public DateOnly? RestrictivePracticeReviewDate { get; init; }
+    /// <summary>
+    /// INC-04: true = an active register entry of <see cref="RestrictivePracticeType"/> existed for
+    /// the involved participant at creation (authorised); false = none did (unauthorised —
+    /// reportable-incident territory); null = not determinable (not an RP incident, or no
+    /// participant selected). Frozen at creation — see the entity XML doc for why Update never
+    /// recomputes this.
+    /// </summary>
+    public bool? IsRestrictivePracticeAuthorised { get; init; }
     public string Description { get; init; } = string.Empty;
     public string? ImmediateActionsTaken { get; init; }
     public bool WereEmergencyServicesCalled { get; init; }
@@ -1274,6 +1288,10 @@ public record CreateIncidentDto
     /// <summary>Required (server-validated) when <see cref="IncidentType"/> is <see cref="IncidentType.Other"/> (INC-02).</summary>
     [StringLength(500)]
     public string? OtherTypeSpecify { get; init; }
+    /// <summary>INC-04: required (server-validated) when <see cref="IncidentType"/> is <see cref="IncidentType.RestrictivePracticeUse"/> — same 6-value set as the participant register.</summary>
+    public RestrictivePracticeType? RestrictivePracticeType { get; init; }
+    /// <summary>INC-05: optional link to one of the involved participant's register entries. Must belong to <see cref="InvolvedParticipantId"/> and match <see cref="RestrictivePracticeType"/> (server-validated).</summary>
+    public Guid? RestrictivePracticeId { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;

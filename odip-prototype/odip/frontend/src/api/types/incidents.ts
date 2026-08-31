@@ -1,4 +1,5 @@
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream } from './enums'
+import type { RestrictivePracticeType } from './restrictive-practices'
 
 /** INC-01: same value set as ServiceStream, plus "None" — the untagged default (backend ServiceStreams.None). */
 export type IncidentServiceType = ServiceStream | 'None'
@@ -30,6 +31,20 @@ export interface IncidentDetailDto extends IncidentListDto {
   involvedStaffId: string | null
   involvedStaffName: string | null
   reportedByStaffId: string
+  /** INC-04: which of the register's 6 categories was used. Null unless incidentType is 'RestrictivePracticeUse'. */
+  restrictivePracticeType: RestrictivePracticeType | null
+  /** INC-05: the linked register entry, if the reporter picked one of the involved participant's authorised practices. */
+  restrictivePracticeId: string | null
+  restrictivePracticeDescription: string | null
+  /** "YYYY-MM-DD" — the linked entry's review date, for display only. */
+  restrictivePracticeReviewDate: string | null
+  /**
+   * INC-04: true = authorised (an active register entry of restrictivePracticeType existed for
+   * the involved participant at creation), false = unauthorised (none did — reportable-incident
+   * territory), null = not determinable (not an RP incident, or no participant was selected).
+   * Frozen at creation — editing the incident afterwards never recomputes this.
+   */
+  isRestrictivePracticeAuthorised: boolean | null
   description: string
   immediateActionsTaken: string | null
   wereEmergencyServicesCalled: boolean
@@ -60,6 +75,10 @@ export interface CreateIncidentDto {
   reportedByStaffId: string
   incidentType: IncidentType
   otherTypeSpecify?: string
+  /** INC-04: required when incidentType is 'RestrictivePracticeUse'. */
+  restrictivePracticeType?: RestrictivePracticeType
+  /** INC-05: optional link to one of the involved participant's register entries. */
+  restrictivePracticeId?: string
   severity: IncidentSeverity
   title: string
   description: string

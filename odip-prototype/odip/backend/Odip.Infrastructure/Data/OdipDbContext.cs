@@ -448,10 +448,16 @@ public class OdipDbContext : DbContext
             e.HasOne(i => i.ReviewedByUser).WithMany().HasForeignKey(i => i.ReviewedByUserId);
             e.HasOne(i => i.ParticipantBooking).WithMany().HasForeignKey(i => i.ParticipantBookingId);
 
+            // INC-05: SetNull, same idiom as RestrictivePractice → ParticipantMedication — a
+            // hard-deleted register entry (the CRUD API does allow it) should not be blocked by, or
+            // cascade into, an incident that once linked to it; the incident just loses the link.
+            e.HasOne(i => i.RestrictivePractice).WithMany().HasForeignKey(i => i.RestrictivePracticeId).OnDelete(DeleteBehavior.SetNull);
+
             e.HasIndex(i => i.Status);
             e.HasIndex(i => i.Severity);
             e.HasIndex(i => i.QscReportingStatus);
             e.HasIndex(i => i.IsActive);
+            e.HasIndex(i => i.RestrictivePracticeId);
         });
 
         // ── User ─────────────────────────────────────────────────
