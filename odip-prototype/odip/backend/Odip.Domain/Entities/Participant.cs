@@ -258,6 +258,35 @@ public class Participant : ITenantEntity
     public decimal? WeightKg { get; set; }
     public decimal? HeightCm { get; set; }
 
+    // ── Cultural & Consent — cultural/rights flags (INTAKE sub-wave B, Master Data Dictionary
+    // CUL-*) ──────────────────────────────────────────────────────────────────────────────────
+    // Wizard step "Cultural & Consent", placed immediately after "Contacts" — see
+    // ParticipantCreatePage.tsx's WIZARD_STEPS. Flat columns (unlike ParticipantConsent below,
+    // these aren't compliance records with an audit trail of their own — they're identity/rights
+    // attributes, same footing as Gender/LivingArrangement). All nullable/optional — the source
+    // forms (Intake coversheet §1a-5 and Participant Profile §1c-3) list these as a discrete
+    // checkbox block with no field marked required. Null = not asked/unknown, distinct from false.
+    /// <summary>Culturally and Linguistically Diverse.</summary>
+    public bool? IsCald { get; set; }
+    /// <summary>
+    /// The source forms label this checkbox "LGBTIQA+"; named IsLgbtqi here per this PR's brief.
+    /// Flagged, not silently reconciled — see this PR's report.
+    /// </summary>
+    public bool? IsLgbtqi { get; set; }
+    public bool? IsFamilyCommunity { get; set; }
+    /// <summary>Respectful full label, per the design guardrails: "Aboriginal and/or Torres Strait Islander".</summary>
+    public bool? IsAboriginalOrTorresStraitIslander { get; set; }
+    /// <summary>The 5 "information received" flags from the source forms' Cultural table — Rights and Responsibilities.</summary>
+    public bool? ReceivedRightsAndResponsibilitiesInfo { get; set; }
+    public bool? ReceivedPrivacyAndConfidentialityInfo { get; set; }
+    /// <summary>Source form label: "Feedback Info and Form".</summary>
+    public bool? ReceivedFeedbackInfo { get; set; }
+    public bool? ReceivedBeingSafeInfo { get; set; }
+    public bool? ReceivedAdvocacyInfo { get; set; }
+    public string? PersonalInterests { get; set; }
+    /// <summary>Free text — Participant Choice and Control notes (research spec §5's "Choice &amp; Control notes").</summary>
+    public string? ChoiceControlNotes { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -269,4 +298,7 @@ public class Participant : ITenantEntity
 
     /// <summary>CONTACT-01/02/03. See <see cref="Entities.ParticipantContactRole"/>'s type doc.</summary>
     public ICollection<ParticipantContactRole> ContactRoles { get; set; } = new List<ParticipantContactRole>();
+
+    /// <summary>INTAKE sub-wave B. See <see cref="Entities.ParticipantConsent"/>'s type doc.</summary>
+    public ICollection<ParticipantConsent> Consents { get; set; } = new List<ParticipantConsent>();
 }

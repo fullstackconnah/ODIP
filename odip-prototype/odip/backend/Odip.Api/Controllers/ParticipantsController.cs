@@ -37,6 +37,37 @@ public class ParticipantsController : ControllerBase
             : Task.FromResult(true);
 
     /// <summary>
+    /// INTAKE sub-wave B — upserts every consent row submitted with a create/update payload,
+    /// keyed by <see cref="Domain.Enums.ConsentType"/> rather than blindly inserting (unlike
+    /// RiskEntries' insert-only Create loop): the wizard's Cultural &amp; Consent step remains
+    /// editable in edit mode too (see CreateParticipantDto.Consents' doc), so a second/third save
+    /// of the same participant must update the SAME seven rows, not create duplicates. For a
+    /// brand-new participant (no existing rows) this degenerates to a plain insert loop, same
+    /// effective behaviour as Create previously had. Shares the exact same answer-application
+    /// semantics (RecordedAt only re-stamped when Granted actually changes) as
+    /// ParticipantConsentsController.Upsert via <see cref="ParticipantConsentsController.ApplyAnswer"/>,
+    /// so a wizard save and a detail-page edit never disagree about what "recorded" means. Called
+    /// before SaveChangesAsync so every row lands in the same transaction as the participant
+    /// insert/update.
+    /// </summary>
+    private async Task UpsertConsentsAsync(Guid participantId, List<CreateParticipantConsentDto> consents, CancellationToken ct)
+    {
+        if (consents.Count == 0) return;
+        var existing = await _db.ParticipantConsents.Where(c => c.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(c => c.ConsentType);
+        foreach (var dto in consents)
+        {
+            if (!byType.TryGetValue(dto.ConsentType, out var row))
+            {
+                row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, ConsentType = dto.ConsentType };
+                _db.ParticipantConsents.Add(row);
+                byType[dto.ConsentType] = row;
+            }
+            ParticipantConsentsController.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
+        }
+    }
+
+    /// <summary>
     /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
     /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
     /// enough to be findable in the list (at least one of the two names), while a full
@@ -305,6 +336,7 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants
             .Include(x => x.PreferredUser)
             .Include(x => x.RestrictivePractices)
+            .Include(x => x.Consents)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -357,6 +389,15 @@ public class ParticipantsController : ControllerBase
                 ? p.PreferredUser.FirstName + " " + p.PreferredUser.LastName
                 : null,
             IsDraft = p.IsDraft,
+            // INTAKE sub-wave B — Cultural & Consent step.
+            IsCald = p.IsCald, IsLgbtqi = p.IsLgbtqi, IsFamilyCommunity = p.IsFamilyCommunity,
+            IsAboriginalOrTorresStraitIslander = p.IsAboriginalOrTorresStraitIslander,
+            ReceivedRightsAndResponsibilitiesInfo = p.ReceivedRightsAndResponsibilitiesInfo,
+            ReceivedPrivacyAndConfidentialityInfo = p.ReceivedPrivacyAndConfidentialityInfo,
+            ReceivedFeedbackInfo = p.ReceivedFeedbackInfo, ReceivedBeingSafeInfo = p.ReceivedBeingSafeInfo,
+            ReceivedAdvocacyInfo = p.ReceivedAdvocacyInfo,
+            PersonalInterests = p.PersonalInterests, ChoiceControlNotes = p.ChoiceControlNotes,
+            Consents = ParticipantConsentsController.MaterializeAll(p.Id, p.Consents.ToList()),
         }));
     }
 
@@ -454,6 +495,14 @@ public class ParticipantsController : ControllerBase
             AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
             AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
             IsDraft = dto.IsDraft,
+            // INTAKE sub-wave B — Cultural & Consent step.
+            IsCald = dto.IsCald, IsLgbtqi = dto.IsLgbtqi, IsFamilyCommunity = dto.IsFamilyCommunity,
+            IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander,
+            ReceivedRightsAndResponsibilitiesInfo = dto.ReceivedRightsAndResponsibilitiesInfo,
+            ReceivedPrivacyAndConfidentialityInfo = dto.ReceivedPrivacyAndConfidentialityInfo,
+            ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo, ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo,
+            ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo,
+            PersonalInterests = dto.PersonalInterests, ChoiceControlNotes = dto.ChoiceControlNotes,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -516,6 +565,9 @@ public class ParticipantsController : ControllerBase
         // rostering compatibility matrix, in the same transaction as the participant insert.
         // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
         await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
+        // INTAKE sub-wave B — consent rows submitted alongside a new/drafted participant, in the
+        // same SaveChangesAsync call as the participant insert below.
+        await UpsertConsentsAsync(participant.Id, dto.Consents, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -626,6 +678,14 @@ public class ParticipantsController : ControllerBase
         p.EquipmentRequirements = dto.EquipmentRequirements; p.TransportRequirements = dto.TransportRequirements;
         p.MedicalSummary = dto.MedicalSummary; p.BehaviourRiskSummary = dto.BehaviourRiskSummary;
         p.Notes = dto.Notes; p.PreferredUserId = dto.PreferredStaffId; p.ServiceStreams = dto.ServiceStreams;
+        // INTAKE sub-wave B — Cultural & Consent step.
+        p.IsCald = dto.IsCald; p.IsLgbtqi = dto.IsLgbtqi; p.IsFamilyCommunity = dto.IsFamilyCommunity;
+        p.IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander;
+        p.ReceivedRightsAndResponsibilitiesInfo = dto.ReceivedRightsAndResponsibilitiesInfo;
+        p.ReceivedPrivacyAndConfidentialityInfo = dto.ReceivedPrivacyAndConfidentialityInfo;
+        p.ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo; p.ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo;
+        p.ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo;
+        p.PersonalInterests = dto.PersonalInterests; p.ChoiceControlNotes = dto.ChoiceControlNotes;
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
@@ -636,6 +696,9 @@ public class ParticipantsController : ControllerBase
         // compatibility row, in the same transaction as the participant update.
         // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
         await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
+        // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
+        // ContactRoles, this is read on Update too (not create-mode-only).
+        await UpsertConsentsAsync(p.Id, dto.Consents, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }

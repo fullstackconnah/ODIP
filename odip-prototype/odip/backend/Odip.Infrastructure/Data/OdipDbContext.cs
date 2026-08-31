@@ -38,6 +38,8 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantNote> ParticipantNotes => Set<ParticipantNote>();
     public DbSet<ParticipantRoutine> ParticipantRoutines => Set<ParticipantRoutine>();
     public DbSet<ParticipantRiskEntry> ParticipantRiskEntries => Set<ParticipantRiskEntry>();
+    /// <summary>INTAKE sub-wave B. See <see cref="Entities.ParticipantConsent"/>'s type doc.</summary>
+    public DbSet<ParticipantConsent> ParticipantConsents => Set<ParticipantConsent>();
     public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
@@ -1159,6 +1161,28 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId);
         });
 
+        // ── ParticipantConsent (INTAKE sub-wave B) ─────────────────
+        modelBuilder.Entity<ParticipantConsent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SignedByName).HasMaxLength(200);
+
+            // Restrict: same idiom as ParticipantNote/ParticipantRoutine/ParticipantRiskEntry →
+            // Participant — a participant with recorded consent history must not be silently
+            // cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany(p => p.Consents)
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+            // One row per (participant, consent type) — enforced at the DB level, not just by
+            // controller-side upsert-by-type logic, so a duplicate insert fails loudly instead of
+            // producing two rows for the same type that GetForParticipant would then have to
+            // arbitrarily pick between.
+            entity.HasIndex(e => new { e.ParticipantId, e.ConsentType }).IsUnique();
+        });
+
         // ── RestrictivePractice ───────────────────────────────────
         modelBuilder.Entity<RestrictivePractice>(entity =>
         {
@@ -1313,6 +1337,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantRiskEntry>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantRiskEntry>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantConsent>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantConsent>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RestrictivePractice>()
