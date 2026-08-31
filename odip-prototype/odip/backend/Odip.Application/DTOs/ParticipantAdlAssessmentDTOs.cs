@@ -20,6 +20,8 @@ public record ParticipantAdlAssessmentDto
     public AdlType AdlType { get; init; }
     public AdlLevel? Level { get; init; }
     public string? Notes { get; init; }
+    /// <summary>INTAKE-03, CommunityAccessDailyLiving stream-specific. See <see cref="Entities.ParticipantAdlAssessment"/>'s type doc.</summary>
+    public string? HowToHelpNotes { get; init; }
     public DateTime? CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }

@@ -91,6 +91,9 @@ public class ParticipantAdlAssessmentsController : ControllerBase
         AdlType = a.AdlType,
         Level = a.Level,
         Notes = a.Notes,
+        // INTAKE-03, CommunityAccessDailyLiving stream-specific — read-only here; no write path
+        // yet (Create/Upsert DTOs deliberately unchanged, see ParticipantAdlAssessment.HowToHelpNotes's doc).
+        HowToHelpNotes = a.HowToHelpNotes,
         CreatedAt = a.CreatedAt,
         UpdatedAt = a.UpdatedAt,
     };
