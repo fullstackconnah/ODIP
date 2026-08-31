@@ -336,6 +336,156 @@ public class ParticipantsControllerTests
         Assert.False(await db.ParticipantRiskEntries.AnyAsync(r => r.ParticipantId == createdBody.Data!.Id));
     }
 
+    // ── CONTACT-01/02/03: contact roles created transactionally with the participant ────
+
+    [Fact]
+    public async Task Create_WithNewPersonContactRole_CreatesPersonAndRoleTransactionally()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto
+                {
+                    NewPersonFirstName = "Karen", NewPersonLastName = "Johnson", NewPersonMobile = "0412 345 001",
+                    RoleType = Domain.Enums.ContactRoleType.NextOfKin, RelationshipToParticipant = "Mother", IsPrimary = true,
+                },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedRole = await db.ParticipantContactRoles.Include(r => r.Person).SingleAsync(r => r.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(Domain.Enums.ContactRoleType.NextOfKin, savedRole.RoleType);
+        Assert.True(savedRole.IsPrimary);
+        Assert.Equal("Mother", savedRole.RelationshipToParticipant);
+        Assert.NotNull(savedRole.Person);
+        Assert.Equal("Karen", savedRole.Person!.FirstName);
+        Assert.Equal("0412 345 001", savedRole.Person.Mobile);
+    }
+
+    [Fact]
+    public async Task Create_WithExistingPersonContactRole_ReusesThePersonRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson" };
+        db.People.Add(person);
+        db.SaveChanges();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { PersonId = person.Id, RoleType = Domain.Enums.ContactRoleType.EmergencyContact, PriorityOrder = 1 },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(1, await db.People.CountAsync());
+        var savedRole = await db.ParticipantContactRoles.SingleAsync(r => r.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(person.Id, savedRole.PersonId);
+    }
+
+    [Fact]
+    public async Task Create_PlanManagerRoleForSelfManagedParticipant_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        // MinimalCreateDto defaults PlanType to SelfManaged — CONTACT-02: Plan Manager is only
+        // available for plan-managed participants (ContactRoleRules.Validate).
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { NewPersonFirstName = "Diane", NewPersonLastName = "Cooper", RoleType = Domain.Enums.ContactRoleType.PlanManager },
+            },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("plan-managed", body.Errors[0], StringComparison.OrdinalIgnoreCase);
+        Assert.False(await db.Participants.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Create_PlanNomineeRoleForUnder18Participant_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-10)),
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { NewPersonFirstName = "Denise", NewPersonLastName = "Wilson", RoleType = Domain.Enums.ContactRoleType.PlanNominee },
+            },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("under 18", body.Errors[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_TwoActivePrimaryNextOfKinRoles_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { NewPersonFirstName = "Karen", NewPersonLastName = "Johnson", RoleType = Domain.Enums.ContactRoleType.NextOfKin, IsPrimary = true },
+                new CreateParticipantContactRoleDto { NewPersonFirstName = "David", NewPersonLastName = "Johnson", RoleType = Domain.Enums.ContactRoleType.NextOfKin, IsPrimary = true },
+            },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("primary Next of Kin", body.Errors[0]);
+    }
+
+    [Fact]
+    public async Task Create_WithContactRoles_TenantScoped_RolesAndPersonGetSameTenantIdAsParticipant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            ContactRoles = new()
+            {
+                new CreateParticipantContactRoleDto { NewPersonFirstName = "Karen", NewPersonLastName = "Johnson", RoleType = Domain.Enums.ContactRoleType.NextOfKin },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedRole = await db.ParticipantContactRoles.IgnoreQueryFilters().SingleAsync(r => r.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(tenantId, savedRole.TenantId);
+        var savedPerson = await db.People.IgnoreQueryFilters().SingleAsync(p => p.Id == savedRole.PersonId);
+        Assert.Equal(tenantId, savedPerson.TenantId);
+    }
+
     // ── DIAG-01/02: diagnoses (primary + other) and HIDPA support categories ────────
 
     [Fact]
