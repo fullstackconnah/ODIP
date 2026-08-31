@@ -101,18 +101,18 @@ owner decision (collected under Open Flags at the end).
 
 ### C. Contacts Model
 
-- [ ] **CONTACT-01 — Split Identity and Contacts; contacts become a typed table.**
+- [x] **CONTACT-01 — Split Identity and Contacts; contacts become a typed table.**
   `[research needed]` Separate identity from contacts; contacts become a table of
   people, each with a type carrying its own field set. Research required into
   NDIS/disability-practice contact types (next of kin, guardian, GP, support
   coordinator, plan manager, plan nominee, emergency contact, …) and per-type fields.
   Uses the DS-01 shared table.
-- [ ] **CONTACT-02 — Plan-type-dependent contact types; Contacts tab after
+- [x] **CONTACT-02 — Plan-type-dependent contact types; Contacts tab after
   NDIS/Funding.** Contacts tab moves after NDIS & Funding because available contact
   types depend on funding answers: NDIS-funded participants can add Support Coordinator,
   Plan Manager, and Plan Nominee, with availability governed by the selected plan
   management type. Depends on FUND-02 and INTAKE-07.
-- [ ] **CONTACT-03 — Contacts hold multiple roles with role-dependent fields.** One
+- [x] **CONTACT-03 — Contacts hold multiple roles with role-dependent fields.** One
   contact may hold several roles at once — family/other, administrator, authorised
   signatory, next of kin — selected when adding the contact, with different fields per
   role. Roles are a multi-select on top of the CONTACT-01 type model.
