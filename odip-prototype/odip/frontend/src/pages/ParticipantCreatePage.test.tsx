@@ -2422,3 +2422,299 @@ describe('ParticipantCreatePage — INTAKE sub-wave C2: Daily Living (ADL grid, 
     )
   })
 })
+
+// INTAKE-03/04 — Community Access field injection (CommunityAccessDailyLiving stream). Covers:
+// conditional visibility of the CA cards across the three steps they're injected into (Support
+// Needs & Mobility, Behaviour & Communication, Daily Living), the INTAKE-07 engine's
+// unregister+payload-exclusion contract as applied to CA fields specifically (both the flat
+// fields AND the two fixed-array grids' per-row value/notes), the stream-removal confirm dialog
+// (data-entered vs no-data-entered branches), two-row disambiguation across the mobility/BOC
+// checklist split, a11y names for the checklist controls, and the ungated HIDPA extension.
+describe('ParticipantCreatePage — INTAKE-03 Community Access field injection', () => {
+  async function fillIdentityAndGoToNdis(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  }
+
+  function communityAccessCheckbox() {
+    return screen.getByLabelText('Community Access / Daily Living')
+  }
+
+  async function ndisToSupport(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+  }
+
+  async function supportToBehaviour(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+  }
+
+  async function behaviourToDailyLiving(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+  }
+
+  async function backToNdisFromSupport(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Cultural & Consent
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> NDIS & Funding
+  }
+
+  async function backToNdisFromDailyLiving(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Behaviour & Communication
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Support Needs & Mobility
+    await backToNdisFromSupport(user)
+  }
+
+  it('CA cards/fields are absent until the stream is selected, appear once selected, and disappear again on unselect', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await ndisToSupport(user)
+
+    // Support Needs & Mobility — mobility checklist absent without the stream.
+    expect(screen.queryByText('Uses wheelchair')).not.toBeInTheDocument()
+
+    await supportToBehaviour(user)
+    expect(screen.queryByText('Signs I Am Happy and Settled')).not.toBeInTheDocument()
+    expect(screen.queryByText('Harm to self')).not.toBeInTheDocument()
+
+    await behaviourToDailyLiving(user)
+    // Set an ADL level so Notes would render — howToHelpNotes must still be absent regardless.
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'I' }))
+    expect(screen.queryByLabelText('How To Help Me')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Morning')).not.toBeInTheDocument()
+
+    // Select the stream — same journey forward now shows every CA card, and the ADL level
+    // entered before selecting the stream survived the Back/Forward round-trip.
+    await backToNdisFromDailyLiving(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+    expect(screen.getByText('Uses wheelchair')).toBeInTheDocument()
+
+    await supportToBehaviour(user)
+    expect(screen.getByText('Signs I Am Happy and Settled')).toBeInTheDocument()
+    expect(screen.getByText('Harm to self')).toBeInTheDocument()
+
+    await behaviourToDailyLiving(user)
+    expect(screen.getByLabelText('How To Help Me')).toBeInTheDocument()
+    expect(screen.getByLabelText('Morning')).toBeInTheDocument()
+
+    // Unselect again — no CA data was ever entered this run, so the uncheck applies immediately
+    // (no confirm dialog — see the dedicated no-data-case test below) and every CA card vanishes.
+    await backToNdisFromDailyLiving(user)
+    await user.click(communityAccessCheckbox())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await ndisToSupport(user)
+    expect(screen.queryByText('Uses wheelchair')).not.toBeInTheDocument()
+  })
+
+  it('mobility checklist only appears on Support Needs & Mobility; BOC checklist/signs/triggers only on Behaviour & Communication; supports-look-like + ADL howToHelpNotes only on Daily Living', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+
+    expect(screen.getByText('Uses wheelchair')).toBeInTheDocument()
+    expect(screen.queryByText('Harm to self')).not.toBeInTheDocument()
+    expect(screen.queryByText('Signs I Am Happy and Settled')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Morning')).not.toBeInTheDocument()
+
+    await supportToBehaviour(user)
+    expect(screen.queryByText('Uses wheelchair')).not.toBeInTheDocument()
+    expect(screen.getByText('Harm to self')).toBeInTheDocument()
+    expect(screen.getByText('Signs I Am Happy and Settled')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Morning')).not.toBeInTheDocument()
+
+    await behaviourToDailyLiving(user)
+    expect(screen.queryByText('Uses wheelchair')).not.toBeInTheDocument()
+    expect(screen.queryByText('Harm to self')).not.toBeInTheDocument()
+    expect(screen.queryByText('Signs I Am Happy and Settled')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Morning')).toBeInTheDocument()
+    // howToHelpNotes only renders once a level is set, on this step alone.
+    expect(screen.queryByLabelText('How To Help Me')).not.toBeInTheDocument()
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'I' }))
+    expect(screen.getByLabelText('How To Help Me')).toBeInTheDocument()
+  })
+
+  it('deselecting the stream (after confirming removal) unregisters CA fields entirely from the payload — flat fields absent, checklist/ADL rows collapse to null', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByPlaceholderText('Additional notes...'), 'Manual wheelchair, needs ramp access.')
+
+    await supportToBehaviour(user)
+    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Smiles and hums when content.')
+
+    await behaviourToDailyLiving(user)
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Level — Dressing' })).getByRole('radio', { name: 'I' }))
+    await user.type(screen.getByLabelText('How To Help Me'), 'Lay out clothes in order.')
+
+    await backToNdisFromDailyLiving(user)
+    await user.click(communityAccessCheckbox()) // data entered -> confirm dialog
+    const dialog = screen.getByRole('dialog', { name: /remove community access/i })
+    await user.click(within(dialog).getByRole('button', { name: 'Remove and clear' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+
+    // Flat CA field: key absent entirely — same INTAKE-07 exclusion convention the
+    // fundingOrganisation test above proves via `'x' in payload === false`, not null/undefined.
+    expect('signsHappyAndSettled' in payload).toBe(false)
+
+    // checklistItems/adlAssessments are fixed-length arrays that are ALWAYS submitted in full (21
+    // and 20 rows respectively, every scenario) — a hidden row doesn't disappear from the array,
+    // its value/notes collapse to null instead, the same "unanswered" shape those arrays'
+    // never-touched rows already use elsewhere in this file (see the ADL level round-trip test).
+    const wheelchairRow = payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'UsesWheelchair')
+    expect(wheelchairRow).toMatchObject({ value: null, notes: null })
+    const dressingRow = payload.adlAssessments.find((a: { adlType: string }) => a.adlType === 'Dressing')
+    expect(dressingRow).toMatchObject({ howToHelpNotes: null })
+  })
+
+  it('draft-save with a subset of CA fields filled in sends exactly those, and untouched checklist rows round-trip as the null/null unanswered placeholder', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+
+    // One item from the mobility group...
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' }))
+
+    await supportToBehaviour(user)
+    // ...one flat field, and one item from the BOC group — left at their unanswered placeholder otherwise.
+    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Calm, quiet humming.')
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Harm to self' })).getByRole('radio', { name: 'No' }))
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+
+    expect(payload.isDraft).toBe(true)
+    expect(payload.signsHappyAndSettled).toBe('Calm, quiet humming.')
+    expect(payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'UsesWheelchair'))
+      .toMatchObject({ value: 'Yes', notes: null })
+    expect(payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'HarmToSelf'))
+      .toMatchObject({ value: 'No', notes: null })
+    // Untouched rows collapse to null/null, not undefined/empty string — same convention as the
+    // Daily Living ADL grid's own never-assessed rows.
+    expect(payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'FallsRisk'))
+      .toMatchObject({ value: null, notes: null })
+    expect(payload.checklistItems).toHaveLength(21)
+  })
+
+  it('unchecking the stream with no CA data entered removes it immediately, without a confirm dialog', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    expect(communityAccessCheckbox()).toBeChecked()
+
+    await user.click(communityAccessCheckbox())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(communityAccessCheckbox()).not.toBeChecked()
+  })
+
+  it('unchecking after CA data is entered shows a confirm dialog; Cancel preserves the checkbox and data, Confirm removes and clears', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' }))
+    await backToNdisFromSupport(user)
+
+    await user.click(communityAccessCheckbox())
+    const dialog = screen.getByRole('dialog', { name: /remove community access/i })
+    expect(dialog).toBeInTheDocument()
+    // The checkbox stays visually checked while the dialog is open — the removal hasn't applied yet.
+    expect(communityAccessCheckbox()).toBeChecked()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(communityAccessCheckbox()).toBeChecked()
+    await ndisToSupport(user)
+    expect(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    await backToNdisFromSupport(user)
+    await user.click(communityAccessCheckbox())
+    const dialog2 = screen.getByRole('dialog', { name: /remove community access/i })
+    await user.click(within(dialog2).getByRole('button', { name: 'Remove and clear' }))
+    expect(communityAccessCheckbox()).not.toBeChecked()
+    await ndisToSupport(user)
+    expect(screen.queryByText('Uses wheelchair')).not.toBeInTheDocument()
+  })
+
+  it('two different checklist items keep independent itemType/value/notes in the payload — not swapped, not merged', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' }))
+    const mobilityItem = screen.getByText('Uses wheelchair').closest('div') as HTMLElement
+    await user.type(within(mobilityItem).getByPlaceholderText('Additional notes...'), 'Manual wheelchair.')
+
+    await supportToBehaviour(user)
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Harm to self' })).getByRole('radio', { name: 'No' }))
+    const bocItem = screen.getByText('Harm to self').closest('div') as HTMLElement
+    await user.type(within(bocItem).getByPlaceholderText('Additional notes...'), 'No history of self-harm.')
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+
+    expect(payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'UsesWheelchair'))
+      .toMatchObject({ itemType: 'UsesWheelchair', value: 'Yes', notes: 'Manual wheelchair.' })
+    expect(payload.checklistItems.find((c: { itemType: string }) => c.itemType === 'HarmToSelf'))
+      .toMatchObject({ itemType: 'HarmToSelf', value: 'No', notes: 'No history of self-harm.' })
+  })
+
+  it('a11y: mobility and BOC checklist items expose real accessible names for their value picker and notes field', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    await user.click(communityAccessCheckbox())
+    await ndisToSupport(user)
+
+    expect(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Uses wheelchair' })).getByRole('radio', { name: 'Yes' }))
+    const mobilityItem = screen.getByText('Uses wheelchair').closest('div') as HTMLElement
+    expect(within(mobilityItem).getByLabelText('Notes')).toBeInTheDocument()
+
+    await supportToBehaviour(user)
+    expect(screen.getByRole('radiogroup', { name: 'Value — Harm to self' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Value — Harm to self' })).getByRole('radio', { name: 'No' }))
+    const bocItem = screen.getByText('Harm to self').closest('div') as HTMLElement
+    expect(within(bocItem).getByLabelText('Notes')).toBeInTheDocument()
+  })
+
+  it('the 5 new HIDPA categories and HIDPA Notes are visible on the Medical step regardless of CommunityAccessDailyLiving selection', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillIdentityAndGoToNdis(user)
+    // A different stream selected — CommunityAccessDailyLiving is NOT — proves this card is ungated.
+    await user.click(screen.getByLabelText('STA'))
+    await ndisToSupport(user)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    expect(within(stepNav()).getByRole('button', { name: /medical/i, current: 'step' })).toBeInTheDocument()
+
+    expect(screen.getByLabelText('Stoma / colostomy')).toBeInTheDocument()
+    expect(screen.getByLabelText('Diabetes management (insulin)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Pressure care')).toBeInTheDocument()
+    expect(screen.getByLabelText('High intensity behaviour support')).toBeInTheDocument()
+    expect(screen.getByLabelText('Medication administration (complex)')).toBeInTheDocument()
+    expect(screen.getByLabelText('HIDPA Notes')).toBeInTheDocument()
+  })
+})
