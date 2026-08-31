@@ -338,7 +338,7 @@ trigger-then-pick model is one interaction step simpler for a dozen items.
 medication administration status picker (Administered/Refused/Withheld/Missed).
 
 **Props**: `options: { key: string; label: string }[]`, `value: string`,
-`onChange: (key: string) => void`, `className`.
+`onChange: (key: string) => void`, `className`, `ariaLabel?: string`.
 
 **States**: each option is selected/unselected; no disabled-per-option support today (add
 it if a consumer needs it rather than working around its absence).
@@ -348,7 +348,15 @@ tracks one selected value from a fixed set, which is exactly `role="radiogroup"`
 `role="radio"` + `aria-checked` semantics (not `aria-pressed`, which implies independent
 on/off toggles). Roving tabindex: only the checked option (or the first, if none matches)
 is a Tab stop; Arrow keys (all four directions) plus Home/End move *and select* within the
-group, per the ARIA APG radio pattern.
+group, per the ARIA APG radio pattern. `ariaLabel` sets the radiogroup's accessible name
+directly (`aria-label`) — pass it whenever the group isn't already labelled another way.
+In particular, a bare ToggleGroup rendered directly as a FormField's child DOES get a real
+label for free (FormField's `cloneElement` reaches it), but a ToggleGroup rendered as the
+output of an RHF `<Controller>`'s `render` prop inside FormField does NOT — FormField clones
+its labelling props onto the `<Controller>` element itself, which doesn't forward unknown
+props to its render function, so the label is silently dropped (no crash, no warning — see
+FormField.tsx's own comment). Pass `ariaLabel` explicitly for that shape; omitting it isn't
+an error, just an unlabelled radiogroup.
 
 **When to use**: 2-5 mutually-exclusive, always-visible options where showing every
 choice at once beats hiding them behind a Dropdown trigger. **When not to**: more than
@@ -360,7 +368,27 @@ relevant at once — that's a Dropdown or SearchableSelect job.
   options={STATUS_OPTIONS.map(o => ({ key: o.key, label: o.label }))}
   value={status}
   onChange={v => setStatus(v as MedicationAdministrationStatus)}
+  ariaLabel="Status"
 />
+```
+
+Controller-wrapped inside FormField (the shape that needs `ariaLabel` — see above):
+
+```tsx
+<FormField label="Granted">
+  <Controller
+    control={control}
+    name="consents.0.granted"
+    render={({ field }) => (
+      <ToggleGroup
+        options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }, { key: '', label: 'Not recorded' }]}
+        value={field.value ?? ''}
+        onChange={field.onChange}
+        ariaLabel="Granted"
+      />
+    )}
+  />
+</FormField>
 ```
 
 ---

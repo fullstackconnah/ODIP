@@ -560,6 +560,26 @@ public enum AtRiskParty
 }
 
 /// <summary>
+/// INTAKE (sub-wave B) — the seven distinct consent decisions captured by the Participant Profile
+/// source form's "Consent and Terms" block (research spec §1c-19/§4.5, Master Data Dictionary
+/// CNST-001..013 collapsed to these seven, per this PR's brief): photo/video promotional use,
+/// alcohol consent, non-prescribed/OTC (incl. paracetamol) medication, emergency medical
+/// treatment, privacy collection, travel insurance acceptance (Terms &amp; Conditions for
+/// Holidays/STA), and the general Terms &amp; Conditions acceptance itself. See
+/// <see cref="Odip.Domain.Entities.ParticipantConsent"/>'s type doc for the full entity shape.
+/// </summary>
+public enum ConsentType
+{
+    PhotoVideo,
+    Alcohol,
+    OtcMedication,
+    EmergencyMedical,
+    Privacy,
+    TravelInsurance,
+    TermsAndConditions
+}
+
+/// <summary>
 /// The NDIS-authoritative restrictive practice categories, plus <see cref="Unclassified"/> for
 /// register rows backfilled from the old free-text <c>SupportProfile.RestrictivePracticeDetails</c>
 /// field (see the AddRestrictivePractices migration) where no specific category is known.

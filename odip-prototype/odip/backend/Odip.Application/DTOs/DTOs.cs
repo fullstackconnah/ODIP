@@ -114,6 +114,21 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? EyeColour { get; init; }
     public decimal? WeightKg { get; init; }
     public decimal? HeightCm { get; init; }
+
+    // INTAKE sub-wave B — Cultural & Consent step. See Participant.cs's field group doc.
+    public bool? IsCald { get; init; }
+    public bool? IsLgbtqi { get; init; }
+    public bool? IsFamilyCommunity { get; init; }
+    public bool? IsAboriginalOrTorresStraitIslander { get; init; }
+    public bool? ReceivedRightsAndResponsibilitiesInfo { get; init; }
+    public bool? ReceivedPrivacyAndConfidentialityInfo { get; init; }
+    public bool? ReceivedFeedbackInfo { get; init; }
+    public bool? ReceivedBeingSafeInfo { get; init; }
+    public bool? ReceivedAdvocacyInfo { get; init; }
+    public string? PersonalInterests { get; init; }
+    public string? ChoiceControlNotes { get; init; }
+    /// <summary>Always all seven <see cref="Domain.Enums.ConsentType"/> entries — see ParticipantConsentsController.GetForParticipant.</summary>
+    public List<ParticipantConsentDto> Consents { get; init; } = new();
 }
 
 public record CreateParticipantDto
@@ -304,6 +319,31 @@ public record CreateParticipantDto
     public string? EyeColour { get; init; }
     public decimal? WeightKg { get; init; }
     public decimal? HeightCm { get; init; }
+
+    // INTAKE sub-wave B — Cultural & Consent step (Master Data Dictionary CUL-*). All optional;
+    // see Participant.cs's field group doc for the full rationale and the IsLgbtqi naming flag.
+    public bool? IsCald { get; init; }
+    public bool? IsLgbtqi { get; init; }
+    public bool? IsFamilyCommunity { get; init; }
+    public bool? IsAboriginalOrTorresStraitIslander { get; init; }
+    public bool? ReceivedRightsAndResponsibilitiesInfo { get; init; }
+    public bool? ReceivedPrivacyAndConfidentialityInfo { get; init; }
+    public bool? ReceivedFeedbackInfo { get; init; }
+    public bool? ReceivedBeingSafeInfo { get; init; }
+    public bool? ReceivedAdvocacyInfo { get; init; }
+    [StringLength(2000)]
+    public string? PersonalInterests { get; init; }
+    [StringLength(2000)]
+    public string? ChoiceControlNotes { get; init; }
+    /// <summary>
+    /// Consent rows captured on the wizard's Cultural &amp; Consent step, upserted transactionally
+    /// with the participant — see ParticipantsController.UpsertConsentsAsync. Unlike RiskEntries/
+    /// ContactRoles (create-mode-only fields), this list is read by BOTH Create and Update: consent
+    /// answers are meant to keep being fillable across draft saves and full edits, not just at
+    /// initial intake, and the detail page's nested CRUD (ParticipantConsentsController) is an
+    /// additional, always-available write path for the same data.
+    /// </summary>
+    public List<CreateParticipantConsentDto> Consents { get; init; } = new();
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

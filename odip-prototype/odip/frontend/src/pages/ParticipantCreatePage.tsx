@@ -1,6 +1,6 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm, useFieldArray, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
+import { useForm, useFieldArray, useWatch, Controller, type Resolver, type FieldErrors, type Control, type FieldPath } from 'react-hook-form'
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
@@ -13,9 +13,10 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType } from '@/api/types/enums'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
+import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
   GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams,
@@ -157,6 +158,32 @@ const baseParticipantSchema = z.object({
   eyeColour: z.string().optional(),
   weightKg: z.coerce.number().optional(),
   heightCm: z.coerce.number().optional(),
+  // INTAKE sub-wave B — "Cultural & Consent" wizard step (research spec §4.5/§5). Every flag is
+  // tri-state (Yes/No/not-yet-answered) to match the backend's nullable bool — represented here
+  // as a string ('true' | 'false' | '' for unanswered) rather than z.boolean(), the same
+  // tri-state-as-string shape as each consents[].granted row below, so both render through the
+  // same YesNoToggleField helper. Collapsed to boolean|null in buildPayload before submit.
+  isCald: z.enum(['true', 'false', '']).optional(),
+  isLgbtqi: z.enum(['true', 'false', '']).optional(),
+  isFamilyCommunity: z.enum(['true', 'false', '']).optional(),
+  isAboriginalOrTorresStraitIslander: z.enum(['true', 'false', '']).optional(),
+  receivedRightsAndResponsibilitiesInfo: z.enum(['true', 'false', '']).optional(),
+  receivedPrivacyAndConfidentialityInfo: z.enum(['true', 'false', '']).optional(),
+  receivedFeedbackInfo: z.enum(['true', 'false', '']).optional(),
+  receivedBeingSafeInfo: z.enum(['true', 'false', '']).optional(),
+  receivedAdvocacyInfo: z.enum(['true', 'false', '']).optional(),
+  personalInterests: z.string().optional(),
+  choiceControlNotes: z.string().optional(),
+  // Fixed 7-row array (one per ConsentType, never user-add/remove — unlike riskEntries/
+  // contactRoles) — always all 7 rows, submitted on both create and edit saves (see
+  // CreateParticipantDto.consents' backend doc for why this differs from riskEntries/
+  // contactRoles' create-mode-only convention).
+  consents: z.array(z.object({
+    consentType: z.string(),
+    granted: z.enum(['true', 'false', '']).optional(),
+    signedByName: z.string().optional(),
+    signedDate: z.string().optional(),
+  })).optional(),
 })
 
 type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -375,6 +402,66 @@ function focusField(fieldName: string) {
   if (el instanceof HTMLElement) el.focus()
 }
 
+/** Review-step display helper for a tri-state ('true' | 'false' | '' | undefined) field. */
+function yesNoUnknown(value: string | undefined): string {
+  return value === 'true' ? 'Yes' : value === 'false' ? 'No' : 'Not recorded'
+}
+
+/** boolean|null (the wire shape) -> the wizard's tri-state string shape, for reset()'s round-trip. */
+function boolToTriState(value: boolean | null | undefined): 'true' | 'false' | '' {
+  return value === true ? 'true' : value === false ? 'false' : ''
+}
+
+/** The tri-state string shape -> boolean|null (the wire shape), for buildPayload. */
+function triStateToBool(value: string | undefined): boolean | null {
+  return value === 'true' ? true : value === 'false' ? false : null
+}
+
+/**
+ * INTAKE sub-wave B — a Yes/No ToggleGroup bound to a tri-state string field via Controller,
+ * shared by the 9 cultural/rights flags and each of the 7 consent rows' `granted` field. An
+ * unmatched value (the '' unanswered state) leaves both ToggleGroup options unselected, per
+ * ToggleGroup's own "no match" behaviour — exactly the "not yet answered" visual this tri-state
+ * needs, with no third explicit button.
+ */
+// Three explicit options, not two: an honest bool? control must be able to go back to "not
+// recorded" after being answered, not just toggle between Yes and No — on a compliance record
+// (consents especially), "I don't know what to put so I'll leave it on whatever it last said" is
+// a real data-entry-error trap. Shared by every tri-state field so the affordance is consistent
+// everywhere it appears (review-round polish).
+const YES_NO_UNANSWERED_OPTIONS = [
+  { key: 'true', label: 'Yes' },
+  { key: 'false', label: 'No' },
+  { key: '', label: 'Not recorded' },
+]
+
+function YesNoToggleField({ control, name, label, hint }: {
+  control: Control<ParticipantFormData>
+  name: FieldPath<ParticipantFormData>
+  label: string
+  hint?: string
+}) {
+  return (
+    <FormField label={label} hint={hint} className="mb-0">
+      <Controller
+        control={control}
+        name={name}
+        render={({ field }) => (
+          <ToggleGroup
+            options={YES_NO_UNANSWERED_OPTIONS}
+            value={(field.value as string) ?? ''}
+            onChange={field.onChange}
+            // FormField's cloneElement labelling can't reach through this Controller (see
+            // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
+            // the radiogroup has a real accessible name instead of none at all.
+            ariaLabel={label}
+          />
+        )}
+      />
+    </FormField>
+  )
+}
+
 // Living arrangements (LIVING-01..04) and address (INTAKE-06) live on the Identity step rather
 // than a new wizard step or the Support Needs step: neither depends on funding/support-need
 // answers, and where/how a participant lives is core identity/intake context — putting them here
@@ -404,6 +491,15 @@ const STEP_KEY_IDENTIFIERS_FIELDS = [
 // Nominee, the participant's date of birth captured on the Identity step), so it must come after
 // NDIS & Funding regardless of what else sits between them.
 const STEP_CONTACTS_FIELDS = ['contactRoles'] as const
+// INTAKE sub-wave B — "Cultural & Consent" step (research spec §4.5/§5), placed immediately
+// after Contacts per this PR's brief. All fields optional — draft-save must work with any subset
+// filled, same doctrine as every other wizard step.
+const STEP_CULTURAL_CONSENT_FIELDS = [
+  'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+  'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+  'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+  'personalInterests', 'choiceControlNotes', 'consents',
+] as const
 const STEP_SUPPORT_FIELDS = [
   'isHighSupport', 'isIntensiveSupport', 'supportRatio',
   'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions',
@@ -433,9 +529,14 @@ const WIZARD_STEPS: WizardStep[] = [
   // CONTACT-02: moved after NDIS & Funding (was folded into the Identity step's label before
   // CONTACT-01/02/03 existed) — see STEP_CONTACTS_FIELDS's doc comment above.
   { key: 'contacts', label: 'Contacts', fields: STEP_CONTACTS_FIELDS },
+  // INTAKE sub-wave B — see STEP_CULTURAL_CONSENT_FIELDS's doc comment above for placement.
+  { key: 'culturalConsent', label: 'Cultural & Consent', fields: STEP_CULTURAL_CONSENT_FIELDS },
   { key: 'support', label: 'Support Needs & Equipment', fields: STEP_SUPPORT_FIELDS },
   { key: 'medical', label: 'Medical', fields: STEP_MEDICAL_FIELDS },
-  { key: 'risks', label: 'Risks & Consents', fields: STEP_RISK_FIELDS },
+  // INTAKE sub-wave B: renamed from "Risks & Consents" — consent content now has its own step
+  // (this one carried none to begin with: just Behaviour Risk Summary/General Notes/INTAKE-09
+  // risk entries, nothing consent-shaped), so the two step names no longer overlap.
+  { key: 'risks', label: 'Risks & Hazards', fields: STEP_RISK_FIELDS },
   { key: 'review', label: 'Review', fields: STEP_REVIEW_FIELDS },
 ]
 const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
@@ -451,6 +552,8 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   // INTAKE sub-wave A — Key Identifiers: every field optional except the weight/height bounds.
   baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
   baseParticipantSchema.pick(pickShape(STEP_CONTACTS_FIELDS)).superRefine(contactRolesRefine),
+  // INTAKE sub-wave B — every field optional, no cross-field requirement.
+  baseParticipantSchema.pick(pickShape(STEP_CULTURAL_CONSENT_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
   baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
@@ -595,6 +698,8 @@ export default function ParticipantCreatePage() {
       preferredStaffId: null,
       riskEntries: [],
       contactRoles: [],
+      // INTAKE sub-wave B — fixed 7-row array, one per ConsentType, all unanswered by default.
+      consents: CONSENT_TYPES.map((type) => ({ consentType: type, granted: '' as const, signedByName: '', signedDate: '' })),
     },
   })
   // INTAKE-09: create-mode-only repeatable risk-entry rows — see riskEntries' schema doc above.
@@ -876,6 +981,32 @@ export default function ParticipantCreatePage() {
         // CONTACT-02: same reasoning as riskEntries above — contacts for an already-created
         // participant are managed via the Contacts tab's nested CRUD, not through this wizard.
         contactRoles: [],
+        // INTAKE sub-wave B — cultural/rights flags. Tri-state boolean|null -> 'true'|'false'|''.
+        isCald: boolToTriState(existing.isCald),
+        isLgbtqi: boolToTriState(existing.isLgbtqi),
+        isFamilyCommunity: boolToTriState(existing.isFamilyCommunity),
+        isAboriginalOrTorresStraitIslander: boolToTriState(existing.isAboriginalOrTorresStraitIslander),
+        receivedRightsAndResponsibilitiesInfo: boolToTriState(existing.receivedRightsAndResponsibilitiesInfo),
+        receivedPrivacyAndConfidentialityInfo: boolToTriState(existing.receivedPrivacyAndConfidentialityInfo),
+        receivedFeedbackInfo: boolToTriState(existing.receivedFeedbackInfo),
+        receivedBeingSafeInfo: boolToTriState(existing.receivedBeingSafeInfo),
+        receivedAdvocacyInfo: boolToTriState(existing.receivedAdvocacyInfo),
+        personalInterests: existing.personalInterests ?? '',
+        choiceControlNotes: existing.choiceControlNotes ?? '',
+        // INTAKE sub-wave B — unlike riskEntries/contactRoles above, consents ARE populated from
+        // `existing` in edit mode (see CreateParticipantDto.consents' backend doc): the wizard
+        // step stays editable after the participant already exists, not create-mode-only. Always
+        // all 7 ConsentType rows, in CONSENT_TYPES order regardless of what order the server
+        // returned them in.
+        consents: CONSENT_TYPES.map((type) => {
+          const c = existing.consents?.find((row) => row.consentType === type)
+          return {
+            consentType: type,
+            granted: boolToTriState(c?.granted ?? null),
+            signedByName: c?.signedByName ?? '',
+            signedDate: c?.signedDate ? c.signedDate.split('T')[0] : '',
+          }
+        }),
       })
     }
   }, [existing, reset])
@@ -935,6 +1066,24 @@ export default function ParticipantCreatePage() {
       const num = raw === '' || raw === null || raw === undefined ? NaN : Number(raw)
       payload[numField] = Number.isFinite(num) && num !== 0 ? num : null
     }
+    // INTAKE sub-wave B: collapse each tri-state 'true'|'false'|'' UI field down to the backend's
+    // boolean|null shape.
+    for (const culturalField of [
+      'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+      'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+      'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+    ] as const) {
+      payload[culturalField] = triStateToBool(data[culturalField])
+    }
+    // Signed-by/date only travel with the payload once granted — clearing them here (rather than
+    // relying on the JSX simply not rendering them) means a user who typed a name then flipped
+    // the toggle back to No/blank doesn't leave stale signed-by data sitting in form state.
+    payload.consents = (data.consents ?? []).map((c) => ({
+      consentType: c.consentType,
+      granted: triStateToBool(c.granted),
+      signedByName: c.granted === 'true' ? (c.signedByName || null) : null,
+      signedDate: c.granted === 'true' ? (c.signedDate || null) : null,
+    }))
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
@@ -1142,7 +1291,28 @@ export default function ParticipantCreatePage() {
           })),
     },
     {
+      // INTAKE sub-wave B — Cultural & Consent step review summary.
       step: 4,
+      rows: [
+        { label: 'CALD', value: yesNoUnknown(watchedValues.isCald) },
+        { label: 'LGBTIQA+', value: yesNoUnknown(watchedValues.isLgbtqi) },
+        { label: 'Family / Community', value: yesNoUnknown(watchedValues.isFamilyCommunity) },
+        { label: 'Aboriginal and/or Torres Strait Islander', value: yesNoUnknown(watchedValues.isAboriginalOrTorresStraitIslander) },
+        { label: 'Received: Rights and Responsibilities', value: yesNoUnknown(watchedValues.receivedRightsAndResponsibilitiesInfo) },
+        { label: 'Received: Privacy and Confidentiality', value: yesNoUnknown(watchedValues.receivedPrivacyAndConfidentialityInfo) },
+        { label: 'Received: Feedback Information and Form', value: yesNoUnknown(watchedValues.receivedFeedbackInfo) },
+        { label: 'Received: Being Safe Information', value: yesNoUnknown(watchedValues.receivedBeingSafeInfo) },
+        { label: 'Received: Advocacy Information', value: yesNoUnknown(watchedValues.receivedAdvocacyInfo) },
+        { label: 'Personal Interests', value: watchedValues.personalInterests || '—' },
+        { label: 'Choice & Control Notes', value: watchedValues.choiceControlNotes || '—' },
+        ...CONSENT_TYPES.map((type, index) => ({
+          label: CONSENT_TYPE_LABELS[type],
+          value: yesNoUnknown(watchedValues.consents?.[index]?.granted as string | undefined),
+        })),
+      ],
+    },
+    {
+      step: 5,
       rows: [
         { label: 'High Support', value: watchedValues.isHighSupport ? 'Yes' : 'No' },
         { label: 'Intensive Support (NDIS billing)', value: watchedValues.isIntensiveSupport ? 'Yes' : 'No' },
@@ -1163,7 +1333,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 5,
+      step: 6,
       rows: [
         {
           label: 'Primary Diagnosis',
@@ -1182,7 +1352,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 6,
+      step: 7,
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -1681,6 +1851,11 @@ export default function ParticipantCreatePage() {
                                   ]}
                                   value={row?.personMode ?? 'existing'}
                                   onChange={mode => setValue(`contactRoles.${index}.personMode` as const, mode as 'existing' | 'new', { shouldDirty: true })}
+                                  // Same pre-existing FormField+ToggleGroup labelling gap as
+                                  // YesNoToggleField (see ToggleGroup.tsx's ariaLabel doc) — a
+                                  // bare ToggleGroup doesn't read aria-labelledby either, so it
+                                  // needs its own accessible name passed through directly too.
+                                  ariaLabel="Person"
                                 />
                               </FormField>
 
@@ -1772,7 +1947,80 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
+        {/* INTAKE sub-wave B — "Cultural & Consent" step. Placed immediately after Contacts (see
+            WIZARD_STEPS' doc). The old "Risks & Consents" step carried no consent content at all
+            (just Behaviour Risk Summary/General Notes/INTAKE-09 risk entries) — renamed to
+            "Risks & Hazards" below rather than moved from, since there was nothing to move. */}
         {stepIndex === 4 && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Cultural Background" className="space-y-4">
+              <YesNoToggleField control={control} name="isCald" label="Culturally and Linguistically Diverse (CALD)" />
+              <YesNoToggleField control={control} name="isLgbtqi" label="LGBTIQA+" />
+              <YesNoToggleField control={control} name="isFamilyCommunity" label="Family / Community" />
+              <YesNoToggleField control={control} name="isAboriginalOrTorresStraitIslander" label="Aboriginal and/or Torres Strait Islander" />
+            </Card>
+
+            <Card title="Information Received" className="space-y-4">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Has the participant (or their representative) received and understood the following?
+              </p>
+              <YesNoToggleField control={control} name="receivedRightsAndResponsibilitiesInfo" label="Rights and Responsibilities" />
+              <YesNoToggleField control={control} name="receivedPrivacyAndConfidentialityInfo" label="Privacy and Confidentiality" />
+              <YesNoToggleField control={control} name="receivedFeedbackInfo" label="Feedback Information and Form" />
+              <YesNoToggleField control={control} name="receivedBeingSafeInfo" label="Being Safe Information" />
+              <YesNoToggleField control={control} name="receivedAdvocacyInfo" label="Advocacy Information" />
+            </Card>
+
+            <Card title="Personal Interests & Choice and Control" className="space-y-4 md:col-span-2">
+              <FormField label="Personal Interests">
+                <textarea id="personalInterests" {...register('personalInterests')} rows={3} placeholder="Hobbies, interests, things this participant enjoys..." />
+              </FormField>
+              <FormField label="Choice & Control Notes">
+                <textarea id="choiceControlNotes" {...register('choiceControlNotes')} rows={3} placeholder="Support areas, goals, and preferences for choice and control..." />
+              </FormField>
+            </Card>
+
+            <Card title="Consent & Terms" className="space-y-4 md:col-span-2">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Record each consent decision below. Signed-by name and date appear once a consent is granted.
+              </p>
+              <div className="space-y-3">
+                {CONSENT_TYPES.map((type, index) => {
+                  const granted = watchedValues.consents?.[index]?.granted
+                  return (
+                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                      {/* Reuses the same YesNoToggleField as the cultural/rights flags above —
+                          gives this row a real accessible name via ToggleGroup's ariaLabel (see
+                          YesNoToggleField's own comment: FormField's cloneElement can't reach
+                          through the Controller wrapper, so ariaLabel is what actually carries
+                          the name here) rather than a bare unlabelled ToggleGroup next to a plain
+                          <span>. */}
+                      <YesNoToggleField control={control} name={`consents.${index}.granted` as FieldPath<ParticipantFormData>} label={CONSENT_TYPE_LABELS[type as ConsentType]} />
+                      {/* Local conditional render, not the INTAKE-07 conditionalFields engine: that
+                          engine's ConditionalFieldDef contract targets named whole-form fields, not
+                          per-row paths inside a fixed 7-row array — a narrower, per-row condition
+                          that's simpler to express inline here than as a whole-form declarative def
+                          (and this array is never user-add/remove, unlike riskEntries/contactRoles,
+                          so there's no dynamic-row-count concern either way). */}
+                      {granted === 'true' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField label="Signed by" className="mb-0">
+                            <input {...register(`consents.${index}.signedByName` as const)} placeholder="Full name" />
+                          </FormField>
+                          <FormField label="Date signed" className="mb-0">
+                            <input type="date" {...register(`consents.${index}.signedDate` as const)} />
+                          </FormField>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {stepIndex === 5 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Support Needs" className="space-y-4">
               <FormField label="High Support" layout="checkbox">
@@ -1930,7 +2178,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 5 && (
+        {stepIndex === 6 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Diagnoses" className="space-y-4">
               <FormField label="Primary Diagnosis">
@@ -2091,9 +2339,9 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 6 && (
+        {stepIndex === 7 && (
           <div className="grid md:grid-cols-2 gap-6">
-            <Card title="Risks & Consents" className="space-y-4">
+            <Card title="Risks & Hazards" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-1.5">
                   <span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span>

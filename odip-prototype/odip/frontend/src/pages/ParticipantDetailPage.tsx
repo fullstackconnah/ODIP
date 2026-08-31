@@ -13,7 +13,12 @@ import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories } from '@/api/types/participants'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ContactsTab } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ContactsTab } from './participant-detail'
+
+/** INTAKE sub-wave B — tri-state (boolean | null) display helper, same "—" empty-state idiom as every other unset field on this page. */
+function yesNoUnset(value: boolean | null): string {
+  return value === true ? 'Yes' : value === false ? 'No' : '—'
+}
 
 function Tag({ label }: { label: string }) {
   return (
@@ -304,6 +309,42 @@ export default function ParticipantDetailPage() {
               </div>
             </Card>
           )}
+          {/* INTAKE sub-wave B — Cultural & Consent step (research spec §4.5/§5). Same
+              whole-card-conditional empty-state pattern as Key Identifiers/Medical above: nothing
+              here is required, so the card only renders once at least one flag/note has a value. */}
+          {(p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
+            || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
+            || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
+            || p.personalInterests || p.choiceControlNotes) && (
+            <Card title="Cultural Background" className="md:col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+                <span className="text-[var(--color-muted-foreground)]">CALD</span><span>{yesNoUnset(p.isCald)}</span>
+                <span className="text-[var(--color-muted-foreground)]">LGBTIQA+</span><span>{yesNoUnset(p.isLgbtqi)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Family / Community</span><span>{yesNoUnset(p.isFamilyCommunity)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Aboriginal and/or Torres Strait Islander</span><span>{yesNoUnset(p.isAboriginalOrTorresStraitIslander)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Rights and Responsibilities</span><span>{yesNoUnset(p.receivedRightsAndResponsibilitiesInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Privacy and Confidentiality</span><span>{yesNoUnset(p.receivedPrivacyAndConfidentialityInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Feedback Information and Form</span><span>{yesNoUnset(p.receivedFeedbackInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Being Safe Information</span><span>{yesNoUnset(p.receivedBeingSafeInfo)}</span>
+                <span className="text-[var(--color-muted-foreground)]">Received: Advocacy Information</span><span>{yesNoUnset(p.receivedAdvocacyInfo)}</span>
+                {p.personalInterests && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Personal Interests</span>
+                    <span className="whitespace-pre-line">{p.personalInterests}</span>
+                  </>
+                )}
+                {p.choiceControlNotes && (
+                  <>
+                    <span className="text-[var(--color-muted-foreground)]">Choice & Control Notes</span>
+                    <span className="whitespace-pre-line">{p.choiceControlNotes}</span>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+          <Card className="md:col-span-2">
+            <ParticipantConsentsSection participantId={id} />
+          </Card>
           {(p.mobilityNotes || p.transportRequirements || p.equipmentRequirements || p.notes) && (
             <Card title="Notes" className="md:col-span-2">
               <div className="text-sm space-y-2 text-[var(--color-muted-foreground)]">

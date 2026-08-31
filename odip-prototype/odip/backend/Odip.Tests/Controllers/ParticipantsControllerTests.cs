@@ -336,6 +336,207 @@ public class ParticipantsControllerTests
         Assert.False(await db.ParticipantRiskEntries.AnyAsync(r => r.ParticipantId == createdBody.Data!.Id));
     }
 
+    // ── INTAKE sub-wave B: consent rows upserted transactionally with the participant ───
+
+    [Fact]
+    public async Task Create_WithConsents_CreatesThemTransactionallyWithParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            Consents = new()
+            {
+                new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.PhotoVideo, Granted = true, SignedByName = "Sophie Brown", SignedDate = new DateOnly(2026, 1, 1) },
+                new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Alcohol, Granted = false },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantConsents.Where(c => c.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, c => c.ConsentType == Domain.Enums.ConsentType.PhotoVideo && c.Granted == true && c.SignedByName == "Sophie Brown");
+        Assert.Contains(saved, c => c.ConsentType == Domain.Enums.ConsentType.Alcohol && c.Granted == false && c.SignedByName == null);
+    }
+
+    [Fact]
+    public async Task Create_DraftWithPartialConsents_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            IsDraft = true,
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = true } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Equal(1, await db.ParticipantConsents.CountAsync(c => c.ParticipantId == createdBody.Data!.Id));
+    }
+
+    [Fact]
+    public async Task Create_GrantedFalseVsNull_RoundTripsThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.TravelInsurance, Granted = false } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal(7, body.Data!.Consents.Count);
+        var travelInsurance = body.Data.Consents.Single(c => c.ConsentType == Domain.Enums.ConsentType.TravelInsurance);
+        Assert.False(travelInsurance.Granted); // explicitly declined, not merely absent
+        var neverAnswered = body.Data.Consents.Single(c => c.ConsentType == Domain.Enums.ConsentType.PhotoVideo);
+        Assert.Null(neverAnswered.Granted); // not yet answered
+    }
+
+    [Fact]
+    public async Task GetById_NoConsentRows_StillReturnsAllSevenAsSynthesizedPlaceholders()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var result = await controller.GetById(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(7, body.Data!.Consents.Count);
+        Assert.All(body.Data.Consents, c => Assert.Null(c.Id));
+    }
+
+    [Fact]
+    public async Task Update_WithConsents_UpsertsSameRows_DoesNotDuplicate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = false } },
+        };
+
+        await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        await controller.Update(participant.Id, updateDto with
+        {
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = true, SignedByName = "Sophie Brown" } },
+        }, CancellationToken.None);
+
+        var saved = await db.ParticipantConsents.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.True(single.Granted);
+        Assert.Equal("Sophie Brown", single.SignedByName);
+    }
+
+    [Fact]
+    public async Task Create_WithConsents_TenantScoped_ConsentsGetSameTenantIdAsParticipant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = true } },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var savedConsent = await db.ParticipantConsents.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == createdBody.Data!.Id);
+        Assert.Equal(tenantId, savedConsent.TenantId);
+    }
+
+    /// <summary>
+    /// Review-round polish: the exact scenario UpsertConsentsAsync's early-return guard defends —
+    /// a caller (e.g. ParticipantsPage's isActive-only toggle) that PUTs an UpdateParticipantDto
+    /// without ever touching Consents (defaults to an empty list) must not wipe/no-op away the
+    /// participant's already-answered consent rows just because this particular save didn't
+    /// mention them.
+    /// </summary>
+    [Fact]
+    public async Task Update_WithoutConsentsField_LeavesExistingConsentRowsUntouched()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var withConsent = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            Consents = new() { new CreateParticipantConsentDto { ConsentType = Domain.Enums.ConsentType.Privacy, Granted = true, SignedByName = "Sophie Brown" } },
+        };
+        await controller.Update(participant.Id, withConsent, CancellationToken.None);
+
+        // A later, unrelated save (e.g. an isActive toggle from the participants list) that never
+        // mentions Consents at all — same shape as any DTO caller built before this field existed.
+        var toggleOnly = withConsent with { Consents = new(), IsActive = false };
+        await controller.Update(participant.Id, toggleOnly, CancellationToken.None);
+
+        var saved = await db.ParticipantConsents.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        var single = Assert.Single(saved);
+        Assert.True(single.Granted);
+        Assert.Equal("Sophie Brown", single.SignedByName);
+    }
+
+    /// <summary>
+    /// Proves the null-guard added alongside the empty-list guard above: System.Text.Json
+    /// overwrites CreateParticipantDto.Consents' `= new()` initializer with an explicit null when
+    /// a raw request body includes `"consents": null` (present-but-null, unlike an omitted
+    /// property) — UpsertConsentsAsync must treat that the same as "don't touch consents", not NRE.
+    /// </summary>
+    [Fact]
+    public async Task Update_ConsentsExplicitlyNull_DoesNotThrow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            Consents = null!,
+        };
+
+        var result = await controller.Update(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantConsents.AnyAsync(c => c.ParticipantId == participant.Id));
+    }
+
     // ── CONTACT-01/02/03: contact roles created transactionally with the participant ────
 
     [Fact]

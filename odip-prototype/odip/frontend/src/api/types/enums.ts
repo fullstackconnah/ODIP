@@ -223,6 +223,10 @@ export type DayOfWeekName = typeof DAYS_OF_WEEK[number]
 export const ALERT_SEVERITIES = ['Critical', 'Warning', 'Info'] as const
 export type AlertSeverity = typeof ALERT_SEVERITIES[number]
 
+// ── Consent Type (INTAKE sub-wave B) ──────────────────────
+export const CONSENT_TYPES = ['PhotoVideo', 'Alcohol', 'OtcMedication', 'EmergencyMedical', 'Privacy', 'TravelInsurance', 'TermsAndConditions'] as const
+export type ConsentType = typeof CONSENT_TYPES[number]
+
 // ── Living Arrangement (LIVING-01) ───────────────────────────────────────
 export const LIVING_ARRANGEMENTS = ['Family', 'Independent', 'SupportedAccommodation'] as const
 export type LivingArrangement = typeof LIVING_ARRANGEMENTS[number]

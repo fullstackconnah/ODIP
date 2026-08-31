@@ -146,6 +146,7 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
     await user.type(screen.getByLabelText('Region'), 'QLD')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
     // Trigger the cross-field equipment error: check a box (this un-disables the notes
@@ -157,9 +158,10 @@ describe('ParticipantCreatePage per-step validation scoping', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/select an equipment item/i)
 
-    // Go back to the NDIS step (via Contacts, then Key Identifiers) — its own field is still
-    // editable and shows no error, even though the Support step above it currently has an
-    // outstanding validation error.
+    // Go back to the NDIS step (via Cultural & Consent, Contacts, then Key Identifiers) — its own
+    // field is still editable and shows no error, even though the Support step above it
+    // currently has an outstanding validation error.
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Back' })) // -> Contacts
     await user.click(screen.getByRole('button', { name: 'Back' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Back' })) // -> NDIS & Funding
@@ -181,10 +183,11 @@ describe('ParticipantCreatePage Review step', () => {
     await user.type(screen.getByLabelText('NDIS Number'), '431234567')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   }
 
@@ -204,10 +207,10 @@ describe('ParticipantCreatePage Review step', () => {
     // Each group's Edit button carries a distinct accessible name (aria-label) even though
     // they all show the same "Edit" visible text — six identical "Edit" accessible names
     // would be indistinguishable to screen reader users navigating by role.
-    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(7)
+    expect(screen.getAllByRole('button', { name: /^Edit / })).toHaveLength(8)
 
     // Review groups render in step order: Identity(0), NDIS(1), Key Identifiers(2), Contacts(3),
-    // Support(4), Medical(5), Risks(6).
+    // Cultural & Consent(4), Support(5), Medical(6), Risks(7).
     await user.click(screen.getByRole('button', { name: 'Edit NDIS & Funding' }))
 
     // Jumped back to the NDIS & Funding step, with the value still there.
@@ -269,6 +272,12 @@ describe('ParticipantCreatePage Review step', () => {
         'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'taxiCardNumber', 'transportRequirements', 'weightKg',
+        // INTAKE sub-wave B — Cultural & Consent step, always present (buildPayload explicitly
+        // assigns every one of these, converting the tri-state UI value to boolean|null).
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -292,9 +301,10 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
 
     // Change the pick from the Review step (Edit link back to Identity) before ever submitting —
@@ -307,9 +317,10 @@ describe('ParticipantCreatePage Review step', () => {
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -370,9 +381,10 @@ describe('ParticipantCreatePage — INTAKE-05 gender self-description reveal', (
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -397,9 +409,10 @@ describe('ParticipantCreatePage — FUND-01 NDIS plan dates', () => {
     await user.type(screen.getByLabelText('Plan End Date'), '2026-12-31')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -474,9 +487,10 @@ describe('ParticipantCreatePage — FUND-02 funding source gating (INTAKE-07 eng
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -548,9 +562,10 @@ describe('ParticipantCreatePage — FUND-02 review-round fix: confirm before los
 
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -580,9 +595,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -600,6 +616,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements',
         'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+        // INTAKE sub-wave B — Cultural & Consent step, always present.
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -616,9 +637,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.type(screen.getByLabelText(/Funding Organisation/i), 'Self-funded')
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -635,6 +657,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
         'requiresStandingMachine', 'riskEntries', 'serviceStreams', 'supportRatio', 'transportRequirements',
         'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+        // INTAKE sub-wave B — Cultural & Consent step, always present.
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -650,9 +677,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -672,6 +700,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'riskEntries',
         'serviceStreams', 'supportRatio', 'transportRequirements',
         'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+        // INTAKE sub-wave B — Cultural & Consent step, always present.
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -686,9 +719,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -712,9 +746,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -734,6 +769,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'supportRatio', 'transportRequirements', 'whoLivesWith',
         'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+        // INTAKE sub-wave B — Cultural & Consent step, always present.
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -763,9 +803,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -785,6 +826,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'riskEntries', 'serviceStreams',
         'silProviderContactPhone', 'silProviderName', 'supportRatio', 'transportRequirements',
         'middleName', 'placeOfBirth', 'country', 'phone', 'email', 'isDsoa', 'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+        // INTAKE sub-wave B — Cultural & Consent step, always present.
+        'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+        'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+        'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+        'personalInterests', 'choiceControlNotes', 'consents',
       ].sort()
     )
   })
@@ -814,9 +860,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
@@ -833,12 +880,13 @@ async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
 }
 
 async function finishWizard(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
   await user.click(screen.getByRole('button', { name: /create participant/i }))
 }
@@ -1024,7 +1072,7 @@ describe('ParticipantCreatePage — DIAG-02 HIDPA support categories + epilepsy 
 describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () => {
   async function advanceToRisks(user: ReturnType<typeof userEvent.setup>) {
     await advanceToMedical(user)
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
   }
 
   it('adds a row, fills it in, and submits it as part of the create payload', async () => {
@@ -1077,7 +1125,7 @@ describe('ParticipantCreatePage — INTAKE-09 risk entries (create mode)', () =>
     // error text, not the top-of-step alert summary — a nested array-item error doesn't
     // collapse onto the whole `riskEntries` field the way a flat field's error would).
     expect(screen.getByText('Description is required')).toBeInTheDocument()
-    // Still on the Risks & Consents step — Review's read-only content hasn't appeared.
+    // Still on the Risks & Hazards step — Review's read-only content hasn't appeared.
     expect(screen.getByRole('button', { name: /add risk entry/i })).toBeInTheDocument()
   })
 
@@ -1127,9 +1175,10 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
   }
 
   async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
     await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
   }
@@ -1286,7 +1335,7 @@ describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
 
     await user.type(screen.getByLabelText('First Name *'), 'Jamie')
     await user.type(screen.getByLabelText('Last Name *'), 'Smith')
-    for (let i = 0; i < 7; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
+    for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: 'Next' })) // -> ... -> Review
     await user.click(screen.getByRole('button', { name: /create participant/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -1525,5 +1574,243 @@ describe('ParticipantCreatePage — INTAKE-08 fix round 1 (Finding 1a): Save-as-
     // The rest of the edit flow is unaffected — no Draft badge, and Next still works normally.
     expect(screen.queryByText('Draft')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
+})
+
+// Review-round polish: YesNoToggleField now passes ariaLabel through to ToggleGroup (see
+// ToggleGroup.tsx's ariaLabel doc), so each of the Cultural & Consent step's 16 Yes/No/Not
+// recorded radiogroups carries a real accessible name. Every scoped query below is
+// `screen.getByRole('radiogroup', { name: ... })` directly (no DOM-proximity helper) — proof the
+// name genuinely exists: if the wiring were broken, every one of these would fail to find
+// anything rather than silently falling back to some other element.
+
+describe('ParticipantCreatePage — INTAKE sub-wave B: Cultural & Consent', () => {
+  async function advanceToCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+  }
+
+  async function finishFromCulturalConsent(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+  }
+
+  it('the step is placed immediately after Contacts', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    expect(within(stepNav()).getByRole('button', { name: /cultural & consent/i })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Consent & Terms' })).toBeInTheDocument()
+  })
+
+  it('leaving every cultural flag and consent untouched submits them all as null/unanswered', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+    await finishFromCulturalConsent(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    for (const field of [
+      'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+      'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+      'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+    ]) {
+      expect(payload[field]).toBeNull()
+    }
+    expect(payload.consents).toHaveLength(7)
+    expect(payload.consents.every((c: { granted: boolean | null }) => c.granted === null)).toBe(true)
+  })
+
+  it('answering Yes/No on cultural flags submits true/false, not just non-null', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })).getByRole('radio', { name: 'Yes' }))
+    await user.click(within(screen.getByRole('radiogroup', { name: 'LGBTIQA+' })).getByRole('radio', { name: 'No' }))
+
+    await finishFromCulturalConsent(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isCald).toBe(true)
+    expect(payload.isLgbtqi).toBe(false)
+    // Untouched flags stay unanswered (null), not silently defaulted either way.
+    expect(payload.isFamilyCommunity).toBeNull()
+  })
+
+  it('a cultural flag answered Yes can be cleared back to "not recorded" (Not just Yes/No toggling)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    const caldGroup = screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })
+    await user.click(within(caldGroup).getByRole('radio', { name: 'Yes' }))
+    expect(within(caldGroup).getByRole('radio', { name: 'Yes' })).toBeChecked()
+
+    // A third, explicit "Not recorded" option — not just Yes/No — is the whole point: an
+    // already-answered compliance flag must be recoverable back to "unanswered", not stuck
+    // toggling between Yes and No forever once touched.
+    await user.click(within(caldGroup).getByRole('radio', { name: 'Not recorded' }))
+    expect(within(caldGroup).getByRole('radio', { name: 'Not recorded' })).toBeChecked()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isCald).toBeNull()
+  })
+
+  it('a consent answered Yes with a signature can be cleared back to "not recorded", dropping the signature too', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'Not recorded' }))
+
+    expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const alcohol = payload.consents.find((c: { consentType: string }) => c.consentType === 'Alcohol')
+    expect(alcohol).toMatchObject({ granted: null, signedByName: null, signedDate: null })
+  })
+
+  it('a consent answered No does not reveal Signed by/Date signed, and submits granted=false with no signature', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Alcohol' })).getByRole('radio', { name: 'No' }))
+
+    expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const alcohol = payload.consents.find((c: { consentType: string }) => c.consentType === 'Alcohol')
+    expect(alcohol).toMatchObject({ granted: false, signedByName: null, signedDate: null })
+  })
+
+  it('a consent answered Yes reveals Signed by/Date signed, and both travel in the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Privacy (collection & use of information)' })).getByRole('radio', { name: 'Yes' }))
+
+    await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
+    await user.type(screen.getByLabelText('Date signed'), '2026-02-01')
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const privacy = payload.consents.find((c: { consentType: string }) => c.consentType === 'Privacy')
+    expect(privacy).toMatchObject({ granted: true, signedByName: 'Jamie Smith', signedDate: '2026-02-01' })
+  })
+
+  it('typing a signed-by name then flipping back to No clears it from the payload, not just the UI', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Terms & Conditions' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByLabelText('Signed by'), 'Jamie Smith')
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Terms & Conditions' })).getByRole('radio', { name: 'No' }))
+
+    expect(screen.queryByLabelText('Signed by')).not.toBeInTheDocument()
+
+    await finishFromCulturalConsent(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    const terms = payload.consents.find((c: { consentType: string }) => c.consentType === 'TermsAndConditions')
+    expect(terms).toMatchObject({ granted: false, signedByName: null, signedDate: null })
+  })
+
+  it('Save as draft with only some cultural/consent fields filled in succeeds, sending exactly those', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToCulturalConsent(user)
+
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Aboriginal and/or Torres Strait Islander' })).getByRole('radio', { name: 'Yes' }))
+    await user.type(screen.getByLabelText('Personal Interests'), 'Fishing, live music.')
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.isAboriginalOrTorresStraitIslander).toBe(true)
+    expect(payload.personalInterests).toBe('Fishing, live music.')
+    expect(payload.isCald).toBeNull()
+    expect(payload.choiceControlNotes).toBeNull()
+    expect(payload.consents.every((c: { granted: boolean | null }) => c.granted === null)).toBe(true)
+  })
+
+  it('edit mode round-trips cultural flags and consents into their controls, and a save resubmits them unchanged', async () => {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', isActive: true, isDraft: false,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+        isCald: true, isLgbtqi: false, isFamilyCommunity: null, isAboriginalOrTorresStraitIslander: null,
+        receivedRightsAndResponsibilitiesInfo: true, receivedPrivacyAndConfidentialityInfo: true,
+        receivedFeedbackInfo: false, receivedBeingSafeInfo: null, receivedAdvocacyInfo: null,
+        personalInterests: 'Painting, live music.', choiceControlNotes: 'Prefers her own roster.',
+        consents: [
+          { id: 'c1', participantId: 'participant-1', consentType: 'PhotoVideo', granted: true, recordedAt: '2026-01-01T00:00:00Z', signedByName: 'Sophie Brown', signedDate: '2026-01-01', createdAt: null, updatedAt: null },
+          { id: 'c2', participantId: 'participant-1', consentType: 'Alcohol', granted: false, recordedAt: '2026-01-01T00:00:00Z', signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', consentType: 'OtcMedication', granted: null, recordedAt: null, signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', consentType: 'EmergencyMedical', granted: null, recordedAt: null, signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', consentType: 'Privacy', granted: null, recordedAt: null, signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', consentType: 'TravelInsurance', granted: null, recordedAt: null, signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+          { id: null, participantId: 'participant-1', consentType: 'TermsAndConditions', granted: null, recordedAt: null, signedByName: null, signedDate: null, createdAt: null, updatedAt: null },
+        ],
+      },
+      isLoading: false,
+    })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+
+    await user.click(within(stepNav()).getByRole('button', { name: /cultural & consent/i }))
+
+    expect(within(screen.getByRole('radiogroup', { name: 'Culturally and Linguistically Diverse (CALD)' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(within(screen.getByRole('radiogroup', { name: 'LGBTIQA+' })).getByRole('radio', { name: 'No' })).toBeChecked()
+    expect(screen.getByLabelText('Personal Interests')).toHaveValue('Painting, live music.')
+    expect(within(screen.getByRole('radiogroup', { name: 'Photo & Video (promotional use)' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(screen.getByDisplayValue('Sophie Brown')).toBeInTheDocument()
+
+    await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(call.data).toMatchObject({
+      isCald: true, isLgbtqi: false, isFamilyCommunity: null, isAboriginalOrTorresStraitIslander: null,
+      personalInterests: 'Painting, live music.', choiceControlNotes: 'Prefers her own roster.',
+    })
+    expect(call.data.consents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ consentType: 'PhotoVideo', granted: true, signedByName: 'Sophie Brown', signedDate: '2026-01-01' }),
+        expect.objectContaining({ consentType: 'Alcohol', granted: false, signedByName: null, signedDate: null }),
+      ])
+    )
   })
 })
