@@ -37,12 +37,24 @@ public record ParticipantListDto
 
 public record ParticipantDetailDto : ParticipantListDto
 {
+    /// <summary>INTAKE sub-wave A, PID-004.</summary>
+    public string? MiddleName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
     public Gender? Gender { get; init; }
     public string? GenderSelfDescription { get; init; }
+    /// <summary>INTAKE sub-wave A, PID-010.</summary>
+    public string? PlaceOfBirth { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-006.</summary>
+    public string? Country { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-007 — the participant's own phone (not a Contact's).</summary>
+    public string? Phone { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-008 — the participant's own email (not a Contact's).</summary>
+    public string? Email { get; init; }
     public string? NdisNumber { get; init; }
     public DateOnly? PlanStartDate { get; init; }
     public DateOnly? PlanEndDate { get; init; }
+    /// <summary>INTAKE sub-wave A, NDIS-006 — Disability Support for Older Australians.</summary>
+    public bool IsDsoa { get; init; }
     public ParticipantFundingSource FundingSource { get; init; }
     public string? FundingOrganisation { get; init; }
     /// <summary>LIVING-01.</summary>
@@ -86,6 +98,22 @@ public record ParticipantDetailDto : ParticipantListDto
     public DateTime UpdatedAt { get; init; }
     public Guid? PreferredStaffId { get; init; }
     public string? PreferredStaffName { get; init; }
+
+    // INTAKE sub-wave A — Key Identifiers step (Master Data Dictionary CARD-*/PHY-*). See
+    // Participant.cs's field group doc for the full rationale/deferred-fields note.
+    public string? PensionCardNumber { get; init; }
+    public DateOnly? PensionCardExpiry { get; init; }
+    public string? MedicareNumber { get; init; }
+    public DateOnly? MedicareExpiry { get; init; }
+    public string? CompanionCardNumber { get; init; }
+    public DateOnly? CompanionCardExpiry { get; init; }
+    public string? PrivateHealthFund { get; init; }
+    public string? PrivateHealthMembershipNumber { get; init; }
+    public string? TaxiCardNumber { get; init; }
+    public string? HairColour { get; init; }
+    public string? EyeColour { get; init; }
+    public decimal? WeightKg { get; init; }
+    public decimal? HeightCm { get; init; }
 }
 
 public record CreateParticipantDto
@@ -117,11 +145,30 @@ public record CreateParticipantDto
     public bool IsDraft { get; init; }
     [StringLength(100)]
     public string? PreferredName { get; init; }
+    /// <summary>INTAKE sub-wave A, PID-004.</summary>
+    [StringLength(100)]
+    public string? MiddleName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
     public Gender? Gender { get; init; }
     /// <summary>Only meaningful (and validated server-side) when Gender is "Other".</summary>
     [StringLength(200)]
     public string? GenderSelfDescription { get; init; }
+    /// <summary>INTAKE sub-wave A, PID-010.</summary>
+    [StringLength(200)]
+    public string? PlaceOfBirth { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-006.</summary>
+    [StringLength(100)]
+    public string? Country { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-007 — the participant's own phone. Format validated
+    /// server-side (see ParticipantsController.ValidatePhone) whenever provided; absence never
+    /// blocks a draft (INTAKE-08 doctrine).</summary>
+    [StringLength(30)]
+    public string? Phone { get; init; }
+    /// <summary>INTAKE sub-wave A, CON-008 — the participant's own email. Format validated
+    /// server-side (see ParticipantsController.ValidateEmail) whenever provided; absence never
+    /// blocks a draft.</summary>
+    [StringLength(200)]
+    public string? Email { get; init; }
     [StringLength(20)]
     public string? NdisNumber { get; init; }
     public DateOnly? PlanStartDate { get; init; }
@@ -129,6 +176,10 @@ public record CreateParticipantDto
     public PlanType PlanType { get; init; }
     [StringLength(100)]
     public string? Region { get; init; }
+    /// <summary>INTAKE sub-wave A, NDIS-006 — Disability Support for Older Australians, labelled
+    /// in full on the wizard. Defaults false; standalone from FundingSource (see Participant.cs's
+    /// doc for why folding it into FundingSource=Other would be lossy).</summary>
+    public bool IsDsoa { get; init; }
     /// <summary>FUND-02. Defaults to Ndis — matches the entity default and the migration backfill.</summary>
     public ParticipantFundingSource FundingSource { get; init; } = ParticipantFundingSource.Ndis;
     /// <summary>Reused "Other — specify" field: required (and validated server-side, see
@@ -228,6 +279,31 @@ public record CreateParticipantDto
     /// never reads this list, same convention as RiskEntries.
     /// </summary>
     public List<CreateParticipantContactRoleDto> ContactRoles { get; init; } = new();
+
+    // INTAKE sub-wave A — Key Identifiers step (Master Data Dictionary CARD-*/PHY-*). All
+    // optional; see Participant.cs's field group doc for the full rationale and the
+    // deliberately-deferred/omitted fields (Photo, a second Plan Number).
+    [StringLength(50)]
+    public string? PensionCardNumber { get; init; }
+    public DateOnly? PensionCardExpiry { get; init; }
+    [StringLength(50)]
+    public string? MedicareNumber { get; init; }
+    public DateOnly? MedicareExpiry { get; init; }
+    [StringLength(50)]
+    public string? CompanionCardNumber { get; init; }
+    public DateOnly? CompanionCardExpiry { get; init; }
+    [StringLength(100)]
+    public string? PrivateHealthFund { get; init; }
+    [StringLength(50)]
+    public string? PrivateHealthMembershipNumber { get; init; }
+    [StringLength(50)]
+    public string? TaxiCardNumber { get; init; }
+    [StringLength(50)]
+    public string? HairColour { get; init; }
+    [StringLength(50)]
+    public string? EyeColour { get; init; }
+    public decimal? WeightKg { get; init; }
+    public decimal? HeightCm { get; init; }
 }
 
 public record UpdateParticipantDto : CreateParticipantDto
