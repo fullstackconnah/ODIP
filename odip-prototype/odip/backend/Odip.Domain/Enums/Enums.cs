@@ -610,7 +610,11 @@ public enum ServiceStreams
 /// frontend via the generic derivation capability in `src/lib/conditionalFields.ts`
 /// (`useDeriveFieldValues`), which fires only on the transition into the epilepsy-selected state
 /// so a user's later manual untick is never silently re-forced. Backend has no special-casing for
-/// this rule; it just stores whatever bitmask the client submits.
+/// this rule; it just stores whatever bitmask the client submits. This is one-directional by
+/// design: the engine only ever defaults <see cref="EpilepsyManagement"/> ON, never forces it back
+/// OFF — so later REMOVING the Epilepsy diagnosis entirely (not just switching it away and back to
+/// re-trigger the default) still never silently clears an already-set EpilepsyManagement flag. A
+/// flagged high-intensity support need is never dropped without an explicit, separate user action.
 /// </summary>
 [Flags]
 public enum HidpaSupportCategory

@@ -390,6 +390,88 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task Update_BlankOtherDiagnosisEntry_ReturnsBadRequest()
+    {
+        // Fix-round regression coverage: Update() previously omitted the ValidateDiagnoses call
+        // that Create() had, so a PUT with a blank OtherDiagnoses entry persisted silently where
+        // POST correctly 400s. Same dual-wiring as ValidateGender/ValidateFundingSource/
+        // ValidateLivingArrangement/ValidateAddressPostcode.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            OtherDiagnoses = new() { "Epilepsy", "   " },
+        };
+
+        var result = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("blank", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        // Confirms it never persisted — the row is untouched by the rejected update.
+        var unchanged = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Empty(unchanged.OtherDiagnoses);
+    }
+
+    [Fact]
+    public async Task Create_DiagnosesWithPaddingWhitespace_AreStoredTrimmed()
+    {
+        // A raw API caller sending " Epilepsy" (leading/trailing whitespace) must still persist
+        // as the exact "Epilepsy" string — otherwise it silently defeats the frontend's
+        // exact-string epilepsy-derivation match (primaryDiagnosis === 'Epilepsy' /
+        // otherDiagnoses.includes('Epilepsy')).
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            PrimaryDiagnosis = "  Cerebral Palsy  ",
+            OtherDiagnoses = new() { " Epilepsy", "Down Syndrome \t" },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == createdBody.Data!.Id);
+        Assert.Equal("Cerebral Palsy", saved.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Epilepsy", "Down Syndrome" }, saved.OtherDiagnoses);
+    }
+
+    [Fact]
+    public async Task Update_DiagnosesWithPaddingWhitespace_AreStoredTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            PrimaryDiagnosis = " Epilepsy ",
+            OtherDiagnoses = new() { " Acquired Brain Injury " },
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Equal("Epilepsy", saved.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Acquired Brain Injury" }, saved.OtherDiagnoses);
+    }
+
+    [Fact]
     public void ParticipantDetailDto_CombinedHidpaSupportCategories_SerialisesAsCommaSeparatedString()
     {
         // Same JsonStringEnumConverter flags-serialisation contract as ServiceStreams (see

@@ -84,7 +84,12 @@ import type { UseFormSetValue, UseFormUnregister } from 'react-hook-form'
  *     transition is a fresh "default", which is the intended, documented behaviour, not a bug.
  *   - USER OVERRIDE SURVIVES: because `apply` only fires on the transition edge, a user who
  *     unticks the derived value while `when` remains true is never overridden — the engine does
- *     not "correct" the field back on subsequent renders.
+ *     not "correct" the field back on subsequent renders. This is one-directional by design: the
+ *     engine only ever defaults the derived value ON (via `apply`), never forces it back OFF —
+ *     so REMOVING the source condition entirely (e.g. deleting the Epilepsy diagnosis outright,
+ *     not just switching it away and back to re-trigger the default) still never silently clears
+ *     an already-set derived value either. A flagged high-intensity support need is never dropped
+ *     without an explicit, separate user action.
  *   - EDIT-MODE SAFE (the `resetKey` param): loading an existing record's data via `reset()`
  *     looks, to the hook, identical to a user causing the same value change — both take `when`
  *     from false to true. Left unguarded, opening an edit page for an Epilepsy participant whose

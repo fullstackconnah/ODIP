@@ -81,6 +81,17 @@ public class ParticipantsController : ControllerBase
     /// enforce a required companion field), diagnoses are open text with a curated picklist as UI
     /// guidance only (see Diagnoses.cs's type doc) — so the only server-side rule is "not blank,
     /// not absurdly long" per entry, applied to both PrimaryDiagnosis and every OtherDiagnoses row.
+    /// Called from both Create and Update (same dual-wiring as the four validators above it) —
+    /// a PUT must reject a blank/over-long entry exactly like a POST does. Validation runs
+    /// against the raw (untrimmed) value; Create/Update then trim PrimaryDiagnosis/each
+    /// OtherDiagnoses entry before assigning it to the entity, so a caller sending " Epilepsy"
+    /// (leading/trailing whitespace) still persists as the exact "Epilepsy" string the frontend's
+    /// epilepsy-derivation rule matches on — see the .Trim() calls at the PrimaryDiagnosis/
+    /// OtherDiagnoses assignments in both methods below. The <see cref="Odip.Domain.Enums.HidpaSupportCategory"/>
+    /// doc comment and conditionalFields.ts's module doc both note the flip side of this: the
+    /// derivation engine only ever defaults a HIDPA category ON, never forces it back OFF — so
+    /// removing an Epilepsy diagnosis entirely (not just switching it away and back) still never
+    /// silently clears an already-set EpilepsyManagement flag, deliberately.
     /// </summary>
     private static string? ValidateDiagnoses(CreateParticipantDto dto)
     {
@@ -262,7 +273,7 @@ public class ParticipantsController : ControllerBase
             IsRepeatClient = dto.IsRepeatClient,
             MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
             MobilitySupportOptions = dto.MobilitySupportOptions,
-            PrimaryDiagnosis = dto.PrimaryDiagnosis, OtherDiagnoses = dto.OtherDiagnoses, HidpaSupportCategories = dto.HidpaSupportCategories,
+            PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(), OtherDiagnoses = dto.OtherDiagnoses.Select(d => d.Trim()).ToList(), HidpaSupportCategories = dto.HidpaSupportCategories,
             IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
             OvernightSupport = dto.OvernightSupport, OvernightRatio = dto.OvernightRatio,
             RequiresHiLoBed = dto.RequiresHiLoBed, RequiresHoist = dto.RequiresHoist, RequiresShowerChair = dto.RequiresShowerChair,
@@ -313,6 +324,10 @@ public class ParticipantsController : ControllerBase
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
+        var diagnosesError = ValidateDiagnoses(dto);
+        if (diagnosesError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -337,7 +352,7 @@ public class ParticipantsController : ControllerBase
         p.IsRepeatClient = dto.IsRepeatClient;
         p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;
-        p.PrimaryDiagnosis = dto.PrimaryDiagnosis; p.OtherDiagnoses = dto.OtherDiagnoses; p.HidpaSupportCategories = dto.HidpaSupportCategories;
+        p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.OtherDiagnoses = dto.OtherDiagnoses.Select(d => d.Trim()).ToList(); p.HidpaSupportCategories = dto.HidpaSupportCategories;
         p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
         p.OvernightSupport = dto.OvernightSupport; p.OvernightRatio = dto.OvernightRatio;
         p.RequiresHiLoBed = dto.RequiresHiLoBed; p.RequiresHoist = dto.RequiresHoist; p.RequiresShowerChair = dto.RequiresShowerChair;
