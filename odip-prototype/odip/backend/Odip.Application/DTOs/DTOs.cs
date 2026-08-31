@@ -62,6 +62,12 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? AddressState { get; init; }
     public string? AddressPostcode { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
+    /// <summary>DIAG-01.</summary>
+    public string? PrimaryDiagnosis { get; init; }
+    /// <summary>DIAG-01.</summary>
+    public List<string> OtherDiagnoses { get; init; } = new();
+    /// <summary>DIAG-02.</summary>
+    public HidpaSupportCategory HidpaSupportCategories { get; init; }
     public SupportRatio OvernightRatio { get; init; }
     public bool RequiresHiLoBed { get; init; }
     public bool RequiresHoist { get; init; }
@@ -148,6 +154,13 @@ public record CreateParticipantDto
     public bool MobilityAidWheelchair { get; init; }
     public bool MobilityAidWalker { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
+    /// <summary>DIAG-01. Free text — selected from the curated picklist or typed via "Other — specify"; see Diagnoses.cs's type doc.</summary>
+    [StringLength(200)]
+    public string? PrimaryDiagnosis { get; init; }
+    /// <summary>DIAG-01. Each entry validated server-side (see ValidateDiagnoses) for non-blank + length only, not against the curated set.</summary>
+    public List<string> OtherDiagnoses { get; init; } = new();
+    /// <summary>DIAG-02. Defaults to None — untagged until intake captures it.</summary>
+    public HidpaSupportCategory HidpaSupportCategories { get; init; } = HidpaSupportCategory.None;
     public bool IsHighSupport { get; init; }
     public bool IsIntensiveSupport { get; init; }
     public OvernightSupportType OvernightSupport { get; init; }

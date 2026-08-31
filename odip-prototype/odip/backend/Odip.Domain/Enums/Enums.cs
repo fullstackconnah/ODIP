@@ -587,6 +587,60 @@ public enum ServiceStreams
 }
 
 /// <summary>
+/// DIAG-02: the NDIS "High Intensity Daily Personal Activities" (HIDPA) support categories a
+/// participant needs, per Supplementary Module 1 of the NDIS Practice Standards (the "High
+/// Intensity Support Skills Descriptors", HISSD, in effect from 1 Feb 2024). Stored as a bitmask
+/// int on <see cref="Entities.Participant.HidpaSupportCategories"/>, default <see cref="None"/> —
+/// same [Flags]-on-a-participant-column shape as <see cref="ServiceStreams"/> (see that enum's doc
+/// for the JsonStringEnumConverter comma-separated-names wire format both share), NOT the same
+/// concept as <see cref="ServiceStreams.HIDPA"/> — that flag tags a participant as engaging with
+/// the HIDPA business/service line in general; this enum instead records WHICH specific
+/// high-intensity support categories they need, independent of ServiceStreams tagging.
+///
+/// CAVEAT: this 9-category list and the one-line descriptions were compiled from 3 corroborating
+/// secondary sources (NDS, Team DSC, CentroQMS) — the primary NDIS Quality &amp; Safeguards
+/// Commission PDF could not be fetched directly during research (repeated timeouts/a 403). Treat
+/// member names/order as reliable (cross-source agreement) but verify exact descriptor wording
+/// against the Commission's published PDF before shipping copy that quotes it verbatim to
+/// end users: https://www.ndiscommission.gov.au/sites/default/files/2024-09/High%20Intensity%20support%20skills%20descriptors.pdf
+///
+/// DIAG-02's defined rule: an Epilepsy diagnosis (<see cref="Entities.Participant.PrimaryDiagnosis"/>
+/// or any entry in <see cref="Entities.Participant.OtherDiagnoses"/>) pre-selects
+/// <see cref="EpilepsyManagement"/> as a DEFAULT, not a lock — implemented entirely on the
+/// frontend via the generic derivation capability in `src/lib/conditionalFields.ts`
+/// (`useDeriveFieldValues`), which fires only on the transition into the epilepsy-selected state
+/// so a user's later manual untick is never silently re-forced. Backend has no special-casing for
+/// this rule; it just stores whatever bitmask the client submits. This is one-directional by
+/// design: the engine only ever defaults <see cref="EpilepsyManagement"/> ON, never forces it back
+/// OFF — so later REMOVING the Epilepsy diagnosis entirely (not just switching it away and back to
+/// re-trigger the default) still never silently clears an already-set EpilepsyManagement flag. A
+/// flagged high-intensity support need is never dropped without an explicit, separate user action.
+/// </summary>
+[Flags]
+public enum HidpaSupportCategory
+{
+    None = 0,
+    /// <summary>Manual/assisted bowel management (enemas, suppositories, ostomy/stoma bowel care) for participants who cannot self-manage elimination.</summary>
+    ComplexBowelCare = 1,
+    /// <summary>Delivering nutrition/fluids/medication via feeding tube (PEG, NG, jejunostomy), incl. site and equipment care.</summary>
+    EnteralFeeding = 2,
+    /// <summary>Safe mealtime assistance and swallowing-risk management for a diagnosed severe swallowing disorder, incl. choking/aspiration response.</summary>
+    DysphagiaManagement = 4,
+    /// <summary>Care of a surgical airway (tube, stoma site, suctioning) for participants who breathe via tracheostomy.</summary>
+    TracheostomyCare = 8,
+    /// <summary>Operating/monitoring mechanical ventilation equipment and responding to alarms/emergencies for ventilator-dependent participants.</summary>
+    VentilatorSupport = 16,
+    /// <summary>Managing indwelling/suprapubic urinary catheters — bag changes, hygiene, blockage/infection risk monitoring.</summary>
+    UrinaryCatheterManagement = 32,
+    /// <summary>Administering prescribed subcutaneous injections (incl. insulin) — diabetes-management guidance is folded into this descriptor, not a standalone category.</summary>
+    SubcutaneousInjections = 64,
+    /// <summary>Managing wounds requiring specialised dressing/monitoring beyond basic first aid.</summary>
+    ComplexWoundCare = 128,
+    /// <summary>Recognising and responding to seizures per the participant's seizure-management plan, incl. emergency medication (e.g. midazolam) where authorised. See the DIAG-02 derivation rule above.</summary>
+    EpilepsyManagement = 256,
+}
+
+/// <summary>
 /// Ranking for a computed <see cref="Odip.Application.DTOs.ParticipantAlertDto"/> (task 6c —
 /// participant risk alerts). Declared in ascending urgency order so a plain numeric sort
 /// (<c>(int)Severity</c> ascending) puts <see cref="Critical"/> first — the order the frontend

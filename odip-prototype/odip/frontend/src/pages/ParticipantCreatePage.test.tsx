@@ -242,11 +242,11 @@ describe('ParticipantCreatePage Review step', () => {
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
         'supportRatio', 'transportRequirements',
       ].sort()
@@ -543,11 +543,11 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'genderSelfDescription', 'isHighSupport',
+        'fundingSource', 'gender', 'genderSelfDescription', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
         'supportRatio', 'transportRequirements',
       ].sort()
@@ -576,10 +576,10 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingOrganisation', 'fundingSource', 'gender', 'isHighSupport',
+        'fundingOrganisation', 'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes',
-        'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'region',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'notes', 'otherDiagnoses',
+        'overnightRatio', 'overnightSupport', 'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region',
         'requiresCommode', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair',
         'requiresStandingMachine', 'serviceStreams', 'supportRatio', 'transportRequirements',
       ].sort()
@@ -608,12 +608,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'mainSupportPersonName', 'mainSupportPersonRelationship', 'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'othersLivingInAccommodation', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'residentialInfo', 'serviceStreams',
         'supportRatio', 'transportRequirements',
       ].sort()
@@ -665,12 +665,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livesWithOthers', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
         'supportRatio', 'transportRequirements', 'whoLivesWith',
       ].sort()
@@ -713,12 +713,12 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
       [
         'accommodationType', 'addressPostcode', 'addressState', 'addressStreet', 'addressSuburb',
         'behaviourRiskSummary', 'dateOfBirth', 'equipmentRequirements', 'firstName',
-        'fundingSource', 'gender', 'isHighSupport',
+        'fundingSource', 'gender', 'hidpaSupportCategories', 'isHighSupport',
         'isIntensiveSupport', 'isRepeatClient', 'lastName', 'livingArrangement', 'livingArrangementNotes',
         'medicalSummary', 'mobilityAidWalker',
-        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes',
+        'mobilityAidWheelchair', 'mobilityNotes', 'mobilitySupportOptions', 'ndisNumber', 'notes', 'otherDiagnoses',
         'onSiteSupportHours', 'overnightRatio', 'overnightSupport', 'planEndDate', 'planStartDate', 'planType',
-        'preferredName', 'preferredStaffId', 'region', 'requiresCommode', 'requiresHiLoBed',
+        'preferredName', 'preferredStaffId', 'primaryDiagnosis', 'region', 'requiresCommode', 'requiresHiLoBed',
         'requiresHoist', 'requiresShowerChair', 'requiresStandingMachine', 'serviceStreams',
         'silProviderContactPhone', 'silProviderName', 'supportRatio', 'transportRequirements',
       ].sort()
@@ -758,5 +758,197 @@ describe('ParticipantCreatePage — INTAKE-07 conditional payload exclusion (exa
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
       addressStreet: '12 Example Street', addressSuburb: 'Fortitude Valley', addressState: 'QLD', addressPostcode: '4006',
     })
+  })
+})
+
+async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+  await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Equipment
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+}
+
+async function finishWizard(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Consents
+  await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+  await user.click(screen.getByRole('button', { name: /create participant/i }))
+}
+
+describe('ParticipantCreatePage — DIAG-01 diagnoses (primary + other)', () => {
+  it('shows the specify field only when Primary Diagnosis is "Other — specify"', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    expect(screen.queryByLabelText(/Specify Primary Diagnosis/i)).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Other — specify')
+    expect(screen.getByLabelText(/Specify Primary Diagnosis/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+    expect(screen.queryByLabelText(/Specify Primary Diagnosis/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks Next on the Medical step when Other — specify is selected but not specified', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Other — specify')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/please specify the primary diagnosis/i)
+  })
+
+  it('submits a curated Primary Diagnosis directly', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Cerebral Palsy')
+    await finishWizard(user)
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ primaryDiagnosis: 'Cerebral Palsy' })
+  })
+
+  it('submits a typed "Other — specify" Primary Diagnosis collapsed to the one backend field', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Other — specify')
+    await user.type(screen.getByLabelText(/Specify Primary Diagnosis/i), 'Rett Syndrome')
+    await finishWizard(user)
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.primaryDiagnosis).toBe('Rett Syndrome')
+    expect('primaryDiagnosisOther' in payload).toBe(false)
+  })
+
+  it('checkbox-selects a curated Other Diagnoses entry and adds a custom entry via the add input', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(screen.getByLabelText('Down Syndrome'))
+    await user.type(screen.getByLabelText(/Other — specify a diagnosis to add/i), 'Rare Syndrome X')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByText('Rare Syndrome X')).toBeInTheDocument()
+
+    await finishWizard(user)
+
+    expect(mockCreateMutateAsync.mock.calls[0][0].otherDiagnoses).toEqual(['Down Syndrome', 'Rare Syndrome X'])
+  })
+
+  it('removes a custom other-diagnosis entry via its remove button', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.type(screen.getByLabelText(/Other — specify a diagnosis to add/i), 'Temp Entry')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByText('Temp Entry')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove Temp Entry' }))
+    expect(screen.queryByText('Temp Entry')).not.toBeInTheDocument()
+  })
+
+  it('defaults otherDiagnoses to an empty array when nothing is selected', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+    await finishWizard(user)
+
+    expect(mockCreateMutateAsync.mock.calls[0][0].otherDiagnoses).toEqual([])
+  })
+})
+
+describe('ParticipantCreatePage — DIAG-02 HIDPA support categories + epilepsy derivation', () => {
+  it('submits hidpaSupportCategories as "None" by default', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+    await finishWizard(user)
+
+    expect(mockCreateMutateAsync.mock.calls[0][0].hidpaSupportCategories).toBe('None')
+  })
+
+  it('checking a HIDPA category submits it in the comma-separated wire format', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(screen.getByLabelText('Complex Wound Care'))
+    await finishWizard(user)
+
+    expect(mockCreateMutateAsync.mock.calls[0][0].hidpaSupportCategories).toBe('ComplexWoundCare')
+  })
+
+  it('selecting Epilepsy as Primary Diagnosis pre-selects Epilepsy and Seizure Management by default', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+  })
+
+  it('selecting Epilepsy via Other Diagnoses also triggers the default (not primary-only)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(screen.getByLabelText('Epilepsy')) // the Other Diagnoses checkbox, not the primary select
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+  })
+
+  it('the derived default is a DEFAULT not a lock: the user can untick it, and it survives further unrelated edits', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+
+    await user.click(screen.getByLabelText('Epilepsy and Seizure Management')) // untick
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    // Further, unrelated edits on the same step (`when` stays true — no new false->true
+    // transition) must not silently re-force it back on.
+    await user.click(screen.getByLabelText('Down Syndrome'))
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    await finishWizard(user)
+    expect(mockCreateMutateAsync.mock.calls[0][0].hidpaSupportCategories).not.toContain('EpilepsyManagement')
+  })
+
+  it('re-selecting Epilepsy after deselecting it re-fires the default (each new transition is a fresh default)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+    await user.click(screen.getByLabelText('Epilepsy and Seizure Management')) // untick
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Cerebral Palsy') // when: false
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy') // when: false -> true again
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+  })
+
+  it('does not pre-select Epilepsy Management when a manual selection is made without an epilepsy diagnosis ever being set', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToMedical(user)
+
+    await user.click(screen.getByLabelText('Epilepsy and Seizure Management')) // manual tick, no diagnosis set
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Cerebral Palsy') // `when` never transitions
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked() // untouched by the engine either way
   })
 })

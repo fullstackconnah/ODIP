@@ -9,13 +9,19 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES } from '@/api/types/enums'
-import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement } from '@/api/types/enums'
-import { MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams } from '@/api/types/participants'
+import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES } from '@/api/types/enums'
+import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory } from '@/api/types/enums'
+import {
+  MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, SERVICE_STREAM_LABELS,
+  GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, parseServiceStreams, formatServiceStreams,
+  DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS, HIDPA_CATEGORY_TITLES,
+  parseHidpaCategories, formatHidpaCategories,
+} from '@/api/types/participants'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import {
   useConditionalFields, useUnregisterHiddenFields, useFocusFallbackOnHide, stripHiddenFieldKeys,
-  type ConditionalFieldDef, type ConditionPredicate,
+  useDeriveFieldValues,
+  type ConditionalFieldDef, type ConditionPredicate, type FieldDerivationDef,
 } from '@/lib/conditionalFields'
 
 const baseParticipantSchema = z.object({
@@ -76,6 +82,16 @@ const baseParticipantSchema = z.object({
   mobilityNotes: z.string().optional(),
   equipmentRequirements: z.string().optional(),
   transportRequirements: z.string().optional(),
+  // DIAG-01. primaryDiagnosis holds either a curated DIAGNOSIS_OPTIONS value or the
+  // DIAGNOSIS_OTHER_SENTINEL — required-ness of primaryDiagnosisOther (the "Other — specify"
+  // typed value) is enforced by diagnosisOtherRefine below, not the base shape, since it's only
+  // relevant when the sentinel is selected (see CONDITIONAL_FIELDS). Collapsed to a single
+  // primaryDiagnosis string before submit — see onSubmit.
+  primaryDiagnosis: z.string().optional(),
+  primaryDiagnosisOther: z.string().optional(),
+  otherDiagnoses: z.array(z.string()).optional(),
+  // DIAG-02. hidpaSupportCategories mirrors serviceStreams' array-of-flag-names shape/handling.
+  hidpaSupportCategories: z.array(z.string()).optional(),
   medicalSummary: z.string().optional(),
   behaviourRiskSummary: z.string().optional(),
   notes: z.string().optional(),
@@ -185,12 +201,22 @@ function addressPostcodeRefine(data: AddressFields, ctx: z.RefinementCtx) {
   }
 }
 
+// DIAG-01: primaryDiagnosis "Other — specify" requires the typed free-text field — same
+// standalone-function pattern as genderRefine/fundingSourceRefine.
+type DiagnosisFields = { primaryDiagnosis?: string; primaryDiagnosisOther?: string }
+function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx) {
+  if (data.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL && !data.primaryDiagnosisOther?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['primaryDiagnosisOther'], message: 'Please specify the primary diagnosis.' })
+  }
+}
+
 const participantSchema = baseParticipantSchema
   .superRefine(equipmentRefine)
   .superRefine(genderRefine)
   .superRefine(fundingSourceRefine)
   .superRefine(livingArrangementRefine)
   .superRefine(addressPostcodeRefine)
+  .superRefine(diagnosisOtherRefine)
 
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in
 // favour of .issues), so it throws past react-hook-form instead of populating
@@ -237,7 +263,11 @@ const STEP_SUPPORT_FIELDS = [
   'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
   'mobilityNotes', 'equipmentRequirements', 'transportRequirements',
 ] as const
-const STEP_MEDICAL_FIELDS = ['medicalSummary'] as const
+// DIAG-01/02: diagnoses (primary + other), then HIDPA directly below them (a direct derivation —
+// see the epilepsy rule — so they must share this step/schema), then the pre-existing free-text
+// summary last as overflow for anything the structured fields don't capture. See the HIDPA
+// research note on wizard placement for the fuller reasoning against opening a new step.
+const STEP_MEDICAL_FIELDS = ['primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories', 'medicalSummary'] as const
 const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes'] as const
 const STEP_REVIEW_FIELDS = [] as const
 
@@ -266,7 +296,7 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
-  baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)),
+  baseParticipantSchema.pick(pickShape(STEP_MEDICAL_FIELDS)).superRefine(diagnosisOtherRefine),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
   null,
 ]
@@ -340,6 +370,31 @@ const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
     visibleWhen: (v) => v.livingArrangement === 'Family' || v.livingArrangement === 'Independent' || v.livingArrangement === 'SupportedAccommodation',
     focusFallback: 'livingArrangement',
   },
+  {
+    // DIAG-01: "Other — specify" reveals the typed free-text field, same shape as
+    // genderSelfDescription/fundingOrganisation above.
+    fields: ['primaryDiagnosisOther'],
+    visibleWhen: (v) => v.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL,
+    focusFallback: 'primaryDiagnosis',
+  },
+]
+
+// DIAG-02: the epilepsy -> epilepsy-management HIDPA default, implemented via conditionalFields.ts's
+// useDeriveFieldValues (see that module's VALUE DERIVATION doc for the full transition-only/
+// user-override/edit-mode-safe semantics this relies on). Fires when primaryDiagnosis or any
+// otherDiagnoses entry equals the curated "Epilepsy" value — matches on that exact string
+// regardless of whether it arrived via the curated dropdown/checkboxes or (in principle) a custom
+// "Epilepsy"-spelled other-diagnosis entry.
+const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
+  {
+    when: (v) => v.primaryDiagnosis === 'Epilepsy' || !!v.otherDiagnoses?.includes('Epilepsy'),
+    apply: (v, setValue) => {
+      const current = (v.hidpaSupportCategories ?? []) as string[]
+      if (!current.includes('EpilepsyManagement')) {
+        setValue('hidpaSupportCategories', [...current, 'EpilepsyManagement'], { shouldDirty: true })
+      }
+    },
+  },
 ]
 
 export default function ParticipantCreatePage() {
@@ -367,6 +422,10 @@ export default function ParticipantCreatePage() {
       mobilityAidWheelchair: false,
       mobilityAidWalker: false,
       mobilitySupportOptions: [],
+      primaryDiagnosis: '',
+      primaryDiagnosisOther: '',
+      otherDiagnoses: [],
+      hidpaSupportCategories: [],
       isHighSupport: false,
       isIntensiveSupport: false,
       overnightSupport: 'None',
@@ -484,6 +543,12 @@ export default function ParticipantCreatePage() {
   useUnregisterHiddenFields(unregister, hiddenFields)
   useFocusFallbackOnHide(CONDITIONAL_FIELDS, hiddenFields)
 
+  // DIAG-02: `existing` (undefined until the edit-mode fetch resolves, then a stable object
+  // reference) is the resetKey — see useDeriveFieldValues' doc for why this keeps a saved
+  // participant's deliberately-unticked HIDPA selection from being silently re-derived on every
+  // edit-page load, while still deriving live off real edits in both create and edit modes.
+  useDeriveFieldValues(watchedValues, FIELD_DERIVATIONS, setValue, existing)
+
   // FUND-02 review-round fix: the server unconditionally clears FundingOrganisation on save
   // whenever FundingSource != Other (defence in depth against a stale value lingering — see
   // ParticipantsController.ValidateFundingSource's neighbouring assignment). That means a
@@ -494,6 +559,11 @@ export default function ParticipantCreatePage() {
   // the user confirms via the dialog below Cancel reverts the select to Other with the text
   // untouched; Confirm applies the switch (the field then hides/unregisters as normal, and the
   // text is what the server clears on save).
+  // DIAG-01: transient typing buffer for the "add another diagnosis" text input on the Other
+  // Diagnoses list — not itself a form field; its value is pushed into otherDiagnoses on Add,
+  // then cleared, same "type then commit" shape as a tag input.
+  const [customDiagnosisInput, setCustomDiagnosisInput] = useState('')
+
   const [pendingFundingSourceValue, setPendingFundingSourceValue] = useState<string | null>(null)
   const fundingSourceRegistration = register('fundingSource')
   const handleFundingSourceChange = (e: ChangeEvent<HTMLSelectElement>) => {
@@ -577,6 +647,19 @@ export default function ParticipantCreatePage() {
         mobilityAidWheelchair: existing.mobilityAidWheelchair ?? false,
         mobilityAidWalker: existing.mobilityAidWalker ?? false,
         mobilitySupportOptions: existing.mobilitySupportOptions ?? [],
+        // DIAG-01: a saved value outside the curated list (typed via "Other — specify" at intake)
+        // round-trips back into that same UI shape — the select shows the sentinel, and the
+        // actual saved text reappears in the specify field. A saved curated value shows directly.
+        primaryDiagnosis: existing.primaryDiagnosis
+          ? (DIAGNOSIS_OPTIONS as readonly string[]).includes(existing.primaryDiagnosis)
+            ? existing.primaryDiagnosis
+            : DIAGNOSIS_OTHER_SENTINEL
+          : '',
+        primaryDiagnosisOther: existing.primaryDiagnosis && !(DIAGNOSIS_OPTIONS as readonly string[]).includes(existing.primaryDiagnosis)
+          ? existing.primaryDiagnosis
+          : '',
+        otherDiagnoses: existing.otherDiagnoses ?? [],
+        hidpaSupportCategories: parseHidpaCategories(existing.hidpaSupportCategories),
         isHighSupport: existing.isHighSupport ?? false,
         isIntensiveSupport: existing.isIntensiveSupport ?? false,
         overnightSupport: existing.overnightSupport ?? 'None',
@@ -605,6 +688,15 @@ export default function ParticipantCreatePage() {
     // guaranteeing it regardless, per the engine's module doc.
     const payload: any = stripHiddenFieldKeys({ ...data }, hiddenFields)
     payload.serviceStreams = formatServiceStreams(data.serviceStreams as ServiceStream[] | undefined)
+    // DIAG-01: collapse the two-field UI representation (curated select + "Other — specify" text)
+    // down to the one backend string field — the typed text when the sentinel is selected,
+    // otherwise the curated value as-is. primaryDiagnosisOther is UI-only and never sent.
+    payload.primaryDiagnosis = data.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL
+      ? data.primaryDiagnosisOther
+      : data.primaryDiagnosis
+    delete payload.primaryDiagnosisOther
+    // DIAG-02.
+    payload.hidpaSupportCategories = formatHidpaCategories(data.hidpaSupportCategories as HidpaSupportCategory[] | undefined)
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
@@ -732,6 +824,19 @@ export default function ParticipantCreatePage() {
     {
       step: 3,
       rows: [
+        {
+          label: 'Primary Diagnosis',
+          value: watchedValues.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL
+            ? (watchedValues.primaryDiagnosisOther || '—')
+            : (watchedValues.primaryDiagnosis || '—'),
+        },
+        { label: 'Other Diagnoses', value: watchedValues.otherDiagnoses?.length ? watchedValues.otherDiagnoses.join(', ') : 'None' },
+        {
+          label: 'HIDPA Support Categories',
+          value: watchedValues.hidpaSupportCategories?.length
+            ? watchedValues.hidpaSupportCategories.map((c) => HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c).join(', ')
+            : 'None',
+        },
         { label: 'Medical Summary', value: watchedValues.medicalSummary || '—' },
       ],
     },
@@ -1241,7 +1346,158 @@ export default function ParticipantCreatePage() {
 
         {stepIndex === 3 && (
           <div className="grid md:grid-cols-2 gap-6">
-            <Card title="Medical" className="space-y-4">
+            <Card title="Diagnoses" className="space-y-4">
+              <FormField label="Primary Diagnosis">
+                <select id="primaryDiagnosis" {...register('primaryDiagnosis')}>
+                  <option value="">Select a diagnosis...</option>
+                  {DIAGNOSIS_OPTIONS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                  <option value={DIAGNOSIS_OTHER_SENTINEL}>{DIAGNOSIS_OTHER_SENTINEL}</option>
+                </select>
+              </FormField>
+
+              {isVisible('primaryDiagnosisOther') && (
+                <FormField label="Specify Primary Diagnosis" required error={errors.primaryDiagnosisOther?.message}>
+                  <input id="primaryDiagnosisOther" {...register('primaryDiagnosisOther')} placeholder="e.g. Rett Syndrome" />
+                </FormField>
+              )}
+
+              <fieldset className="m-0 p-0 border-0">
+                <legend className={labelClass}>Other Diagnoses</legend>
+                <Controller
+                  control={control}
+                  name="otherDiagnoses"
+                  render={({ field }) => {
+                    const selected = field.value ?? []
+                    const curated: readonly string[] = DIAGNOSIS_OPTIONS
+                    const customEntries = selected.filter((d) => !curated.includes(d))
+                    return (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                          {DIAGNOSIS_OPTIONS.map((option) => {
+                            const checked = selected.includes(option)
+                            return (
+                              <label key={option} className="flex items-center gap-3 py-1 min-h-[44px]">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    field.onChange(
+                                      e.target.checked
+                                        ? [...selected, option]
+                                        : selected.filter((v) => v !== option)
+                                    )
+                                  }}
+                                  className="w-4 h-4 rounded border-[var(--color-border)]"
+                                />
+                                <span className="text-sm text-[var(--color-foreground)]">{option}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+
+                        {customEntries.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {customEntries.map((entry) => (
+                              <span
+                                key={entry}
+                                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+                              >
+                                {entry}
+                                <button
+                                  type="button"
+                                  aria-label={`Remove ${entry}`}
+                                  onClick={() => field.onChange(selected.filter((v) => v !== entry))}
+                                  className="min-w-[20px] min-h-[20px] leading-none font-bold hover:text-[var(--color-foreground)]"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="otherDiagnosesCustomInput"
+                            aria-label="Other — specify a diagnosis to add"
+                            value={customDiagnosisInput}
+                            onChange={(e) => setCustomDiagnosisInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return
+                              e.preventDefault()
+                              const value = customDiagnosisInput.trim()
+                              if (value && !selected.includes(value)) field.onChange([...selected, value])
+                              setCustomDiagnosisInput('')
+                            }}
+                            placeholder={DIAGNOSIS_OTHER_SENTINEL}
+                            className="flex-1"
+                          />
+                          <button
+                            type="button"
+                            className="px-3 min-h-[44px] rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-colors"
+                            onClick={() => {
+                              const value = customDiagnosisInput.trim()
+                              if (value && !selected.includes(value)) field.onChange([...selected, value])
+                              setCustomDiagnosisInput('')
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+              </fieldset>
+            </Card>
+
+            <Card title="HIDPA Support Categories" className="space-y-4">
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                High Intensity Daily Personal Activities support categories. An Epilepsy diagnosis
+                pre-selects Epilepsy and Seizure Management below by default — untick it if the
+                formal high-intensity support isn't needed.
+              </p>
+              <fieldset className="m-0 p-0 border-0">
+                <legend className="sr-only">HIDPA Support Categories</legend>
+                <Controller
+                  control={control}
+                  name="hidpaSupportCategories"
+                  render={({ field }) => (
+                    <div className="grid grid-cols-1 gap-x-4">
+                      {HIDPA_SUPPORT_CATEGORIES.map((category) => {
+                        const selected = field.value ?? []
+                        const checked = selected.includes(category)
+                        return (
+                          <label
+                            key={category}
+                            className="flex items-center gap-3 py-1 min-h-[44px]"
+                            title={HIDPA_CATEGORY_TITLES[category]}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                field.onChange(
+                                  e.target.checked
+                                    ? [...selected, category]
+                                    : selected.filter((v) => v !== category)
+                                )
+                              }}
+                              className="w-4 h-4 rounded border-[var(--color-border)]"
+                            />
+                            <span className="text-sm text-[var(--color-foreground)]">{HIDPA_CATEGORY_LABELS[category]}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                />
+              </fieldset>
+            </Card>
+
+            <Card title="Medical" className="space-y-4 md:col-span-2">
               <FormField label="Medical Summary">
                 <textarea id="medicalSummary" {...register('medicalSummary')} rows={4} placeholder="Medical information..." />
               </FormField>

@@ -274,6 +274,228 @@ public class ParticipantsControllerTests
         Assert.Equal(Domain.Enums.ServiceStreams.None, saved.ServiceStreams);
     }
 
+    // ── DIAG-01/02: diagnoses (primary + other) and HIDPA support categories ────────
+
+    [Fact]
+    public async Task Create_DiagnosesAndHidpa_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            PrimaryDiagnosis = "Epilepsy",
+            OtherDiagnoses = new() { "Acquired Brain Injury", "Custom diagnosis via Other — specify" },
+            HidpaSupportCategories = Domain.Enums.HidpaSupportCategory.EpilepsyManagement | Domain.Enums.HidpaSupportCategory.ComplexWoundCare,
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal("Epilepsy", body.Data!.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Acquired Brain Injury", "Custom diagnosis via Other — specify" }, body.Data.OtherDiagnoses);
+        Assert.True(body.Data.HidpaSupportCategories.HasFlag(Domain.Enums.HidpaSupportCategory.EpilepsyManagement));
+        Assert.True(body.Data.HidpaSupportCategories.HasFlag(Domain.Enums.HidpaSupportCategory.ComplexWoundCare));
+        Assert.False(body.Data.HidpaSupportCategories.HasFlag(Domain.Enums.HidpaSupportCategory.EnteralFeeding));
+    }
+
+    [Fact]
+    public async Task Create_DefaultDiagnosesAndHidpa_AreEmptyAndNone()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == createdBody.Data!.Id);
+        Assert.Null(saved.PrimaryDiagnosis);
+        Assert.Empty(saved.OtherDiagnoses);
+        Assert.Equal(Domain.Enums.HidpaSupportCategory.None, saved.HidpaSupportCategories);
+    }
+
+    [Fact]
+    public async Task Update_DiagnosesAndHidpa_RoundTripThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            PrimaryDiagnosis = "Cerebral Palsy",
+            OtherDiagnoses = new() { "Epilepsy" },
+            HidpaSupportCategories = Domain.Enums.HidpaSupportCategory.EnteralFeeding,
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal("Cerebral Palsy", body.Data!.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Epilepsy" }, body.Data.OtherDiagnoses);
+        Assert.Equal(Domain.Enums.HidpaSupportCategory.EnteralFeeding, body.Data.HidpaSupportCategories);
+    }
+
+    [Fact]
+    public async Task Create_BlankPrimaryDiagnosis_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { PrimaryDiagnosis = "   " };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("Primary diagnosis", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_BlankOtherDiagnosisEntry_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { OtherDiagnoses = new() { "Epilepsy", "  " } };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("blank", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_OtherDiagnosisEntryTooLong_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with { OtherDiagnoses = new() { new string('x', 201) } };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("200 characters", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Update_BlankOtherDiagnosisEntry_ReturnsBadRequest()
+    {
+        // Fix-round regression coverage: Update() previously omitted the ValidateDiagnoses call
+        // that Create() had, so a PUT with a blank OtherDiagnoses entry persisted silently where
+        // POST correctly 400s. Same dual-wiring as ValidateGender/ValidateFundingSource/
+        // ValidateLivingArrangement/ValidateAddressPostcode.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            OtherDiagnoses = new() { "Epilepsy", "   " },
+        };
+
+        var result = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("blank", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+
+        // Confirms it never persisted — the row is untouched by the rejected update.
+        var unchanged = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Empty(unchanged.OtherDiagnoses);
+    }
+
+    [Fact]
+    public async Task Create_DiagnosesWithPaddingWhitespace_AreStoredTrimmed()
+    {
+        // A raw API caller sending " Epilepsy" (leading/trailing whitespace) must still persist
+        // as the exact "Epilepsy" string — otherwise it silently defeats the frontend's
+        // exact-string epilepsy-derivation match (primaryDiagnosis === 'Epilepsy' /
+        // otherDiagnoses.includes('Epilepsy')).
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            PrimaryDiagnosis = "  Cerebral Palsy  ",
+            OtherDiagnoses = new() { " Epilepsy", "Down Syndrome \t" },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == createdBody.Data!.Id);
+        Assert.Equal("Cerebral Palsy", saved.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Epilepsy", "Down Syndrome" }, saved.OtherDiagnoses);
+    }
+
+    [Fact]
+    public async Task Update_DiagnosesWithPaddingWhitespace_AreStoredTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            PrimaryDiagnosis = " Epilepsy ",
+            OtherDiagnoses = new() { " Acquired Brain Injury " },
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+
+        var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Equal("Epilepsy", saved.PrimaryDiagnosis);
+        Assert.Equal(new[] { "Acquired Brain Injury" }, saved.OtherDiagnoses);
+    }
+
+    [Fact]
+    public void ParticipantDetailDto_CombinedHidpaSupportCategories_SerialisesAsCommaSeparatedString()
+    {
+        // Same JsonStringEnumConverter flags-serialisation contract as ServiceStreams (see
+        // ParticipantListDto_CombinedServiceStreams_SerialisesAsCommaSeparatedString above) —
+        // HidpaSupportCategories lives on ParticipantDetailDto (mirrors MobilitySupportOptions'
+        // placement), not ParticipantListDto.
+        var dto = new ParticipantDetailDto
+        {
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", FullName = "Sophie Brown",
+            HidpaSupportCategories = Domain.Enums.HidpaSupportCategory.EpilepsyManagement | Domain.Enums.HidpaSupportCategory.ComplexBowelCare,
+        };
+
+        var json = JsonSerializer.Serialize(dto, ApiJsonOptions);
+        using var doc = JsonDocument.Parse(json);
+        var value = doc.RootElement.GetProperty("hidpaSupportCategories").GetString();
+
+        Assert.Equal("ComplexBowelCare, EpilepsyManagement", value);
+
+        var roundTripped = JsonSerializer.Deserialize<ParticipantDetailDto>(json, ApiJsonOptions);
+        Assert.Equal(
+            Domain.Enums.HidpaSupportCategory.EpilepsyManagement | Domain.Enums.HidpaSupportCategory.ComplexBowelCare,
+            roundTripped!.HidpaSupportCategories);
+    }
+
     [Fact]
     public async Task GetAll_ProjectsHasActiveMedicationsPerParticipant()
     {
