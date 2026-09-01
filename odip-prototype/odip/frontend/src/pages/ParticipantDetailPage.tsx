@@ -100,11 +100,6 @@ export default function ParticipantDetailPage() {
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
           {p.isDraft && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
-            </div>
-          )}
-          {p.isDraft && (
             <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
