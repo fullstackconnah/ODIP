@@ -21,7 +21,7 @@ import {
 } from '@/components/wizard'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel, ChecklistItemType } from '@/api/types/enums'
-import { CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_FIELD_MAP, availableContactRoleTypes, contactRoleGateError, planTypeComplianceWarning } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, selectableContactRoleTypes, contactRoleGateError, planTypeComplianceWarning, unionRelevantFields } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
@@ -148,11 +148,16 @@ const baseParticipantSchema = z.object({
     personId: z.string().optional(),
     newPersonFirstName: z.string().optional(),
     newPersonLastName: z.string().optional(),
-    roleType: z.string().min(1, 'Role type is required'),
+    // PF-5 (SPEC-02): multi-select — a row fans out into one CreateParticipantContactRoleDto
+    // per selected role, sharing this row's personId/newPerson* (see buildPayload below). Every
+    // ParticipantContactRole row is still single-role; this is the wizard-form-only shape.
+    roleTypes: z.array(z.string()).min(1, 'Select at least one role'),
     relationshipToParticipant: z.string().optional(),
     isPrimary: z.boolean().optional(),
     // Bug fix: ProviderContact + AgencyManaged requires this true (ContactRoleRules.Validate /
-    // contactRoleGateError) — the wizard must collect it, not just the Contacts tab.
+    // contactRoleGateError) — the wizard must collect it, not just the Contacts tab. Shared
+    // across the row (not per-role) since it's the only role-specific field this lean wizard
+    // step surfaces at all — see CONTACT-02's field-set doc above.
     registeredProviderFlag: z.boolean().optional(),
   })).optional(),
   // INTAKE sub-wave A — "Key Identifiers" wizard step (research spec §4.4/§5). All optional;
@@ -449,7 +454,7 @@ type ContactRoleRowFields = {
   personId?: string
   newPersonFirstName?: string
   newPersonLastName?: string
-  roleType?: string
+  roleTypes?: string[]
   registeredProviderFlag?: boolean
 }
 type ContactRolesFields = { contactRoles?: ContactRoleRowFields[]; planType?: string }
@@ -461,10 +466,12 @@ function contactRolesRefine(data: ContactRolesFields, ctx: z.RefinementCtx) {
     if (row.personMode === 'new' && !row.newPersonFirstName?.trim() && !row.newPersonLastName?.trim()) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'newPersonFirstName'], message: "Provide the new person's name." })
     }
-    // Bug fix: mirrors contactRoleGateError's ProviderContact/AgencyManaged branch (the only
-    // branch that can fire for a ProviderContact row, regardless of dateOfBirth) so the wizard
-    // blocks the same row the server would 400 on, instead of only warning inline.
-    if (row.roleType === 'ProviderContact') {
+    // PF-5 (SPEC-02): multi-select roleTypes — mirrors contactRoleGateError's
+    // ProviderContact/AgencyManaged branch (the only branch that can fire for a ProviderContact
+    // selection, regardless of dateOfBirth) so the wizard blocks the same row the server would
+    // 400 on, instead of only warning inline, whether or not ProviderContact is the only role
+    // selected for this row.
+    if (row.roleTypes?.includes('ProviderContact')) {
       const gateError = contactRoleGateError('ProviderContact', data.planType as PlanType | undefined, undefined, row.registeredProviderFlag)
       if (gateError) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'registeredProviderFlag'], message: gateError })
@@ -1624,32 +1631,39 @@ export default function ParticipantCreatePage() {
     delete payload.primaryDiagnosisOther
     // DIAG-02.
     payload.hidpaSupportCategories = formatHidpaCategories(data.hidpaSupportCategories as HidpaSupportCategory[] | undefined)
-    // CONTACT-02: expand the wizard's lean per-row shape (personMode/personId/newPerson*/roleType/
-    // relationshipToParticipant/isPrimary) into the full CreateParticipantContactRoleDto shape the
-    // server expects — every other role-specific field (guardian order scope, nominee scope, GP
-    // registration number, etc.) is left null here and filled in later via the Contacts tab, since
-    // the wizard step deliberately doesn't surface all 25+ of them.
-    payload.contactRoles = (data.contactRoles ?? []).map((row) => ({
-      personId: row.personMode === 'existing' ? (row.personId || null) : null,
-      newPersonFirstName: row.personMode === 'new' ? (row.newPersonFirstName || null) : null,
-      newPersonLastName: row.personMode === 'new' ? (row.newPersonLastName || null) : null,
-      newPersonPhone: null, newPersonMobile: null, newPersonEmail: null, newPersonOrganisation: null,
-      roleType: row.roleType,
-      relationshipToParticipant: row.relationshipToParticipant || null,
-      isPrimary: !!row.isPrimary,
-      status: 'Active',
-      orderScopeDomains: [],
-      priorityOrder: null, authorisedForMedicalInfo: null, appointingTribunal: null,
-      orderStartDate: null, orderReviewDate: null, orderEndDate: null, nomineeScope: null, appointmentDate: null,
-      reasonForAppointment: null, alternateRepresentativeName: null, fundingLineItemType: null, organisationName: null,
-      registrationNumber: null, lastVisitDate: null, consentToShare: null, discipline: null, frequencyOfContact: null,
-      // Bug fix: only a ProviderContact row carries this field — the backend nulls it for every
-      // other role anyway (ContactRoleRules), but a stray `false` shouldn't be sent regardless.
-      websterPackFlag: null, roleTitle: null,
-      registeredProviderFlag: row.roleType === 'ProviderContact' ? !!row.registeredProviderFlag : null,
-      scopeNotes: null,
-      authorisationDocumentReference: null, preferredLanguage: null, startDate: null, endDate: null, notes: null,
-    }))
+    // CONTACT-02/PF-5 (SPEC-02): expand the wizard's lean per-row shape (personMode/personId/
+    // newPerson*/roleTypes/relationshipToParticipant/isPrimary) into the full
+    // CreateParticipantContactRoleDto shape the server expects — every other role-specific field
+    // (guardian order scope, nominee scope, GP registration number, etc.) is left null here and
+    // filled in later via the Contacts tab, since the wizard step deliberately doesn't surface all
+    // 25+ of them. PF-5: a row's `roleTypes` (multi-select) fans out into one DTO entry PER
+    // selected role, all sharing the same person fields (same personId, or the same new-person
+    // details — the server creates the Person once and reuses it for the row's other roles, see
+    // ParticipantsController.Create) — never a single DTO carrying multiple roles.
+    payload.contactRoles = (data.contactRoles ?? []).flatMap((row) => {
+      const roleTypes = row.roleTypes && row.roleTypes.length > 0 ? row.roleTypes : ['NextOfKin']
+      return roleTypes.map((roleType) => ({
+        personId: row.personMode === 'existing' ? (row.personId || null) : null,
+        newPersonFirstName: row.personMode === 'new' ? (row.newPersonFirstName || null) : null,
+        newPersonLastName: row.personMode === 'new' ? (row.newPersonLastName || null) : null,
+        newPersonPhone: null, newPersonMobile: null, newPersonEmail: null, newPersonOrganisation: null,
+        roleType,
+        relationshipToParticipant: row.relationshipToParticipant || null,
+        isPrimary: !!row.isPrimary,
+        status: 'Active',
+        orderScopeDomains: [],
+        priorityOrder: null, authorisedForMedicalInfo: null, appointingTribunal: null,
+        orderStartDate: null, orderReviewDate: null, orderEndDate: null, nomineeScope: null, appointmentDate: null,
+        reasonForAppointment: null, alternateRepresentativeName: null, fundingLineItemType: null, organisationName: null,
+        registrationNumber: null, lastVisitDate: null, consentToShare: null, discipline: null, frequencyOfContact: null,
+        // Bug fix: only a ProviderContact row carries this field — the backend nulls it for every
+        // other role anyway (ContactRoleRules), but a stray `false` shouldn't be sent regardless.
+        websterPackFlag: null, roleTitle: null,
+        registeredProviderFlag: roleType === 'ProviderContact' ? !!row.registeredProviderFlag : null,
+        scopeNotes: null,
+        authorisationDocumentReference: null, preferredLanguage: null, startDate: null, endDate: null, notes: null,
+      }))
+    })
     // INTAKE sub-wave A: weightKg/heightCm are z.coerce.number() fields, but only a full submit
     // (participantResolver) actually runs that coercion — "Save as draft" reads getValues()
     // directly (bypassing the resolver entirely, by design — see handleSaveDraft's doc), so the
@@ -2045,7 +2059,13 @@ export default function ParticipantCreatePage() {
           ? [{ label: 'Contacts', value: 'None added' }]
           : (watchedValues.contactRoles ?? []).map((row, i) => ({
               label: `Contact ${i + 1}`,
-              value: `${CONTACT_ROLE_TYPE_LABELS[(row?.roleType as ContactRoleType) ?? 'NextOfKin']} — ${
+              // PF-5 (SPEC-02): a row's roleTypes is multi-select — list every selected role's
+              // label (comma-joined), not just the first, so Review reflects the full fan-out
+              // buildPayload will submit.
+              value: `${
+                ((row?.roleTypes as ContactRoleType[] | undefined) ?? ['NextOfKin'])
+                  .map(rt => CONTACT_ROLE_TYPE_LABELS[rt]).join(', ')
+              } — ${
                 row?.personMode === 'new'
                   ? [row?.newPersonFirstName, row?.newPersonLastName].filter(Boolean).join(' ') || '—'
                   : people.find(p => p.id === row?.personId)?.fullName ?? '—'
@@ -2748,10 +2768,18 @@ export default function ParticipantCreatePage() {
                   <div className="space-y-3">
                     {contactRoleFields.map((field, index) => {
                       const row = watchedValues.contactRoles?.[index]
-                      const rowRoleType = (row?.roleType as ContactRoleType | undefined) ?? 'NextOfKin'
-                      const available = availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
-                      const gateError = contactRoleGateError(rowRoleType, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth, row?.registeredProviderFlag)
-                      const rowVisibleFields = CONTACT_ROLE_FIELD_MAP[rowRoleType] ?? []
+                      // PF-5 (SPEC-02): multi-select — a row can carry 2+ roles fanning out to
+                      // that many CreateParticipantContactRoleDto entries (see buildPayload).
+                      const rowRoleTypes = ((row?.roleTypes as ContactRoleType[] | undefined) ?? ['NextOfKin'])
+                      // PF-5: the multi-select checkbox group offers a self-correctable role
+                      // (currently just ProviderContact) even while its gate is unmet — see
+                      // selectableContactRoleTypes' doc (contacts.ts) for why this differs from
+                      // the plain availableContactRoleTypes a single-select Dropdown would use.
+                      const available = selectableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
+                      const gateErrors = rowRoleTypes
+                        .map(rt => ({ rt, msg: contactRoleGateError(rt, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth, row?.registeredProviderFlag) }))
+                        .filter((e): e is { rt: ContactRoleType; msg: string } => !!e.msg)
+                      const rowVisibleFields = unionRelevantFields(rowRoleTypes)
                       return (
                         <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
                           <div className="flex items-start gap-2">
@@ -2821,25 +2849,44 @@ export default function ParticipantCreatePage() {
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
-                            <FormField label="Role type" className="mb-0" hint={gateError ?? undefined}>
-                              <Dropdown
-                                variant="form"
-                                value={rowRoleType}
-                                onChange={v => setValue(`contactRoles.${index}.roleType` as const, v as ContactRoleType, { shouldDirty: true })}
-                                items={CONTACT_ROLE_TYPES.map(rt => ({
-                                  value: rt, label: CONTACT_ROLE_TYPE_LABELS[rt],
-                                  disabled: !available.includes(rt) && rt !== rowRoleType,
-                                }))}
-                              />
-                            </FormField>
-                            <FormField label="Relationship to participant" className="mb-0">
-                              <input {...register(`contactRoles.${index}.relationshipToParticipant` as const)} placeholder="e.g. Mother" />
-                            </FormField>
-                          </div>
-                          {gateError && (
-                            <p role="alert" className="text-xs text-[var(--color-destructive)]">{gateError}</p>
-                          )}
+                          <FormField label="Role types" className="mb-0" error={errors.contactRoles?.[index]?.roleTypes?.message}>
+                            <div className="flex flex-wrap gap-2">
+                              {CONTACT_ROLE_TYPES.map(rt => {
+                                const checked = rowRoleTypes.includes(rt)
+                                const disabled = !available.includes(rt) && !checked
+                                return (
+                                  <label
+                                    key={rt}
+                                    className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer min-h-[36px] transition-colors ${
+                                      checked ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)]'
+                                    } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={e => {
+                                        const next = e.target.checked
+                                          ? [...rowRoleTypes, rt]
+                                          : rowRoleTypes.filter(r => r !== rt)
+                                        setValue(`contactRoles.${index}.roleTypes` as const, next, { shouldDirty: true })
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-[var(--color-border)]"
+                                    />
+                                    {CONTACT_ROLE_TYPE_LABELS[rt]}
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </FormField>
+                          <FormField label="Relationship to participant" className="mb-0">
+                            <input {...register(`contactRoles.${index}.relationshipToParticipant` as const)} placeholder="e.g. Mother" />
+                          </FormField>
+                          {gateErrors.map(({ rt, msg }) => (
+                            <p key={rt} role="alert" className="text-xs text-[var(--color-destructive)]">
+                              {rowRoleTypes.length > 1 ? `${CONTACT_ROLE_TYPE_LABELS[rt]}: ${msg}` : msg}
+                            </p>
+                          ))}
                           {rowVisibleFields.includes('registeredProviderFlag') && (
                             <FormField
                               label="Registered NDIS provider"
@@ -2864,7 +2911,7 @@ export default function ParticipantCreatePage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleType: availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)[0] ?? 'NextOfKin', relationshipToParticipant: '', isPrimary: false, registeredProviderFlag: false })}
+                  onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleTypes: [availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)[0] ?? 'NextOfKin'], relationshipToParticipant: '', isPrimary: false, registeredProviderFlag: false })}
                   className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
                 >
                   <Plus className="w-4 h-4" /> Add contact

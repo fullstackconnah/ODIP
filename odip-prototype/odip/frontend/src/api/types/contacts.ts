@@ -118,6 +118,13 @@ export interface CreateParticipantContactRoleDto extends ContactRoleFields {
   newPersonMobile?: string | null
   newPersonEmail?: string | null
   newPersonOrganisation?: string | null
+  // PF-6 (SPEC-02): the rest of CreatePersonDto's optional fields, so AddContactRoleForm's
+  // search-first "create new" fallback can capture more than just a name on first add.
+  newPersonAddressLine?: string | null
+  newPersonSuburb?: string | null
+  newPersonState?: string | null
+  newPersonPostcode?: string | null
+  newPersonDateOfBirth?: string | null
 }
 
 /** A role's Person is fixed after creation — no person fields here (see the backend DTO's doc). */
@@ -196,13 +203,35 @@ export function contactRoleGateError(
 }
 
 /** Every role type available for this participant right now (gate error === null) — drives the
- * Contacts step/tab's role-type picker. */
+ * single-select Role type Dropdown (edit mode's one-role-at-a-time picker): a role already gated
+ * cannot be freshly picked there at all (see contactRoleGateError's ProviderContact/Agency-managed
+ * branch — there is no way to supply `registeredProviderFlag` before the role is selected in a
+ * single-select control, so the Dropdown simply never offers it). */
 export function availableContactRoleTypes(
   roleTypes: readonly ContactRoleType[],
   planType: PlanType | null | undefined,
   dateOfBirth: string | null | undefined,
 ): ContactRoleType[] {
   return roleTypes.filter(rt => contactRoleGateError(rt, planType, dateOfBirth) === null)
+}
+
+/** PF-5 (SPEC-02): role types a multi-select CHECKBOX group should always offer, even when
+ * `contactRoleGateError` currently reports a violation for them. Unlike the single-select Dropdown
+ * above, a multi-select checkbox group renders every selected role's own fields inline (including
+ * `registeredProviderFlag` once ProviderContact is checked) — so ProviderContact can be selected
+ * fresh even while its gate is unmet, its live warning shown via contactRoleGateError, and
+ * corrected in place by ticking that field, rather than being unreachable until some other step
+ * pre-satisfies it. PlanManager/PlanNominee have no such row-level field that can fix their gate
+ * (plan type and date of birth are fixed at this point), so they stay disabled here exactly as
+ * they are for the Dropdown. */
+const SELF_CORRECTABLE_GATE_ROLE_TYPES: ReadonlySet<ContactRoleType> = new Set<ContactRoleType>(['ProviderContact'])
+
+export function selectableContactRoleTypes(
+  roleTypes: readonly ContactRoleType[],
+  planType: PlanType | null | undefined,
+  dateOfBirth: string | null | undefined,
+): ContactRoleType[] {
+  return roleTypes.filter(rt => SELF_CORRECTABLE_GATE_ROLE_TYPES.has(rt) || contactRoleGateError(rt, planType, dateOfBirth) === null)
 }
 
 // ── PF-2 (SPEC-02): plan-type↔contact-role completeness warning ──────────────────────────
@@ -216,14 +245,25 @@ export function availableContactRoleTypes(
 
 /** Minimal shape this helper needs from a contact-role row — matches both the create-mode
  * `useFieldArray` row shape and `ParticipantContactRoleDto`, so either can be passed directly.
- * `roleType` is a plain `string` (not `ContactRoleType`) because the create-mode wizard's Zod
- * schema types its field-array rows as `z.string()` (form values aren't the same as the wire
- * DTO) — this helper only ever compares it against known role-type literals, so a widened string
- * type costs nothing and avoids an extra cast at every call site. */
+ * `roleType`/`roleTypes` are plain `string`/`string[]` (not `ContactRoleType`) because the
+ * create-mode wizard's Zod schema types its field-array rows as `z.array(z.string())` (form
+ * values aren't the same as the wire DTO) — this helper only ever compares them against known
+ * role-type literals, so a widened string type costs nothing and avoids an extra cast at every
+ * call site.
+ * PF-5 (SPEC-02): a row now carries `roleTypes` (multi-select, one row fans out to N persisted
+ * roles) rather than a single `roleType` — `roleType` is kept here too since
+ * `ParticipantContactRoleDto` (the already-persisted, single-role-per-row server shape edit mode
+ * would use if it ever called this helper) still has it; a row satisfies a condition if EITHER
+ * shape names the matching role. */
 export interface PlanTypeComplianceRoleInput {
   roleType?: string
+  roleTypes?: readonly string[]
   registeredProviderFlag?: boolean | null
   status?: ContactRoleStatus | string
+}
+
+function roleInputHasRole(r: PlanTypeComplianceRoleInput, roleType: string): boolean {
+  return r.roleType === roleType || (r.roleTypes?.includes(roleType) ?? false)
 }
 
 /**
@@ -240,11 +280,11 @@ export function planTypeComplianceWarning(
   const roles = contactRoles ?? []
   const active = roles.filter(r => (r.status ?? 'Active') === 'Active')
 
-  if (planType === 'PlanManaged' && !active.some(r => r.roleType === 'PlanManager'))
+  if (planType === 'PlanManaged' && !active.some(r => roleInputHasRole(r, 'PlanManager')))
     return 'This plan-managed participant has no active Plan Manager contact recorded.'
 
   if (planType === 'AgencyManaged'
-    && !active.some(r => r.roleType === 'ProviderContact' && r.registeredProviderFlag === true))
+    && !active.some(r => roleInputHasRole(r, 'ProviderContact') && r.registeredProviderFlag === true))
     return 'This agency-managed participant has no active registered-provider contact with agency details recorded.'
 
   return null
@@ -276,3 +316,28 @@ export const CONTACT_ROLE_FIELD_MAP: Record<ContactRoleType, ContactRoleFieldKey
 }
 
 export const GUARDIAN_ORDER_SCOPE_DOMAINS = ['Health', 'Accommodation', 'Lifestyle', 'Legal', 'Financial', 'Plenary'] as const
+
+// ── PF-5 (SPEC-02): multi-role field union ──────────────────────────────
+
+/**
+ * The deduplicated set of relevant field keys across every selected role, in first-seen order
+ * (walking `roleTypes` in the order given, then each role's own `CONTACT_ROLE_FIELD_MAP` entry).
+ * A pure, easily-unit-testable building block for "does this selection need any role-specific
+ * fields at all" — AddContactRoleForm still renders each selected role's own fields in its own
+ * grouped block (SPEC-02's "independent per-role values" default for shared-slot fields like
+ * OrganisationName, since each role is a separate ParticipantContactRole row with its own
+ * column value), so this union is NOT used to collapse same-named fields into one shared input.
+ */
+export function unionRelevantFields(roleTypes: readonly ContactRoleType[]): ContactRoleFieldKey[] {
+  const seen = new Set<ContactRoleFieldKey>()
+  const result: ContactRoleFieldKey[] = []
+  for (const roleType of roleTypes) {
+    for (const key of CONTACT_ROLE_FIELD_MAP[roleType] ?? []) {
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push(key)
+      }
+    }
+  }
+  return result
+}
