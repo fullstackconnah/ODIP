@@ -60,15 +60,15 @@ public record UpdateRestrictivePracticeDto
 // ══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// One row of RP-01's bulk-add table. Deliberately has no <c>RelatedMedicationId</c> — unlike
-/// <see cref="CreateRestrictivePracticeDto"/>, bulk-add's table only has description/authorised
-/// by/authorisation date/review date columns, with no per-row medication picker. A row whose
-/// <see cref="Type"/> is <see cref="RestrictivePracticeType.ChemicalRestraint"/> is therefore
-/// rejected outright by <c>RestrictivePracticesController.CreateBulk</c> rather than silently
-/// created unlinked — see that method's comment for the reasoning. No data-annotation attributes
-/// here on purpose: bulk validation is done manually per row in the controller so every failure
-/// can be reported against its row index instead of short-circuiting on the first ASP.NET
-/// automatic-model-validation failure with no row context.
+/// One row of PD-2's "Add entries" bulk table — now the only create path, so a row's
+/// <see cref="Type"/> may be <see cref="RestrictivePracticeType.ChemicalRestraint"/>.
+/// <see cref="RelatedMedicationId"/> is optional even for a chemical-restraint row (logged
+/// before the medication record exists is still a meaningful entry); when set it's validated the
+/// same way <see cref="CreateRestrictivePracticeDto.RelatedMedicationId"/> is, via
+/// <c>RestrictivePracticesController.ValidateRelatedMedicationAsync</c>. No data-annotation
+/// attributes here on purpose: bulk validation is done manually per row in the controller so
+/// every failure can be reported against its row index instead of short-circuiting on the first
+/// ASP.NET automatic-model-validation failure with no row context.
 /// </summary>
 public record BulkCreateRestrictivePracticeRowDto
 {
@@ -77,6 +77,11 @@ public record BulkCreateRestrictivePracticeRowDto
     public string? AuthorisedBy { get; init; }
     public DateOnly? AuthorisationDate { get; init; }
     public DateOnly? ReviewDate { get; init; }
+
+    /// <summary>Only meaningful when <see cref="Type"/> is ChemicalRestraint. Optional — a
+    /// chemical restraint row may be added unlinked. Must reference a medication belonging to
+    /// the same participant when set.</summary>
+    public Guid? RelatedMedicationId { get; init; }
     public bool IsActive { get; init; } = true;
 }
 

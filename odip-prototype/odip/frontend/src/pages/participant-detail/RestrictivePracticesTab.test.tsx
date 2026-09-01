@@ -7,11 +7,10 @@ import type { MedicationListDto } from '@/api/types/medications'
 
 const {
   mockUseRestrictivePractices, mockUseParticipantMedications,
-  mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockBulkCreateMutateAsync,
+  mockUpdateMutateAsync, mockDeleteMutateAsync, mockBulkCreateMutateAsync,
 } = vi.hoisted(() => ({
   mockUseRestrictivePractices: vi.fn(() => ({ data: [] as RestrictivePracticeDto[], isLoading: false })),
   mockUseParticipantMedications: vi.fn(() => ({ data: [] as MedicationListDto[], isLoading: false })),
-  mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockDeleteMutateAsync: vi.fn(),
   mockBulkCreateMutateAsync: vi.fn(),
@@ -23,7 +22,6 @@ const {
 vi.mock('@/api/hooks', () => ({
   useRestrictivePractices: mockUseRestrictivePractices,
   useParticipantMedications: mockUseParticipantMedications,
-  useCreateRestrictivePractice: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdateRestrictivePractice: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeleteRestrictivePractice: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
   useBulkCreateRestrictivePractices: () => ({ mutateAsync: mockBulkCreateMutateAsync, isPending: false }),
@@ -83,7 +81,6 @@ function setUserRole(role: string) {
 }
 
 beforeEach(() => {
-  mockCreateMutateAsync.mockClear()
   mockUpdateMutateAsync.mockClear()
   mockDeleteMutateAsync.mockClear()
   mockBulkCreateMutateAsync.mockClear()
@@ -139,7 +136,7 @@ describe('RestrictivePracticesTab', () => {
     expect(screen.queryByText(/review overdue/i)).not.toBeInTheDocument()
   })
 
-  it('hides Edit/Delete/New entry actions for a ReadOnly user', () => {
+  it('hides Edit/Delete/Add entries actions for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
 
@@ -147,86 +144,17 @@ describe('RestrictivePracticesTab', () => {
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /new entry/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add entries/i })).not.toBeInTheDocument()
   })
 
-  it('hides Edit/Delete/New entry actions for a SupportWorker (narrower than routines/notes)', () => {
+  it('hides Edit/Delete/Add entries actions for a SupportWorker (narrower than routines/notes)', () => {
     setUserRole('SupportWorker')
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /new entry/i })).not.toBeInTheDocument()
-  })
-
-  it('does not show a medication picker when Type is not Chemical restraint', async () => {
-    const user = userEvent.setup()
-    mockUseParticipantMedications.mockReturnValue({ data: [makeMedication()], isLoading: false })
-
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-
-    expect(screen.queryByText(/linked medication/i)).not.toBeInTheDocument()
-  })
-
-  it('shows a medication picker populated from the participant medications when Type is Chemical restraint', async () => {
-    const user = userEvent.setup()
-    mockUseParticipantMedications.mockReturnValue({ data: [makeMedication({ name: 'Risperidone', strength: '1mg' })], isLoading: false })
-
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-    await user.click(screen.getByLabelText('Type'))
-    // Each type option now carries a plain-language description alongside its label (jargon-barrier
-    // fix), which becomes part of the option's accessible name — match on the label prefix instead
-    // of an exact string.
-    await user.click(screen.getByRole('option', { name: /^chemical restraint/i }))
-
-    expect(screen.getByText(/linked medication/i)).toBeInTheDocument()
-    await user.click(screen.getByLabelText(/linked medication/i))
-    expect(screen.getByRole('option', { name: 'Risperidone 1mg' })).toBeInTheDocument()
-  })
-
-  it('guides the user to the Medications tab when linking a chemical restraint and the participant has no medications on record', async () => {
-    const user = userEvent.setup()
-    mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
-
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-    await user.click(screen.getByLabelText('Type'))
-    await user.click(screen.getByRole('option', { name: /^chemical restraint/i }))
-
-    expect(screen.getByText(/no active medications on record/i)).toBeInTheDocument()
-  })
-
-  it('creates a new register entry with the entered type and description', async () => {
-    const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-    await user.type(screen.getByLabelText(/description/i), 'Environmental restriction — locked doors overnight.')
-    await user.click(screen.getByRole('button', { name: /save entry/i }))
-
-    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
-    const [call] = mockCreateMutateAsync.mock.calls[0]
-    expect(call.participantId).toBe('participant-1')
-    expect(call.data.description).toBe('Environmental restriction — locked doors overnight.')
-    expect(call.data.type).toBe('Unclassified')
-    expect(call.data.relatedMedicationId).toBeNull()
-  })
-
-  it('requires a description before saving', async () => {
-    const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-    await user.click(screen.getByRole('button', { name: /save entry/i }))
-
-    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText('Description is required')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add entries/i })).not.toBeInTheDocument()
   })
 
   it('edits an existing entry, prefilling the form', async () => {
@@ -277,38 +205,62 @@ describe('RestrictivePracticesTab', () => {
   })
 })
 
-describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
+// PD-2: the single-entry create form is gone — "Add entries" (the former bulk-add modal) is now
+// the only create path, including for a single practice. Its former RP-01 create-path coverage
+// (creating an entry, description-required validation, chemical-restraint medication linking on
+// create) now lives here, exercised through the modal, plus new coverage for defaulting to one
+// row and for Chemical restraint becoming selectable (it used to be excluded from bulk).
+describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   async function openBulkRows(user: ReturnType<typeof userEvent.setup>, count: string) {
-    await user.click(screen.getByRole('button', { name: /bulk add/i }))
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await user.clear(screen.getByLabelText(/number of entries/i))
     await user.type(screen.getByLabelText(/number of entries/i), count)
     await user.click(screen.getByRole('button', { name: /continue/i }))
   }
 
-  it('hides the Bulk add action for a ReadOnly user', () => {
+  async function selectBulkType(user: ReturnType<typeof userEvent.setup>, optionName: RegExp) {
+    await user.click(screen.getByLabelText(/restrictive practice type/i))
+    await user.click(screen.getByRole('option', { name: optionName }))
+  }
+
+  it('hides the Add entries action for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
-    expect(screen.queryByRole('button', { name: /bulk add/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add entries/i })).not.toBeInTheDocument()
   })
 
-  it('opens the bulk-add setup step, offering every type except Chemical restraint', async () => {
+  it('opens the setup step offering every restrictive practice type, including Chemical restraint', async () => {
     const user = userEvent.setup()
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
-    await user.click(screen.getByRole('button', { name: /bulk add/i }))
-    expect(screen.getByRole('dialog', { name: /bulk add restrictive practices/i })).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    expect(screen.getByRole('dialog', { name: /add entries/i })).toBeInTheDocument()
 
     await user.click(screen.getByLabelText(/restrictive practice type/i))
     expect(screen.getByRole('option', { name: /^seclusion/i })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /^chemical restraint/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /^chemical restraint/i })).toBeInTheDocument()
+  })
+
+  it('defaults to a single empty row so a one-off entry stays as fast as the old single-entry form', async () => {
+    const user = userEvent.setup()
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    expect(screen.getByLabelText(/number of entries/i)).toHaveValue(1)
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(screen.getByLabelText('Description, row 1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Description, row 2')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save 1 entry/i })).toBeInTheDocument()
   })
 
   it('rejects an invalid row count before generating rows', async () => {
     const user = userEvent.setup()
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
-    await user.click(screen.getByRole('button', { name: /bulk add/i }))
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await user.clear(screen.getByLabelText(/number of entries/i))
     await user.type(screen.getByLabelText(/number of entries/i), '0')
     await user.click(screen.getByRole('button', { name: /continue/i }))
@@ -364,6 +316,27 @@ describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Description is required')
   })
 
+  it('creates a single entry end to end through Add entries (the only create path)', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+    await user.type(screen.getByLabelText('Description, row 1'), 'Environmental restriction — locked doors overnight.')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockBulkCreateMutateAsync.mock.calls[0]
+    expect(call.participantId).toBe('participant-1')
+    expect(call.data.items).toHaveLength(1)
+    expect(call.data.items[0]).toMatchObject({
+      type: 'Seclusion',
+      description: 'Environmental restriction — locked doors overnight.',
+      relatedMedicationId: null,
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('saves every row sharing the picked type in a single bulk request, then closes', async () => {
     const user = userEvent.setup()
     mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
@@ -384,7 +357,89 @@ describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('surfaces a server row-level error against the right row without closing the modal', async () => {
+  it('does not show a Linked medication column when the batch type is not Chemical restraint', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantMedications.mockReturnValue({ data: [makeMedication()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await openBulkRows(user, '1')
+
+    expect(screen.queryByText(/linked medication/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a Linked medication column populated from participant medications when Chemical restraint is picked', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantMedications.mockReturnValue({ data: [makeMedication({ name: 'Risperidone', strength: '1mg' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    await selectBulkType(user, /^chemical restraint/i)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(screen.getByRole('columnheader', { name: 'Linked medication' })).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Linked medication, row 1'))
+    expect(screen.getByRole('option', { name: 'Risperidone 1mg' })).toBeInTheDocument()
+  })
+
+  it('shows the no-active-medications hint when Chemical restraint is picked and the participant has none on record', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    await selectBulkType(user, /^chemical restraint/i)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(screen.getByText(/no active medications on record/i)).toBeInTheDocument()
+  })
+
+  it('creates a Chemical restraint entry with a linked medication, matching the old single-entry shape', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantMedications.mockReturnValue({ data: [makeMedication({ id: 'med-9', name: 'Risperidone', strength: '1mg' })], isLoading: false })
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    await selectBulkType(user, /^chemical restraint/i)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await user.type(screen.getByLabelText('Description, row 1'), 'Chemical restraint via Risperidone.')
+    await user.click(screen.getByLabelText('Linked medication, row 1'))
+    await user.click(screen.getByRole('option', { name: 'Risperidone 1mg' }))
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockBulkCreateMutateAsync.mock.calls[0]
+    expect(call.data.items[0]).toMatchObject({
+      type: 'ChemicalRestraint',
+      description: 'Chemical restraint via Risperidone.',
+      relatedMedicationId: 'med-9',
+    })
+  })
+
+  it('leaves relatedMedicationId null for a Chemical restraint row with no medication selected', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    await selectBulkType(user, /^chemical restraint/i)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await user.type(screen.getByLabelText('Description, row 1'), 'Chemical restraint, unlinked for now.')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockBulkCreateMutateAsync.mock.calls[0]
+    expect(call.data.items[0].relatedMedicationId).toBeNull()
+  })
+
+  // Partial-failure handling: this is deliberately all-or-nothing, matching the backend's
+  // single-transaction write. Nothing is saved until every row is valid — a mixed batch never
+  // leaves some rows silently created and others dropped — and a row the server rejects is
+  // reported against exactly that row, with every other row's already-entered content left
+  // intact so the user only has to fix the flagged row and resubmit, not retype the batch.
+  it('surfaces a server row-level error against the right row without closing the modal or losing other rows', async () => {
     const user = userEvent.setup()
     mockBulkCreateMutateAsync.mockRejectedValue({
       response: { data: { errors: ['Row 2: Description is required'] } },
@@ -397,7 +452,11 @@ describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
     await user.click(screen.getByRole('button', { name: /save 2 entries/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Description is required')
-    expect(screen.getByRole('dialog', { name: /bulk add/i })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /add entries/i })).toBeInTheDocument()
+    // Nothing was silently dropped: the other, valid row's content is still there for the user
+    // to just fix row 2 and resubmit.
+    expect(screen.getByLabelText('Description, row 1')).toHaveValue('First entry')
+    expect(screen.getByLabelText('Description, row 2')).toHaveValue('Second entry')
   })
 
   it('surfaces a whole-request server error as a banner when it is not row-prefixed', async () => {
@@ -421,15 +480,7 @@ describe('RestrictivePracticesTab — bulk add (RP-01)', () => {
     await openBulkRows(user, '1')
     await user.click(screen.getByRole('button', { name: /back/i }))
 
-    expect(screen.getByRole('dialog', { name: /bulk add restrictive practices/i })).toBeInTheDocument()
-  })
-
-  it('leaves the single-entry New entry modal flow unaffected by the bulk-add path', async () => {
-    const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
-
-    await user.click(screen.getAllByRole('button', { name: /new entry/i })[0])
-    expect(screen.getByRole('dialog', { name: /new restrictive practice entry/i })).toBeInTheDocument()
-    expect(screen.queryByLabelText(/number of entries/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /add entries/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/number of entries/i)).toBeInTheDocument()
   })
 })

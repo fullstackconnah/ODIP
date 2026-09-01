@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ShieldAlert, AlertTriangle, ChevronDown, Plus, Pill, ListChecks, Trash2 } from 'lucide-react'
+import { ShieldAlert, AlertTriangle, ChevronDown, Plus, Pill, Trash2 } from 'lucide-react'
 import type { AxiosError } from 'axios'
 import {
-  useRestrictivePractices, useCreateRestrictivePractice, useUpdateRestrictivePractice, useDeleteRestrictivePractice,
+  useRestrictivePractices, useUpdateRestrictivePractice, useDeleteRestrictivePractice,
   useBulkCreateRestrictivePractices, useParticipantMedications,
 } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
@@ -14,7 +14,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import {
-  RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, BULK_RESTRICTIVE_PRACTICE_TYPES,
+  RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS,
 } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
@@ -23,18 +23,20 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
-/** One row of RP-01's bulk-add table — client-side draft state before it becomes its own register entry. */
+/** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
   id: string
   description: string
   authorisedBy: string
   authorisationDate: string
   reviewDate: string
+  /** Only meaningful when the batch type is ChemicalRestraint; ignored otherwise. */
+  relatedMedicationId: string
 }
 
 function makeBulkRow(): BulkRowState {
   const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `row-${Date.now()}-${Math.random()}`
-  return { id, description: '', authorisedBy: '', authorisationDate: '', reviewDate: '' }
+  return { id, description: '', authorisedBy: '', authorisationDate: '', reviewDate: '', relatedMedicationId: '' }
 }
 
 /**
@@ -194,12 +196,13 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const { canWriteRestrictivePractices } = usePermissions()
   const { data: practices = [], isLoading } = useRestrictivePractices(participantId, true)
   const { data: medications = [] } = useParticipantMedications(participantId, false)
-  const createPractice = useCreateRestrictivePractice()
   const updatePractice = useUpdateRestrictivePractice()
   const deletePractice = useDeleteRestrictivePractice()
   const bulkCreatePractices = useBulkCreateRestrictivePractices()
 
-  const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; practice?: RestrictivePracticeDto } | null>(null)
+  // PD-2: creation now only happens through the "Add entries" bulk modal below. This modal is
+  // edit-only — `null` means closed, otherwise the entry currently being edited.
+  const [editingPractice, setEditingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [form, setForm] = useState<PracticeFormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<{ description?: string }>({})
   const [modalError, setModalError] = useState<string | null>(null)
@@ -207,10 +210,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const [listError, setListError] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
 
-  // RP-01 bulk-add: 'setup' picks a type + row count; 'rows' is the editable table.
+  // PD-2 "Add entries": 'setup' picks a type + row count; 'rows' is the editable table. This is
+  // now the only create path, so it defaults to a single row — a one-off entry takes the same
+  // number of clicks as the old single-entry form did, minus a modal.
   const [bulkStep, setBulkStep] = useState<'setup' | 'rows' | null>(null)
-  const [bulkType, setBulkType] = useState<RestrictivePracticeType>(BULK_RESTRICTIVE_PRACTICE_TYPES[0])
-  const [bulkCountInput, setBulkCountInput] = useState('3')
+  const [bulkType, setBulkType] = useState<RestrictivePracticeType>(RESTRICTIVE_PRACTICE_TYPES[0])
+  const [bulkCountInput, setBulkCountInput] = useState('1')
   const [bulkCountError, setBulkCountError] = useState<string | null>(null)
   const [bulkRows, setBulkRows] = useState<BulkRowState[]>([])
   const [bulkRowErrors, setBulkRowErrors] = useState<Map<string, string>>(new Map())
@@ -218,13 +223,6 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
   const activePractices = useMemo(() => practices.filter(p => p.isActive), [practices])
   const inactivePractices = useMemo(() => practices.filter(p => !p.isActive), [practices])
-
-  function openCreate() {
-    setForm(EMPTY_FORM)
-    setErrors({})
-    setModalError(null)
-    setModalState({ mode: 'create' })
-  }
 
   function openEdit(practice: RestrictivePracticeDto) {
     setForm({
@@ -238,11 +236,11 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     })
     setErrors({})
     setModalError(null)
-    setModalState({ mode: 'edit', practice })
+    setEditingPractice(practice)
   }
 
   function closeModal() {
-    setModalState(null)
+    setEditingPractice(null)
     setModalError(null)
   }
 
@@ -255,6 +253,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
   async function handleSave() {
     if (!validate()) return
+    if (!editingPractice) return
     setModalError(null)
     const payload = {
       type: form.type,
@@ -266,22 +265,18 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       isActive: form.isActive,
     }
     try {
-      if (modalState?.mode === 'edit' && modalState.practice) {
-        await updatePractice.mutateAsync({ id: modalState.practice.id, data: payload })
-      } else if (participantId) {
-        await createPractice.mutateAsync({ participantId, data: payload })
-      }
+      await updatePractice.mutateAsync({ id: editingPractice.id, data: payload })
       closeModal()
     } catch (err) {
       setModalError(extractErrorMessage(err, 'Failed to save restrictive practice entry.'))
     }
   }
 
-  // ── RP-01 bulk-add ────────────────────────────────────────────────────
+  // ── PD-2 "Add entries" (only creation path) ─────────────────────────────
 
   function openBulk() {
-    setBulkType(BULK_RESTRICTIVE_PRACTICE_TYPES[0])
-    setBulkCountInput('3')
+    setBulkType(RESTRICTIVE_PRACTICE_TYPES[0])
+    setBulkCountInput('1')
     setBulkCountError(null)
     setBulkGeneralError(null)
     setBulkRowErrors(new Map())
@@ -353,6 +348,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         authorisedBy: row.authorisedBy.trim() || null,
         authorisationDate: row.authorisationDate || null,
         reviewDate: row.reviewDate || null,
+        relatedMedicationId: bulkType === 'ChemicalRestraint' ? (row.relatedMedicationId || null) : null,
         isActive: true,
       })),
     }
@@ -367,6 +363,56 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     }
   }
 
+  const medicationColumn: Column<BulkRowState> = {
+    key: 'relatedMedicationId',
+    header: 'Linked medication',
+    editable: {
+      render: (row, onChange, ctx) => {
+        const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
+        const labelId = `bulk-medication-label-${row.id}`
+        return (
+          <div>
+            <span id={labelId} className="sr-only">{`Linked medication, row ${rowNumber}`}</span>
+            <Dropdown
+              variant="form"
+              aria-labelledby={labelId}
+              aria-invalid={ctx.errorId ? 'true' : undefined}
+              aria-describedby={ctx.errorId}
+              value={row.relatedMedicationId}
+              onChange={onChange}
+              items={[
+                { value: '', label: 'None' },
+                ...medications.map(m => ({ value: m.id, label: m.strength ? `${m.name} ${m.strength}` : m.name })),
+              ]}
+            />
+          </div>
+        )
+      },
+    },
+  }
+
+  const removeColumn: Column<BulkRowState> = {
+    key: 'remove',
+    header: <span className="sr-only">Remove row</span>,
+    align: 'center',
+    render: row => {
+      const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
+      return (
+        <button
+          type="button"
+          onClick={() => removeBulkRow(row.id)}
+          disabled={bulkRows.length <= 1}
+          aria-label={`Remove row ${rowNumber}`}
+          className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )
+    },
+  }
+
+  // Type is picked once per batch in the setup step, so a "Linked medication" column only makes
+  // sense — and only appears — when the whole batch's type is ChemicalRestraint.
   const bulkColumns: Column<BulkRowState>[] = [
     {
       key: 'description',
@@ -448,25 +494,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         },
       },
     },
-    {
-      key: 'remove',
-      header: <span className="sr-only">Remove row</span>,
-      align: 'center',
-      render: row => {
-        const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
-        return (
-          <button
-            type="button"
-            onClick={() => removeBulkRow(row.id)}
-            disabled={bulkRows.length <= 1}
-            aria-label={`Remove row ${rowNumber}`}
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )
-      },
-    },
+    ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),
+    removeColumn,
   ]
 
   async function confirmDelete() {
@@ -481,7 +510,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     }
   }
 
-  const isSaving = createPractice.isPending || updatePractice.isPending
+  const isSaving = updatePractice.isPending
 
   return (
     <div className="space-y-6">
@@ -492,16 +521,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             <button
               type="button"
               onClick={openBulk}
-              className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-medium hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-colors"
-            >
-              <ListChecks className="w-4 h-4" /> Bulk add
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
               className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all shadow-md shadow-[var(--color-primary)]/20"
             >
-              <Plus className="w-4 h-4" /> New entry
+              <Plus className="w-4 h-4" /> Add entries
             </button>
           </div>
         )}
@@ -530,7 +552,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           icon={ShieldAlert}
           title="No restrictive practices recorded"
           description="Record any restrictive practice in use for this participant — seclusion, chemical, mechanical, physical, or environmental restraint — with its authorisation and review date."
-          action={canWriteRestrictivePractices && participantId ? { label: 'New entry', onClick: openCreate } : undefined}
+          action={canWriteRestrictivePractices && participantId ? { label: 'Add entries', onClick: openBulk } : undefined}
         />
       ) : (
         <div className="space-y-3">
@@ -562,9 +584,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       )}
 
       <Modal
-        open={!!modalState}
+        open={!!editingPractice}
         onClose={closeModal}
-        title={modalState?.mode === 'edit' ? 'Edit restrictive practice entry' : 'New restrictive practice entry'}
+        title="Edit restrictive practice entry"
         size="md"
         footer={
           <>
@@ -644,16 +666,14 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               <input type="date" value={form.reviewDate} onChange={e => setForm(f => ({ ...f, reviewDate: e.target.value }))} />
             </FormField>
           </div>
-          {modalState?.mode === 'edit' && (
-            <FormField label="Active" layout="checkbox" hint="Inactive entries are hidden from the default list but not deleted">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-                className="w-4 h-4 rounded border-[var(--color-border)]"
-              />
-            </FormField>
-          )}
+          <FormField label="Active" layout="checkbox" hint="Inactive entries are hidden from the default list but not deleted">
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
+              className="w-4 h-4 rounded border-[var(--color-border)]"
+            />
+          </FormField>
         </div>
       </Modal>
 
@@ -671,7 +691,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       <Modal
         open={bulkStep === 'setup'}
         onClose={closeBulk}
-        title="Bulk add restrictive practices"
+        title="Add entries"
         size="sm"
         footer={
           <>
@@ -696,15 +716,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Pick the type shared by every entry you're adding and how many, then fill in each row's details.
           </p>
-          <FormField
-            label="Restrictive practice type"
-            hint="Adding a chemical restraint? Use New entry instead — it links a medication record, which the bulk table doesn't support."
-          >
+          <FormField label="Restrictive practice type">
             <Dropdown
               variant="form"
               value={bulkType}
               onChange={v => setBulkType(v as RestrictivePracticeType)}
-              items={BULK_RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: TYPE_DESCRIPTIONS[t] }))}
+              items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: TYPE_DESCRIPTIONS[t] }))}
             />
           </FormField>
           <FormField label="Number of entries" error={bulkCountError ?? undefined}>
@@ -723,7 +740,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       <Modal
         open={bulkStep === 'rows'}
         onClose={closeBulk}
-        title={`Bulk add — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}`}
+        title={`Add entries — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}`}
         size="xl"
         footer={
           <>
@@ -750,6 +767,11 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
               {bulkGeneralError}
             </div>
+          )}
+          {bulkType === 'ChemicalRestraint' && medications.length === 0 && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              This participant has no active medications on record — add one on the Medications tab first, or leave these rows unlinked for now.
+            </p>
           )}
           <DataTable
             data={bulkRows}
