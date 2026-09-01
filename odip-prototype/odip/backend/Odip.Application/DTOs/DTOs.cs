@@ -1920,6 +1920,8 @@ public record IncidentDetailDto : IncidentListDto
     public string? EmergencyServicesDetails { get; init; }
     public string? WitnessNames { get; init; }
     public string? WitnessStatements { get; init; }
+    /// <summary>IN-5: recorded injuries, populated only when <see cref="IncidentListDto.IncidentType"/> is <see cref="IncidentType.Injury"/> (empty list otherwise).</summary>
+    public List<IncidentInjuryDto> Injuries { get; init; } = new();
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
     public Guid? ReviewedByStaffId { get; init; }
@@ -1971,6 +1973,32 @@ public record CreateIncidentDto
     public string? WitnessNames { get; init; }
     [StringLength(4000)]
     public string? WitnessStatements { get; init; }
+    /// <summary>
+    /// IN-5: repeatable injury rows, backing the frontend <c>BodyDiagram</c> component. Only
+    /// meaningful (server-validated as non-empty) when <see cref="IncidentType"/> is
+    /// <see cref="Enums.IncidentType.Injury"/> — see <see cref="IncidentsController.ValidateServiceTypeAndIncidentType"/>.
+    /// Update full-replaces the persisted collection with this list every time (see
+    /// <see cref="Entities.IncidentInjury"/>'s type doc).
+    /// </summary>
+    public List<CreateIncidentInjuryDto> Injuries { get; init; } = new();
+}
+
+/// <summary>IN-5: one submitted injury row — see <see cref="Entities.IncidentInjury"/>.</summary>
+public record CreateIncidentInjuryDto
+{
+    public BodyRegion Region { get; init; }
+    public InjuryType InjuryType { get; init; }
+    [StringLength(2000)]
+    public string Description { get; init; } = string.Empty;
+}
+
+/// <summary>IN-5: one persisted injury row, as returned by <c>GET /incidents/{id}</c>.</summary>
+public record IncidentInjuryDto
+{
+    public Guid Id { get; init; }
+    public BodyRegion Region { get; init; }
+    public InjuryType InjuryType { get; init; }
+    public string Description { get; init; } = string.Empty;
 }
 
 public record UpdateIncidentDto : CreateIncidentDto

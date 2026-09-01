@@ -90,6 +90,12 @@ public class IncidentReport
     public string? WitnessNames { get; set; }
     public string? WitnessStatements { get; set; }
 
+    /// <summary>
+    /// IN-5: recorded injuries when <see cref="IncidentType"/> is <see cref="Enums.IncidentType.Injury"/> —
+    /// see <see cref="IncidentInjury"/> for the full-replace-on-Update contract.
+    /// </summary>
+    public List<IncidentInjury> Injuries { get; set; } = new();
+
     // QSC compliance
     public QscReportingStatus QscReportingStatus { get; set; } = QscReportingStatus.NotRequired;
     public DateTime? QscReportedAt { get; set; }

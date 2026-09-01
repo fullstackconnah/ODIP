@@ -122,7 +122,9 @@ public class IncidentsControllerTests
         var participant = SeedParticipant(db);
         var controller = new IncidentsController(db);
 
-        var dto = CreateDto(reporter.Id, incidentType: IncidentType.Injury, rpType: null, involvedParticipantId: participant.Id);
+        // Not IncidentType.Injury — that requires >=1 Injuries row (IN-5) and this test only
+        // cares about non-RP incidents leaving the RP fields null.
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
         var result = await controller.Create(dto, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
@@ -395,5 +397,161 @@ public class IncidentsControllerTests
         // Frozen: still true from creation, despite the new participant/type combination having
         // no matching active register entry.
         Assert.True(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    // ── IN-5: injuries ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_InjuryIncidentWithZeroRows_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.Injury, rpType: null);
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("at least one injury", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await db.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_NonInjuryIncidentWithNoInjuries_IsValid()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        // Default IncidentType from CreateDto is RestrictivePracticeUse, unrelated to injuries —
+        // an incident with an empty Injuries list must not be blocked when it isn't an Injury.
+        var dto = CreateDto(reporter.Id, involvedParticipantId: null, rpType: RestrictivePracticeType.Seclusion);
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Empty(await db.IncidentInjuries.Where(x => x.IncidentReportId == saved.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_InjuryIncidentWithRows_PersistsAndRoundTripsThroughGetById()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.Injury, rpType: null) with
+        {
+            Injuries = new List<CreateIncidentInjuryDto>
+            {
+                new() { Region = BodyRegion.LeftForearm, InjuryType = InjuryType.Laceration, Description = "Cut from broken glass." },
+                new() { Region = BodyRegion.RightAnkle, InjuryType = InjuryType.SprainOrStrain, Description = "Twisted stepping off the bus." },
+            }
+        };
+
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(createResult.Result);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var getResult = await controller.GetById(incidentId, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal(2, body.Data!.Injuries.Count);
+        Assert.Contains(body.Data.Injuries, i => i.Region == BodyRegion.LeftForearm && i.InjuryType == InjuryType.Laceration && i.Description == "Cut from broken glass.");
+        Assert.Contains(body.Data.Injuries, i => i.Region == BodyRegion.RightAnkle && i.InjuryType == InjuryType.SprainOrStrain && i.Description == "Twisted stepping off the bus.");
+    }
+
+    [Fact]
+    public async Task Update_RemovingOneInjuryRow_ResultsInExactlyRemainingRowsPersisted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.Injury, rpType: null) with
+        {
+            Injuries = new List<CreateIncidentInjuryDto>
+            {
+                new() { Region = BodyRegion.Head, InjuryType = InjuryType.Bruise, Description = "Bumped head on doorway." },
+                new() { Region = BodyRegion.LeftHand, InjuryType = InjuryType.Abrasion, Description = "Grazed hand on wall." },
+                new() { Region = BodyRegion.RightKnee, InjuryType = InjuryType.Swelling, Description = "Knee swelled after fall." },
+            }
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        // Full-replace with only 2 of the original 3 rows — mirrors the wizard's "the form owns
+        // the full list, always sends the full list" contract.
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Injury,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            Injuries = new List<CreateIncidentInjuryDto>
+            {
+                new() { Region = BodyRegion.Head, InjuryType = InjuryType.Bruise, Description = "Bumped head on doorway." },
+                new() { Region = BodyRegion.RightKnee, InjuryType = InjuryType.Swelling, Description = "Knee swelled after fall." },
+            }
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var remaining = await db.IncidentInjuries.Where(x => x.IncidentReportId == incident.Id).ToListAsync();
+        Assert.Equal(2, remaining.Count);
+        Assert.Contains(remaining, x => x.Region == BodyRegion.Head);
+        Assert.Contains(remaining, x => x.Region == BodyRegion.RightKnee);
+        Assert.DoesNotContain(remaining, x => x.Region == BodyRegion.LeftHand);
+    }
+
+    [Fact]
+    public async Task Update_InjuryIncidentToZeroRows_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.Injury, rpType: null) with
+        {
+            Injuries = new List<CreateIncidentInjuryDto>
+            {
+                new() { Region = BodyRegion.Head, InjuryType = InjuryType.Bruise, Description = "Bumped head." },
+            }
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.Injury,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            Injuries = new List<CreateIncidentInjuryDto>(),
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(updateResult.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("at least one injury", StringComparison.OrdinalIgnoreCase));
+        // Original row must survive an update that was rejected before SaveChangesAsync.
+        Assert.Single(await db.IncidentInjuries.Where(x => x.IncidentReportId == incident.Id).ToListAsync());
     }
 }

@@ -63,6 +63,8 @@ public class OdipDbContext : DbContext
     public DbSet<TripDocument> TripDocuments => Set<TripDocument>();
     public DbSet<User> Users => Set<User>();
     public DbSet<IncidentReport> IncidentReports => Set<IncidentReport>();
+    /// <summary>IN-5: see <see cref="Entities.IncidentInjury"/>'s type doc.</summary>
+    public DbSet<IncidentInjury> IncidentInjuries => Set<IncidentInjury>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<TripClaim> TripClaims => Set<TripClaim>();
     public DbSet<ClaimLineItem> ClaimLineItems => Set<ClaimLineItem>();
@@ -567,6 +569,23 @@ public class OdipDbContext : DbContext
             e.HasIndex(i => i.QscReportingStatus);
             e.HasIndex(i => i.IsActive);
             e.HasIndex(i => i.RestrictivePracticeId);
+        });
+
+        // ── IncidentInjury (IN-5) ────────────────────────────────
+        modelBuilder.Entity<IncidentInjury>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Description).HasMaxLength(2000).IsRequired();
+
+            // Cascade: unlike IncidentReport.TripInstanceId's Restrict (which protects a
+            // still-meaningful trip from deletion), an injury row has no meaning once its parent
+            // incident is gone.
+            e.HasOne(x => x.IncidentReport)
+                .WithMany(i => i.Injuries)
+                .HasForeignKey(x => x.IncidentReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.IncidentReportId);
         });
 
         // ── User ─────────────────────────────────────────────────
