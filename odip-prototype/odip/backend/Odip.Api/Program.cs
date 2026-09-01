@@ -169,6 +169,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService
 
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
 
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();

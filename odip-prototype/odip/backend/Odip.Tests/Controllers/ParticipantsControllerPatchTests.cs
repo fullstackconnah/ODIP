@@ -124,7 +124,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_MissingParticipant_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.Patch(Guid.NewGuid(), new PatchParticipantDto(), CancellationToken.None);
 
@@ -157,7 +157,7 @@ public class ParticipantsControllerPatchTests
         using var scopedDb = new OdipDbContext(scopedOptions, tenantAMock.Object);
         var foreignParticipantId = await scopedDb.Participants.IgnoreQueryFilters().Select(p => p.Id).SingleAsync();
 
-        var controller = new ParticipantsController(scopedDb, new StaffCompatibilityLinkService(scopedDb), new ParticipantDocumentService(scopedDb));
+        var controller = new ParticipantsController(scopedDb, new StaffCompatibilityLinkService(scopedDb), new ParticipantDocumentService(scopedDb), new SafetyNoteSyncService(scopedDb));
         var patchDto = new PatchParticipantDto { PersonalDetails = new PatchPersonalDetailsDto { FirstName = "Hacked", LastName = "Name" } };
 
         var result = await controller.Patch(foreignParticipantId, patchDto, CancellationToken.None);
@@ -173,7 +173,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_PersonalDetailsGroup_LeavesOtherGroupsUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -198,7 +198,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_AbsentGroup_IsNotClearedToNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // Patch only KeyIdentifiers — every other group (including PersonalDetails' MiddleName/
@@ -224,7 +224,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_PresentGroupWithNullMember_ClearsThatField()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // PersonalDetails is present, but MiddleName/PreferredName are omitted (null) from this
@@ -246,7 +246,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_SupportNeedsMobility_NeverTouchesChecklistItems()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -275,7 +275,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_NdisPlanGroup_FundingSourceOtherWithoutOrganisation_Returns400()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -297,7 +297,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_LivingArrangementGroup_FamilyWithoutMainSupportPerson_Returns400()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -315,7 +315,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_PersonalDetailsGroup_BlankNames_Returns400()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // PatchParticipantDto has no IsDraft — a Patch is always fully validated, never relaxed
@@ -332,7 +332,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_InvalidMobilitySupportOption_Returns400()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -356,7 +356,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_PreferredStaffAbsent_NeverTriggersCompatibilityLinkSync()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var staff = new User
         {
@@ -389,7 +389,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_ConsentsGroup_AddsUpdatesAndLeavesOmittedTypeUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller); // seeds Privacy=true
 
         var patchDto = new PatchParticipantDto
@@ -420,7 +420,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_ConsentsGroup_PresentWithNullValues_ClearsExistingRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller); // seeds Privacy=true, SignedByName="Guardian"
 
         var patchDto = new PatchParticipantDto
@@ -442,7 +442,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_HealthConditionsGroup_AddsUpdatesAndLeavesOmittedTypeUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller); // seeds Epilepsy Has=true, Severity="Moderate"
 
         var patchDto = new PatchParticipantDto
@@ -466,7 +466,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_HealthConditionsGroup_PresentWithNullValues_ClearsExistingRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -488,7 +488,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_AdlAssessmentsGroup_AddsUpdatesAndLeavesOmittedTypeUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller); // seeds Dressing/Supervision
 
         var patchDto = new PatchParticipantDto
@@ -512,7 +512,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_AdlAssessmentsGroup_PresentWithNullValues_ClearsExistingRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -534,7 +534,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_ChecklistItemsGroup_AddsUpdatesAndLeavesOmittedTypeUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller); // seeds UsesWheelchair=Yes, FallsRisk=No
 
         // Simulates a step-5-scoped save: only its own item-types are sent; FallsRisk (which this
@@ -564,7 +564,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_ChecklistItemsGroup_PresentWithNullValues_ClearsExistingRow()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // Sending the type WITH every field null clears the row — this is the sharp edge a
@@ -591,7 +591,7 @@ public class ParticipantsControllerPatchTests
     public async Task Patch_NonCollectionGroup_LeavesAllFourCollectionsUntouched()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -605,5 +605,93 @@ public class ParticipantsControllerPatchTests
         Assert.True(detail.HealthConditions.Single(c => c.ConditionType == HealthConditionType.Epilepsy).Has);
         Assert.Equal(AdlLevel.Supervision, detail.AdlAssessments.Single(a => a.AdlType == AdlType.Dressing).Level);
         Assert.Equal(ChecklistItemValue.Yes, detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.UsesWheelchair).Value);
+    }
+
+    // ── PD-5 item 5c: the 4 safety-critical partial-save groups sync the auto-note ──────────
+
+    [Fact]
+    public async Task Patch_MedicalGroup_SyncsAllergiesSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+        Assert.False(await db.ParticipantNotes.AnyAsync(n => n.SourceKey == "safety:allergies"));
+
+        var patchDto = new PatchParticipantDto
+        {
+            Medical = new PatchMedicalDto { PrimaryDiagnosis = "Epilepsy", AllergiesDetail = "Penicillin", MedicalSummary = "Stable." },
+        };
+        var result = await controller.Patch(id, patchDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == id && n.SourceKey == "safety:allergies");
+        Assert.Contains("Penicillin", note.Description);
+    }
+
+    [Fact]
+    public async Task Patch_BehaviourCommunicationGroup_SyncsBehavioursOfConcernSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        var patchDto = new PatchParticipantDto
+        {
+            BehaviourCommunication = new PatchBehaviourCommunicationDto { BehavioursOfConcernCurrent = true },
+        };
+        await controller.Patch(id, patchDto, CancellationToken.None);
+
+        Assert.True(await db.ParticipantNotes.AnyAsync(n => n.ParticipantId == id && n.SourceKey == "safety:behavioursOfConcern"));
+    }
+
+    [Fact]
+    public async Task Patch_RisksHazardsSummaryGroup_SyncsRisksHazardsSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        var patchDto = new PatchParticipantDto
+        {
+            RisksHazardsSummary = new PatchRisksHazardsSummaryDto { BehaviourRiskSummary = "Elopement risk near roads." },
+        };
+        await controller.Patch(id, patchDto, CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == id && n.SourceKey == "safety:risksHazards");
+        Assert.Contains("Elopement risk near roads.", note.Description);
+    }
+
+    [Fact]
+    public async Task Patch_SupportNeedsMobilityGroup_SyncsFallsRiskSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        var patchDto = new PatchParticipantDto
+        {
+            SupportNeedsMobility = new PatchSupportNeedsMobilityDto { FallsRiskRating = RiskRatingLevel.High },
+        };
+        await controller.Patch(id, patchDto, CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == id && n.SourceKey == "safety:fallsRisk");
+        Assert.Contains("High", note.Description);
+    }
+
+    [Fact]
+    public async Task Patch_PersonalDetailsGroupOnly_DoesNotRunSafetyNoteSync()
+    {
+        // No safety-critical group present — the sync pass is skipped entirely (no note churn).
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        var patchDto = new PatchParticipantDto
+        {
+            PersonalDetails = new PatchPersonalDetailsDto { FirstName = "Renamed", LastName = "Brown" },
+        };
+        await controller.Patch(id, patchDto, CancellationToken.None);
+
+        Assert.False(await db.ParticipantNotes.AnyAsync(n => n.ParticipantId == id && n.SourceKey != null));
     }
 }
