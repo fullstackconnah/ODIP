@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DataTable } from './DataTable'
 import type { Column } from './DataTable'
+import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 
 type Row = { id: string; name: string; age: number }
 
@@ -299,5 +300,78 @@ describe('DataTable — verticalDividers (DS-02)', () => {
     for (const row of allRows) {
       expect(row.className).toMatch(/divide-x/)
     }
+  })
+})
+
+describe('DataTable — vertical dividers driven by the GEN-2 UI preference', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  function expectAllRowsToMatchDivider(matches: boolean) {
+    const allRows = screen.getAllByRole('row')
+    expect(allRows.length).toBeGreaterThan(1)
+    for (const row of allRows) {
+      if (matches) expect(row.className).toMatch(/divide-x/)
+      else expect(row.className).not.toMatch(/divide-x/)
+    }
+  }
+
+  it('renders divide-x when the user preference has vertical dividers on', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
+    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: true }))
+
+    render(
+      <UiPreferencesProvider>
+        <DataTable data={rows} columns={columns} keyField="id" />
+      </UiPreferencesProvider>
+    )
+
+    expectAllRowsToMatchDivider(true)
+  })
+
+  it('omits divide-x when the user preference has vertical dividers off', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
+    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: false }))
+
+    render(
+      <UiPreferencesProvider>
+        <DataTable data={rows} columns={columns} keyField="id" />
+      </UiPreferencesProvider>
+    )
+
+    expectAllRowsToMatchDivider(false)
+  })
+
+  it('an explicit verticalDividers={true} prop wins over a preference that is off', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
+    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: false }))
+
+    render(
+      <UiPreferencesProvider>
+        <DataTable data={rows} columns={columns} keyField="id" verticalDividers={true} />
+      </UiPreferencesProvider>
+    )
+
+    expectAllRowsToMatchDivider(true)
+  })
+
+  it('an explicit verticalDividers={false} prop wins over a preference that is on', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
+    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: true }))
+
+    render(
+      <UiPreferencesProvider>
+        <DataTable data={rows} columns={columns} keyField="id" verticalDividers={false} />
+      </UiPreferencesProvider>
+    )
+
+    expectAllRowsToMatchDivider(false)
+  })
+
+  it('falls back to the default preference (off) when rendered outside any UiPreferencesProvider', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    expectAllRowsToMatchDivider(false)
   })
 })
