@@ -4,14 +4,20 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ParticipantCreatePage from './ParticipantCreatePage'
 import { COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES } from '@/api/types/enums'
+import type { ParticipantContactRoleDto } from '@/api/types/contacts'
 
 const {
   mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync, mockPatchMutateAsync,
+  mockUseParticipantContactRoles, mockCreateContactRoleMutateAsync, mockUpdateContactRoleMutateAsync,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockPatchMutateAsync: vi.fn(),
+  // PF-4 (SPEC-02) — edit mode's Contacts step's read-only list + inline AddContactRoleForm.
+  mockUseParticipantContactRoles: vi.fn(() => ({ data: [] as ParticipantContactRoleDto[], isLoading: false })),
+  mockCreateContactRoleMutateAsync: vi.fn(),
+  mockUpdateContactRoleMutateAsync: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Dropdown, Card are the real components, so this
@@ -34,6 +40,10 @@ vi.mock('@/api/hooks', () => ({
       { id: 'person-1', firstName: 'Karen', lastName: 'Johnson', fullName: 'Karen Johnson', organisation: null, activeRoleCount: 0 },
     ],
   }),
+  // PF-4 (SPEC-02) — edit mode's Contacts step, and AddContactRoleForm (which it renders inline).
+  useParticipantContactRoles: mockUseParticipantContactRoles,
+  useCreateContactRole: () => ({ mutateAsync: mockCreateContactRoleMutateAsync, isPending: false }),
+  useUpdateContactRole: () => ({ mutateAsync: mockUpdateContactRoleMutateAsync, isPending: false }),
 }))
 
 // ParticipantCreatePage calls useUnsavedChangesWarning, which uses react-router 7's
@@ -61,6 +71,10 @@ beforeEach(() => {
   mockUpdateMutateAsync.mockReset()
   mockPatchMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-participant-1' } })
+  mockUseParticipantContactRoles.mockReturnValue({ data: [], isLoading: false })
+  mockCreateContactRoleMutateAsync.mockReset()
+  mockUpdateContactRoleMutateAsync.mockReset()
+  mockCreateContactRoleMutateAsync.mockResolvedValue({ data: { id: 'role-new-1' } })
 })
 
 function stepNav() {
@@ -1458,6 +1472,77 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     // only appears once a since-invalidated role is actually selected (see ContactRoleRules'
     // Update-path equivalent for that scenario).
     expect(screen.queryByText(/plan manager contacts are only available/i)).not.toBeInTheDocument()
+  })
+})
+
+// PF-4 (SPEC-02): edit mode's Contacts step gets an inline "Add contact" affordance instead of
+// just a link to the Contacts tab — routed through the same nested-CRUD endpoint
+// (ParticipantContactRolesController) the Contacts tab already uses, never through the wizard's
+// whole-payload contactRoles array (that stays create-mode-only, see the describe block above).
+describe('ParticipantCreatePage — PF-4 edit-mode add-contact (nested-CRUD, via AddContactRoleForm)', () => {
+  function renderEditPage(planType = 'SelfManaged') {
+    mockUseParticipant.mockReturnValue({
+      data: {
+        id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true,
+        overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType,
+      },
+      isLoading: false,
+    })
+    const router = createMemoryRouter(
+      [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    return render(<RouterProvider router={router} />)
+  }
+
+  async function goToContactsStep(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(within(stepNav()).getByRole('button', { name: /contacts/i }))
+    await expectStep(/contacts/i)
+  }
+
+  it('renders existing contacts read-only alongside an "Add contact" affordance, and still links to the Contacts tab', async () => {
+    mockUseParticipantContactRoles.mockReturnValue({
+      data: [{
+        id: 'role-1', participantId: 'participant-1', personId: 'person-1', personFullName: 'Karen Johnson',
+        personPhone: null, personMobile: '0412 345 001', personEmail: null, personOrganisation: null,
+        roleType: 'NextOfKin', isPrimary: true, status: 'Active', orderScopeDomains: [],
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      }],
+      isLoading: false,
+    })
+    const user = userEvent.setup()
+    renderEditPage()
+    await goToContactsStep(user)
+
+    expect(screen.getByText('Karen Johnson')).toBeInTheDocument()
+    expect(screen.getByText('Next of Kin')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /contacts tab/i })).toHaveAttribute('href', '/participants/participant-1?tab=contacts')
+    expect(screen.getByRole('button', { name: /add contact/i })).toBeInTheDocument()
+  })
+
+  it('adding a contact from the edit wizard persists via the nested-CRUD endpoint, not the wizard\'s whole-payload submit', async () => {
+    const user = userEvent.setup()
+    renderEditPage()
+    await goToContactsStep(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('radio', { name: 'New person' }))
+    await user.type(screen.getByLabelText('First name *'), 'Denise')
+    await user.type(screen.getByLabelText('Last name'), 'Wilson')
+    await user.click(screen.getByRole('button', { name: 'Save contact' }))
+
+    expect(mockCreateContactRoleMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockCreateContactRoleMutateAsync.mock.calls[0][0]
+    expect(call.participantId).toBe('participant-1')
+    expect(call.data).toMatchObject({ newPersonFirstName: 'Denise', newPersonLastName: 'Wilson', roleType: 'NextOfKin' })
+
+    // Never routed through the wizard's own create/update mutation (whole-payload submit).
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+
+    // The inline form collapses back to the "Add contact" button on success — no navigation.
+    expect(screen.queryByRole('button', { name: 'Save contact' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add contact/i })).toBeInTheDocument()
   })
 })
 

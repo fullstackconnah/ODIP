@@ -19,6 +19,11 @@ export function useCreateContactRole() {
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['participant-contact-roles', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['persons'] })
+      // PF-4 (SPEC-02): also refresh the participant record itself — its server-computed
+      // planTypeComplianceWarning depends on the persisted contact-role set, and the wizard's
+      // edit-mode Contacts step (a second entry point into this same nested-CRUD endpoint)
+      // renders that banner from the useParticipant(id) query.
+      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
     },
   })
 }
