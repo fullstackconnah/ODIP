@@ -152,6 +152,43 @@ public static class ContactRoleRules
 
         return null;
     }
+
+    /// <summary>
+    /// PF-2 (SPEC-02): advisory, non-blocking plan-type↔contact-role completeness check. Per the
+    /// product owner's decision, this is warn-only in BOTH create and edit — it never throws and is
+    /// never wired into <see cref="Validate"/>/<see cref="ValidateUniqueness"/> or any
+    /// request-validation path; callers only use the returned string to populate
+    /// <c>ParticipantDetailDto.PlanTypeComplianceWarning</c> for display. Evaluated purely against
+    /// the participant's persisted, ACTIVE contact roles (never the submitted DTO), so create and
+    /// edit compute the identical value from the identical source — see SPEC-02 PF-2's Design
+    /// section for the full rationale.
+    ///
+    /// Table (PF-2):
+    ///  - SelfManaged: no candidate field exists for this plan type — always null.
+    ///  - PlanManaged: warns when there is no active PlanManager role.
+    ///  - AgencyManaged: warns when there is no active ProviderContact role with
+    ///    RegisteredProviderFlag == true — "agency details" ARE ProviderContact's own
+    ///    OrganisationName/RoleTitle/RegistrationNumber/RegisteredProviderFlag fields; no new
+    ///    entity/columns are needed for this rule.
+    /// </summary>
+    public static string? PlanTypeComplianceWarning(
+        PlanType planType,
+        IEnumerable<(ContactRoleType RoleType, bool? RegisteredProviderFlag, ContactRoleStatus Status)> activeRoles)
+    {
+        // Defensive: callers are expected to pre-filter to Active rows, but a caller passing the
+        // participant's full role history through unfiltered must not produce a false "satisfied"
+        // reading from an Expired/Superseded row.
+        var active = activeRoles.Where(r => r.Status == ContactRoleStatus.Active);
+
+        return planType switch
+        {
+            PlanType.PlanManaged when !active.Any(r => r.RoleType == ContactRoleType.PlanManager)
+                => "This plan-managed participant has no active Plan Manager contact recorded.",
+            PlanType.AgencyManaged when !active.Any(r => r.RoleType == ContactRoleType.ProviderContact && r.RegisteredProviderFlag == true)
+                => "This agency-managed participant has no active registered-provider contact with agency details recorded.",
+            _ => null,
+        };
+    }
 }
 
 /// <summary>

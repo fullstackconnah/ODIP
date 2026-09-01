@@ -157,4 +157,86 @@ public class ContactRoleRulesTests
         Assert.Null(ContactRoleRules.ValidateUniqueness(ContactRoleType.Specialist, false, ContactRoleStatus.Active, existing));
         Assert.Null(ContactRoleRules.ValidateUniqueness(ContactRoleType.ProviderContact, false, ContactRoleStatus.Active, existing));
     }
+
+    // ── PlanTypeComplianceWarning (PF-2, SPEC-02) — advisory only, never thrown ──────────
+
+    [Fact]
+    public void PlanTypeComplianceWarning_SelfManaged_AlwaysNull_EvenWithNoRoles()
+    {
+        Assert.Null(ContactRoleRules.PlanTypeComplianceWarning(PlanType.SelfManaged, []));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_SelfManaged_AlwaysNull_EvenWithOtherRoles()
+    {
+        var roles = new[] { (ContactRoleType.NextOfKin, (bool?)null, ContactRoleStatus.Active) };
+        Assert.Null(ContactRoleRules.PlanTypeComplianceWarning(PlanType.SelfManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_PlanManaged_NoRoles_Warns()
+    {
+        var warning = ContactRoleRules.PlanTypeComplianceWarning(PlanType.PlanManaged, []);
+        Assert.NotNull(warning);
+        Assert.Contains("Plan Manager", warning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_PlanManaged_WithActivePlanManager_IsNull()
+    {
+        var roles = new[] { (ContactRoleType.PlanManager, (bool?)null, ContactRoleStatus.Active) };
+        Assert.Null(ContactRoleRules.PlanTypeComplianceWarning(PlanType.PlanManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_PlanManaged_WithOnlyExpiredPlanManager_Warns()
+    {
+        // Expired/Superseded rows don't satisfy the condition — only an ACTIVE role counts.
+        var roles = new[] { (ContactRoleType.PlanManager, (bool?)null, ContactRoleStatus.Expired) };
+        Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.PlanManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_PlanManaged_WithUnrelatedActiveRole_StillWarns()
+    {
+        var roles = new[] { (ContactRoleType.NextOfKin, (bool?)null, ContactRoleStatus.Active) };
+        Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.PlanManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_AgencyManaged_NoRoles_Warns()
+    {
+        var warning = ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, []);
+        Assert.NotNull(warning);
+        Assert.Contains("registered-provider", warning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_AgencyManaged_WithRegisteredActiveProviderContact_IsNull()
+    {
+        var roles = new[] { (ContactRoleType.ProviderContact, (bool?)true, ContactRoleStatus.Active) };
+        Assert.Null(ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_AgencyManaged_WithUnregisteredProviderContact_Warns()
+    {
+        // RegisteredProviderFlag false or null doesn't satisfy the condition.
+        var roles = new[] { (ContactRoleType.ProviderContact, (bool?)false, ContactRoleStatus.Active) };
+        Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_AgencyManaged_WithNullRegisteredFlagProviderContact_Warns()
+    {
+        var roles = new[] { (ContactRoleType.ProviderContact, (bool?)null, ContactRoleStatus.Active) };
+        Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, roles));
+    }
+
+    [Fact]
+    public void PlanTypeComplianceWarning_AgencyManaged_WithExpiredRegisteredProviderContact_Warns()
+    {
+        var roles = new[] { (ContactRoleType.ProviderContact, (bool?)true, ContactRoleStatus.Expired) };
+        Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, roles));
+    }
 }

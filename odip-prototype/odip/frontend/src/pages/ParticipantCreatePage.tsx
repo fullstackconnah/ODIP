@@ -6,7 +6,7 @@ import { z } from 'zod'
 import type { AxiosError } from 'axios'
 import { useCreateParticipant, useUpdateParticipant, usePatchParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -16,11 +16,11 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
-  type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup,
+  type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel, ChecklistItemType } from '@/api/types/enums'
-import { CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_FIELD_MAP, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_FIELD_MAP, availableContactRoleTypes, contactRoleGateError, planTypeComplianceWarning } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
@@ -563,6 +563,48 @@ const YES_NO_UNANSWERED_OPTIONS = [
   { key: 'false', label: 'No' },
   { key: '', label: 'Not recorded' },
 ]
+
+/**
+ * PF-2 (SPEC-02): advisory, NEVER-dismissable data-completeness banner — plan-type↔contact-role
+ * consistency is a warning, not a blocking validation error (product owner decision). Same
+ * amber/warning-container visual treatment as ParticipantDetailPage.tsx's draft banner. Renders
+ * nothing when `message` is null (condition satisfied, or this PlanType has no such condition).
+ * Rendered identically in all three places this spec names — NDIS & Funding step, Contacts step,
+ * and the Review step's matching summary groups (via `renderReviewRow` below) — all three read
+ * the exact same computed value, so they can never disagree.
+ */
+function PlanTypeComplianceBanner({ message }: { message: string | null | undefined }) {
+  if (!message) return null
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20"
+    >
+      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+      <span>{message}</span>
+    </div>
+  )
+}
+
+/** Sentinel `ReviewRow.label` recognised by `renderReviewRow` below to swap the plain `<dt>`/`<dd>`
+ * pair for the same amber banner treatment `PlanTypeComplianceBanner` renders elsewhere — Review
+ * is "just another rendering of the same underlying data" (SPEC-02 PF-2), not a differently-worded
+ * summary. */
+const PLAN_TYPE_WARNING_REVIEW_ROW_LABEL = 'Plan-type compliance'
+
+/** Passed as WizardReviewStep's `renderRow` override — falls through to the shell's own default
+ * `<dt>`/`<dd>` layout for every row except the plan-type-warning sentinel. */
+function renderReviewRow(row: ReviewRow) {
+  if (row.label === PLAN_TYPE_WARNING_REVIEW_ROW_LABEL) {
+    return <PlanTypeComplianceBanner key={row.label} message={row.value} />
+  }
+  return (
+    <div key={row.label} className="flex justify-between gap-4">
+      <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
+      <dd className="font-medium text-right min-w-0 break-words">{row.value}</dd>
+    </div>
+  )
+}
 
 function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
   control: Control<ParticipantFormData>
@@ -1876,6 +1918,15 @@ export default function ParticipantCreatePage() {
     ? OVERNIGHT_RATIO_LABELS[(watchedValues.overnightRatio as SupportRatio) ?? 'OneToOne'] ?? '—'
     : 'N/A'
 
+  // PF-2 (SPEC-02): edit mode reads the backend-computed value straight off the participant DTO
+  // (no client-side reimplementation of the rule); create mode has no participant to fetch yet,
+  // so it computes the identical rule live, client-side, against the in-progress contactRoles
+  // field array. Both sources agree by construction at every point either is actually available
+  // — see contacts.ts's planTypeComplianceWarning doc.
+  const planTypeComplianceWarningValue = isEdit
+    ? (existing?.planTypeComplianceWarning ?? null)
+    : planTypeComplianceWarning(watchedValues.planType as PlanType | undefined, watchedValues.contactRoles)
+
   // CORE-01: `reviewGroups` is now a `ReviewGroup[]` — `step: N` (positional) became
   // `stepKey: '<key>'` (WIZARD_STEPS' own literal keys, matching the "PF-9 living-arrangement-
   // step-move" resilience CORE-01 was built for: reordering WIZARD_STEPS below no longer risks
@@ -1951,6 +2002,11 @@ export default function ParticipantCreatePage() {
             ? watchedValues.serviceStreams.map((s) => SERVICE_STREAM_LABELS[s as ServiceStream] ?? s).join(', ')
             : 'None',
         },
+        // PF-2 (SPEC-02): rendered as the same amber banner via renderReviewRow's sentinel-label
+        // check below — omitted entirely (not just hidden) when the condition is satisfied.
+        ...(planTypeComplianceWarningValue
+          ? [{ label: PLAN_TYPE_WARNING_REVIEW_ROW_LABEL, value: planTypeComplianceWarningValue }]
+          : []),
       ],
     },
     {
@@ -1978,16 +2034,24 @@ export default function ParticipantCreatePage() {
       // depending on personMode, since the person's real name isn't known client-side for a
       // not-yet-saved "existing person" selection beyond whatever the picker already resolved.
       stepKey: 'contacts',
-      rows: (watchedValues.contactRoles?.length ?? 0) === 0
-        ? [{ label: 'Contacts', value: 'None added' }]
-        : (watchedValues.contactRoles ?? []).map((row, i) => ({
-            label: `Contact ${i + 1}`,
-            value: `${CONTACT_ROLE_TYPE_LABELS[(row?.roleType as ContactRoleType) ?? 'NextOfKin']} — ${
-              row?.personMode === 'new'
-                ? [row?.newPersonFirstName, row?.newPersonLastName].filter(Boolean).join(' ') || '—'
-                : people.find(p => p.id === row?.personId)?.fullName ?? '—'
-            }`,
-          })),
+      rows: [
+        ...((watchedValues.contactRoles?.length ?? 0) === 0
+          ? [{ label: 'Contacts', value: 'None added' }]
+          : (watchedValues.contactRoles ?? []).map((row, i) => ({
+              label: `Contact ${i + 1}`,
+              value: `${CONTACT_ROLE_TYPE_LABELS[(row?.roleType as ContactRoleType) ?? 'NextOfKin']} — ${
+                row?.personMode === 'new'
+                  ? [row?.newPersonFirstName, row?.newPersonLastName].filter(Boolean).join(' ') || '—'
+                  : people.find(p => p.id === row?.personId)?.fullName ?? '—'
+              }`,
+            }))),
+        // PF-2 (SPEC-02): identical banner text/condition as the NDIS & Funding group above —
+        // Review is just another rendering of the same underlying data, never a differently-
+        // worded summary.
+        ...(planTypeComplianceWarningValue
+          ? [{ label: PLAN_TYPE_WARNING_REVIEW_ROW_LABEL, value: planTypeComplianceWarningValue }]
+          : []),
+      ],
     },
     {
       // INTAKE sub-wave B — Cultural & Consent step review summary.
@@ -2481,6 +2545,9 @@ export default function ParticipantCreatePage() {
                 </FormField>
               )}
 
+              {/* PF-2 (SPEC-02): advisory, never-dismissable — see PlanTypeComplianceBanner's doc. */}
+              {isVisible('planType') && <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />}
+
               <FormField label="Region">
                 <input id="region" {...register('region')} placeholder="e.g. QLD" />
               </FormField>
@@ -2612,6 +2679,7 @@ export default function ParticipantCreatePage() {
           <div className="grid md:grid-cols-1 gap-6">
             {isEdit ? (
               <Card title="Contacts" className="space-y-3">
+                <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   Contacts are managed from the{' '}
                   <Link to={`/participants/${id}?tab=contacts`} className="text-[var(--color-primary)] hover:underline">
@@ -2622,6 +2690,7 @@ export default function ParticipantCreatePage() {
               </Card>
             ) : (
               <Card title="Contacts" className="space-y-3">
+                <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   Add next of kin, guardians, support coordinators, plan managers, and other key
                   contacts. Optional here — richer per-role details (e.g. a guardian's tribunal
@@ -3728,6 +3797,7 @@ export default function ParticipantCreatePage() {
             groups={reviewGroups}
             steps={WIZARD_STEPS}
             onEdit={wizard.goToStep}
+            renderRow={renderReviewRow}
           />
         )}
 

@@ -417,6 +417,12 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   supportsLookLikeDay: string | null
   supportsLookLikeAfternoonEvening: string | null
   supportsLookLikeOvernight: string | null
+  /** PF-2 (SPEC-02): advisory-only plan-type↔contact-role completeness warning, computed
+   * server-side from this participant's persisted active contactRoles — see
+   * Odip.Domain.Enums.ContactRoleRules.PlanTypeComplianceWarning. Null when the condition for
+   * this participant's planType is satisfied (or there is no condition, e.g. SelfManaged). Never
+   * blocks a save; persists across reads until a qualifying contact role actually exists. */
+  planTypeComplianceWarning: string | null
 }
 
 export interface CreateParticipantDto {
