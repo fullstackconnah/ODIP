@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { getRelevantRoutines } from './routines'
 import type { ParticipantRoutineDto } from '@/api/types'
 
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): ParticipantRoutineDto {
   return {
     id: 'routine-1',
@@ -9,7 +11,7 @@ function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): Participan
     title: 'Routine',
     description: 'Details',
     category: 'PersonalCare',
-    dayOfWeek: null,
+    days: ALL_DAYS,
     startTime: null,
     endTime: null,
     isCritical: false,
@@ -30,13 +32,23 @@ describe('getRelevantRoutines', () => {
   })
 
   it('excludes routines pinned to a different day of week', () => {
-    const routine = makeRoutine({ dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '11:00:00' })
+    const routine = makeRoutine({ days: ['Tuesday'], startTime: '10:00:00', endTime: '11:00:00' })
     expect(getRelevantRoutines([routine], mondayShift)).toEqual([])
   })
 
   it('includes an every-day timed routine whose window overlaps the shift', () => {
-    const routine = makeRoutine({ dayOfWeek: null, startTime: '10:00:00', endTime: '11:00:00' })
+    const routine = makeRoutine({ days: ALL_DAYS, startTime: '10:00:00', endTime: '11:00:00' })
     expect(getRelevantRoutines([routine], mondayShift)).toEqual([routine])
+  })
+
+  it('includes a multi-day (not every-day) routine whose day set contains the shift day', () => {
+    const routine = makeRoutine({ days: ['Monday', 'Wednesday', 'Friday'], startTime: '10:00:00', endTime: '11:00:00' })
+    expect(getRelevantRoutines([routine], mondayShift)).toEqual([routine])
+  })
+
+  it('excludes a multi-day (not every-day) routine whose day set excludes the shift day', () => {
+    const routine = makeRoutine({ days: ['Tuesday', 'Thursday'], startTime: '10:00:00', endTime: '11:00:00' })
+    expect(getRelevantRoutines([routine], mondayShift)).toEqual([])
   })
 
   it('excludes a timed routine whose window does not overlap the shift', () => {
@@ -45,7 +57,7 @@ describe('getRelevantRoutines', () => {
   })
 
   it('includes a timed routine matching the shift day', () => {
-    const routine = makeRoutine({ dayOfWeek: 'Monday', startTime: '09:30:00', endTime: '10:00:00' })
+    const routine = makeRoutine({ days: ['Monday'], startTime: '09:30:00', endTime: '10:00:00' })
     expect(getRelevantRoutines([routine], mondayShift)).toEqual([routine])
   })
 

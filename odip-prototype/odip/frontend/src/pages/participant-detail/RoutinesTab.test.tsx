@@ -22,6 +22,8 @@ vi.mock('@/api/hooks', () => ({
   useDeleteRoutine: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
 }))
 
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): ParticipantRoutineDto {
   return {
     id: 'routine-1',
@@ -29,7 +31,7 @@ function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): Participan
     title: 'Morning routine',
     description: 'Wake gently, offer a warm drink.',
     category: 'PersonalCare',
-    dayOfWeek: null,
+    days: ALL_DAYS,
     startTime: null,
     endTime: null,
     isCritical: false,
@@ -65,20 +67,154 @@ describe('RoutinesTab', () => {
   it('groups routines into Every day and weekday sections, critical items flagged', () => {
     mockUseParticipantRoutines.mockReturnValue({
       data: [
-        makeRoutine({ id: 'r1', title: 'Seizure protocol', isCritical: true, dayOfWeek: null }),
-        makeRoutine({ id: 'r2', title: 'Saturday swimming', dayOfWeek: 'Saturday', startTime: '09:30:00', endTime: '11:30:00' }),
+        makeRoutine({ id: 'r1', title: 'Seizure protocol', isCritical: true, days: ALL_DAYS }),
+        makeRoutine({ id: 'r2', title: 'Saturday swimming', days: ['Saturday'], startTime: '09:30:00', endTime: '11:30:00' }),
       ],
       isLoading: false,
     })
 
     render(<RoutinesTab participantId="participant-1" />)
 
-    expect(screen.getByText('Every day')).toBeInTheDocument()
-    expect(screen.getByText('Saturday')).toBeInTheDocument()
+    // "Every day" also appears as this routine's own day-set label on its card (formatDaySet),
+    // so the group heading is asserted by role to disambiguate from that second occurrence.
+    expect(screen.getByRole('heading', { name: 'Every day' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Saturday' })).toBeInTheDocument()
     expect(screen.getByText('Seizure protocol')).toBeInTheDocument()
     expect(screen.getByText('Saturday swimming')).toBeInTheDocument()
     expect(screen.getByText('Critical')).toBeInTheDocument()
     expect(screen.getByLabelText('Critical')).toBeInTheDocument()
+  })
+
+  // PD-4: a routine can apply to any non-empty subset of the 7 days, not just "every day" or a
+  // single day.
+  describe('PD-4 — multi-day selection', () => {
+    it('a Mon/Wed/Fri routine appears in all three day groups, never in Every day', () => {
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ title: 'Physio exercises', days: ['Monday', 'Wednesday', 'Friday'] })],
+        isLoading: false,
+      })
+
+      render(<RoutinesTab participantId="participant-1" />)
+
+      expect(screen.queryByRole('heading', { name: 'Every day' })).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Monday' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Wednesday' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Friday' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Tuesday' })).not.toBeInTheDocument()
+      // One card render per applicable day bucket — never dropped from any but the first.
+      expect(screen.getAllByText('Physio exercises')).toHaveLength(3)
+    })
+
+    it('"Every day" is derived: unchecking it (only possible when all 7 are checked) clears the selection, and checking it selects all 7', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+
+      const everyDayCheckbox = screen.getByRole('checkbox', { name: 'Every day' })
+      const mondayCheckbox = screen.getByRole('checkbox', { name: 'Monday' })
+
+      // The create form defaults to every day selected.
+      expect(everyDayCheckbox).toBeChecked()
+      expect(mondayCheckbox).toBeChecked()
+
+      // Unchecking "Every day" clears the whole selection, forcing an explicit re-pick rather
+      // than falling back to some arbitrary default day.
+      await user.click(everyDayCheckbox)
+      expect(everyDayCheckbox).not.toBeChecked()
+      expect(mondayCheckbox).not.toBeChecked()
+
+      // Ticking individual days one at a time doesn't re-check "Every day" until all 7 are picked.
+      for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) {
+        await user.click(screen.getByRole('checkbox', { name: day }))
+      }
+      expect(everyDayCheckbox).not.toBeChecked()
+      await user.click(screen.getByRole('checkbox', { name: 'Sunday' }))
+      expect(everyDayCheckbox).toBeChecked()
+
+      // Checking "Every day" directly from a partial (not just empty) selection forces all 7.
+      await user.click(mondayCheckbox)
+      expect(everyDayCheckbox).not.toBeChecked()
+      await user.click(everyDayCheckbox)
+      expect(mondayCheckbox).toBeChecked()
+    })
+
+    it('rejects saving with no days selected', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'No days task')
+      await user.type(screen.getByLabelText(/description/i), 'Should not save.')
+      await user.click(screen.getByRole('checkbox', { name: 'Every day' })) // all 7 -> none
+
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(screen.getByText('Select at least one day')).toBeInTheDocument()
+      expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    })
+
+    it('saves a multi-day selection as exactly the chosen set', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'Swimming')
+      await user.type(screen.getByLabelText(/description/i), 'Pool session.')
+      await user.click(screen.getByRole('checkbox', { name: 'Every day' })) // clear to none
+      await user.click(screen.getByRole('checkbox', { name: 'Monday' }))
+      await user.click(screen.getByRole('checkbox', { name: 'Wednesday' }))
+      await user.click(screen.getByRole('checkbox', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+      const [call] = mockCreateMutateAsync.mock.calls[0]
+      expect(call.data.days).toEqual(['Monday', 'Wednesday', 'Friday'])
+    })
+
+    it('prefills the day checkboxes from the routine being edited', async () => {
+      const user = userEvent.setup()
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ days: ['Monday', 'Wednesday', 'Friday'] })],
+        isLoading: false,
+      })
+
+      render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+
+      expect(screen.getByRole('checkbox', { name: 'Every day' })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Wednesday' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Friday' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Tuesday' })).not.toBeChecked()
+    })
+
+    it('formats the day-set label for the common cases: Every day, Weekdays, Weekends, and an arbitrary subset', () => {
+      mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine({ days: ALL_DAYS })], isLoading: false })
+      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />)
+      expect(screen.getAllByText('Every day').length).toBeGreaterThan(0)
+      unmount1()
+
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] })],
+        isLoading: false,
+      })
+      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />)
+      // One card render per applicable day bucket (5), each showing the "Weekdays" label.
+      expect(screen.getAllByText('Weekdays')).toHaveLength(5)
+      unmount2()
+
+      mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine({ days: ['Saturday', 'Sunday'] })], isLoading: false })
+      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />)
+      expect(screen.getAllByText('Weekends')).toHaveLength(2)
+      unmount3()
+
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ days: ['Monday', 'Wednesday', 'Friday'] })],
+        isLoading: false,
+      })
+      render(<RoutinesTab participantId="participant-1" />)
+      expect(screen.getAllByText('Mon, Wed, Fri')).toHaveLength(3)
+    })
   })
 
   it('hides Edit/Delete actions for a ReadOnly user', () => {
@@ -109,7 +245,7 @@ describe('RoutinesTab', () => {
     expect(call.data.title).toBe('Evening wind-down')
     expect(call.data.description).toBe('Dim the lights and lower the volume from 8pm.')
     expect(call.data.isCritical).toBe(true)
-    expect(call.data.dayOfWeek).toBeNull()
+    expect(call.data.days).toEqual(ALL_DAYS)
     expect(call.data.startTime).toBeNull()
   })
 
@@ -198,8 +334,8 @@ describe('RoutinesTab', () => {
     it('renders "From {time}" for a start-only routine and "By {time}" for an end-only routine', () => {
       mockUseParticipantRoutines.mockReturnValue({
         data: [
-          makeRoutine({ id: 'r1', title: 'Start-only task', dayOfWeek: null, startTime: '07:00:00', endTime: null }),
-          makeRoutine({ id: 'r2', title: 'End-only task', dayOfWeek: null, startTime: null, endTime: '17:00:00' }),
+          makeRoutine({ id: 'r1', title: 'Start-only task', days: ALL_DAYS, startTime: '07:00:00', endTime: null }),
+          makeRoutine({ id: 'r2', title: 'End-only task', days: ALL_DAYS, startTime: null, endTime: '17:00:00' }),
         ],
         isLoading: false,
       })
@@ -213,8 +349,8 @@ describe('RoutinesTab', () => {
     it('still renders "Untimed" when neither time is set, and a range when both are set', () => {
       mockUseParticipantRoutines.mockReturnValue({
         data: [
-          makeRoutine({ id: 'r1', title: 'Untimed task', dayOfWeek: null, startTime: null, endTime: null }),
-          makeRoutine({ id: 'r2', title: 'Ranged task', dayOfWeek: null, startTime: '09:30:00', endTime: '11:30:00' }),
+          makeRoutine({ id: 'r1', title: 'Untimed task', days: ALL_DAYS, startTime: null, endTime: null }),
+          makeRoutine({ id: 'r2', title: 'Ranged task', days: ALL_DAYS, startTime: '09:30:00', endTime: '11:30:00' }),
         ],
         isLoading: false,
       })

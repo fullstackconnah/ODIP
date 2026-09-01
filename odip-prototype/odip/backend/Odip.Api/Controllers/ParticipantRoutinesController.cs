@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -32,7 +33,7 @@ public class ParticipantRoutinesController : ControllerBase
 
         var items = await query
             .OrderByDescending(r => r.IsCritical)
-            .ThenBy(r => r.DayOfWeek)
+            .ThenBy(r => r.Days)
             .ThenBy(r => r.StartTime)
             .ToListAsync(ct);
 
@@ -44,6 +45,9 @@ public class ParticipantRoutinesController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantRoutineDto>>> Create(
         Guid participantId, [FromBody] CreateParticipantRoutineDto dto, CancellationToken ct)
     {
+        if (dto.Days.Count == 0)
+            return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("At least one day is required"));
+
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<ParticipantRoutineDto>.Fail("Participant not found"));
 
@@ -54,7 +58,7 @@ public class ParticipantRoutinesController : ControllerBase
             Title = dto.Title,
             Description = dto.Description,
             Category = dto.Category,
-            DayOfWeek = dto.DayOfWeek,
+            Days = ToFlags(dto.Days),
             StartTime = dto.StartTime,
             EndTime = dto.EndTime,
             IsCritical = dto.IsCritical,
@@ -71,13 +75,16 @@ public class ParticipantRoutinesController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantRoutineDto>>> Update(
         Guid id, [FromBody] UpdateParticipantRoutineDto dto, CancellationToken ct)
     {
+        if (dto.Days.Count == 0)
+            return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("At least one day is required"));
+
         var routine = await _db.ParticipantRoutines.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (routine == null) return NotFound(ApiResponse<ParticipantRoutineDto>.Fail("Routine not found"));
 
         routine.Title = dto.Title;
         routine.Description = dto.Description;
         routine.Category = dto.Category;
-        routine.DayOfWeek = dto.DayOfWeek;
+        routine.Days = ToFlags(dto.Days);
         routine.StartTime = dto.StartTime;
         routine.EndTime = dto.EndTime;
         routine.IsCritical = dto.IsCritical;
@@ -111,7 +118,7 @@ public class ParticipantRoutinesController : ControllerBase
         Title = r.Title,
         Description = r.Description,
         Category = r.Category,
-        DayOfWeek = r.DayOfWeek,
+        Days = ToDayList(r.Days),
         StartTime = r.StartTime,
         EndTime = r.EndTime,
         IsCritical = r.IsCritical,
@@ -119,4 +126,10 @@ public class ParticipantRoutinesController : ControllerBase
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt,
     };
+
+    /// <summary>Wire day-name list → storage flags (PD-4). Thin wrapper so call sites here read naturally; the real logic — including the migration's identical rule — lives in <see cref="ParticipantRoutineDayMapper"/> where it's unit-tested directly.</summary>
+    private static ParticipantRoutineDays ToFlags(IReadOnlyList<DayOfWeek> days) => ParticipantRoutineDayMapper.ToFlags(days);
+
+    /// <summary>Storage flags → wire day-name list (PD-4). See <see cref="ToFlags"/>.</summary>
+    private static IReadOnlyList<DayOfWeek> ToDayList(ParticipantRoutineDays flags) => ParticipantRoutineDayMapper.ToDayList(flags);
 }

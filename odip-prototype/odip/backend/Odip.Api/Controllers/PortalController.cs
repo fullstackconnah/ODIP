@@ -125,7 +125,7 @@ public class PortalController : ControllerBase
 
         var routines = await _db.ParticipantRoutines
             .Where(r => r.ParticipantId == participant.Id && r.IsActive)
-            .OrderByDescending(r => r.IsCritical).ThenBy(r => r.DayOfWeek).ThenBy(r => r.StartTime)
+            .OrderByDescending(r => r.IsCritical).ThenBy(r => r.Days).ThenBy(r => r.StartTime)
             .ToListAsync(ct);
 
         // INTAKE-09: active risk entries only — same active-only scoping as routines/medications
@@ -377,7 +377,7 @@ public class PortalController : ControllerBase
         Title = r.Title,
         Description = r.Description,
         Category = r.Category,
-        DayOfWeek = r.DayOfWeek,
+        Days = ParticipantRoutineDayMapper.ToDayList(r.Days),
         StartTime = r.StartTime,
         EndTime = r.EndTime,
         IsCritical = r.IsCritical,
