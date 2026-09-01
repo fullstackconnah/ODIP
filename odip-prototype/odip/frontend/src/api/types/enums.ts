@@ -86,13 +86,46 @@ export type UserRole = typeof USER_ROLES[number]
 export const INCIDENT_TYPES = ['Injury', 'Illness', 'MedicationError', 'BehaviourOfConcern', 'RestrictivePracticeUse', 'PropertyDamage', 'MissingPerson', 'Abuse', 'Neglect', 'Death', 'Other'] as const
 export type IncidentType = typeof INCIDENT_TYPES[number]
 
+/** IN-3: single source for the incident-type Dropdown's items and any read-only display elsewhere. */
+export const INCIDENT_TYPE_LABELS: Record<IncidentType, string> = {
+  Injury: 'Injury',
+  Illness: 'Illness',
+  MedicationError: 'Medication Error',
+  BehaviourOfConcern: 'Behaviour of Concern',
+  RestrictivePracticeUse: 'Restrictive Practice Use',
+  PropertyDamage: 'Property Damage',
+  MissingPerson: 'Missing Person',
+  Abuse: 'Abuse',
+  Neglect: 'Neglect',
+  Death: 'Death',
+  Other: 'Other',
+}
+
 // ── Incident Severity ───────────────────────────────────
 export const INCIDENT_SEVERITIES = ['Low', 'Medium', 'High', 'Critical'] as const
 export type IncidentSeverity = typeof INCIDENT_SEVERITIES[number]
 
+/** IN-3: single source for the severity Dropdown's items and any read-only display elsewhere. */
+export const INCIDENT_SEVERITY_LABELS: Record<IncidentSeverity, string> = {
+  Low: 'Low',
+  Medium: 'Medium',
+  High: 'High',
+  Critical: 'Critical',
+}
+
 // ── Incident Status ─────────────────────────────────────
 export const INCIDENT_STATUSES = ['Draft', 'Submitted', 'UnderReview', 'Escalated', 'Resolved', 'Closed'] as const
 export type IncidentStatus = typeof INCIDENT_STATUSES[number]
+
+/** Compliance step: single source for the Status Dropdown's items. */
+export const INCIDENT_STATUS_LABELS: Record<IncidentStatus, string> = {
+  Draft: 'Draft',
+  Submitted: 'Submitted',
+  UnderReview: 'Under Review',
+  Escalated: 'Escalated',
+  Resolved: 'Resolved',
+  Closed: 'Closed',
+}
 
 // ── Body Region (IN-5 — injury incidents) ───────────────
 // View-independent: a region is a body part, not "body part as seen from the front/back". The
@@ -176,6 +209,15 @@ export const INJURY_TYPE_LABELS: Record<InjuryType, string> = {
 // ── QSC Reporting Status ────────────────────────────────
 export const QSC_REPORTING_STATUSES = ['NotRequired', 'Required', 'ReportedWithin24h', 'ReportedLate', 'Pending'] as const
 export type QscReportingStatus = typeof QSC_REPORTING_STATUSES[number]
+
+/** Compliance step: single source for the QSC Reporting Status Dropdown's items. */
+export const QSC_REPORTING_STATUS_LABELS: Record<QscReportingStatus, string> = {
+  NotRequired: 'Not Required',
+  Required: 'Required',
+  ReportedWithin24h: 'Reported Within 24h',
+  ReportedLate: 'Reported Late',
+  Pending: 'Pending',
+}
 
 // ── Insurance Status ────────────────────────────────────
 export const INSURANCE_STATUSES = ['None', 'Pending', 'Confirmed', 'Expired', 'Cancelled'] as const

@@ -1913,6 +1913,8 @@ public record IncidentDetailDto : IncidentListDto
     public Guid? RestrictivePracticeId { get; init; }
     public string? RestrictivePracticeDescription { get; init; }
     public DateOnly? RestrictivePracticeReviewDate { get; init; }
+    /// <summary>IN-4: see <see cref="Entities.IncidentReport.UnapprovedRestrictivePracticeDetails"/>. Detail-only, mirrors <see cref="RestrictivePracticeId"/>'s own detail-only placement.</summary>
+    public string? UnapprovedRestrictivePracticeDetails { get; init; }
     /// <summary>
     /// INC-04: true = an active register entry of <see cref="RestrictivePracticeType"/> existed for
     /// the involved participant at creation (authorised); false = none did (unauthorised —
@@ -1963,6 +1965,16 @@ public record CreateIncidentDto
     public RestrictivePracticeType? RestrictivePracticeType { get; init; }
     /// <summary>INC-05: optional link to one of the involved participant's register entries. Must belong to <see cref="InvolvedParticipantId"/> and match <see cref="RestrictivePracticeType"/> (server-validated).</summary>
     public Guid? RestrictivePracticeId { get; init; }
+    /// <summary>
+    /// IN-4: free-text description of the restrictive practice actually used, when it was NOT one
+    /// of the participant's approved/active register entries. Mutually exclusive with
+    /// <see cref="RestrictivePracticeId"/> — a request setting both is rejected 400 (see
+    /// <see cref="IncidentsController.ValidateServiceTypeAndIncidentType"/>). Never causes a
+    /// <see cref="Entities.RestrictivePractice"/> row to be created or updated — see
+    /// <see cref="Entities.IncidentReport.UnapprovedRestrictivePracticeDetails"/>'s doc.
+    /// </summary>
+    [StringLength(2000)]
+    public string? UnapprovedRestrictivePracticeDetails { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;

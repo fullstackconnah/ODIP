@@ -257,7 +257,12 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
             onChange={value => setDraftInjuryType(value as InjuryType)}
           />
         </FormField>
-        <FormField label="Description" required>
+        {/* "Injury Description", not "Description": IN-6 wires this component into the incident
+            wizard's details step, which has its own top-level "Description" field for the
+            overall incident — an identical label here would collide (two controls with the same
+            accessible name on one page, ambiguous for both screen readers and getByLabelText).
+            The regex-based label lookups in BodyDiagram.test.tsx (/Description/) still match. */}
+        <FormField label="Injury Description" required>
           <textarea
             value={draftDescription}
             onChange={e => setDraftDescription(e.target.value)}

@@ -60,6 +60,21 @@ public class IncidentReport
     public RestrictivePractice? RestrictivePractice { get; set; }
 
     /// <summary>
+    /// IN-4: free-text description of the restrictive practice actually used, captured ONLY when
+    /// the reporter did not link one of the involved participant's approved/active register
+    /// entries above (<see cref="RestrictivePracticeId"/> null). Mutually exclusive with
+    /// <see cref="RestrictivePracticeId"/> — enforced client-side (the wizard step's own
+    /// superRefine) and server-side (<see cref="Api.Controllers.IncidentsController"/> 400s a
+    /// request carrying both). <b>Recording this text NEVER creates or updates a row in
+    /// <see cref="Entities.RestrictivePractice"/> — there is no code path anywhere, on Create or
+    /// Update, that inserts into the participant's register from this field.</b> It exists purely
+    /// so an incident can capture what happened even when it wasn't one of the participant's
+    /// approved practices, without ever silently approving/registering that practice as a side
+    /// effect.
+    /// </summary>
+    public string? UnapprovedRestrictivePracticeDetails { get; set; }
+
+    /// <summary>
     /// INC-04: the authorised-vs-unauthorised determination, computed once at Create from whether
     /// the involved participant had an ACTIVE register entry of <see cref="RestrictivePracticeType"/>
     /// at that moment — true = authorised (a matching active entry existed), false = unauthorised

@@ -1,5 +1,20 @@
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream } from './enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType } from './enums'
 import type { RestrictivePracticeType } from './restrictive-practices'
+
+/** IN-5: one persisted injury row, as returned by GET /incidents/{id}. */
+export interface IncidentInjuryDto {
+  id: string
+  region: BodyRegion
+  injuryType: InjuryType
+  description: string
+}
+
+/** IN-5: one submitted injury row — see IncidentInjuryDto for the persisted shape. */
+export interface CreateIncidentInjuryDto {
+  region: BodyRegion
+  injuryType: InjuryType
+  description: string
+}
 
 /** INC-01: same value set as ServiceStream, plus "None" — the untagged default (backend ServiceStreams.None). */
 export type IncidentServiceType = ServiceStream | 'None'
@@ -39,6 +54,13 @@ export interface IncidentDetailDto extends IncidentListDto {
   /** "YYYY-MM-DD" — the linked entry's review date, for display only. */
   restrictivePracticeReviewDate: string | null
   /**
+   * IN-4: free-text description of the restrictive practice actually used, when it was NOT one
+   * of the participant's approved/active register entries. Mutually exclusive with
+   * restrictivePracticeId — the backend rejects (400) a request setting both. Recording this
+   * NEVER creates or updates a RestrictivePractice register row.
+   */
+  unapprovedRestrictivePracticeDetails: string | null
+  /**
    * INC-04: true = authorised (an active register entry of restrictivePracticeType existed for
    * the involved participant at creation), false = unauthorised (none did — reportable-incident
    * territory), null = not determinable (not an RP incident, or no participant was selected).
@@ -51,6 +73,8 @@ export interface IncidentDetailDto extends IncidentListDto {
   emergencyServicesDetails: string | null
   witnessNames: string | null
   witnessStatements: string | null
+  /** IN-5: recorded injuries, populated only when incidentType is 'Injury' (empty array otherwise). */
+  injuries: IncidentInjuryDto[]
   qscReportedAt: string | null
   qscReferenceNumber: string | null
   reviewedByStaffId: string | null
@@ -79,6 +103,12 @@ export interface CreateIncidentDto {
   restrictivePracticeType?: RestrictivePracticeType
   /** INC-05: optional link to one of the involved participant's register entries. */
   restrictivePracticeId?: string
+  /**
+   * IN-4: free-text description of an unapproved restrictive practice — mutually exclusive with
+   * restrictivePracticeId (enforced client-side by the wizard step's schema and server-side as a
+   * 400). Never results in a RestrictivePractice register row being created.
+   */
+  unapprovedRestrictivePracticeDetails?: string
   severity: IncidentSeverity
   title: string
   description: string
@@ -89,6 +119,8 @@ export interface CreateIncidentDto {
   emergencyServicesDetails?: string
   witnessNames?: string
   witnessStatements?: string
+  /** IN-5: repeatable injury rows — only meaningful (server-validated as non-empty) when incidentType is 'Injury'. */
+  injuries: CreateIncidentInjuryDto[]
 }
 
 export interface UpdateIncidentDto extends CreateIncidentDto {
