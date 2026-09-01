@@ -178,6 +178,16 @@ export function usePermissions() {
     canWriteParticipantDetails: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * PD-6: gates `useUpdateSupportProfile()` — the `/support-profile` sub-resource's own PUT,
+     * separate from `canWriteParticipantDetails`'s PATCH gate because it's a genuinely different
+     * resource/endpoint. Mirrors `ParticipantsController.UpdateSupportProfile`'s
+     * `[Authorize(Roles = "Admin,Coordinator,SuperAdmin")]` gate exactly — same three roles as
+     * `canWriteParticipantDetails` today, but kept as its own named boolean (not reused) so the
+     * two can diverge later without silently changing the other's meaning.
+     */
+    canWriteSupportProfile: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).

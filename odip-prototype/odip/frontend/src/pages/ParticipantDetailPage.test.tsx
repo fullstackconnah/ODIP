@@ -7,12 +7,11 @@ import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 
 const {
-  mockUseParticipant, mockUseParticipantBookings, mockUseSupportProfile, mockUseParticipantAlerts,
+  mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockUseParticipantBookings: vi.fn(() => ({ data: [] })),
-  mockUseSupportProfile: vi.fn(() => ({ data: undefined })),
   mockUseParticipantAlerts: vi.fn(() => ({ data: undefined })),
   // DOC-01 — mocked like every other hook this file already stubs, so the button-render/click
   // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
@@ -28,7 +27,6 @@ const {
 vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
   useParticipantBookings: mockUseParticipantBookings,
-  useSupportProfile: mockUseSupportProfile,
   useParticipantAlerts: mockUseParticipantAlerts,
   useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
   useDownloadParticipantProfilePdf: mockUseDownloadParticipantProfilePdf,
@@ -44,6 +42,10 @@ vi.mock('./participant-detail', () => ({
   ParticipantHealthConditionsSection: () => <div data-testid="health-conditions-section" />,
   ParticipantAdlAssessmentsSection: () => <div data-testid="adl-assessments-section" />,
   ContactsTab: () => <div data-testid="contacts-tab" />,
+  // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
+  // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
+  // have their own test file" approach as every other nested-CRUD section above.
+  SupportProfileTab: () => <div data-testid="support-profile-tab" />,
 }))
 
 function setUserRole(role: string) {
@@ -86,7 +88,6 @@ function makeChecklistItem(overrides: Partial<ParticipantChecklistItemDto> & { i
 beforeEach(() => {
   mockUseParticipant.mockReset()
   mockUseParticipantBookings.mockReturnValue({ data: [] })
-  mockUseSupportProfile.mockReturnValue({ data: undefined })
   mockUseParticipantAlerts.mockReturnValue({ data: undefined })
   mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
@@ -222,7 +223,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.queryByText('NDIS Number')).not.toBeInTheDocument()
   })
 
-  it('renders Support Needs & Mobility with Intensive Support (previously unrendered) and the relocated free-text fields, and retires the old generic "Notes" card', () => {
+  it('PD-6: no longer shows a "Support Needs & Mobility" card — those fields moved to the Support Profile tab', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({
         isIntensiveSupport: true, mobilityNotes: 'Prefers left-side approach.',
@@ -232,13 +233,9 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     })
     renderAt('participant-1')
 
-    expect(screen.getByRole('heading', { name: 'Support Needs & Mobility' })).toBeInTheDocument()
-    expect(screen.getByText('Intensive Support')).toBeInTheDocument()
-    expect(screen.getByText('Prefers left-side approach.')).toBeInTheDocument()
-    expect(screen.getByText('Needs a slide sheet.')).toBeInTheDocument()
-    expect(screen.getByText('Wheelchair-accessible van only.')).toBeInTheDocument()
-    // No longer under a generic "Notes" heading — PDETAIL-01 retired that card in favour of
-    // relocating its fields to their real wizard-step homes.
+    expect(screen.queryByRole('heading', { name: 'Support Needs & Mobility' })).not.toBeInTheDocument()
+    // No longer under a generic "Notes" heading either — PDETAIL-01 already retired that card;
+    // PD-6 now retires its PDETAIL-01 successor from this tab too.
     expect(screen.queryByRole('heading', { name: 'Notes' })).not.toBeInTheDocument()
   })
 
@@ -254,7 +251,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByText(/Prefers morning visits\./)).toBeInTheDocument()
   })
 
-  it('orders ALL ten Details-tab step-family groups to mirror the wizard step order end to end: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Support Needs & Mobility, Medical, Behaviour & Communication, Community Access, Daily Living, Risks & Hazards', () => {
+  it('orders the remaining Details-tab step-family groups to mirror the wizard step order end to end: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Medical, Behaviour & Communication, Community Access, Daily Living, Risks & Hazards (Support Needs & Mobility moved to the Support Profile tab under PD-6)', () => {
     mockUseParticipant.mockReturnValue({
       // One field (or the CommunityAccessDailyLiving stream itself, for the stream-gated card)
       // per whole-card-conditional group, so every group's Card actually renders and can be
@@ -278,8 +275,10 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(idx('Identity')).toBeLessThan(idx('NDIS & Funding'))
     expect(idx('NDIS & Funding')).toBeLessThan(idx('Key Identifiers'))
     expect(idx('Key Identifiers')).toBeLessThan(idx('Cultural Background'))
-    expect(idx('Cultural Background')).toBeLessThan(idx('Support Needs & Mobility'))
-    expect(idx('Support Needs & Mobility')).toBeLessThan(idx('Medical'))
+    // PD-6: "Support Needs & Mobility" no longer sits between Cultural Background and Medical —
+    // that card was removed from this tab entirely.
+    expect(idx('Support Needs & Mobility')).toBe(-1)
+    expect(idx('Cultural Background')).toBeLessThan(idx('Medical'))
     expect(idx('Medical')).toBeLessThan(idx('Behaviour & Communication'))
     // Community Access is stream-gated overflow content belonging to the Support Needs & Mobility /
     // Behaviour & Communication steps (see the Community Access card's own doc comment) —

@@ -7,6 +7,7 @@ import type {
   UpdateParticipantDto,
   PatchParticipantDto,
   SupportProfileDto,
+  UpdateSupportProfileDto,
   BookingListDto,
   PagedResult,
 } from '../types'
@@ -42,6 +43,27 @@ export function useSupportProfile(id: string | undefined) {
     queryKey: ['support-profile', id],
     queryFn: () => apiGet<SupportProfileDto>(`/participants/${id}/support-profile`),
     enabled: !!id,
+  })
+}
+
+/**
+ * PD-6: wraps the existing, previously-unused `PUT /participants/{id}/support-profile` (see
+ * ParticipantsController.UpdateSupportProfile) — the sub-resource half of the merged Support
+ * Profile tab. Every consumer must gate on `canWriteSupportProfile` (mirrors that endpoint's own
+ * `Authorize(Roles = "Admin,Coordinator,SuperAdmin")` gate), not `canWriteParticipantDetails` —
+ * they're two different resources with two different (currently identical, but independently
+ * named) role gates. Note the endpoint's response body only echoes Id/ParticipantId, not the
+ * saved fields, so this hook invalidates the `support-profile` query rather than relying on the
+ * mutation's own response to refresh the read side.
+ */
+export function useUpdateSupportProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateSupportProfileDto }) =>
+      apiPutRaw<SupportProfileDto>(`/participants/${id}/support-profile`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['support-profile', vars.id] })
+    },
   })
 }
 
