@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
+import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
 import { ArrowLeft, Info, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
@@ -10,7 +10,8 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
-import type { TripListDto, StaffListDto, ParticipantListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
+import { ParticipantPicker } from '@/components/ParticipantPicker'
+import type { TripListDto, StaffListDto, CreateIncidentDto, UpdateIncidentDto } from '@/api/types'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS } from '@/api/types/enums'
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
@@ -112,8 +113,6 @@ export default function IncidentCreatePage() {
   const mutation = isEdit ? updateIncident : createIncident
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
-  // INTAKE-08: the incident participant picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const { data: existingIncident } = useIncident(id)
 
   // INC-03: router-state prefill dropped in by RecordAdministrationModal after a
@@ -477,13 +476,11 @@ export default function IncidentCreatePage() {
           </FormField>
 
           <FormField label="Involved Participant">
-            <SearchableSelect
+            <ParticipantPicker
+              allowNone
+              noneLabel="None"
               value={involvedParticipantId ?? ''}
               onChange={v => setValue('involvedParticipantId', v, { shouldDirty: true })}
-              items={[
-                { value: '', label: 'None' },
-                ...participants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName || `${p.firstName} ${p.lastName}` })),
-              ]}
             />
           </FormField>
 
