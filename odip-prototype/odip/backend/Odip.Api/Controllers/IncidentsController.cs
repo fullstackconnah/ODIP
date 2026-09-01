@@ -57,6 +57,11 @@ public class IncidentsController : ControllerBase
             return "Please specify the incident type.";
         if (dto.IncidentType == IncidentType.RestrictivePracticeUse && dto.RestrictivePracticeType == null)
             return "Please select the restrictive practice type.";
+        // IN-5: an Injury incident must record where on the body it happened — mirrors the
+        // wizard's own details-step Next-button gate (defense in depth, same idiom as every other
+        // rule in this method).
+        if (dto.IncidentType == IncidentType.Injury && dto.Injuries.Count == 0)
+            return "Please record at least one injury.";
         return null;
     }
 
@@ -164,6 +169,7 @@ public class IncidentsController : ControllerBase
             .Include(i => i.InvolvedUser)
             .Include(i => i.ReviewedByUser)
             .Include(i => i.RestrictivePractice)
+            .Include(i => i.Injuries)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -204,6 +210,13 @@ public class IncidentsController : ControllerBase
                 EmergencyServicesDetails = i.EmergencyServicesDetails,
                 WitnessNames = i.WitnessNames,
                 WitnessStatements = i.WitnessStatements,
+                Injuries = i.Injuries.Select(inj => new IncidentInjuryDto
+                {
+                    Id = inj.Id,
+                    Region = inj.Region,
+                    InjuryType = inj.InjuryType,
+                    Description = inj.Description
+                }).ToList(),
                 QscReportedAt = i.QscReportedAt,
                 QscReferenceNumber = i.QscReferenceNumber,
                 ReviewedByStaffId = i.ReviewedByUserId,
@@ -286,6 +299,22 @@ public class IncidentsController : ControllerBase
         }
 
         _db.IncidentReports.Add(incident);
+
+        // IN-5: injury rows submitted alongside a new incident are created in the same
+        // SaveChangesAsync call as the incident insert below — transactional with it, mirrors
+        // ParticipantsController.Create's RiskEntries insert loop.
+        foreach (var injury in dto.Injuries)
+        {
+            _db.IncidentInjuries.Add(new IncidentInjury
+            {
+                Id = Guid.NewGuid(),
+                IncidentReportId = incident.Id,
+                Region = injury.Region,
+                InjuryType = injury.InjuryType,
+                Description = injury.Description.Trim(),
+            });
+        }
+
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
@@ -382,6 +411,24 @@ public class IncidentsController : ControllerBase
         // Set reviewed timestamp when reviewer is assigned
         if (dto.ReviewedByStaffId.HasValue && i.ReviewedAt == null)
             i.ReviewedAt = DateTime.UtcNow;
+
+        // IN-5: full-replace the injuries collection — the form always sends the complete list
+        // (same "form owns the full list" contract as RiskEntries), so this is a straightforward
+        // delete-all-then-reinsert rather than an id-matched diff (contrast IN-7's
+        // IncidentWitness Update, which must preserve already-responded rows).
+        var existingInjuries = await _db.IncidentInjuries.Where(x => x.IncidentReportId == id).ToListAsync(ct);
+        _db.IncidentInjuries.RemoveRange(existingInjuries);
+        foreach (var injury in dto.Injuries)
+        {
+            _db.IncidentInjuries.Add(new IncidentInjury
+            {
+                Id = Guid.NewGuid(),
+                IncidentReportId = i.Id,
+                Region = injury.Region,
+                InjuryType = injury.InjuryType,
+                Description = injury.Description.Trim(),
+            });
+        }
 
         await _db.SaveChangesAsync(ct);
 

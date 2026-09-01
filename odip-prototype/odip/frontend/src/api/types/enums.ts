@@ -94,6 +94,85 @@ export type IncidentSeverity = typeof INCIDENT_SEVERITIES[number]
 export const INCIDENT_STATUSES = ['Draft', 'Submitted', 'UnderReview', 'Escalated', 'Resolved', 'Closed'] as const
 export type IncidentStatus = typeof INCIDENT_STATUSES[number]
 
+// ── Body Region (IN-5 — injury incidents) ───────────────
+// View-independent: a region is a body part, not "body part as seen from the front/back". The
+// frontend BodyDiagram component maps each of these onto an always-visible list button plus,
+// for most regions, one or two aria-hidden decorative SVG paths (front/back). Verbatim list per
+// SPEC-04 IN-5 — do not reorder/rename without checking the backend BodyRegion enum stays in sync.
+export const BODY_REGIONS = [
+  'Head', 'Face', 'Neck', 'Chest', 'Abdomen', 'Pelvis', 'UpperBack', 'LowerBack', 'Buttocks',
+  'LeftShoulder', 'RightShoulder', 'LeftUpperArm', 'RightUpperArm', 'LeftElbow', 'RightElbow',
+  'LeftForearm', 'RightForearm', 'LeftWrist', 'RightWrist', 'LeftHand', 'RightHand',
+  'LeftHip', 'RightHip', 'LeftThigh', 'RightThigh', 'LeftKnee', 'RightKnee',
+  'LeftLowerLeg', 'RightLowerLeg', 'LeftAnkle', 'RightAnkle', 'LeftFoot', 'RightFoot',
+  'Other',
+] as const
+export type BodyRegion = typeof BODY_REGIONS[number]
+
+export const BODY_REGION_LABELS: Record<BodyRegion, string> = {
+  Head: 'Head',
+  Face: 'Face',
+  Neck: 'Neck',
+  Chest: 'Chest',
+  Abdomen: 'Abdomen',
+  Pelvis: 'Pelvis',
+  UpperBack: 'Upper back',
+  LowerBack: 'Lower back',
+  Buttocks: 'Buttocks',
+  LeftShoulder: 'Left shoulder',
+  RightShoulder: 'Right shoulder',
+  LeftUpperArm: 'Left upper arm',
+  RightUpperArm: 'Right upper arm',
+  LeftElbow: 'Left elbow',
+  RightElbow: 'Right elbow',
+  LeftForearm: 'Left forearm',
+  RightForearm: 'Right forearm',
+  LeftWrist: 'Left wrist',
+  RightWrist: 'Right wrist',
+  LeftHand: 'Left hand',
+  RightHand: 'Right hand',
+  LeftHip: 'Left hip',
+  RightHip: 'Right hip',
+  LeftThigh: 'Left thigh',
+  RightThigh: 'Right thigh',
+  LeftKnee: 'Left knee',
+  RightKnee: 'Right knee',
+  LeftLowerLeg: 'Left lower leg',
+  RightLowerLeg: 'Right lower leg',
+  LeftAnkle: 'Left ankle',
+  RightAnkle: 'Right ankle',
+  LeftFoot: 'Left foot',
+  RightFoot: 'Right foot',
+  Other: 'Other',
+}
+
+/** Which of the four `BodyDiagram` fieldset headings each region groups under. */
+export const BODY_REGION_GROUPS: { heading: string; regions: BodyRegion[] }[] = [
+  { heading: 'Head & Torso', regions: ['Head', 'Face', 'Neck', 'Chest', 'Abdomen', 'Pelvis', 'UpperBack', 'LowerBack', 'Buttocks'] },
+  { heading: 'Arms', regions: ['LeftShoulder', 'RightShoulder', 'LeftUpperArm', 'RightUpperArm', 'LeftElbow', 'RightElbow', 'LeftForearm', 'RightForearm', 'LeftWrist', 'RightWrist', 'LeftHand', 'RightHand'] },
+  { heading: 'Legs', regions: ['LeftHip', 'RightHip', 'LeftThigh', 'RightThigh', 'LeftKnee', 'RightKnee', 'LeftLowerLeg', 'RightLowerLeg', 'LeftAnkle', 'RightAnkle', 'LeftFoot', 'RightFoot'] },
+  { heading: 'Other', regions: ['Other'] },
+]
+
+// ── Injury Type (IN-5 — selectable per injury row) ──────
+export const INJURY_TYPES = [
+  'Bruise', 'Laceration', 'Abrasion', 'Burn', 'Fracture', 'SprainOrStrain', 'Bite', 'PressureInjury', 'Swelling', 'Other',
+] as const
+export type InjuryType = typeof INJURY_TYPES[number]
+
+export const INJURY_TYPE_LABELS: Record<InjuryType, string> = {
+  Bruise: 'Bruise',
+  Laceration: 'Laceration',
+  Abrasion: 'Abrasion',
+  Burn: 'Burn',
+  Fracture: 'Fracture',
+  SprainOrStrain: 'Sprain or strain',
+  Bite: 'Bite',
+  PressureInjury: 'Pressure injury',
+  Swelling: 'Swelling',
+  Other: 'Other',
+}
+
 // ── QSC Reporting Status ────────────────────────────────
 export const QSC_REPORTING_STATUSES = ['NotRequired', 'Required', 'ReportedWithin24h', 'ReportedLate', 'Pending'] as const
 export type QscReportingStatus = typeof QSC_REPORTING_STATUSES[number]
