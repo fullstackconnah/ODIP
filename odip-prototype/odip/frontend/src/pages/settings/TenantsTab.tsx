@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Search } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
+import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
 
 // ---------------------------------------------------------------------------
@@ -69,90 +70,64 @@ export default function TenantsTab({
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-sm text-[var(--color-muted-foreground)]">
-          {tenants.length === 0
+      <DataTable
+        data={filtered}
+        keyField="id"
+        emptyMessage={
+          tenants.length === 0
             ? 'No tenants yet. Click "+ Add Tenant" to create the first one.'
-            : 'No tenants match your search.'}
-        </div>
-      ) : (
-        <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-border)]">
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Organisation Name
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Email Domain
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Status
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Created
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Users
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(tenant => (
-                <tr
-                  key={tenant.id}
-                  className="border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-accent)]/50 transition-colors"
+            : 'No tenants match your search.'
+        }
+        columns={[
+          { key: 'name', header: 'Organisation Name', className: 'font-medium' },
+          { key: 'emailDomain', header: 'Email Domain', className: 'text-[var(--color-muted-foreground)]' },
+          {
+            key: 'isActive',
+            header: 'Status',
+            render: (tenant: TenantSummaryDto) => (
+              <span
+                className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  tenant.isActive
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {tenant.isActive ? 'Active' : 'Inactive'}
+              </span>
+            ),
+          },
+          {
+            key: 'createdAt',
+            header: 'Created',
+            className: 'text-[var(--color-muted-foreground)]',
+            render: (tenant: TenantSummaryDto) => new Date(tenant.createdAt).toLocaleDateString(),
+          },
+          { key: 'userCount', header: 'Users', className: 'text-[var(--color-muted-foreground)]' },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (tenant: TenantSummaryDto) => (
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onEditTenant(tenant)}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-foreground)] transition-colors"
                 >
-                  <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
-                    {tenant.name}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {tenant.emailDomain}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        tenant.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {tenant.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {new Date(tenant.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {tenant.userCount}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEditTenant(tenant)}
-                        className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-foreground)] transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onViewTenantDetail(tenant)}
-                        className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                      >
-                        View Users
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewTenantDetail(tenant)}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
+                >
+                  View Users
+                </button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

@@ -19,6 +19,7 @@ import UserFormPanel from '@/pages/settings/UserFormPanel'
 import TenantDetailView from '@/pages/settings/TenantDetailView'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
+import { useUiPreferences } from '@/hooks/useUiPreferences'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -66,8 +67,32 @@ function QualificationSettingsTab() {
   )
 }
 
+function AppearanceSettingsTab() {
+  const { prefs, setPref } = useUiPreferences()
+
+  return (
+    <div className="max-w-md space-y-4">
+      <div>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Appearance</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+          Applies to all tables and is remembered on this device.
+        </p>
+        <label className="flex items-center gap-3 text-sm text-[var(--color-foreground)] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={prefs.tableVerticalDividers}
+            onChange={e => setPref('tableVerticalDividers', e.target.checked)}
+            className="w-4 h-4 accent-[var(--color-primary)]"
+          />
+          Show vertical separators between table columns
+        </label>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users'>('templates')
+  const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'appearance' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users'>('templates')
   const { data: templates = [] } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
@@ -86,6 +111,7 @@ export default function SettingsPage() {
     { key: 'templates' as const, label: 'Event Templates' },
     { key: 'activities' as const, label: 'Activity Library' },
     { key: 'qualifications' as const, label: 'Qualification Warnings' },
+    { key: 'appearance' as const, label: 'Appearance' },
     { key: 'provider' as const, label: 'Provider Settings' },
     { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
     { key: 'holidays' as const, label: 'Public Holidays', superAdminOnly: true },
@@ -175,6 +201,7 @@ export default function SettingsPage() {
       )}
 
       {tab === 'qualifications' && <QualificationSettingsTab />}
+      {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
       {tab === 'holidays' && <PublicHolidaysTab />}
