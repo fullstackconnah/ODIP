@@ -55,9 +55,10 @@ export interface UpdateRestrictivePracticeDto {
 }
 
 /**
- * RP-01 bulk-add row. No `relatedMedicationId` — the bulk table has no medication column, so
- * `type` must not be `'ChemicalRestraint'`; the backend rejects any row that is (see
- * RestrictivePracticesController.CreateBulk's XML doc for why bulk doesn't support it).
+ * PD-2 "Add entries" bulk-add row — the only create path, so `type` may be `'ChemicalRestraint'`.
+ * `relatedMedicationId` is optional even then (a chemical restraint entry can be logged before
+ * the medication record exists); the server validates it the same way `Create`/`Update` do when
+ * it's set.
  */
 export interface BulkCreateRestrictivePracticeRowDto {
   type: RestrictivePracticeType
@@ -65,12 +66,10 @@ export interface BulkCreateRestrictivePracticeRowDto {
   authorisedBy?: string | null
   authorisationDate?: string | null
   reviewDate?: string | null
+  relatedMedicationId?: string | null
   isActive: boolean
 }
 
 export interface BulkCreateRestrictivePracticeDto {
   items: BulkCreateRestrictivePracticeRowDto[]
 }
-
-/** RP types selectable for RP-01's bulk-add flow — ChemicalRestraint is excluded (see above). */
-export const BULK_RESTRICTIVE_PRACTICE_TYPES = RESTRICTIVE_PRACTICE_TYPES.filter(t => t !== 'ChemicalRestraint')
