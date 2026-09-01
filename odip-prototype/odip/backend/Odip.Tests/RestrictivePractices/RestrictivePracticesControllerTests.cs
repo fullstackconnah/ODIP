@@ -574,13 +574,14 @@ public class RestrictivePracticesControllerTests
         string description = "Locked doors overnight for safety.",
         RestrictivePracticeType type = RestrictivePracticeType.EnvironmentalRestraint,
         string? authorisedBy = null, DateOnly? authorisationDate = null, DateOnly? reviewDate = null,
-        bool isActive = true) => new()
+        Guid? relatedMedicationId = null, bool isActive = true) => new()
     {
         Description = description,
         Type = type,
         AuthorisedBy = authorisedBy,
         AuthorisationDate = authorisationDate,
         ReviewDate = reviewDate,
+        RelatedMedicationId = relatedMedicationId,
         IsActive = isActive,
     };
 
@@ -752,10 +753,11 @@ public class RestrictivePracticesControllerTests
     }
 
     [Fact]
-    public async Task CreateBulk_ChemicalRestraintRow_RejectedWithClearMessage_AndNothingCreated()
+    public async Task CreateBulk_ChemicalRestraintRowWithValidMedication_LinksAndPersists()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
+        var medication = SeedMedication(db, participant.Id);
         var controller = new RestrictivePracticesController(db);
 
         var dto = new BulkCreateRestrictivePracticeDto
@@ -763,7 +765,35 @@ public class RestrictivePracticesControllerTests
             Items = new()
             {
                 BulkRow(description: "Valid environmental row."),
-                BulkRow(description: "Chemical row.", type: RestrictivePracticeType.ChemicalRestraint),
+                BulkRow(description: "Chemical row.", type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: medication.Id),
+            },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Success);
+        Assert.Equal(2, body.Data!.Count);
+
+        var saved = await db.RestrictivePractices.SingleAsync(rp => rp.Type == RestrictivePracticeType.ChemicalRestraint);
+        Assert.Equal(medication.Id, saved.RelatedMedicationId);
+    }
+
+    [Fact]
+    public async Task CreateBulk_ChemicalRestraintRowWithMedicationFromDifferentParticipant_ReturnsRowErrorAndNothingCreated()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var otherParticipant = SeedParticipant(db, "Other", "Person");
+        var otherMedication = SeedMedication(db, otherParticipant.Id);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new()
+            {
+                BulkRow(description: "Valid environmental row."),
+                BulkRow(description: "Chemical row.", type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: otherMedication.Id),
             },
         };
 
@@ -771,10 +801,29 @@ public class RestrictivePracticesControllerTests
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
-        Assert.Contains(body.Errors!, e => e.StartsWith("Row 2:") && e.Contains("linked medication", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(body.Errors!, e => e.StartsWith("Row 2:") && e.Contains("does not belong to this participant", StringComparison.OrdinalIgnoreCase));
 
         // All-or-nothing: the valid row before it was not persisted either.
         Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateBulk_ChemicalRestraintRowWithoutMedication_SucceedsUnlinked()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db);
+
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(description: "Chemical row, no medication yet.", type: RestrictivePracticeType.ChemicalRestraint) },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Success);
+        Assert.Null(body.Data!.Single().RelatedMedicationId);
     }
 
     [Fact]
@@ -789,7 +838,7 @@ public class RestrictivePracticesControllerTests
             Items = new()
             {
                 BulkRow(description: ""),
-                BulkRow(type: RestrictivePracticeType.ChemicalRestraint),
+                BulkRow(type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: Guid.NewGuid()),
             },
         };
 
@@ -799,7 +848,7 @@ public class RestrictivePracticesControllerTests
         var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
         Assert.Equal(2, body.Errors!.Count);
         Assert.Contains(body.Errors, e => e.StartsWith("Row 1:"));
-        Assert.Contains(body.Errors, e => e.StartsWith("Row 2:"));
+        Assert.Contains(body.Errors, e => e.StartsWith("Row 2:") && e.Contains("not found", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -90,22 +90,22 @@ public class RestrictivePracticesController : ControllerBase
     }
 
     /// <summary>
-    /// RP-01: bulk-create N register entries in one request — the editable-table add flow's save
-    /// step. All rows are validated together and the write is all-or-nothing: either every row is
-    /// created, or (on any validation failure) none are and the response carries one message per
-    /// failing row so the table can surface errors against the right row. A single
-    /// <see cref="OdipDbContext.SaveChangesAsync"/> call is already wrapped in one implicit DB
-    /// transaction by EF Core, so no explicit <c>BeginTransactionAsync</c> is needed here — and
-    /// since every row is validated in memory before anything is added to the context, a bad row
-    /// never reaches SaveChangesAsync at all.
+    /// PD-2: bulk-create N register entries in one request — now the ONLY create path ("Add
+    /// entries"), including a single row, since the single-entry create form was removed in
+    /// favour of this flow. All rows are validated together and the write is all-or-nothing:
+    /// either every row is created, or (on any validation failure) none are and the response
+    /// carries one message per failing row so the table can surface errors against the right row.
+    /// A single <see cref="OdipDbContext.SaveChangesAsync"/> call is already wrapped in one
+    /// implicit DB transaction by EF Core, so no explicit <c>BeginTransactionAsync</c> is needed
+    /// here — and since every row is validated in memory before anything is added to the context,
+    /// a bad row never reaches SaveChangesAsync at all.
     ///
-    /// ChemicalRestraint rows are rejected rather than supported unlinked: a chemical restraint
-    /// entry needs its own <c>RelatedMedicationId</c>, and the bulk table has no per-row
-    /// medication column to capture one (see RP-01's spec — description/authorised
-    /// by/authorisation date/review date only). Half-supporting it (silently dropping the link)
-    /// would produce a compliance-relevant register entry with a validation rule quietly not
-    /// enforced, which is worse than telling the coordinator to use the single-entry form for
-    /// that one row. This is the documented, deliberately simpler choice for RP-01.
+    /// ChemicalRestraint rows are supported (unlike the earlier RP-01-only version of this
+    /// endpoint): once this is the only create path, rejecting them outright would make it
+    /// impossible to create a chemical restraint entry at all. A row's
+    /// <see cref="BulkCreateRestrictivePracticeRowDto.RelatedMedicationId"/> is optional and,
+    /// when set, validated with the same <see cref="ValidateRelatedMedicationAsync"/> helper
+    /// <see cref="Create"/>/<see cref="Update"/> already use.
     /// </summary>
     [HttpPost("participants/{participantId:guid}/restrictive-practices/bulk")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -131,11 +131,6 @@ public class RestrictivePracticesController : ControllerBase
             var row = dto.Items[i];
             var label = $"Row {i + 1}";
 
-            if (row.Type == RestrictivePracticeType.ChemicalRestraint)
-            {
-                errors.Add($"{label}: Chemical restraint entries need a linked medication — add these individually from the single-entry form, not bulk-add.");
-                continue;
-            }
             if (string.IsNullOrWhiteSpace(row.Description))
             {
                 errors.Add($"{label}: Description is required");
@@ -149,6 +144,11 @@ public class RestrictivePracticesController : ControllerBase
             if (row.AuthorisedBy != null && row.AuthorisedBy.Length > 200)
             {
                 errors.Add($"{label}: Authorised by must be 200 characters or fewer");
+            }
+            if (row.RelatedMedicationId.HasValue)
+            {
+                var medicationError = await ValidateRelatedMedicationAsync(row.Type, row.RelatedMedicationId.Value, participantId, ct);
+                if (medicationError != null) errors.Add($"{label}: {medicationError}");
             }
         }
 
@@ -164,7 +164,7 @@ public class RestrictivePracticesController : ControllerBase
             AuthorisedBy = row.AuthorisedBy,
             AuthorisationDate = row.AuthorisationDate,
             ReviewDate = row.ReviewDate,
-            RelatedMedicationId = null,
+            RelatedMedicationId = row.RelatedMedicationId,
             IsActive = row.IsActive,
         }).ToList();
 
