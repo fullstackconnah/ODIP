@@ -1,6 +1,7 @@
 export * from './enums'
 export * from './common'
 export * from './participants'
+export * from './participant-patch'
 export * from './contacts'
 export * from './trips'
 export * from './bookings'
