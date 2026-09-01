@@ -3,13 +3,15 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ParticipantCreatePage from './ParticipantCreatePage'
+import { COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES } from '@/api/types/enums'
 
 const {
-  mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync,
+  mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync, mockPatchMutateAsync,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
+  mockPatchMutateAsync: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Dropdown, Card are the real components, so this
@@ -17,6 +19,8 @@ const {
 vi.mock('@/api/hooks', () => ({
   useCreateParticipant: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
+  // PF-1: "Save changes" — usePatchParticipant's own mutation, independent of create/update above.
+  usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false, isError: false }),
   useParticipant: mockUseParticipant,
   useStaff: () => ({
     data: [
@@ -55,6 +59,7 @@ beforeEach(() => {
   mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false })
   mockCreateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockReset()
+  mockPatchMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-participant-1' } })
 })
 
@@ -2908,5 +2913,177 @@ describe('ParticipantCreatePage — INTAKE-03 Community Access field injection',
     expect(screen.getByLabelText('High intensity behaviour support')).toBeInTheDocument()
     expect(screen.getByLabelText('Medication administration (complex)')).toBeInTheDocument()
     expect(screen.getByLabelText('HIDPA Notes')).toBeInTheDocument()
+  })
+})
+
+// PF-1: "Save changes" — lets an edit-mode save persist just the current step's CORE-02 field
+// group(s) without walking every remaining tab. See SPEC-02's PF-1 design section and
+// SPEC-00-foundations.md's CORE-02 section (both outside this worktree) for the full contract.
+describe('ParticipantCreatePage — PF-1 "Save changes" (partial save)', () => {
+  const baseEditParticipant = {
+    id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true, isDraft: false,
+    overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'SelfManaged',
+  }
+
+  function renderEditPage(data: Record<string, unknown>) {
+    mockUseParticipant.mockReturnValue({ data, isLoading: false })
+    const router = createMemoryRouter(
+      [
+        { path: '/participants/:id/edit', element: <ParticipantCreatePage /> },
+        { path: '/participants/:id', element: <div>Participant detail</div> },
+      ],
+      { initialEntries: ['/participants/participant-1/edit'] },
+    )
+    return render(<RouterProvider router={router} />)
+  }
+
+  describe('button visibility', () => {
+    it('appears in edit mode on a patchable step (Identity) for a non-draft participant', () => {
+      renderEditPage(baseEditParticipant)
+      expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    })
+
+    it('does not appear in create mode', () => {
+      renderCreatePage()
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    })
+
+    it('does not appear on the Contacts step (no patchable group)', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /contacts/i }))
+      await expectStep(/contacts/i)
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    })
+
+    it('does not appear on the Review step (no fields of its own)', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+      await expectStep(/review/i)
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    })
+
+    it('does not appear for a draft participant — "Save as draft" covers that case instead', () => {
+      renderEditPage({ ...baseEditParticipant, isDraft: true })
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /save as draft/i })).toBeInTheDocument()
+    })
+  })
+
+  it('validates only the current step — an invalid field left on another step does not block it', async () => {
+    const user = userEvent.setup()
+    // fundingSource 'Other' with no fundingOrganisation fails the NDIS step's own
+    // fundingSourceRefine — but we never visit that step here.
+    renderEditPage({ ...baseEditParticipant, fundingSource: 'Other', fundingOrganisation: '' })
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+    await user.click(within(stepNav()).getByRole('button', { name: /key identifiers/i }))
+    await expectStep(/key identifiers/i)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('blocks on the current step\'s own invalid field, with the same per-field error handleNext would show', async () => {
+    const user = userEvent.setup()
+    // Gender "Other" requires genderSelfDescription (genderRefine) — Identity is the default step.
+    renderEditPage({ ...baseEditParticipant, gender: 'Other', genderSelfDescription: '' })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mockPatchMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('sends exactly the groups the current step owns, in a single PATCH call', async () => {
+    const user = userEvent.setup()
+    renderEditPage(baseEditParticipant)
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+    await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+    await expectStep(/ndis & funding/i)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+    const call = mockPatchMutateAsync.mock.calls[0][0]
+    expect(call.id).toBe('participant-1')
+    expect(Object.keys(call.data).sort()).toEqual(['ndisPlan', 'serviceProfile'])
+  })
+
+  describe('the checklistItems trap — a step must send only the item types it owns', () => {
+    const editParticipantWithChecklist = {
+      ...baseEditParticipant,
+      serviceStreams: 'CommunityAccessDailyLiving',
+      checklistItems: [
+        { itemType: 'FallsRisk', value: 'Yes', notes: 'step 5 note' },
+        { itemType: 'HarmToSelf', value: 'Yes', notes: 'step 7 note' },
+      ],
+    }
+
+    it('saving step 5 (Support Needs & Mobility) sends only its own 9 item types, omitting step 7\'s entirely', async () => {
+      const user = userEvent.setup()
+      renderEditPage(editParticipantWithChecklist)
+      mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+      await user.click(within(stepNav()).getByRole('button', { name: /support needs & mobility/i }))
+      await expectStep(/support needs & mobility/i)
+      await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+      expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+      const { data } = mockPatchMutateAsync.mock.calls[0][0]
+      const sentTypes = (data.checklistItems as { itemType: string }[]).map((c) => c.itemType)
+      expect(sentTypes.sort()).toEqual([...COMMUNITY_MOBILITY_RISK_ITEM_TYPES].sort())
+      for (const otherType of COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES) {
+        expect(sentTypes).not.toContain(otherType)
+      }
+    })
+
+    it('saving step 7 (Behaviour & Communication) sends only its own 12 item types, omitting step 5\'s entirely', async () => {
+      const user = userEvent.setup()
+      renderEditPage(editParticipantWithChecklist)
+      mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+      await user.click(within(stepNav()).getByRole('button', { name: /behaviour & communication/i }))
+      await expectStep(/behaviour & communication/i)
+      await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+      expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+      const { data } = mockPatchMutateAsync.mock.calls[0][0]
+      const sentTypes = (data.checklistItems as { itemType: string }[]).map((c) => c.itemType)
+      expect(sentTypes.sort()).toEqual([...COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES].sort())
+      for (const otherType of COMMUNITY_MOBILITY_RISK_ITEM_TYPES) {
+        expect(sentTypes).not.toContain(otherType)
+      }
+    })
+  })
+
+  it('stays on the same step after a successful save — no navigation away from the wizard', async () => {
+    const user = userEvent.setup()
+    renderEditPage(baseEditParticipant)
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+    await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+    await expectStep(/ndis & funding/i)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+    // Still on the wizard, still on the NDIS & Funding step — not navigated to the detail page.
+    expect(screen.getByRole('heading', { name: /edit participant/i })).toBeInTheDocument()
+    expect(within(stepNav()).getByRole('button', { name: /ndis & funding/i, current: 'step' })).toBeInTheDocument()
+    expect(screen.getByLabelText('NDIS Number')).toBeInTheDocument()
+  })
+
+  it('a failed save surfaces an error and does not navigate away', async () => {
+    const user = userEvent.setup()
+    renderEditPage(baseEditParticipant)
+    mockPatchMutateAsync.mockRejectedValue(new Error('network blip'))
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alert')).toHaveTextContent(/failed to save changes/i)
+    expect(screen.getByRole('heading', { name: /edit participant/i })).toBeInTheDocument()
   })
 })
