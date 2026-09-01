@@ -6,11 +6,13 @@ namespace Odip.Domain.Entities;
 /// <summary>
 /// A per-day routine or shift-critical specific a support worker must know/do for a
 /// participant — e.g. a morning routine, a mealtime requirement, or a communication
-/// preference. <see cref="DayOfWeek"/> null means "every day"; <see cref="StartTime"/>/
-/// <see cref="EndTime"/> null means untimed (applies across the whole day rather than a
-/// specific window). Retired via <see cref="IsActive"/> rather than archived — unlike
-/// <see cref="ParticipantNote"/>/<see cref="ParticipantMedication"/> this isn't a
-/// compliance record, so it's also hard-deletable via the controller.
+/// preference. <see cref="Days"/> is a non-empty flag set of the days it applies on
+/// (PD-4) — <see cref="ParticipantRoutineDays.All"/> means every day; there is no
+/// separate "every day" sentinel. <see cref="StartTime"/>/<see cref="EndTime"/> null
+/// means untimed (applies across the whole day rather than a specific window). Retired
+/// via <see cref="IsActive"/> rather than archived — unlike <see cref="ParticipantNote"/>/
+/// <see cref="ParticipantMedication"/> this isn't a compliance record, so it's also
+/// hard-deletable via the controller.
 /// </summary>
 public class ParticipantRoutine : ITenantEntity
 {
@@ -26,8 +28,8 @@ public class ParticipantRoutine : ITenantEntity
 
     public RoutineCategory Category { get; set; }
 
-    /// <summary>Null means the routine applies every day.</summary>
-    public DayOfWeek? DayOfWeek { get; set; }
+    /// <summary>Non-empty set of days the routine applies on. <see cref="ParticipantRoutineDays.All"/> means every day.</summary>
+    public ParticipantRoutineDays Days { get; set; } = ParticipantRoutineDays.All;
 
     /// <summary>Null (with <see cref="EndTime"/> also null) means untimed — applies across the whole day.</summary>
     public TimeOnly? StartTime { get; set; }

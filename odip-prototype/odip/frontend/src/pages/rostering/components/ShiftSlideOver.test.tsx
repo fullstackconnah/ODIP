@@ -41,7 +41,7 @@ function makeRoutine(overrides: Partial<ParticipantRoutineDto> = {}): Participan
     title: 'Morning routine',
     description: 'Wake gently, offer a warm drink.',
     category: 'PersonalCare',
-    dayOfWeek: null,
+    days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     startTime: null,
     endTime: null,
     isCritical: false,
