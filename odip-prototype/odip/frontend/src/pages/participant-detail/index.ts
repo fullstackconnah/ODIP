@@ -7,3 +7,5 @@ export { default as ParticipantConsentsSection } from './ParticipantConsentsSect
 export { default as ParticipantHealthConditionsSection } from './ParticipantHealthConditionsSection'
 export { default as ParticipantAdlAssessmentsSection } from './ParticipantAdlAssessmentsSection'
 export { default as ContactsTab } from './ContactsTab'
+export { default as SupportProfileTab } from './SupportProfileTab'
+export { SectionEditPanel } from './SectionEditPanel'
