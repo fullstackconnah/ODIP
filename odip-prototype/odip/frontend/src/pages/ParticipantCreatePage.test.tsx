@@ -1456,6 +1456,139 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
   })
 })
 
+// Bug fix: the wizard built every contact-role row with registeredProviderFlag hard-coded to
+// null, but ContactRoleRules.Validate (mirrored by contactRoleGateError) rejects a ProviderContact
+// row on an Agency-managed participant unless it's true — there was no way to satisfy the rule
+// through the wizard, so this combination always 400'd at final submit. See ContactsTab.tsx's
+// equivalent checkbox (the reference implementation) for the field this restores here.
+describe('ParticipantCreatePage — bug fix: registeredProviderFlag on ProviderContact rows', () => {
+  async function goToContactsStep(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+    await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+    await expectStep(/ndis & funding/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await expectStep(/key identifiers/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await expectStep(/contacts/i)
+  }
+
+  // Plan Type's Dropdown is wrapped in a react-hook-form <Controller> (see the FUND-02 tests'
+  // doc above), so its trigger isn't reachable via getByLabelText — found by its current visible
+  // text instead, same as that describe block does.
+  async function setPlanType(user: ReturnType<typeof userEvent.setup>, label: string) {
+    await user.click(screen.getByRole('button', { name: 'Self Managed' }))
+    await user.click(screen.getByRole('option', { name: label }))
+  }
+
+  // Provider Contact is only selectable in the Role type picker while the plan isn't already
+  // Agency-managed (contactRoleGateError disables it otherwise) — so the row is built while the
+  // plan is still Self Managed (the wizard's default), then the plan is switched to Agency
+  // Managed afterwards via Back, mirroring how the wizard's own step order (NDIS & Funding is
+  // answered before Contacts) forces this sequence in practice.
+  async function addProviderContactRow(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('button', { name: /role type/i }))
+    await user.click(screen.getByRole('option', { name: 'Support Worker / Provider Contact' }))
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
+  }
+
+  async function switchToAgencyManaged(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Back' })) // -> NDIS & Funding
+    await setPlanType(user, 'Agency Managed')
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+    await expectStep(/contacts/i)
+  }
+
+  async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+    await expectStep(/cultural & consent/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+    await expectStep(/support needs & mobility/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+    await expectStep(/medical/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+    await expectStep(/behaviour & communication/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+    await expectStep(/daily living/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+    await expectStep(/risks & hazards/i)
+    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+    await expectStep(/review/i)
+    await user.click(screen.getByRole('button', { name: /create participant/i }))
+  }
+
+  it('renders the Registered NDIS provider checkbox for a ProviderContact row on an Agency-managed participant', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToContactsStep(user)
+    await addProviderContactRow(user)
+    await switchToAgencyManaged(user)
+
+    expect(screen.getByLabelText('Registered NDIS provider')).toBeInTheDocument()
+  })
+
+  it('leaving it unchecked surfaces the gate error at the Contacts step and blocks progression/submit', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToContactsStep(user)
+    await addProviderContactRow(user)
+    await switchToAgencyManaged(user)
+
+    // The message renders twice — once as the Role type field's hint, once as the standalone
+    // alert paragraph (pre-existing pattern, see the Role type FormField above) — so assert
+    // presence via getAllByText rather than getByText.
+    expect(screen.getAllByText('Agency-managed participants can only record registered-provider contacts.').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    // Still on the Contacts step — Next did not advance — and the server was never reached.
+    await expectStep(/contacts/i)
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('checking it clears the gate error and submits registeredProviderFlag: true for that row', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToContactsStep(user)
+    await addProviderContactRow(user)
+    await switchToAgencyManaged(user)
+
+    await user.click(screen.getByLabelText('Registered NDIS provider'))
+    expect(screen.queryAllByText('Agency-managed participants can only record registered-provider contacts.')).toHaveLength(0)
+
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.contactRoles).toHaveLength(1)
+    expect(payload.contactRoles[0]).toMatchObject({ roleType: 'ProviderContact', registeredProviderFlag: true })
+  })
+
+  it('a non-ProviderContact row does not render the checkbox and submits registeredProviderFlag: null', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await goToContactsStep(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
+
+    // Default role type for a fresh row is NextOfKin — not a role CONTACT_ROLE_FIELD_MAP lists
+    // registeredProviderFlag under, so the field stays hidden.
+    expect(screen.queryByLabelText('Registered NDIS provider')).not.toBeInTheDocument()
+
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.contactRoles[0]).toMatchObject({ roleType: 'NextOfKin', registeredProviderFlag: null })
+  })
+})
+
 describe('ParticipantCreatePage — INTAKE-08 Save as draft', () => {
   it('is available on the very first step and bypasses that step\'s zod validation', async () => {
     const user = userEvent.setup()
