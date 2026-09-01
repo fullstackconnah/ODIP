@@ -206,6 +206,13 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? SupportsLookLikeDay { get; init; }
     public string? SupportsLookLikeAfternoonEvening { get; init; }
     public string? SupportsLookLikeOvernight { get; init; }
+
+    /// <summary>PF-2 (SPEC-02): advisory-only plan-type↔contact-role completeness warning, computed
+    /// from the participant's persisted active <c>ContactRoles</c> via
+    /// <see cref="ContactRoleRules.PlanTypeComplianceWarning"/>. Null when the condition for this
+    /// participant's <see cref="PlanType"/> is satisfied (or there is no condition, e.g.
+    /// SelfManaged). Never blocks a save — see that method's doc for the full rule table.</summary>
+    public string? PlanTypeComplianceWarning { get; init; }
 }
 
 public record CreateParticipantDto

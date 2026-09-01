@@ -2577,5 +2577,175 @@ public class ParticipantsControllerTests
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == createdBody.Data!.Id && n.SourceKey == "safety:allergies");
         Assert.Contains("Bee stings", note.Description);
+    // ── PF-2 (SPEC-02): plan-type compliance warning — advisory only, never blocks a save ──
+
+    [Fact]
+    public async Task Create_AgencyManagedWithNoProviderContact_Succeeds_WithNonNullWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with { PlanType = Domain.Enums.PlanType.AgencyManaged };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        Assert.Equal(201, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.NotNull(body.Data!.PlanTypeComplianceWarning);
+        Assert.Contains("registered-provider", body.Data.PlanTypeComplianceWarning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_PlanManagedWithNoPlanManager_Succeeds_WithNonNullWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with { PlanType = Domain.Enums.PlanType.PlanManaged };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        Assert.Equal(201, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.NotNull(body.Data!.PlanTypeComplianceWarning);
+        Assert.Contains("Plan Manager", body.Data.PlanTypeComplianceWarning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Create_SelfManaged_NeverWarns()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var createResult = await controller.Create(MinimalCreateDto(), CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.Null(body.Data!.PlanTypeComplianceWarning);
+    }
+
+    [Fact]
+    public async Task Create_AgencyManagedWithRegisteredProviderContact_Succeeds_WithNullWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            PlanType = Domain.Enums.PlanType.AgencyManaged,
+            ContactRoles = new List<CreateParticipantContactRoleDto>
+            {
+                new()
+                {
+                    NewPersonFirstName = "Priya", NewPersonLastName = "Singh",
+                    RoleType = Domain.Enums.ContactRoleType.ProviderContact,
+                    RegisteredProviderFlag = true,
+                },
+            },
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        Assert.Equal(201, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        Assert.Null(body.Data!.PlanTypeComplianceWarning);
+
+        // Persists after reload, from the live ContactRoles table, per Design point 5.
+        var getResult = await controller.GetById(body.Data.Id, CancellationToken.None);
+        var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Null(getBody.Data!.PlanTypeComplianceWarning);
+    }
+
+    [Fact]
+    public async Task Create_AgencyManagedWithUnregisteredProviderContact_StillRejectedByExistingGate()
+    {
+        // The pre-existing, unrelated ContactRoleRules.Validate hard-block ("Agency-managed
+        // participants can only record registered-provider contacts") answers a different
+        // question than PF-2's warning and must remain untouched by this item.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            PlanType = Domain.Enums.PlanType.AgencyManaged,
+            ContactRoles = new List<CreateParticipantContactRoleDto>
+            {
+                new()
+                {
+                    NewPersonFirstName = "Priya", NewPersonLastName = "Singh",
+                    RoleType = Domain.Enums.ContactRoleType.ProviderContact,
+                    RegisteredProviderFlag = false,
+                },
+            },
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(400, badRequest.StatusCode);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(badRequest.Value);
+        Assert.Contains("registered-provider", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Update_FinalisedAgencyManagedParticipantWithConditionUnmet_Succeeds_WithNonNullWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true,
+            PlanType = Domain.Enums.PlanType.SelfManaged, IsDraft = false,
+        };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.AgencyManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(updateResult.Result);
+        Assert.Equal(200, ok.StatusCode);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(ok.Value);
+        Assert.NotNull(body.Data!.PlanTypeComplianceWarning);
+
+        // Still present after a fresh GetById reload — this is a persistent completeness signal,
+        // not a transient toast, and it's derived from the same live ContactRoles either way.
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.NotNull(getBody.Data!.PlanTypeComplianceWarning);
+    }
+
+    [Fact]
+    public async Task Update_PlanManagedWithActivePlanManagerRoleAdded_ClearsWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true,
+            PlanType = Domain.Enums.PlanType.PlanManaged, IsDraft = false,
+        };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var getBefore = await controller.GetById(participant.Id, CancellationToken.None);
+        var beforeBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getBefore.Result).Value);
+        Assert.NotNull(beforeBody.Data!.PlanTypeComplianceWarning);
+
+        // A qualifying role added via the (separate) nested-CRUD path, not this item's payload.
+        db.ParticipantContactRoles.Add(new Domain.Entities.ParticipantContactRole
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, PersonId = Guid.NewGuid(),
+            RoleType = Domain.Enums.ContactRoleType.PlanManager, Status = Domain.Enums.ContactRoleStatus.Active,
+        });
+        db.SaveChanges();
+
+        var getAfter = await controller.GetById(participant.Id, CancellationToken.None);
+        var afterBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getAfter.Result).Value);
+        Assert.Null(afterBody.Data!.PlanTypeComplianceWarning);
     }
 }

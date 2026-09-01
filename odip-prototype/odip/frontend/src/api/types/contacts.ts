@@ -205,6 +205,51 @@ export function availableContactRoleTypes(
   return roleTypes.filter(rt => contactRoleGateError(rt, planType, dateOfBirth) === null)
 }
 
+// ── PF-2 (SPEC-02): plan-type↔contact-role completeness warning ──────────────────────────
+//
+// Advisory only — never blocks a save. Mirrors
+// Odip.Domain.Enums.ContactRoleRules.PlanTypeComplianceWarning EXACTLY (same messages, same
+// conditions) so create-mode's live client-side computation and edit-mode's backend-computed
+// `existing.planTypeComplianceWarning` never disagree. Used ONLY for create mode's in-progress
+// (pre-save) contactRoles field array via useWatch — edit mode always reads the server-computed
+// value straight off the participant DTO, never re-derives it client-side.
+
+/** Minimal shape this helper needs from a contact-role row — matches both the create-mode
+ * `useFieldArray` row shape and `ParticipantContactRoleDto`, so either can be passed directly.
+ * `roleType` is a plain `string` (not `ContactRoleType`) because the create-mode wizard's Zod
+ * schema types its field-array rows as `z.string()` (form values aren't the same as the wire
+ * DTO) — this helper only ever compares it against known role-type literals, so a widened string
+ * type costs nothing and avoids an extra cast at every call site. */
+export interface PlanTypeComplianceRoleInput {
+  roleType?: string
+  registeredProviderFlag?: boolean | null
+  status?: ContactRoleStatus | string
+}
+
+/**
+ * Mirrors Odip.Domain.Enums.ContactRoleRules.PlanTypeComplianceWarning. `contactRoles` is
+ * expected to be the participant's (or in-progress create form's) full role list — rows without
+ * an explicit `status` are treated as Active, matching create-mode's field array (which has no
+ * status concept of its own before submit; every row it holds is, by definition, about to be
+ * created as Active).
+ */
+export function planTypeComplianceWarning(
+  planType: PlanType | null | undefined,
+  contactRoles: readonly PlanTypeComplianceRoleInput[] | null | undefined,
+): string | null {
+  const roles = contactRoles ?? []
+  const active = roles.filter(r => (r.status ?? 'Active') === 'Active')
+
+  if (planType === 'PlanManaged' && !active.some(r => r.roleType === 'PlanManager'))
+    return 'This plan-managed participant has no active Plan Manager contact recorded.'
+
+  if (planType === 'AgencyManaged'
+    && !active.some(r => r.roleType === 'ProviderContact' && r.registeredProviderFlag === true))
+    return 'This agency-managed participant has no active registered-provider contact with agency details recorded.'
+
+  return null
+}
+
 // ── Per-role-type field visibility (drives which inputs the add/edit modal shows) ──
 
 export type ContactRoleFieldKey = Exclude<keyof ContactRoleFields, 'roleType' | 'isPrimary' | 'status'>

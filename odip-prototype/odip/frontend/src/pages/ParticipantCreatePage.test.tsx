@@ -3092,3 +3092,243 @@ describe('ParticipantCreatePage — PF-1 "Save changes" (partial save)', () => {
     expect(screen.getByRole('heading', { name: /edit participant/i })).toBeInTheDocument()
   })
 })
+
+// PF-2 (SPEC-02): plan-type↔contact-role completeness — advisory only, NEVER blocks a save. Edit
+// mode reads the backend-computed `existing.planTypeComplianceWarning` verbatim; create mode
+// computes the identical rule live, client-side, from the in-progress contactRoles field array
+// (contacts.ts's planTypeComplianceWarning). Both must render the SAME banner text in all three
+// places (NDIS & Funding step, Contacts step, Review step's matching groups).
+describe('ParticipantCreatePage — PF-2 plan-type compliance warning', () => {
+  const PLAN_MANAGER_WARNING = 'This plan-managed participant has no active Plan Manager contact recorded.'
+  const AGENCY_WARNING = 'This agency-managed participant has no active registered-provider contact with agency details recorded.'
+
+  describe('edit mode — backend-computed value', () => {
+    const baseEditParticipant = {
+      id: 'participant-1', firstName: 'Jamie', lastName: 'Smith', isActive: true, isDraft: false,
+      overnightSupport: 'None', overnightRatio: 'OneToOne', supportRatio: 'SharedSupport', planType: 'PlanManaged',
+      planTypeComplianceWarning: PLAN_MANAGER_WARNING,
+    }
+
+    function renderEditPage(data: Record<string, unknown>) {
+      mockUseParticipant.mockReturnValue({ data, isLoading: false })
+      const router = createMemoryRouter(
+        [
+          { path: '/participants/:id/edit', element: <ParticipantCreatePage /> },
+          { path: '/participants/:id', element: <div>Participant detail</div> },
+        ],
+        { initialEntries: ['/participants/participant-1/edit'] },
+      )
+      return render(<RouterProvider router={router} />)
+    }
+
+    it('renders on the NDIS & Funding step, directly under Plan Type', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+      await expectStep(/ndis & funding/i)
+
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+
+    it('renders on the Contacts step', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /contacts/i }))
+      await expectStep(/contacts/i)
+
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+
+    it('renders on the Review step', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+      await expectStep(/review/i)
+
+      // Renders once per matching review group (NDIS & Funding, Contacts) — both with the
+      // identical text, per SPEC-02 PF-2's "same banner text, never a differently-worded summary".
+      const banners = screen.getAllByRole('status')
+      expect(banners.length).toBeGreaterThanOrEqual(1)
+      for (const banner of banners) expect(banner).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+
+    it('does not render when the condition is satisfied (planTypeComplianceWarning is null)', () => {
+      renderEditPage({ ...baseEditParticipant, planTypeComplianceWarning: null })
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('is never dismissable — no close/dismiss control inside the banner', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+      await expectStep(/ndis & funding/i)
+
+      const banner = screen.getByRole('status')
+      expect(within(banner).queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('does not block PF-1 "Save changes" on another step while the warning is present', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      mockPatchMutateAsync.mockResolvedValue({ success: true })
+
+      await user.click(within(stepNav()).getByRole('button', { name: /key identifiers/i }))
+      await expectStep(/key identifiers/i)
+      await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+      expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1)
+      // No new blocking error introduced by the still-present, unrelated warning.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('does not block a full submit from Review while the warning is present', async () => {
+      const user = userEvent.setup()
+      renderEditPage(baseEditParticipant)
+      mockUpdateMutateAsync.mockResolvedValue({ success: true })
+
+      await user.click(within(stepNav()).getByRole('button', { name: /review/i }))
+      await expectStep(/review/i)
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    it('persists across a reload that still reports the condition unmet', async () => {
+      const user = userEvent.setup()
+      const { rerender } = renderEditPage(baseEditParticipant)
+      await user.click(within(stepNav()).getByRole('button', { name: /ndis & funding/i }))
+      await expectStep(/ndis & funding/i)
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+
+      // Simulate a re-fetch after a save that didn't resolve the condition — same warning text.
+      mockUseParticipant.mockReturnValue({ data: baseEditParticipant, isLoading: false })
+      rerender(<RouterProvider router={createMemoryRouter(
+        [{ path: '/participants/:id/edit', element: <ParticipantCreatePage /> }],
+        { initialEntries: ['/participants/participant-1/edit'] },
+      )} />)
+
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+  })
+
+  describe('create mode — live client-side computation', () => {
+    async function fillIdentityAndAdvanceToNdis(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(screen.getByLabelText('First Name *'), 'Jamie')
+      await user.type(screen.getByLabelText('Last Name *'), 'Smith')
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> NDIS & Funding
+      await expectStep(/ndis & funding/i)
+    }
+
+    async function setPlanType(user: ReturnType<typeof userEvent.setup>, label: string) {
+      await user.click(screen.getByRole('button', { name: 'Self Managed' }))
+      await user.click(screen.getByRole('option', { name: label }))
+    }
+
+    async function advanceToContacts(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Key Identifiers
+      await expectStep(/key identifiers/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Contacts
+      await expectStep(/contacts/i)
+    }
+
+    async function finishFromContacts(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+      await expectStep(/cultural & consent/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+      await expectStep(/support needs & mobility/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+      await expectStep(/medical/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+      await expectStep(/behaviour & communication/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+      await expectStep(/daily living/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+      await expectStep(/risks & hazards/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+      await expectStep(/review/i)
+      await user.click(screen.getByRole('button', { name: /create participant/i }))
+    }
+
+    it('SelfManaged (the default) never shows the banner', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('shows the banner on NDIS & Funding once Plan Managed is selected with no Plan Manager contact', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      await setPlanType(user, 'Plan Managed')
+
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+
+    it('shows the banner on the Contacts step too, reading the same live value', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      await setPlanType(user, 'Agency Managed')
+      await advanceToContacts(user)
+
+      expect(screen.getByRole('status')).toHaveTextContent(AGENCY_WARNING)
+    })
+
+    it('clears once a satisfying contact role is added to the in-progress form', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      await setPlanType(user, 'Plan Managed')
+      await advanceToContacts(user)
+      expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
+
+      await user.click(screen.getByRole('button', { name: /add contact/i }))
+      await user.click(screen.getByRole('button', { name: /role type/i }))
+      await user.click(screen.getByRole('option', { name: 'Plan Manager' }))
+      await user.click(screen.getByPlaceholderText('Search people…'))
+      await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
+
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('shows on the Review step reading the same live value as the earlier steps', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      await setPlanType(user, 'Plan Managed')
+      await advanceToContacts(user)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Cultural & Consent
+      await expectStep(/cultural & consent/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Support Needs & Mobility
+      await expectStep(/support needs & mobility/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Medical
+      await expectStep(/medical/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Behaviour & Communication
+      await expectStep(/behaviour & communication/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Daily Living
+      await expectStep(/daily living/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Risks & Hazards
+      await expectStep(/risks & hazards/i)
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Review
+      await expectStep(/review/i)
+
+      const banners = screen.getAllByRole('status')
+      expect(banners.length).toBeGreaterThanOrEqual(1)
+      for (const banner of banners) expect(banner).toHaveTextContent(PLAN_MANAGER_WARNING)
+    })
+
+    it('a create submission with the condition unmet still succeeds — the save is never blocked', async () => {
+      const user = userEvent.setup()
+      renderCreatePage()
+      await fillIdentityAndAdvanceToNdis(user)
+      await setPlanType(user, 'Plan Managed')
+      await advanceToContacts(user)
+
+      await finishFromContacts(user)
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
+})

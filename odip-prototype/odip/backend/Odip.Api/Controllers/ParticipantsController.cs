@@ -378,6 +378,25 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// PF-2 (SPEC-02): loads this participant's persisted, active contact roles and computes the
+    /// advisory <see cref="ContactRoleRules.PlanTypeComplianceWarning"/> from them — never the
+    /// submitted DTO, so a role row that failed some other validation and never persisted can't
+    /// produce a false "satisfied" reading. Shared by GetById/Create/Update/Patch so all four
+    /// response bodies compute the identical value from the identical source.
+    /// </summary>
+    private async Task<string?> ComputePlanTypeComplianceWarningAsync(Guid participantId, PlanType planType, CancellationToken ct)
+    {
+        var activeRoles = await _db.ParticipantContactRoles
+            .Where(r => r.ParticipantId == participantId && r.Status == ContactRoleStatus.Active)
+            .Select(r => new { r.RoleType, r.RegisteredProviderFlag, r.Status })
+            .ToListAsync(ct);
+
+        return ContactRoleRules.PlanTypeComplianceWarning(
+            planType,
+            activeRoles.Select(r => (r.RoleType, r.RegisteredProviderFlag, r.Status)));
+    }
+
+    /// <summary>
     /// LIVING-02/03/04 server-side clearing: defence in depth, mirroring FundingOrganisation's
     /// pattern in Create/Update above — a field belonging to a non-selected arrangement type (or,
     /// for WhoLivesWith, belonging to a LivesWithOthers=false Independent participant) is stored
@@ -469,6 +488,7 @@ public class ParticipantsController : ControllerBase
 
         var hasActiveMedications = await _db.ParticipantMedications
             .AnyAsync(m => m.ParticipantId == id && m.Status != MedicationStatus.Ceased, ct);
+        var planTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
 
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {
@@ -564,6 +584,7 @@ public class ParticipantsController : ControllerBase
             BocDeEscalationStrategies = p.BocDeEscalationStrategies, BocWhatNotToDo = p.BocWhatNotToDo,
             SupportsLookLikeMorning = p.SupportsLookLikeMorning, SupportsLookLikeDay = p.SupportsLookLikeDay,
             SupportsLookLikeAfternoonEvening = p.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = p.SupportsLookLikeOvernight,
+            PlanTypeComplianceWarning = planTypeComplianceWarning,
         }));
     }
 
@@ -785,8 +806,13 @@ public class ParticipantsController : ControllerBase
         // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
         await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
         await _db.SaveChangesAsync(ct);
+        // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
+        // inserted above, in the same SaveChangesAsync), not from dto.ContactRoles — a role row
+        // that failed some other validation and never persisted can't produce a false "satisfied"
+        // reading.
+        var createPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(participant.Id, participant.PlanType, ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
-            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
+            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt, PlanTypeComplianceWarning = createPlanTypeComplianceWarning }));
     }
 
     /// <summary>Update an existing participant.</summary>
@@ -959,7 +985,10 @@ public class ParticipantsController : ControllerBase
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
+        // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
+        // warning is computed from the participant's live ContactRoles exactly as GetById does.
+        var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = updatePlanTypeComplianceWarning }));
     }
 
     /// <summary>
@@ -1234,7 +1263,10 @@ public class ParticipantsController : ControllerBase
             await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
 
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
+        // PF-2: Patch's DTO never carries contactRoles either — computed from live ContactRoles,
+        // using p.PlanType as it stands after any ndisPlan group patch applied above.
+        var patchPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = patchPlanTypeComplianceWarning }));
     }
 
     /// <summary>Get bookings for a participant.</summary>
