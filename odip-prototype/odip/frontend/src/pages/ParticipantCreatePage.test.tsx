@@ -2390,10 +2390,15 @@ describe('ParticipantCreatePage — INTAKE sub-wave C1: clinical enrichment (Hea
     expect(within(screen.getByRole('radiogroup', { name: 'Anaphylaxis Risk' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
     expect(within(screen.getByRole('radiogroup', { name: 'Epilepsy' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
 
+    // PD-6: in edit mode this step is now a read-only summary linking to the Support Profile tab
+    // (Ambulant Status/Falls Risk Rating/Uneven Ground are no longer editable here at all — they
+    // moved to SupportProfileTab) — but the RHF state loaded via reset() from `existing` still
+    // carries them unchanged into the full-submit payload below, same as Contacts/Risk Entries'
+    // own edit-mode-inert steps already round-trip their untouched data.
     await user.click(within(stepNav()).getByRole('button', { name: /support needs & mobility/i }))
-    expect(screen.getByLabelText('Ambulant Status')).toHaveValue('Unsteady')
-    expect(screen.getByLabelText('Falls Risk Rating')).toHaveValue('Medium')
-    expect(within(screen.getByRole('radiogroup', { name: 'Uneven Ground' })).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    expect(screen.getByText(/support needs & mobility is now managed from the/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /participant's support profile tab/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Ambulant Status')).not.toBeInTheDocument()
 
     await user.click(within(stepNav()).getByRole('button', { name: /behaviour & communication/i }))
     expect(screen.getByLabelText('Memory')).toHaveValue('Fair')

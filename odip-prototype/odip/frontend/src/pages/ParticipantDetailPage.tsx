@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useParticipant, useParticipantBookings, useSupportProfile, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf } from '@/api/hooks'
+import { useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf } from '@/api/hooks'
 import { formatDateAu, maskNdisNumber } from '@/lib/utils'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
@@ -12,13 +12,13 @@ import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import {
-  OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS, GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories,
-  AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
+  GENDER_LABELS, FUNDING_SOURCE_LABELS, LIVING_ARRANGEMENT_LABELS, HIDPA_CATEGORY_LABELS, parseHidpaCategories,
+  RISK_RATING_LEVEL_LABELS, MEMORY_LEVEL_LABELS,
   parseServiceStreams,
 } from '@/api/types/participants'
 import { CHECKLIST_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
 import type { Gender, FundingSource, LivingArrangement, HidpaSupportCategory, ChecklistItemType } from '@/api/types/enums'
-import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab } from './participant-detail'
+import { MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection, ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab } from './participant-detail'
 
 /** INTAKE sub-wave B — tri-state (boolean | null) display helper, same "—" empty-state idiom as every other unset field on this page. */
 function yesNoUnset(value: boolean | null): string {
@@ -46,7 +46,6 @@ export default function ParticipantDetailPage() {
   const isAdmin = currentUser.role === 'Admin'
   const { data: p, isLoading } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
-  const { data: supportProfile } = useSupportProfile(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
   // early returns below, per the rules of hooks.
@@ -55,19 +54,6 @@ export default function ParticipantDetailPage() {
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!p) return <div className="text-center py-12">Participant not found</div>
-
-  const mobilityAidBadges = [
-    p.mobilityAidWheelchair && 'Wheelchair',
-    p.mobilityAidWalker && 'Walker',
-  ].filter((v): v is string => !!v)
-
-  const equipmentBadges = [
-    p.requiresHiLoBed && 'Hi-Lo Bed',
-    p.requiresHoist && 'Hoist',
-    p.requiresShowerChair && 'Shower Chair',
-    p.requiresCommode && 'Commode',
-    p.requiresStandingMachine && 'Standing Machine',
-  ].filter((v): v is string => !!v)
 
   // DIAG-02.
   const hidpaCategories = parseHidpaCategories(p.hidpaSupportCategories)
@@ -395,54 +381,11 @@ export default function ParticipantDetailPage() {
           <Card className="md:col-span-2">
             <ParticipantConsentsSection participantId={id} />
           </Card>
-          {/* PDETAIL-01 — renamed from "Support Needs" to "Support Needs & Mobility" to match the
-              wizard step's own label exactly (STEP_SUPPORT_FIELDS/WIZARD_STEPS), and widened to
-              md:col-span-2 now that it also carries the free-text fields below (previously
-              stranded in a generic "Notes" card near the bottom of the page, alongside the
-              unrelated Risks & Hazards fields) and Intensive Support (previously not rendered
-              anywhere on this page at all — see this PR's report). */}
-          <Card title="Support Needs & Mobility" className="md:col-span-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-              <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
-              <span className="flex flex-wrap gap-1">
-                {mobilityAidBadges.length ? mobilityAidBadges.map(b => <Tag key={b} label={b} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
-              <span className="flex flex-wrap gap-1">
-                {p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map(o => <Tag key={o} label={o} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-primary)]">check_circle</span> Yes</span> : 'No'}</span>
-              {/* PDETAIL-01 — Intensive Support (NDIS billing flag): present on the Participant
-                  entity/DTO and the wizard's Support Needs & Mobility step, but never rendered
-                  anywhere on this page before this pass. */}
-              <span className="text-[var(--color-muted-foreground)]">Intensive Support</span><span>{p.isIntensiveSupport ? 'Yes' : 'No'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
-              <span>{p.overnightSupport && p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Equipment</span>
-              <span className="flex flex-wrap gap-1">
-                {equipmentBadges.length ? equipmentBadges.map(b => <Tag key={b} label={b} />) : '—'}
-              </span>
-              <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span><span>{p.hasRestrictivePracticeFlag ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-amber-500">warning</span> Yes</span> : 'No'}</span>
-              {/* INTAKE sub-wave C1 — Mobility & Functional (research spec §4.7/§5). */}
-              <span className="text-[var(--color-muted-foreground)]">Ambulant Status</span><span>{p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Falls Risk Rating</span><span>{p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Uneven Ground</span><span>{yesNoUnset(p.unevenGroundFlag)}</span>
-              <span className="text-[var(--color-muted-foreground)]">Level of Personal Care</span><span>{p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : '—'}</span>
-              {p.orthotics && (<><span className="text-[var(--color-muted-foreground)]">Orthotics</span><span className="whitespace-pre-line">{p.orthotics}</span></>)}
-              {p.continenceSupportDetail && (<><span className="text-[var(--color-muted-foreground)]">Continence Support</span><span className="whitespace-pre-line">{p.continenceSupportDetail}</span></>)}
-              {p.bowelCareDetail && (<><span className="text-[var(--color-muted-foreground)]">Colostomy / Catheter / Enema / Suppository</span><span className="whitespace-pre-line">{p.bowelCareDetail}</span></>)}
-              {p.menstruationSupport && (<><span className="text-[var(--color-muted-foreground)]">Menstruation Support</span><span className="whitespace-pre-line">{p.menstruationSupport}</span></>)}
-              {p.skinIntegrity && (<><span className="text-[var(--color-muted-foreground)]">Skin Integrity</span><span className="whitespace-pre-line">{p.skinIntegrity}</span></>)}
-              {/* PDETAIL-01 — moved in from the old bottom-of-page "Notes" card, which mixed
-                  these Support Needs & Mobility step fields with the unrelated Risks & Hazards
-                  step's General Notes field. Rendered with this card's own established
-                  conditional-row idiom (matching Orthotics/Continence Support above) rather than
-                  the old card's flat "<strong>Label:</strong> value" paragraph style. */}
-              {p.mobilityNotes && (<><span className="text-[var(--color-muted-foreground)]">Mobility Notes</span><span className="whitespace-pre-line">{p.mobilityNotes}</span></>)}
-              {p.equipmentRequirements && (<><span className="text-[var(--color-muted-foreground)]">Equipment Requirements</span><span className="whitespace-pre-line">{p.equipmentRequirements}</span></>)}
-              {p.transportRequirements && (<><span className="text-[var(--color-muted-foreground)]">Transport Requirements</span><span className="whitespace-pre-line">{p.transportRequirements}</span></>)}
-            </div>
-          </Card>
+          {/* PD-6 — the "Support Needs & Mobility" card that used to live here has moved to the
+              Support Profile tab (SupportProfileTab.tsx), merged with the `/support-profile`
+              sub-resource fields and made editable there. See SPEC-03's PD-6: having the same
+              fields editable/displayed in two places would repeat the dual-write-path
+              inconsistency discovery already flagged for consents/health/ADL. */}
           {(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.hidpaNotes || p.medicalSummary
             || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes) && (
             <Card title="Medical" className="md:col-span-2">
@@ -681,29 +624,7 @@ export default function ParticipantDetailPage() {
       )}
 
       {tab === 'support' && (
-        <Card>
-          {!supportProfile ? (
-            <p className="text-[var(--color-muted-foreground)]">No support profile recorded</p>
-          ) : (
-            <div className="space-y-4 text-sm">
-              {[
-                { label: 'Communication Notes', value: supportProfile.communicationNotes },
-                { label: 'Behaviour Support', value: supportProfile.behaviourSupportNotes },
-                { label: 'Restrictive Practice Details', value: supportProfile.restrictivePracticeDetails },
-                { label: 'Manual Handling', value: supportProfile.manualHandlingNotes },
-                { label: 'Medication & Health', value: supportProfile.medicationHealthSummary },
-                { label: 'Emergency Considerations', value: supportProfile.emergencyConsiderations },
-                { label: 'Travel-Specific', value: supportProfile.travelSpecificNotes },
-              ].filter(f => f.value).map(f => (
-                <div key={f.label}>
-                  <p className="font-medium text-[var(--color-muted-foreground)] mb-1">{f.label}</p>
-                  <p className="whitespace-pre-line">{f.value}</p>
-                </div>
-              ))}
-              {supportProfile.reviewDate && <p className="text-xs text-[var(--color-muted-foreground)]">Review Date: {formatDateAu(supportProfile.reviewDate)}</p>}
-            </div>
-          )}
-        </Card>
+        <SupportProfileTab participantId={id} onNavigateToTab={(t) => setTab(t as typeof tab)} />
       )}
 
       {tab === 'medications' && (
