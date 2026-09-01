@@ -4,7 +4,7 @@ import { useForm, useFieldArray, useWatch, Controller, type Resolver, type Field
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
-import { useCreateParticipant, useUpdateParticipant, usePatchParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
+import { useCreateParticipant, useUpdateParticipant, usePatchParticipant, useParticipant, useStaff, usePersons, useParticipantContactRoles } from '@/api/hooks'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { ArrowLeft, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
@@ -13,6 +13,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import AddContactRoleForm from '@/components/contacts/AddContactRoleForm'
 import { StatusBadge } from '@/components/StatusBadge'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
@@ -1117,6 +1118,11 @@ export default function ParticipantCreatePage() {
   // PF-1: "Save changes" — CORE-02's per-group partial save, gated by canSavePartial below.
   const patchParticipant = usePatchParticipant()
   const { data: existing, isLoading: isLoadingExisting } = useParticipant(isEdit ? id : undefined)
+  // PF-4 (SPEC-02): edit-mode's Contacts step reads the same nested-CRUD query ContactsTab.tsx
+  // uses (ParticipantDetailDto carries no contactRoles array of its own — only the derived
+  // planTypeComplianceWarning) so a role added here, or on the Contacts tab, shows up either way.
+  const { data: existingContactRoles = [] } = useParticipantContactRoles(isEdit ? id : undefined)
+  const [isAddingContact, setIsAddingContact] = useState(false)
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter(s => s.isActive)
   const mutation = isEdit ? updateParticipant : createParticipant
@@ -2681,12 +2687,54 @@ export default function ParticipantCreatePage() {
               <Card title="Contacts" className="space-y-3">
                 <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
                 <p className="text-sm text-[var(--color-muted-foreground)]">
-                  Contacts are managed from the{' '}
+                  Add a contact below, or manage full contact details from the{' '}
                   <Link to={`/participants/${id}?tab=contacts`} className="text-[var(--color-primary)] hover:underline">
                     Contacts tab
                   </Link>{' '}
                   on this participant's detail page.
                 </p>
+                {existingContactRoles.length > 0 && (
+                  <ul className="space-y-2">
+                    {existingContactRoles.map(role => (
+                      <li
+                        key={role.id}
+                        className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--color-border)]"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[var(--color-foreground)] flex items-center gap-2">
+                            {role.personFullName}
+                            {role.isPrimary && <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Primary</span>}
+                          </p>
+                          <p className="text-xs text-[var(--color-muted-foreground)]">{CONTACT_ROLE_TYPE_LABELS[role.roleType]}</p>
+                        </div>
+                        <Link
+                          to={`/participants/${id}?tab=contacts`}
+                          className="text-xs font-medium text-[var(--color-primary)] hover:underline shrink-0"
+                        >
+                          Edit ↗ / Remove
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isAddingContact ? (
+                  <div className="p-3 rounded-lg border border-[var(--color-border)]">
+                    <AddContactRoleForm
+                      participantId={id}
+                      mode="create"
+                      onSaved={() => setIsAddingContact(false)}
+                      onCancel={() => setIsAddingContact(false)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingContact(true)}
+                    className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+                  >
+                    <Plus className="w-4 h-4" /> Add contact
+                  </button>
+                )}
               </Card>
             ) : (
               <Card title="Contacts" className="space-y-3">
