@@ -3,10 +3,11 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ParticipantIdentitySection } from './ParticipantIdentitySection'
 import type { ParticipantDetailDto } from '@/api/types/participants'
+import type { StaffListDto } from '@/api/types/staff'
 
 const { mockPatchMutateAsync, mockUseStaff } = vi.hoisted(() => ({
   mockPatchMutateAsync: vi.fn(),
-  mockUseStaff: vi.fn(() => ({ data: [] })),
+  mockUseStaff: vi.fn((): { data: StaffListDto[] } => ({ data: [] })),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -34,7 +35,7 @@ function makeParticipant(overrides: Partial<ParticipantDetailDto> = {}): Partici
 
 beforeEach(() => {
   mockPatchMutateAsync.mockReset()
-  mockUseStaff.mockReturnValue({ data: [{ id: 'staff-1', fullName: 'Jamie Lee', isActive: true }] })
+  mockUseStaff.mockReturnValue({ data: [{ id: 'staff-1', fullName: 'Jamie Lee', isActive: true } as StaffListDto] })
   setUserRole('Coordinator')
 })
 
