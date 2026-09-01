@@ -6,6 +6,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -20,12 +21,23 @@ namespace Odip.Api.Controllers;
 public class ParticipantNotesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ParticipantNotesController(OdipDbContext db) => _db = db;
+    private readonly SafetyNoteSyncService _safetyNoteSync;
+    public ParticipantNotesController(OdipDbContext db, SafetyNoteSyncService safetyNoteSync)
+    {
+        _db = db;
+        _safetyNoteSync = safetyNoteSync;
+    }
 
     [HttpGet("participants/{participantId:guid}/notes")]
     public async Task<ActionResult<ApiResponse<List<ParticipantNoteDto>>>> GetForParticipant(
         Guid participantId, [FromQuery] bool includeArchived = false, CancellationToken ct = default)
     {
+        // PD-5 item 5d: bounded read-time reconciliation safety net — see
+        // SafetyNoteSyncService.ReconcileForParticipantAsync's doc for why this can't turn this
+        // endpoint into an N+1 or a write-on-every-read.
+        await _safetyNoteSync.ReconcileForParticipantAsync(participantId, ct);
+        await _db.SaveChangesAsync(ct);
+
         var query = _db.ParticipantNotes.Where(n => n.ParticipantId == participantId);
         if (!includeArchived)
             query = query.Where(n => !n.IsArchived);
@@ -76,8 +88,44 @@ public class ParticipantNotesController : ControllerBase
         note.IsArchived = dto.IsArchived;
         note.UpdatedAt = DateTime.UtcNow;
 
+        // PD-5: any human-initiated save on an auto-generated note (SourceKey != null) — title
+        // only, description only, or both — permanently detaches it from the sync going forward.
+        // Archiving a note (confirmArchive routes through this same Update call) also counts.
+        if (note.SourceKey != null)
+            note.IsManuallyEdited = true;
+
         await _db.SaveChangesAsync(ct);
 
+        return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(note)));
+    }
+
+    /// <summary>PD-5: "Dismiss" — acknowledges source drift without touching the note's text.</summary>
+    [HttpPut("participants/notes/{id:guid}/dismiss-drift")]
+    [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantNoteDto>>> DismissDrift(Guid id, CancellationToken ct)
+    {
+        var note = await _db.ParticipantNotes.FirstOrDefaultAsync(n => n.Id == id, ct);
+        if (note == null) return NotFound(ApiResponse<ParticipantNoteDto>.Fail("Note not found"));
+
+        var ok = await _safetyNoteSync.DismissDriftAsync(note, ct);
+        if (!ok) return NotFound(ApiResponse<ParticipantNoteDto>.Fail("Note is not an auto-generated note"));
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(note)));
+    }
+
+    /// <summary>PD-5: "Regenerate" — restores machine-generated text and re-arms auto-sync.</summary>
+    [HttpPut("participants/notes/{id:guid}/regenerate")]
+    [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantNoteDto>>> Regenerate(Guid id, CancellationToken ct)
+    {
+        var note = await _db.ParticipantNotes.FirstOrDefaultAsync(n => n.Id == id, ct);
+        if (note == null) return NotFound(ApiResponse<ParticipantNoteDto>.Fail("Note not found"));
+
+        var ok = await _safetyNoteSync.RegenerateAsync(note, ct);
+        if (!ok) return NotFound(ApiResponse<ParticipantNoteDto>.Fail("Note is not an auto-generated note"));
+
+        await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(note)));
     }
 
@@ -99,5 +147,7 @@ public class ParticipantNotesController : ControllerBase
         CreatedByName = n.CreatedByName,
         CreatedAt = n.CreatedAt,
         UpdatedAt = n.UpdatedAt,
+        SourceKey = n.SourceKey,
+        HasSourceDrift = n.HasSourceDrift,
     };
 }

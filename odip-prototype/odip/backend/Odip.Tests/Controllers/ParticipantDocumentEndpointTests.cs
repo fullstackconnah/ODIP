@@ -102,7 +102,7 @@ public class ParticipantDocumentEndpointTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedRepresentativeParticipant(db);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.DownloadIntakeFormPdf(participant.Id, CancellationToken.None);
 
@@ -116,7 +116,7 @@ public class ParticipantDocumentEndpointTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedRepresentativeParticipant(db);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.DownloadParticipantProfilePdf(participant.Id, CancellationToken.None);
 
@@ -129,7 +129,7 @@ public class ParticipantDocumentEndpointTests
     public async Task DownloadIntakeFormPdf_UnknownParticipantId_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.DownloadIntakeFormPdf(Guid.NewGuid(), CancellationToken.None);
 
@@ -140,7 +140,7 @@ public class ParticipantDocumentEndpointTests
     public async Task DownloadParticipantProfilePdf_UnknownParticipantId_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.DownloadParticipantProfilePdf(Guid.NewGuid(), CancellationToken.None);
 
@@ -169,7 +169,7 @@ public class ParticipantDocumentEndpointTests
         // Seeded under Tenant B, while the ambient ICurrentTenant above is scoped to Tenant A.
         var participant = SeedRepresentativeParticipant(db, tenantBId);
 
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var intakeResult = await controller.DownloadIntakeFormPdf(participant.Id, CancellationToken.None);
         var profileResult = await controller.DownloadParticipantProfilePdf(participant.Id, CancellationToken.None);

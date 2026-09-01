@@ -9,6 +9,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.RestrictivePractices;
@@ -88,7 +89,7 @@ public class RestrictivePracticesControllerTests
     public async Task Create_ParticipantMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Create(Guid.NewGuid(), CreateDto(), CancellationToken.None);
 
@@ -100,7 +101,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(
             description: "Seclusion room used during acute crisis periods only.",
@@ -129,7 +130,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var medication = SeedMedication(db, participant.Id, "Risperidone");
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(
             description: "Chemical restraint linked to prescribed antipsychotic.",
@@ -150,7 +151,7 @@ public class RestrictivePracticesControllerTests
         var participantA = SeedParticipant(db, "Sophie", "Brown");
         var participantB = SeedParticipant(db, "Harrison", "Lee");
         var medicationForB = SeedMedication(db, participantB.Id);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: medicationForB.Id);
 
@@ -170,7 +171,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var medication = SeedMedication(db, participant.Id);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         // Type is Seclusion (the CreateDto default type below), but RelatedMedicationId is set —
         // only ChemicalRestraint entries may link a medication.
@@ -191,7 +192,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: Guid.NewGuid());
 
@@ -212,7 +213,7 @@ public class RestrictivePracticesControllerTests
             new Domain.Entities.RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "Inactive", IsActive = false });
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeInactive: false, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -230,7 +231,7 @@ public class RestrictivePracticesControllerTests
             new Domain.Entities.RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "Inactive", IsActive = false });
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeInactive: true, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -248,7 +249,7 @@ public class RestrictivePracticesControllerTests
             new Domain.Entities.RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = participantB.Id, Description = "B's entry", IsActive = true });
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participantA.Id, includeInactive: false, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -262,7 +263,7 @@ public class RestrictivePracticesControllerTests
     public async Task Update_EntryMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new UpdateRestrictivePracticeDto { Description = "d" };
         var result = await controller.Update(Guid.NewGuid(), dto, CancellationToken.None);
@@ -283,7 +284,7 @@ public class RestrictivePracticesControllerTests
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateRestrictivePracticeDto
         {
             Type = RestrictivePracticeType.PhysicalRestraint,
@@ -320,7 +321,7 @@ public class RestrictivePracticesControllerTests
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateRestrictivePracticeDto
         {
             Type = RestrictivePracticeType.ChemicalRestraint, Description = "d",
@@ -338,7 +339,7 @@ public class RestrictivePracticesControllerTests
     public async Task Delete_EntryMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
@@ -354,7 +355,7 @@ public class RestrictivePracticesControllerTests
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var result = await controller.Delete(practice.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<bool>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -375,7 +376,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         Assert.False(participant.HasRestrictivePracticeFlag);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
 
@@ -388,7 +389,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         await controller.Create(participant.Id, CreateDto(isActive: false), CancellationToken.None);
 
@@ -409,7 +410,7 @@ public class RestrictivePracticesControllerTests
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "d", IsActive = false };
 
         await controller.Update(practice.Id, dto, CancellationToken.None);
@@ -431,7 +432,7 @@ public class RestrictivePracticesControllerTests
         db.SaveChanges();
         Assert.False(participant.HasRestrictivePracticeFlag);
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "d", IsActive = true };
 
         await controller.Update(practice.Id, dto, CancellationToken.None);
@@ -457,7 +458,7 @@ public class RestrictivePracticesControllerTests
         participant.HasRestrictivePracticeFlag = true;
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateRestrictivePracticeDto { Type = RestrictivePracticeType.Unclassified, Description = "First", IsActive = false };
 
         await controller.Update(practiceToDeactivate.Id, dto, CancellationToken.None);
@@ -479,7 +480,7 @@ public class RestrictivePracticesControllerTests
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         await controller.Delete(practice.Id, CancellationToken.None);
 
         var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
@@ -503,7 +504,7 @@ public class RestrictivePracticesControllerTests
         participant.HasRestrictivePracticeFlag = true;
         db.SaveChanges();
 
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
         await controller.Delete(practiceToDelete.Id, CancellationToken.None);
 
         var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
@@ -532,7 +533,7 @@ public class RestrictivePracticesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
-        var controller = new RestrictivePracticesController(scopedDb);
+        var controller = new RestrictivePracticesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var result = await controller.GetForParticipant(participantId, includeInactive: false, CancellationToken.None);
 
@@ -557,7 +558,7 @@ public class RestrictivePracticesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantId);
-        var controller = new RestrictivePracticesController(scopedDb);
+        var controller = new RestrictivePracticesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var result = await controller.Create(participantId, CreateDto(), CancellationToken.None);
 
@@ -589,7 +590,7 @@ public class RestrictivePracticesControllerTests
     public async Task CreateBulk_ParticipantMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto { Items = new() { BulkRow() } };
         var result = await controller.CreateBulk(Guid.NewGuid(), dto, CancellationToken.None);
@@ -602,7 +603,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -624,7 +625,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -643,7 +644,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto { Items = new() };
         var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
@@ -658,7 +659,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -689,7 +690,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -717,7 +718,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -737,7 +738,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -758,7 +759,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         var medication = SeedMedication(db, participant.Id);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -786,7 +787,7 @@ public class RestrictivePracticesControllerTests
         var participant = SeedParticipant(db);
         var otherParticipant = SeedParticipant(db, "Other", "Person");
         var otherMedication = SeedMedication(db, otherParticipant.Id);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -812,7 +813,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -831,7 +832,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -857,7 +858,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
         Assert.False(participant.HasRestrictivePracticeFlag);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -875,7 +876,7 @@ public class RestrictivePracticesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new RestrictivePracticesController(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -904,7 +905,7 @@ public class RestrictivePracticesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantId);
-        var controller = new RestrictivePracticesController(scopedDb);
+        var controller = new RestrictivePracticesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -946,7 +947,7 @@ public class RestrictivePracticesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
-        var controller = new RestrictivePracticesController(scopedDb);
+        var controller = new RestrictivePracticesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var dto = new BulkCreateRestrictivePracticeDto
         {
@@ -959,5 +960,37 @@ public class RestrictivePracticesControllerTests
         // Only tenant B's active row exists; tenant A's own bulk row is inactive. Since tenant
         // scoping hides tenant B's row from tenant A's context, the flag must stay false.
         Assert.False(saved.HasRestrictivePracticeFlag);
+    }
+
+    // ── PD-5: restrictive-practices auto-note trigger coverage (already wired — verify) ────
+
+    [Fact]
+    public async Task Create_ActiveEntry_CreatesRestrictivePracticeSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:restrictivePractices");
+        Assert.False(note.IsArchived);
+    }
+
+    [Fact]
+    public async Task Delete_LastActiveEntry_ArchivesRestrictivePracticeSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var createResult = await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
+        var created = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+        Assert.False((await db.ParticipantNotes.SingleAsync(n => n.SourceKey == "safety:restrictivePractices")).IsArchived);
+
+        await controller.Delete(created.Data!.Id, CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:restrictivePractices");
+        Assert.True(note.IsArchived);
     }
 }

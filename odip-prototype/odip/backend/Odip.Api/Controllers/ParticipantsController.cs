@@ -21,11 +21,13 @@ public class ParticipantsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly ParticipantDocumentService _documentService;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService)
+    private readonly SafetyNoteSyncService _safetyNoteSync;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync)
     {
         _db = db;
         _compatLink = compatLink;
         _documentService = documentService;
+        _safetyNoteSync = safetyNoteSync;
     }
 
     /// <summary>
@@ -776,6 +778,12 @@ public class ParticipantsController : ControllerBase
         // INTAKE-03/04 — Community Access checklist-item grid rows submitted alongside a
         // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
         await UpsertChecklistItemsAsync(participant.Id, dto.ChecklistItems, ct);
+        // PD-5: syncs the safety-critical auto-notes (allergies/behaviours-of-concern/falls-risk/
+        // risks-hazards) in the same SaveChangesAsync as the participant insert. Reads
+        // participant.RiskEntries via the change tracker (see SafetyNoteSyncService), which sees
+        // the RiskEntries loop's just-added, not-yet-persisted rows above — closes the
+        // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
+        await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
         await _db.SaveChangesAsync(ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt }));
@@ -948,6 +956,8 @@ public class ParticipantsController : ControllerBase
         await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
         // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
         await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
+        // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
+        await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }
@@ -1214,6 +1224,14 @@ public class ParticipantsController : ControllerBase
         if (dto.HealthConditions != null) await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
         if (dto.AdlAssessments != null) await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
         if (dto.ChecklistItems != null) await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
+
+        // PD-5, item 5c: any of the 4 partial-save groups above (medical, behaviourCommunication,
+        // risksHazardsSummary, supportNeedsMobility) can touch a safety-critical field — closes
+        // the "core02 partial-save endpoint" holes in SPEC-03's Trigger coverage table. Gated on
+        // group presence so an unrelated group's PATCH (e.g. just PersonalDetails) doesn't run a
+        // needless sync pass.
+        if (dto.Medical != null || dto.BehaviourCommunication != null || dto.RisksHazardsSummary != null || dto.SupportNeedsMobility != null)
+            await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
