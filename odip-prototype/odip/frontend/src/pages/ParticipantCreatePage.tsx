@@ -15,7 +15,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel, ChecklistItemType } from '@/api/types/enums'
-import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_FIELD_MAP, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
@@ -145,6 +145,9 @@ const baseParticipantSchema = z.object({
     roleType: z.string().min(1, 'Role type is required'),
     relationshipToParticipant: z.string().optional(),
     isPrimary: z.boolean().optional(),
+    // Bug fix: ProviderContact + AgencyManaged requires this true (ContactRoleRules.Validate /
+    // contactRoleGateError) — the wizard must collect it, not just the Contacts tab.
+    registeredProviderFlag: z.boolean().optional(),
   })).optional(),
   // INTAKE sub-wave A — "Key Identifiers" wizard step (research spec §4.4/§5). All optional;
   // expiries are plain date strings (YYYY-MM-DD, same shape as planStartDate/planEndDate above).
@@ -435,8 +438,15 @@ function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx) {
 // person's name typed — same standalone-function pattern as the refines above, but per-row
 // (array index in the issue path) rather than a single top-level field, mirroring how
 // riskEntries' row-level errors are handled (see setPathError's doc below).
-type ContactRoleRowFields = { personMode?: 'existing' | 'new'; personId?: string; newPersonFirstName?: string; newPersonLastName?: string }
-type ContactRolesFields = { contactRoles?: ContactRoleRowFields[] }
+type ContactRoleRowFields = {
+  personMode?: 'existing' | 'new'
+  personId?: string
+  newPersonFirstName?: string
+  newPersonLastName?: string
+  roleType?: string
+  registeredProviderFlag?: boolean
+}
+type ContactRolesFields = { contactRoles?: ContactRoleRowFields[]; planType?: string }
 function contactRolesRefine(data: ContactRolesFields, ctx: z.RefinementCtx) {
   data.contactRoles?.forEach((row, index) => {
     if (row.personMode === 'existing' && !row.personId) {
@@ -444,6 +454,15 @@ function contactRolesRefine(data: ContactRolesFields, ctx: z.RefinementCtx) {
     }
     if (row.personMode === 'new' && !row.newPersonFirstName?.trim() && !row.newPersonLastName?.trim()) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'newPersonFirstName'], message: "Provide the new person's name." })
+    }
+    // Bug fix: mirrors contactRoleGateError's ProviderContact/AgencyManaged branch (the only
+    // branch that can fire for a ProviderContact row, regardless of dateOfBirth) so the wizard
+    // blocks the same row the server would 400 on, instead of only warning inline.
+    if (row.roleType === 'ProviderContact') {
+      const gateError = contactRoleGateError('ProviderContact', data.planType as PlanType | undefined, undefined, row.registeredProviderFlag)
+      if (gateError) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contactRoles', index, 'registeredProviderFlag'], message: gateError })
+      }
     }
   })
 }
@@ -804,7 +823,10 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
   // INTAKE sub-wave A — Key Identifiers: every field optional except the weight/height bounds.
   baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
-  baseParticipantSchema.pick(pickShape(STEP_CONTACTS_FIELDS)).superRefine(contactRolesRefine),
+  // planType is added to the pick shape (not to STEP_CONTACTS_FIELDS itself) so contactRolesRefine
+  // can see it here without also reassigning fieldToStepIndex['planType'] to this step — planType
+  // errors must still route back to the NDIS & Funding step, not here.
+  baseParticipantSchema.pick({ ...pickShape(STEP_CONTACTS_FIELDS), planType: true }).superRefine(contactRolesRefine),
   // INTAKE sub-wave B — every field optional, no cross-field requirement.
   baseParticipantSchema.pick(pickShape(STEP_CULTURAL_CONSENT_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_SUPPORT_FIELDS)).superRefine(equipmentRefine),
@@ -1522,7 +1544,11 @@ export default function ParticipantCreatePage() {
       orderStartDate: null, orderReviewDate: null, orderEndDate: null, nomineeScope: null, appointmentDate: null,
       reasonForAppointment: null, alternateRepresentativeName: null, fundingLineItemType: null, organisationName: null,
       registrationNumber: null, lastVisitDate: null, consentToShare: null, discipline: null, frequencyOfContact: null,
-      websterPackFlag: null, roleTitle: null, registeredProviderFlag: null, scopeNotes: null,
+      // Bug fix: only a ProviderContact row carries this field — the backend nulls it for every
+      // other role anyway (ContactRoleRules), but a stray `false` shouldn't be sent regardless.
+      websterPackFlag: null, roleTitle: null,
+      registeredProviderFlag: row.roleType === 'ProviderContact' ? !!row.registeredProviderFlag : null,
+      scopeNotes: null,
       authorisationDocumentReference: null, preferredLanguage: null, startDate: null, endDate: null, notes: null,
     }))
     // INTAKE sub-wave A: weightKg/heightCm are z.coerce.number() fields, but only a full submit
@@ -2471,7 +2497,8 @@ export default function ParticipantCreatePage() {
                       const row = watchedValues.contactRoles?.[index]
                       const rowRoleType = (row?.roleType as ContactRoleType | undefined) ?? 'NextOfKin'
                       const available = availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
-                      const gateError = contactRoleGateError(rowRoleType, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)
+                      const gateError = contactRoleGateError(rowRoleType, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth, row?.registeredProviderFlag)
+                      const rowVisibleFields = CONTACT_ROLE_FIELD_MAP[rowRoleType] ?? []
                       return (
                         <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
                           <div className="flex items-start gap-2">
@@ -2560,6 +2587,20 @@ export default function ParticipantCreatePage() {
                           {gateError && (
                             <p role="alert" className="text-xs text-[var(--color-destructive)]">{gateError}</p>
                           )}
+                          {rowVisibleFields.includes('registeredProviderFlag') && (
+                            <FormField
+                              label="Registered NDIS provider"
+                              layout="checkbox"
+                              className="mb-0"
+                              hint={watchedValues.planType === 'AgencyManaged' ? 'Required for agency-managed participants' : undefined}
+                            >
+                              <input
+                                type="checkbox"
+                                {...register(`contactRoles.${index}.registeredProviderFlag` as const)}
+                                className="w-4 h-4 rounded border-[var(--color-border)]"
+                              />
+                            </FormField>
+                          )}
                           <FormField label="Primary" layout="checkbox" className="mb-0">
                             <input type="checkbox" {...register(`contactRoles.${index}.isPrimary` as const)} className="w-4 h-4 rounded border-[var(--color-border)]" />
                           </FormField>
@@ -2570,7 +2611,7 @@ export default function ParticipantCreatePage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleType: availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)[0] ?? 'NextOfKin', relationshipToParticipant: '', isPrimary: false })}
+                  onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleType: availableContactRoleTypes(CONTACT_ROLE_TYPES, watchedValues.planType as PlanType | undefined, watchedValues.dateOfBirth)[0] ?? 'NextOfKin', relationshipToParticipant: '', isPrimary: false, registeredProviderFlag: false })}
                   className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
                 >
                   <Plus className="w-4 h-4" /> Add contact
