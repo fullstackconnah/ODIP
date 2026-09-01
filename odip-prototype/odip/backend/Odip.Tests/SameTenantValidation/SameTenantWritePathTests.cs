@@ -187,7 +187,9 @@ public class SameTenantWritePathTests
         var dto = new CreateIncidentDto
         {
             ServiceType = ServiceStreams.Trip, TripInstanceId = foreignTrip.Id, ReportedByStaffId = reporter.Id,
-            IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            // Not IncidentType.Injury — that requires >=1 Injuries row (IN-5) and this test is
+            // exercising the cross-tenant trip-link rejection, unrelated to injuries.
+            IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var result = await controller.Create(dto, CancellationToken.None);
 
@@ -246,7 +248,10 @@ public class SameTenantWritePathTests
         var dto = new CreateIncidentDto
         {
             ServiceType = ServiceStreams.STA, TripInstanceId = null, ReportedByStaffId = reporter.Id,
-            IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
+            // Not IncidentType.Injury — that requires >=1 Injuries row (IN-5) and this test is
+            // exercising the "non-Trip service type doesn't require a trip link" rule, unrelated
+            // to injuries.
+            IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Title = "T", Description = "D",
         };
         var result = await controller.Create(dto, CancellationToken.None);
 

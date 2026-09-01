@@ -273,6 +273,66 @@ public enum IncidentSeverity
     Critical
 }
 
+/// <summary>
+/// IN-5: view-independent body region for an <see cref="Entities.IncidentInjury"/> — a region is
+/// a body part, not "body part as seen from the front/back". SPEC-04's frontend
+/// <c>BodyDiagram</c> component maps each region onto zero, one, or two SVG paths (front/back)
+/// plus exactly one always-visible list button; this enum is the single value space shared by
+/// both. Verbatim list per SPEC-04 IN-5.
+/// </summary>
+public enum BodyRegion
+{
+    Head,
+    Face,
+    Neck,
+    Chest,
+    Abdomen,
+    Pelvis,
+    UpperBack,
+    LowerBack,
+    Buttocks,
+    LeftShoulder,
+    RightShoulder,
+    LeftUpperArm,
+    RightUpperArm,
+    LeftElbow,
+    RightElbow,
+    LeftForearm,
+    RightForearm,
+    LeftWrist,
+    RightWrist,
+    LeftHand,
+    RightHand,
+    LeftHip,
+    RightHip,
+    LeftThigh,
+    RightThigh,
+    LeftKnee,
+    RightKnee,
+    LeftLowerLeg,
+    RightLowerLeg,
+    LeftAnkle,
+    RightAnkle,
+    LeftFoot,
+    RightFoot,
+    Other
+}
+
+/// <summary>IN-5: the kind of injury sustained at a given <see cref="BodyRegion"/>. Verbatim list per SPEC-04 IN-5.</summary>
+public enum InjuryType
+{
+    Bruise,
+    Laceration,
+    Abrasion,
+    Burn,
+    Fracture,
+    SprainOrStrain,
+    Bite,
+    PressureInjury,
+    Swelling,
+    Other
+}
+
 public enum IncidentStatus
 {
     Draft,
