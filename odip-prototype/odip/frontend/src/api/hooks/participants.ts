@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw, apiClient } from '../client'
+import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
 import type {
   ParticipantListDto,
   ParticipantDetailDto,
   CreateParticipantDto,
   UpdateParticipantDto,
+  PatchParticipantDto,
   SupportProfileDto,
   BookingListDto,
   PagedResult,
@@ -57,6 +58,26 @@ export function useUpdateParticipant() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto }) =>
       apiPutRaw<ParticipantDetailDto>(`/participants/${id}`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+    },
+  })
+}
+
+/**
+ * CORE-02: partial save — patches only the semantic field groups present in `data` (see
+ * PatchParticipantDto's doc), leaving every absent group untouched server-side. One generic hook
+ * for every group combination a caller needs (a wizard step's 1-4 groups, or a detail-tab
+ * section's 1-2 groups) rather than a hook per section. Same invalidate-on-success shape as
+ * useUpdateParticipant above. Every consumer of this hook must gate on `canWriteParticipantDetails`
+ * (never the broader `canWrite`) — see SPEC-00's CORE-02 section.
+ */
+export function usePatchParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: PatchParticipantDto }) =>
+      apiPatchRaw<ParticipantDetailDto>(`/participants/${id}`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })

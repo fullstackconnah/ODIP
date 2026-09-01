@@ -169,6 +169,15 @@ export function usePermissions() {
     canWriteAdlAssessments: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * CORE-02: gates every `usePatchParticipant()` consumer (the wizard's per-step "Save
+     * changes", the detail-tab section-edit panels) — mirrors ParticipantsController.Patch's
+     * `[Authorize(Roles = "Admin,Coordinator,SuperAdmin")]` gate exactly, same as the pre-existing
+     * PUT gate. Deliberately narrower than the broader `canWrite` (`!isSupportWorker`), which the
+     * backend's real Patch/Update role gate never allows for SupportWorker anyway.
+     */
+    canWriteParticipantDetails: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * Computed participant risk alerts (task 6c) are coordinator/admin-facing — mirrors the
      * backend's ParticipantAlertsController role gate exactly. SupportWorker/ReadOnly excluded
      * (the portal already shows participant flags to support workers separately).
