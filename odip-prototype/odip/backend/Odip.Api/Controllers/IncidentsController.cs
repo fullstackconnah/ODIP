@@ -62,6 +62,15 @@ public class IncidentsController : ControllerBase
         // rule in this method).
         if (dto.IncidentType == IncidentType.Injury && dto.Injuries.Count == 0)
             return "Please record at least one injury.";
+        // IN-4: RestrictivePracticeId (a link to one of the participant's approved/active
+        // register entries) and UnapprovedRestrictivePracticeDetails (free text describing a
+        // practice that was NOT one of those entries) are mutually exclusive by construction —
+        // the wizard's own step schema already enforces "exactly one of the two" client-side, but
+        // a modified/malicious client could still send both, which would be an incoherent state
+        // (linking an approved entry while also claiming an unapproved one was used). Reject it
+        // outright rather than silently picking one side to honour.
+        if (dto.RestrictivePracticeId.HasValue && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
+            return "An incident cannot both link an approved restrictive practice and describe an unapproved one.";
         return null;
     }
 
@@ -203,6 +212,7 @@ public class IncidentsController : ControllerBase
                 RestrictivePracticeId = i.RestrictivePracticeId,
                 RestrictivePracticeDescription = i.RestrictivePractice != null ? i.RestrictivePractice.Description : null,
                 RestrictivePracticeReviewDate = i.RestrictivePractice != null ? i.RestrictivePractice.ReviewDate : null,
+                UnapprovedRestrictivePracticeDetails = i.UnapprovedRestrictivePracticeDetails,
                 IsRestrictivePracticeAuthorised = i.IsRestrictivePracticeAuthorised,
                 Description = i.Description,
                 ImmediateActionsTaken = i.ImmediateActionsTaken,
@@ -272,6 +282,10 @@ public class IncidentsController : ControllerBase
             OtherTypeSpecify = dto.OtherTypeSpecify,
             RestrictivePracticeType = dto.RestrictivePracticeType,
             RestrictivePracticeId = dto.RestrictivePracticeId,
+            // IN-4: trimmed, empty->null — never written when a register entry was linked
+            // instead (the validation above already rejects both being set).
+            UnapprovedRestrictivePracticeDetails = string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)
+                ? null : dto.UnapprovedRestrictivePracticeDetails.Trim(),
             IsRestrictivePracticeAuthorised = isRpAuthorised,
             Severity = dto.Severity,
             Title = dto.Title,
@@ -381,6 +395,10 @@ public class IncidentsController : ControllerBase
         // does NOT silently re-run the authorised/unauthorised finding against today's register.
         i.RestrictivePracticeType = dto.RestrictivePracticeType;
         i.RestrictivePracticeId = dto.RestrictivePracticeId;
+        // IN-4: same trim/empty->null rule as Create — still frozen against ever creating a
+        // RestrictivePractice register row (no such code path exists here or anywhere else).
+        i.UnapprovedRestrictivePracticeDetails = string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)
+            ? null : dto.UnapprovedRestrictivePracticeDetails.Trim();
         i.Severity = dto.Severity;
         i.Status = dto.Status;
         i.Title = dto.Title;

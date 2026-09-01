@@ -16,7 +16,8 @@ const {
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
-// actual conditional-reveal wiring (INC-01 trip dropdown, INC-02 specify field).
+// actual conditional-reveal wiring (INC-01 trip dropdown, INC-02 specify field) and the real
+// wizard shell (useWizard/WizardStepRail/WizardNavFooter/WizardReviewStep).
 vi.mock('@/api/hooks', () => ({
   useCreateIncident: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
   useUpdateIncident: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
@@ -29,7 +30,7 @@ vi.mock('@/api/hooks', () => ({
     { id: 'staff-3', fullName: 'Alex Rivera' },
   ] }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
-  // INC-04/INC-05
+  // INC-04/INC-05/IN-4
   useRestrictivePractices: mockUseRestrictivePractices,
 }))
 
@@ -57,6 +58,82 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
   return render(<RouterProvider router={router} />)
 }
 
+// ── IN-1/IN-3/IN-4/IN-6 wizard navigation helpers ──────────────────────────────────────────
+// The form's fields are now split across wizard steps (Basics / Restrictive Practice
+// [conditional] / Incident Details / Review & Compliance [edit-only] / Review), and three of
+// Basics' native <select>s became Dropdown ('form' variant, GEN-1) — opened by clicking the
+// labelled trigger, then picking a `role="option"` by its visible label text, exactly like the
+// pre-existing restrictivePracticeType Dropdown already did on the old single-page form.
+
+async function openAndSelect(user: ReturnType<typeof userEvent.setup>, labelMatcher: string | RegExp, optionMatcher: string | RegExp) {
+  await user.click(screen.getByLabelText(labelMatcher))
+  await user.click(screen.getByRole('option', { name: optionMatcher }))
+}
+
+async function selectReportedByFirstAlexRivera(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByLabelText('Reported By *'))
+  await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
+}
+
+async function clickNext(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+}
+
+async function clickBack(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Back' }))
+}
+
+/** Fills every field Basics requires by default (title, incidentType='Other's specify text
+ * unless overridden, reportedBy) and clicks Next — lands on whichever step comes after Basics
+ * (Restrictive Practice if incidentType is RestrictivePracticeUse, Incident Details otherwise). */
+async function fillBasicsMinimallyAndNext(
+  user: ReturnType<typeof userEvent.setup>,
+  opts: { title?: string; incidentTypeOption?: string | RegExp; otherTypeSpecify?: string; selectParticipant?: boolean } = {},
+) {
+  const { title = 'Incident title', incidentTypeOption, otherTypeSpecify, selectParticipant } = opts
+  await user.type(screen.getByPlaceholderText('Brief incident summary'), title)
+  if (selectParticipant) {
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
+  }
+  if (incidentTypeOption) {
+    await openAndSelect(user, 'Incident Type *', incidentTypeOption)
+  }
+  // Default incidentType is 'Other', which requires the specify field, unless the caller picked
+  // a different incident type above.
+  if (!incidentTypeOption || incidentTypeOption === 'Other' || (incidentTypeOption instanceof RegExp && incidentTypeOption.test('Other'))) {
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), otherTypeSpecify ?? 'Lost property')
+  }
+  await selectReportedByFirstAlexRivera(user)
+  await clickNext(user)
+}
+
+/** From the Restrictive Practice step, fills the type + picks the "unapproved" path (no active
+ * practice to link) and clicks Next — used by tests that don't care about the RP determination
+ * itself, just need to get past this step's own required fields. */
+async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>, typeOption: string | RegExp, details = 'Improvised, not on the register.') {
+  await openAndSelect(user, /Restrictive Practice Type/i, typeOption)
+  await user.click(screen.getByRole('radio', { name: /none of these/i }))
+  await user.type(screen.getByLabelText(/Describe the restrictive practice/i), details)
+  await clickNext(user)
+}
+
+/** Fills Incident Details' two required fields (description, date/time) and clicks Next —
+ * lands on Review (create mode) or Review & Compliance (edit mode). */
+async function fillDetailsMinimallyAndNext(user: ReturnType<typeof userEvent.setup>, description = 'Details here') {
+  await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), description)
+  await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+  await clickNext(user)
+}
+
+/** IN-5: adds one injury row via BodyDiagram's always-available button list — required before
+ * Incident Details' Next succeeds whenever incidentType is 'Injury'. */
+async function addMinimalInjury(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Head' }))
+  await user.type(screen.getByLabelText(/Injury Description/i), 'Bumped head.')
+  await user.click(screen.getByRole('button', { name: 'Add injury' }))
+}
+
 beforeEach(() => {
   mockUseIncident.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
@@ -64,6 +141,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-incident-1' } })
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
   mockApiPost.mockReset().mockResolvedValue({ success: true, data: null })
+  localStorage.clear()
 })
 
 describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
@@ -73,7 +151,7 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     expect(screen.queryByLabelText(/^Trip/)).not.toBeInTheDocument()
 
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText(/Service Type/i), 'Trip')
+    await openAndSelect(user, /Service Type/i, 'Trip')
 
     expect(screen.getByLabelText(/^Trip/)).toBeInTheDocument()
   })
@@ -82,30 +160,27 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText(/Service Type/i), 'Trip')
+    await openAndSelect(user, /Service Type/i, 'Trip')
     expect(screen.getByLabelText(/^Trip/)).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText(/Service Type/i), 'STA')
+    await openAndSelect(user, /Service Type/i, 'STA')
     expect(screen.queryByLabelText(/^Trip/)).not.toBeInTheDocument()
   })
 
-  it('blocks submit when Service Type is Trip but no trip is selected', async () => {
+  it('blocks advancing past Basics when Service Type is Trip but no trip is selected', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Slip near pool')
-    await user.selectOptions(screen.getByLabelText(/Service Type/i), 'Trip')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await openAndSelect(user, /Service Type/i, 'Trip')
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Slip and fall')
+    await selectReportedByFirstAlexRivera(user)
 
-    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    await clickNext(user)
 
     expect(await screen.findByText(/trip must be selected/i)).toBeInTheDocument()
+    // Still on Basics — the Incident Details fields (a later step) never even mount.
+    expect(screen.queryByPlaceholderText('Detailed description of the incident...')).not.toBeInTheDocument()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
   })
 
@@ -114,17 +189,14 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     renderCreatePage()
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Slip near pool')
-    await user.selectOptions(screen.getByLabelText(/Service Type/i), 'Trip')
-    await user.selectOptions(screen.getByLabelText(/^Trip/), 'trip-1')
+    await openAndSelect(user, /Service Type/i, 'Trip')
+    await openAndSelect(user, /^Trip/, 'Gold Coast Beach Break')
     // incidentType defaults to 'Other', which requires the specify field too.
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Slip and fall')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user) // Basics -> Incident Details
+
+    await fillDetailsMinimallyAndNext(user) // Incident Details -> Review
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
@@ -146,24 +218,18 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'Injury')
+    await openAndSelect(user, 'Incident Type *', 'Injury')
     expect(screen.queryByLabelText(/Specify Incident Type/i)).not.toBeInTheDocument()
   })
 
-  it('blocks submit when Incident Type is Other but nothing is specified', async () => {
+  it('blocks advancing past Basics when Incident Type is Other but nothing is specified', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await selectReportedByFirstAlexRivera(user)
 
-    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    await clickNext(user)
 
     expect(await screen.findByText(/specify the incident type/i)).toBeInTheDocument()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
@@ -173,15 +239,8 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
-    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Lost property')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await fillBasicsMinimallyAndNext(user, { title: 'Something happened', otherTypeSpecify: 'Lost property' })
+    await fillDetailsMinimallyAndNext(user)
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
@@ -196,6 +255,9 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
 // INC-03: RecordAdministrationModal's "Report as incident" navigates here with router state —
 // this page reads it into the form. Nothing was persisted to create this state; it's purely
 // client-side hand-off, so a page refresh (state lost) is equivalent to landing here fresh.
+// IN-8: every prefilled field lands on step 0 (Basics) or step 2 (Incident Details) — the wizard
+// mounts on Basics as normal (no auto-advance), so Basics-owned fields are assertable immediately
+// and Details-owned fields (description/incidentDateTime) need one Next click to reach.
 describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
   const marPrefill: MarIncidentPrefillState = {
     source: 'mar-administration',
@@ -215,20 +277,24 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     tripInstanceId: null,
   }
 
-  it('shows the pre-fill banner and populates title/description/incident type/severity/participant from the MAR record', () => {
+  it('shows the pre-fill banner and populates title/incident type/severity/participant on Basics, and description on Incident Details', async () => {
+    const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
 
     expect(screen.getByText(/pre-filled from the medication record/i)).toBeInTheDocument()
 
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
       .toContain('Insulin')
+    expect((screen.getByLabelText('Incident Type *') as HTMLElement).textContent ?? '').not.toBe('')
+    // Involved Participant is a SearchableSelect combobox — its displayed value is the resolved
+    // item's label (derived from involvedParticipantId), not the raw id.
+    expect(screen.getByLabelText('Involved Participant')).toHaveValue('Sophie Brown')
+
+    // description/incidentDateTime are Incident Details fields — one step further along, but
+    // already atomically populated by the same reset() call (IN-8: no staged/partial prefill).
+    await clickNext(user)
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
       .toContain('Sophie Brown')
-    expect((screen.getByLabelText('Incident Type *') as HTMLSelectElement).value).toBe('MedicationError')
-    expect((screen.getByLabelText('Severity *') as HTMLSelectElement).value).toBe('High')
-    // Involved Participant is now a SearchableSelect combobox — its displayed value is the
-    // resolved item's label (derived from involvedParticipantId), not the raw id.
-    expect(screen.getByLabelText('Involved Participant')).toHaveValue('Sophie Brown')
   })
 
   it('sets Reported By directly from the MAR record\'s recordedByUserId (Staff/User are unified — same id space)', async () => {
@@ -271,14 +337,18 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
   it('sets serviceType to Trip and reveals the trip dropdown when the MAR record carries a tripInstanceId', () => {
     renderCreatePage({ pathname: '/incidents/new', state: { ...marPrefill, tripInstanceId: 'trip-1' } })
 
-    expect((screen.getByLabelText(/Service Type/i) as HTMLSelectElement).value).toBe('Trip')
-    expect((screen.getByLabelText(/^Trip/) as HTMLSelectElement).value).toBe('trip-1')
+    expect(screen.getByLabelText(/Service Type/i)).toHaveTextContent('Trip')
+    expect(screen.getByLabelText(/^Trip/)).toHaveValue('Gold Coast Beach Break')
   })
 
   it('submits the pre-filled values through to the create payload unchanged if the coordinator submits as-is', async () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
 
+    // Every Basics-required field (title/reportedBy/incidentType/severity) arrived pre-filled —
+    // Next succeeds immediately, same for Incident Details' description/incidentDateTime.
+    await clickNext(user) // Basics -> Incident Details
+    await clickNext(user) // Incident Details -> Review
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -306,7 +376,7 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
         involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
         participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
         immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-        witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+        witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
         reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
         resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
         supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
@@ -324,6 +394,10 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
 // keep reappearing on the portal until a separate Dismiss. The filer is the note's own author by
 // construction, so the acknowledge endpoint's author-only ownership check holds without needing
 // to pass any extra identity here.
+//
+// This prefill's suggested incidentType ('Falls' category -> 'Injury') now also means the
+// Incident Details step requires at least one injury row (IN-5) before Next succeeds — a genuine
+// new interaction this branch introduces, not present when injuries didn't exist.
 describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags on submit', () => {
   const shiftNotePrefill: ShiftNoteIncidentPrefillState = {
     source: 'shift-note',
@@ -345,13 +419,17 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     expect(screen.getByText(/pre-filled from a flagged shift note/i)).toBeInTheDocument()
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
       .toContain('Sophie Brown')
-    expect((screen.getByLabelText('Incident Type *') as HTMLSelectElement).value).toBe('Injury')
+    expect(screen.getByLabelText('Incident Type *')).toHaveTextContent('Injury')
   })
 
   it('acknowledges the source note\'s flags after a successful submit', async () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
+    await clickNext(user) // Basics -> Incident Details
+    // Falls -> Injury: at least one injury row is required before Next succeeds.
+    await addMinimalInjury(user)
+    await clickNext(user) // Incident Details -> Review
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
@@ -363,13 +441,8 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
-    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Lost property')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
-
+    await fillBasicsMinimallyAndNext(user, { title: 'Something happened', otherTypeSpecify: 'Lost property' })
+    await fillDetailsMinimallyAndNext(user)
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
@@ -381,6 +454,9 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     mockApiPost.mockRejectedValue(new Error('network error'))
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
+    await clickNext(user)
+    await addMinimalInjury(user)
+    await clickNext(user)
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
@@ -394,31 +470,22 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     expect(screen.queryByText('Restrictive Practice Details')).not.toBeInTheDocument()
   })
 
-  it('shows the RP type picker once Incident Type is Restrictive Practice Use', async () => {
+  it('shows the RP type picker once Incident Type is Restrictive Practice Use (a new step reached via Next)', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
 
     expect(screen.getByText('Restrictive Practice Details')).toBeInTheDocument()
     expect(screen.getByLabelText(/Restrictive Practice Type/i)).toBeInTheDocument()
   })
 
-  it('blocks submit when RP incident type is selected but no RP type is chosen', async () => {
+  it('blocks advancing past the Restrictive Practice step when no RP type is chosen', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
-
-    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
+    await clickNext(user) // still on the Restrictive Practice step — nothing chosen yet
 
     expect(await screen.findByText(/select the restrictive practice type/i)).toBeInTheDocument()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
@@ -428,7 +495,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
 
     expect(screen.getByText(/select the involved participant and restrictive practice type/i)).toBeInTheDocument()
   })
@@ -440,11 +507,8 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
     expect(await screen.findByText(/matches an active practice/i)).toBeInTheDocument()
   })
@@ -454,43 +518,39 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
     expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
   })
 
-  it('submits restrictivePracticeType in the create payload', async () => {
+  // IN-4: with no participant selected there is nothing to link, so reaching Review requires
+  // going through the "None of these — unapproved" path. This also proves the central rule end
+  // to end on the frontend: the payload never carries both restrictivePracticeId and
+  // unapprovedRestrictivePracticeDetails.
+  it('submits restrictivePracticeType and unapprovedRestrictivePracticeDetails (never restrictivePracticeId) in the create payload', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
-    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
-    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
+    await fillUnapprovedRpAndNext(user, /^seclusion/i, 'Improvised seclusion, not on file')
+    await fillDetailsMinimallyAndNext(user)
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
-    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({
       incidentType: 'RestrictivePracticeUse',
       restrictivePracticeType: 'Seclusion',
+      unapprovedRestrictivePracticeDetails: 'Improvised seclusion, not on file',
     })
+    expect(payload.restrictivePracticeId).toBeUndefined()
   })
 })
 
 describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
-  it("lists the involved participant's active practices of the selected type, not other types", async () => {
+  it("lists the involved participant's active practices of the selected type, not other types, as selectable rows", async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
       { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
       { id: 'rp-2', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true },
@@ -498,37 +558,33 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
-    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
-
-    expect(screen.getByRole('option', { name: /Seclusion room during acute crisis/i })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Two-person hold/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Two-person hold/i })).not.toBeInTheDocument()
   })
 
-  it('linking a practice prepopulates an empty description', async () => {
+  it('linking a practice prepopulates an empty description (visible once Incident Details is reached)', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
       { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
-    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
-    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await clickNext(user) // Restrictive Practice -> Incident Details
 
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
       .toContain('Seclusion room during acute crisis.')
   })
 
+  // Reworked navigation for the wizard: description now lives on a LATER step than the RP
+  // linking control, so "already typed" has to be established on Incident Details, then the
+  // reporter goes Back to the Restrictive Practice step and switches the link — the same
+  // never-overwrite behaviour as before, just exercised via a different path.
   it('never overwrites an already-typed description when linking a practice', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
       { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
@@ -536,14 +592,12 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await fillUnapprovedRpAndNext(user, /^seclusion/i, 'placeholder, will switch to a linked practice')
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Already typed details')
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
-    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
-    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+    await clickBack(user) // Incident Details -> Restrictive Practice
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await clickNext(user) // Restrictive Practice -> Incident Details
 
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
       .toBe('Already typed details')
@@ -556,44 +610,41 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'RP incident')
-    await user.selectOptions(screen.getByLabelText('Incident Type *'), 'RestrictivePracticeUse')
-    await user.click(screen.getByLabelText('Involved Participant'))
-    await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^seclusion/i }))
-    await user.click(screen.getByLabelText(/Link to an authorised practice/i))
-    await user.click(screen.getByRole('option', { name: /Seclusion room during acute crisis/i }))
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await clickNext(user) // Restrictive Practice -> Incident Details
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), ' Details here')
-    // Reported By is now a SearchableSelect combobox — staff-1 and staff-3 deliberately share
-    // the fullName "Alex Rivera" (see the useStaff mock above), so pick the first match, which is
-    // staff-1 (item order mirrors the mocked staff array).
-    await user.click(screen.getByLabelText('Reported By *'))
-    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user) // Incident Details -> Review
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
-    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({
       restrictivePracticeType: 'Seclusion',
       restrictivePracticeId: 'rp-1',
     })
+    expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
   })
 })
 
 // INC-04: the determination is frozen at creation — editing an existing incident must never
 // silently re-run it against today's register, even if the participant/type fields are changed.
+// Edit mode's initialVisited: 'all' (same jump-anywhere convention as ParticipantCreatePage) means
+// every step's rail button is clickable immediately — these tests jump directly rather than
+// stepping through Next, since nothing here is testing the Next-validation gate itself.
 describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
   const existingRpIncident = {
     id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'RestrictivePracticeUse', otherTypeSpecify: null,
     restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-1', restrictivePracticeDescription: 'Seclusion room, acute crisis.',
-    restrictivePracticeReviewDate: '2026-12-01', isRestrictivePracticeAuthorised: false,
+    restrictivePracticeReviewDate: '2026-12-01', unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: false,
     severity: 'High', status: 'Draft', title: 'Existing RP incident', incidentDateTime: '2026-08-01T09:00',
     location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
     involvedParticipantName: 'Sophie Brown', qscReportingStatus: 'Required', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
     participantBookingId: null, involvedParticipantId: 'participant-1', involvedStaffId: null, involvedStaffName: null,
     immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-    witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+    witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
     reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
     resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
     supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
@@ -605,7 +656,10 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
       { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true },
     ] })
+    const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
 
     expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
     expect(screen.getByText(/determined when this incident was created/i)).toBeInTheDocument()
@@ -619,9 +673,9 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
     await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)
-    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
-    await user.click(screen.getByRole('option', { name: /^physical restraint/i }))
+    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
 
     expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
   })
@@ -665,16 +719,16 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     expect(involvedStaff).toHaveValue('Alex Rivera')
   })
 
-  it('selects Reviewed By via keyboard only (ArrowDown + Enter) on the edit form', async () => {
+  it('selects Reviewed By via keyboard only (ArrowDown + Enter) on the edit form\'s Compliance step', async () => {
     mockUseIncident.mockReturnValue({
       data: {
-        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Injury', otherTypeSpecify: null,
+        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
         severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
         location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
         involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
         participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
         immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-        witnessNames: null, witnessStatements: null, qscReportedAt: null, qscReferenceNumber: null,
+        witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
         reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
         resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
         supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
@@ -683,11 +737,59 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
+    // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
+    await user.click(await screen.findByRole('button', { name: /Review & Compliance/i }))
+
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)
     // First enabled option is 'Not reviewed' (value '') — one more ArrowDown reaches staff-1.
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
 
     expect(reviewedBy).toHaveValue('Alex Rivera')
+  })
+})
+
+// IN-3: reportedByStaffId defaults to the signed-in user (odip_user in localStorage) — a
+// DEFAULT, not a lock. New coverage this branch adds (no equivalent existed on the pre-wizard
+// single-page form, which never seeded a default at all).
+describe('IncidentCreatePage — IN-3 reportedByStaffId defaults to the signed-in user', () => {
+  it('pre-selects the signed-in user (by id, not name) when odip_user is present in localStorage', async () => {
+    // staff-3 shares its fullName with staff-1 (see the useStaff mock) — asserting via
+    // aria-selected on the specific option (not just the displayed label) proves this resolves
+    // by id, the same audit-integrity guard INC-03's prefill test applies.
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-3', fullName: 'Alex Rivera' }))
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const reportedBy = screen.getByLabelText('Reported By *')
+    expect(reportedBy).toHaveValue('Alex Rivera')
+    await user.click(reportedBy)
+    const options = screen.getAllByRole('option', { name: 'Alex Rivera' })
+    expect(options[0]).toHaveAttribute('aria-selected', 'false')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('leaves Reported By blank when there is no resolvable signed-in user (today\'s untouched behaviour)', () => {
+    renderCreatePage()
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('')
+  })
+
+  it('is a default, not a lock — a manually-picked reporter is never silently reverted', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', fullName: 'Alex Rivera' }))
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const reportedBy = screen.getByLabelText('Reported By *')
+    expect(reportedBy).toHaveValue('Alex Rivera')
+    // Manually switch to the other same-named entry, staff-3.
+    await user.click(reportedBy)
+    await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[1])
+    // Type into an unrelated field, forcing further re-renders — the explicit choice must hold.
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Unrelated edit')
+
+    await user.click(reportedBy)
+    const options = screen.getAllByRole('option', { name: 'Alex Rivera' })
+    expect(options[0]).toHaveAttribute('aria-selected', 'false')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
   })
 })

@@ -554,4 +554,145 @@ public class IncidentsControllerTests
         // Original row must survive an update that was rejected before SaveChangesAsync.
         Assert.Single(await db.IncidentInjuries.Where(x => x.IncidentReportId == incident.Id).ToListAsync());
     }
+
+    // ── IN-4: unapproved restrictive practice details — the register must NEVER be touched ────
+
+    /// <summary>
+    /// THE critical rule: recording an unapproved restrictive practice on an incident must never
+    /// insert a row into the participant's RestrictivePractices register — there is no code path
+    /// anywhere (Create or Update) that does so. This asserts both halves: the incident itself
+    /// persists the free text with RestrictivePracticeId left null, AND the participant's
+    /// register table is untouched (still exactly whatever it was seeded with, here: empty).
+    /// </summary>
+    [Fact]
+    public async Task Create_UnapprovedRestrictivePracticeDetails_PersistsOnIncident_AndNeverCreatesRegisterEntry()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id) with
+        {
+            RestrictivePracticeId = null,
+            UnapprovedRestrictivePracticeDetails = "Staff improvised a locked-room seclusion that isn't on the register.",
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal("Staff improvised a locked-room seclusion that isn't on the register.", saved.UnapprovedRestrictivePracticeDetails);
+        Assert.Null(saved.RestrictivePracticeId);
+        // THE assertion: the participant's register itself was never written to.
+        Assert.Empty(await db.RestrictivePractices.Where(rp => rp.ParticipantId == participant.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_BlankUnapprovedRestrictivePracticeDetails_IsTrimmedToNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            UnapprovedRestrictivePracticeDetails = "   ",
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Null(saved.UnapprovedRestrictivePracticeDetails);
+    }
+
+    [Fact]
+    public async Task Create_BothRestrictivePracticeIdAndUnapprovedDetailsSet_ReturnsBadRequest_AndNeverCreatesRegisterEntry()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+
+        // Simulates a modified/malicious client bypassing the frontend's own mutual-exclusivity
+        // enforcement — both fields set at once is an incoherent state that must be rejected
+        // server-side regardless of what the wizard's own client-side rule would have prevented.
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id) with
+        {
+            UnapprovedRestrictivePracticeDetails = "Also describing an unapproved use at the same time.",
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("cannot both link", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await db.IncidentReports.ToListAsync());
+        // No incident was created at all, so the register obviously wasn't touched either — but
+        // assert it explicitly since that's the property under test in this file.
+        Assert.Single(await db.RestrictivePractices.Where(rp => rp.ParticipantId == participant.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_BothRestrictivePracticeIdAndUnapprovedDetailsSet_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.RestrictivePracticeUse,
+            RestrictivePracticeType = RestrictivePracticeType.Seclusion,
+            RestrictivePracticeId = practice.Id,
+            UnapprovedRestrictivePracticeDetails = "Also set on update — incoherent.",
+            InvolvedParticipantId = participant.Id,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.Required,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(updateResult.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("cannot both link", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GetById_IncludesUnapprovedRestrictivePracticeDetails()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id) with
+        {
+            RestrictivePracticeId = null,
+            UnapprovedRestrictivePracticeDetails = "An unregistered practice was used.",
+        };
+        await controller.Create(dto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var result = await controller.GetById(incidentId, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("An unregistered practice was used.", body.Data!.UnapprovedRestrictivePracticeDetails);
+        Assert.Null(body.Data.RestrictivePracticeId);
+    }
 }

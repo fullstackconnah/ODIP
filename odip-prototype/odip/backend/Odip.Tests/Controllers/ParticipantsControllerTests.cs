@@ -2577,6 +2577,8 @@ public class ParticipantsControllerTests
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == createdBody.Data!.Id && n.SourceKey == "safety:allergies");
         Assert.Contains("Bee stings", note.Description);
+    }
+
     // ── PF-2 (SPEC-02): plan-type compliance warning — advisory only, never blocks a save ──
 
     [Fact]
