@@ -10,11 +10,22 @@ import {
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { formatDateAu } from '@/lib/utils'
-import type { SleepoverType, AssignmentStatus } from '@/api/types/enums'
+import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
 import type { BookingListDto } from '@/api/types/bookings'
+
+const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
+
+const SLEEPOVER_TYPE_LABELS: Record<SleepoverType, string> = {
+  None: 'None',
+  ActiveNight: 'Active Night',
+  PassiveNight: 'Passive Night',
+  Sleepover: 'Sleepover',
+}
+const SLEEPOVER_TYPE_ITEMS: DropdownItem[] = SLEEPOVER_TYPES.map(v => ({ value: v, label: SLEEPOVER_TYPE_LABELS[v] }))
 
 interface StaffEditForm {
   tripInstanceId: string
@@ -239,13 +250,14 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select value={editStaffForm.status} onChange={e => setEditStaffForm({ ...editStaffForm, status: e.target.value as AssignmentStatus })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  {['Proposed', 'Confirmed', 'Completed', 'Cancelled'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <label id="editStaffStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="editStaffStatusLabel"
+                  value={editStaffForm.status}
+                  onChange={val => setEditStaffForm({ ...editStaffForm, status: val as AssignmentStatus })}
+                  items={ASSIGNMENT_STATUS_ITEMS}
+                />
               </div>
 
               {/* Dates */}
@@ -273,14 +285,14 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
 
               {/* Sleepover Type */}
               <div>
-                <label className="block text-sm font-medium mb-1">Sleepover Type</label>
-                <select value={editStaffForm.sleepoverType} onChange={e => setEditStaffForm({ ...editStaffForm, sleepoverType: e.target.value as SleepoverType })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  <option value="None">None</option>
-                  <option value="ActiveNight">Active Night</option>
-                  <option value="PassiveNight">Passive Night</option>
-                  <option value="Sleepover">Sleepover</option>
-                </select>
+                <label id="editStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="editStaffSleepoverTypeLabel"
+                  value={editStaffForm.sleepoverType}
+                  onChange={val => setEditStaffForm({ ...editStaffForm, sleepoverType: val as SleepoverType })}
+                  items={SLEEPOVER_TYPE_ITEMS}
+                />
               </div>
 
               {/* Shift Notes */}
@@ -382,14 +394,14 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
 
               {/* Sleepover Type */}
               <div>
-                <label className="block text-sm font-medium mb-1">Sleepover Type</label>
-                <select value={staffSleepoverType} onChange={e => setStaffSleepoverType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  <option value="None">None</option>
-                  <option value="ActiveNight">Active Night</option>
-                  <option value="PassiveNight">Passive Night</option>
-                  <option value="Sleepover">Sleepover</option>
-                </select>
+                <label id="addStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="addStaffSleepoverTypeLabel"
+                  value={staffSleepoverType}
+                  onChange={setStaffSleepoverType}
+                  items={SLEEPOVER_TYPE_ITEMS}
+                />
               </div>
 
               {/* Shift Notes */}

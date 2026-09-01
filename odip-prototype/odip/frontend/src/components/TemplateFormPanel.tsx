@@ -10,6 +10,7 @@ import {
   useTrips,
 } from '@/api/hooks'
 import type { EventTemplateDto, TripListDto } from '@/api/types'
+import { SearchableSelect } from '@/components/SearchableSelect'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -216,20 +217,15 @@ export default function TemplateFormPanel({
           {/* Fill from trip — create mode only */}
           {!isEdit && (
             <div>
-              <label htmlFor="fillFromTrip" className={labelClass}>Fill from trip</label>
-              <select
+              <label id="fillFromTripLabel" className={labelClass}>Fill from trip</label>
+              <SearchableSelect
                 id="fillFromTrip"
+                aria-labelledby="fillFromTripLabel"
                 value={selectedTripId}
-                onChange={e => handleTripSelect(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">— select a trip —</option>
-                {trips.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.tripName}
-                  </option>
-                ))}
-              </select>
+                onChange={handleTripSelect}
+                placeholder="— select a trip —"
+                items={trips.map(t => ({ value: t.id, label: t.tripName }))}
+              />
               <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
                 Fills name, code, destination, region, and duration from the selected trip.
               </p>

@@ -3,11 +3,28 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+
+const INCIDENT_STATUS_FILTER_ITEMS: DropdownItem[] = [
+  { value: 'Draft', label: 'Draft' },
+  { value: 'Submitted', label: 'Submitted' },
+  { value: 'UnderReview', label: 'Under Review' },
+  { value: 'Escalated', label: 'Escalated' },
+  { value: 'Resolved', label: 'Resolved' },
+  { value: 'Closed', label: 'Closed' },
+]
+
+const INCIDENT_SEVERITY_FILTER_ITEMS: DropdownItem[] = [
+  { value: 'Low', label: 'Low' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'High', label: 'High' },
+  { value: 'Critical', label: 'Critical' },
+]
 
 function formatQscLabel(status: string): string {
   switch (status) {
@@ -84,30 +101,26 @@ export default function IncidentsPage() {
         {toggleButtons}
         {!showArchived && (
           <>
-            <div className="relative">
-              <Filter aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                aria-label="Filter by status"
-                className="pl-10 pr-8 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
-                <option value="">All Statuses</option>
-                <option value="Draft">Draft</option>
-                <option value="Submitted">Submitted</option>
-                <option value="UnderReview">Under Review</option>
-                <option value="Escalated">Escalated</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-              </select>
+            <div className="flex items-center gap-1.5">
+              <Filter aria-hidden="true" className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+              <Dropdown
+                variant="pill"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                label="All Statuses"
+                items={INCIDENT_STATUS_FILTER_ITEMS}
+                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+              />
             </div>
-            <div className="relative">
-              <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}
-                aria-label="Filter by severity"
-                className="px-4 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
-                <option value="">All Severities</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+            <div>
+              <Dropdown
+                variant="pill"
+                value={severityFilter}
+                onChange={setSeverityFilter}
+                label="All Severities"
+                items={INCIDENT_SEVERITY_FILTER_ITEMS}
+                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+              />
             </div>
           </>
         )}

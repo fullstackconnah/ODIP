@@ -1,15 +1,24 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
+
+const POSITION_ITEMS: DropdownItem[] = [
+  { value: 'SupportWorker', label: 'Support Worker' },
+  { value: 'SeniorSupportWorker', label: 'Senior Support Worker' },
+  { value: 'Coordinator', label: 'Coordinator' },
+  { value: 'TeamLeader', label: 'Team Leader' },
+  { value: 'Other', label: 'Other' },
+]
 
 const staffSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -88,7 +97,7 @@ export default function StaffCreatePage() {
     ? [...ROLE_OPTIONS, { value: existingRole, label: ROLE_LABELS[existingRole] ?? existingRole }]
     : ROLE_OPTIONS
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
+  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
     resolver: zodResolver(staffSchema),
     defaultValues: {
       position: 'SupportWorker',
@@ -207,13 +216,19 @@ export default function StaffCreatePage() {
           </FormField>
 
           <FormField label="Position" required error={errors.position?.message}>
-            <select {...register('position')}>
-              <option value="SupportWorker">Support Worker</option>
-              <option value="SeniorSupportWorker">Senior Support Worker</option>
-              <option value="Coordinator">Coordinator</option>
-              <option value="TeamLeader">Team Leader</option>
-              <option value="Other">Other</option>
-            </select>
+            <Controller
+              control={control}
+              name="position"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={POSITION_ITEMS}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Region">
@@ -243,11 +258,20 @@ export default function StaffCreatePage() {
                 : (!errors.role ? 'Controls what this person can access and edit in the app.' : undefined)
             }
           >
-            <select {...register('role')} disabled={isRoleLocked} aria-disabled={isRoleLocked}>
-              {roleSelectOptions.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="role"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={roleSelectOptions}
+                  disabled={isRoleLocked}
+                />
+              )}
+            />
           </FormField>
         </Card>
 

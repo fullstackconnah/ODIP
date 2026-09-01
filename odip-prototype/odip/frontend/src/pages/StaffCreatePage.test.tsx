@@ -80,9 +80,12 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
   it('renders the role field disabled, showing the target\'s actual current role', async () => {
     renderEditPage('staff-1')
 
-    const roleSelect = await screen.findByLabelText(/account role/i)
-    expect(roleSelect).toBeDisabled()
-    expect(within(roleSelect as HTMLSelectElement).getByRole('option', { name: 'Admin', selected: true })).toBeInTheDocument()
+    // GEN-1: Account Role migrated from a native <select> to Dropdown (variant="form") via
+    // Controller, which doesn't forward FormField's aria-labelledby clone to the render-prop
+    // child (same gap TaskCreatePage.test.tsx documents for its Owner picker) — so the trigger
+    // is queried by its own visible text (the current value's label) instead of getByLabelText.
+    const roleButton = await screen.findByRole('button', { name: 'Admin' })
+    expect(roleButton).toBeDisabled()
     expect(screen.getByText(/only an admin can change this role/i)).toBeInTheDocument()
   })
 
@@ -107,11 +110,18 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
 
 describe('StaffCreatePage account-role options (create mode)', () => {
   it('hides Admin and SuperAdmin from a Coordinator\'s options', async () => {
+    const user = userEvent.setup()
     mockUsePermissions.mockReturnValue({ isCoordinator: true })
     renderCreatePage()
 
-    const roleSelect = await screen.findByLabelText(/account role/i)
-    const optionNames = within(roleSelect).getAllByRole('option').map(o => o.textContent)
+    // GEN-1: Dropdown renders its option list in a portal only while open, and — since Controller
+    // doesn't forward FormField's aria-labelledby clone to the render-prop child (see the
+    // disabled-role test above) — the trigger can't be queried by label either. Both Position and
+    // Account Role default to the same 'Support Worker' text, so scope by the field's own label
+    // element instead of relying on the trigger's accessible name being unique.
+    const roleField = (await screen.findByText(/Account Role/)).parentElement!
+    await user.click(within(roleField).getByRole('button'))
+    const optionNames = screen.getAllByRole('option').map(o => o.textContent)
     expect(optionNames).not.toContain('Admin')
     expect(optionNames).not.toContain('SuperAdmin')
     expect(optionNames).toContain('Support Worker')
@@ -120,11 +130,13 @@ describe('StaffCreatePage account-role options (create mode)', () => {
   })
 
   it('offers Admin (but never SuperAdmin) to a non-Coordinator actor', async () => {
+    const user = userEvent.setup()
     mockUsePermissions.mockReturnValue({ isCoordinator: false })
     renderCreatePage()
 
-    const roleSelect = await screen.findByLabelText(/account role/i)
-    const optionNames = within(roleSelect).getAllByRole('option').map(o => o.textContent)
+    const roleField = (await screen.findByText(/Account Role/)).parentElement!
+    await user.click(within(roleField).getByRole('button'))
+    const optionNames = screen.getAllByRole('option').map(o => o.textContent)
     expect(optionNames).toContain('Admin')
     expect(optionNames).not.toContain('SuperAdmin')
   })
