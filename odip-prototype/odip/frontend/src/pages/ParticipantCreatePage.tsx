@@ -4,7 +4,8 @@ import { useForm, useFieldArray, useWatch, Controller, type Resolver, type Field
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
-import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
+import { useCreateParticipant, useUpdateParticipant, usePatchParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
@@ -852,6 +853,67 @@ const STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = Object.fromEntries(
   WIZARD_STEPS.map((step, i) => [step.key, STEP_SCHEMAS[i]]),
 )
 
+// PF-1: which CORE-02 semantic field group(s) a "Save changes" click on a given wizard step
+// patches. Per SPEC-00's CORE-02 "Consumer contract" section for SPEC-02 — copied verbatim from
+// there, keyed by WIZARD_STEPS' own step keys rather than the numeric step indices SPEC-02's text
+// uses: CORE-01 (already merged) moved this wizard's step-position bookkeeping onto string keys
+// specifically so it survives a step-list reshuffle, and a numeric-indexed map here would be the
+// one piece of PF-1 that quietly reintroduces the fragility CORE-01 was built to remove. The
+// step<->numeric-index correspondence is unchanged from SPEC-00's table (identity=0, ndis=1,
+// keyIdentifiers=2, contacts=3 [absent], culturalConsent=4, support=5, medical=6,
+// behaviourCommunication=7, dailyLiving=8, risks=9, review [absent]).
+// contacts/review intentionally absent — no patchable group of their own (Contacts stays on its
+// own nested-CRUD endpoint; Review has no fields of its own).
+const STEP_TO_PATCH_GROUPS: Partial<Record<string, (keyof PatchParticipantDto)[]>> = {
+  identity: ['personalDetails', 'preferredStaff', 'address', 'livingArrangement'],
+  ndis: ['ndisPlan', 'serviceProfile'],
+  keyIdentifiers: ['keyIdentifiers'],
+  culturalConsent: ['culturalBackground', 'consents'],
+  support: ['supportNeedsMobility', 'checklistItems'],
+  medical: ['medical', 'healthConditions'],
+  behaviourCommunication: ['behaviourCommunication', 'communityAccessBehaviour', 'checklistItems'],
+  dailyLiving: ['adlAssessments', 'mealsAndDiet', 'aboutMe', 'supportsLookLike'],
+  risks: ['risksHazardsSummary'],
+}
+
+// The 4 collection groups (consents/healthConditions/adlAssessments/checklistItems) are handled
+// by dedicated branches in handleSavePartial below (checklistItems needs the row-filtering the
+// trap requires; the other three are single-step-owned, so the whole transformed array travels
+// as-is) — this map covers only the remaining 16 SCALAR groups, each a flat slice of
+// buildPayload's already-transformed output. Field lists copied verbatim from SPEC-00's CORE-02
+// field-group partition table / participant-patch.ts's PatchXDto interfaces.
+type ScalarPatchGroup = Exclude<keyof PatchParticipantDto, 'consents' | 'healthConditions' | 'adlAssessments' | 'checklistItems'>
+const PATCH_GROUP_FIELDS: Record<ScalarPatchGroup, readonly (keyof ParticipantFormData)[]> = {
+  personalDetails: ['firstName', 'lastName', 'preferredName', 'middleName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'placeOfBirth', 'country', 'phone', 'email'],
+  preferredStaff: ['preferredStaffId'],
+  address: ['addressStreet', 'addressSuburb', 'addressState', 'addressPostcode'],
+  livingArrangement: ['livingArrangement', 'mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo', 'livesWithOthers', 'whoLivesWith', 'silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours', 'livingArrangementNotes'],
+  ndisPlan: ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'fundingSource', 'fundingOrganisation', 'isDsoa', 'isRepeatClient'],
+  serviceProfile: ['region', 'serviceStreams'],
+  keyIdentifiers: ['pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry', 'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber', 'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm'],
+  culturalBackground: ['isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander', 'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo', 'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo', 'personalInterests', 'choiceControlNotes'],
+  supportNeedsMobility: ['isHighSupport', 'isIntensiveSupport', 'supportRatio', 'mobilityAidWheelchair', 'mobilityAidWalker', 'mobilitySupportOptions', 'overnightSupport', 'overnightRatio', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine', 'mobilityNotes', 'equipmentRequirements', 'transportRequirements', 'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics', 'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity'],
+  medical: ['primaryDiagnosis', 'otherDiagnoses', 'hidpaSupportCategories', 'hidpaNotes', 'medicalSummary', 'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes'],
+  behaviourCommunication: ['memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning', 'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'behaviourRiskRating', 'ridsLogged', 'bspPlanProvided', 'bocChartProvided', 'expressiveSkills', 'receptiveSkills', 'readingAbility', 'communicationAids'],
+  communityAccessBehaviour: ['signsHappyAndSettled', 'whatHelpsMeCalmDown', 'bocTriggers', 'bocEarlyWarningSigns', 'bocDeEscalationStrategies', 'bocWhatNotToDo'],
+  mealsAndDiet: ['mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail', 'specialUtensilsDetail', 'specialDietaryNeedsDetail', 'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten'],
+  aboutMe: ['goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes'],
+  supportsLookLike: ['supportsLookLikeMorning', 'supportsLookLikeDay', 'supportsLookLikeAfternoonEvening', 'supportsLookLikeOvernight'],
+  risksHazardsSummary: ['behaviourRiskSummary', 'notes'],
+}
+
+function extractGroupFields(payload: Record<string, unknown>, fields: readonly (keyof ParticipantFormData)[]) {
+  const dto: Record<string, unknown> = {}
+  for (const f of fields) dto[f as string] = payload[f as string]
+  return dto
+}
+
+function pickFields<T extends object, K extends keyof T>(obj: T, keys: readonly K[]): Pick<T, K> {
+  const result = {} as Pick<T, K>
+  for (const k of keys) result[k] = obj[k]
+  return result
+}
+
 const PLAN_TYPE_LABELS: Record<string, string> = {
   SelfManaged: 'Self Managed',
   PlanManaged: 'Plan Managed',
@@ -1010,6 +1072,8 @@ export default function ParticipantCreatePage() {
   const isEdit = !!id
   const createParticipant = useCreateParticipant()
   const updateParticipant = useUpdateParticipant()
+  // PF-1: "Save changes" — CORE-02's per-group partial save, gated by canSavePartial below.
+  const patchParticipant = usePatchParticipant()
   const { data: existing, isLoading: isLoadingExisting } = useParticipant(isEdit ? id : undefined)
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter(s => s.isActive)
@@ -1690,6 +1754,86 @@ export default function ParticipantCreatePage() {
     }
   }
 
+  // PF-1: "Save changes" — patches only the current step's CORE-02 group(s), validates only the
+  // current step's schema, and stays on the wizard. Exact complement of "Save as draft" (see
+  // canSavePartial below).
+  const [savingPartial, setSavingPartial] = useState(false)
+  const [partialSaveError, setPartialSaveError] = useState<string | null>(null)
+  const [partialSaveSuccess, setPartialSaveSuccess] = useState(false)
+  const handleSavePartial = async () => {
+    if (!id) return
+    const groups = STEP_TO_PATCH_GROUPS[currentStep.key]
+    if (!groups) return
+    setPartialSaveError(null)
+    setPartialSaveSuccess(false)
+    // Validate ONLY the current step's schema — the same validator handleNext already uses —
+    // so "Save changes" never blocks on an unrelated step's missing/invalid field the way a
+    // full submit does.
+    const values = getValues()
+    const stepErrors = await validateStep(currentStep, values)
+    if (stepErrors && stepErrors.length > 0) {
+      let firstPath: string | undefined
+      for (const err of stepErrors) {
+        if (firstPath === undefined) firstPath = err.path
+        setError(err.path as keyof ParticipantFormData, { type: err.code, message: err.message })
+      }
+      if (firstPath !== undefined) requestFocus(firstPath)
+      return
+    }
+    setSavingPartial(true)
+    try {
+      // buildPayload already knows how to transform every field (tri-state collapse, array
+      // upserts, formatServiceStreams/formatHidpaCategories, etc.) — reuse its output rather
+      // than re-deriving the wire shape here. `draft` doesn't matter for a Patch call (there is
+      // no IsDraft field on PatchParticipantDto at all), so pass the participant's current value
+      // through unchanged.
+      const payload = buildPayload(values, existing?.isDraft === true)
+      const data: PatchParticipantDto = {}
+      for (const group of groups) {
+        if (group === 'consents' || group === 'healthConditions' || group === 'adlAssessments') {
+          // Single-step-owned collections — the whole transformed array travels as-is, same as
+          // a full submit.
+          ;(data as Record<string, unknown>)[group] = payload[group]
+        } else if (group === 'checklistItems') {
+          // THE TRAP: checklistItems is ONE flat 21-row collection split BY ROW across TWO
+          // steps — rows 0-8 on Support Needs & Mobility ("support"), rows 9-20 on Behaviour &
+          // Communication ("behaviourCommunication"). The backend upserts collections by item
+          // key: a type OMITTED from the array is left completely untouched, but a type
+          // PRESENT in the array with null value/notes still CLEARS that existing row. So this
+          // step must send ONLY the item types it owns and MUST NOT include the other step's
+          // types at all (not even as null placeholders) — sending all 21 would silently wipe
+          // whichever half this step doesn't own.
+          const ownedTypes: readonly string[] = currentStep.key === 'support'
+            ? COMMUNITY_MOBILITY_RISK_ITEM_TYPES
+            : COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES
+          data.checklistItems = (payload.checklistItems ?? []).filter((item: { itemType: string }) =>
+            (ownedTypes as readonly string[]).includes(item.itemType),
+          )
+        } else {
+          (data as Record<string, unknown>)[group] = extractGroupFields(payload, PATCH_GROUP_FIELDS[group as ScalarPatchGroup])
+        }
+      }
+      const res = await patchParticipant.mutateAsync({ id, data })
+      if (res.success) {
+        // Clear dirty state for just this step's own fields — mirrors onSubmit/handleSaveDraft's
+        // flushSync(reset(...)) dirty-clearing role, but scoped: other steps' still-unsaved edits
+        // must keep tripping useUnsavedChangesWarning(isDirty), since a per-step Patch never
+        // touched their fields server-side.
+        const savedStepFields = pickFields(values, currentStep.fields)
+        const priorDefaults = (control as unknown as { _defaultValues: ParticipantFormData })._defaultValues
+        flushSync(() => reset({ ...priorDefaults, ...savedStepFields } as unknown as Parameters<typeof reset>[0], { keepValues: true }))
+        setPartialSaveSuccess(true)
+        setTimeout(() => setPartialSaveSuccess(false), 2500)
+      } else {
+        setPartialSaveError('Failed to save changes. Please try again.')
+      }
+    } catch (err) {
+      setPartialSaveError(extractErrorMessage(err, 'Failed to save changes. Please try again.'))
+    } finally {
+      setSavingPartial(false)
+    }
+  }
+
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
@@ -1699,15 +1843,29 @@ export default function ParticipantCreatePage() {
   // an already-finalised participant. `existing` is guaranteed resolved here (the loading guard
   // above already returned for edit mode while it was pending).
   const canSaveDraft = !isEdit || existing?.isDraft === true
+  // PF-1: exact complement of canSaveDraft — edit mode, already-finalised (non-draft)
+  // participant. The two never both render for the same participant/step combination.
+  const canSavePartial = isEdit && existing?.isDraft !== true
+  // Contacts/Review have no patchable group of their own (see STEP_TO_PATCH_GROUPS); Review's
+  // `currentStep` resolves to the last real step internally (useWizard's isReviewStep fallback),
+  // so it must be excluded explicitly rather than relying on the lookup alone.
+  const patchGroupsForCurrentStep = !isReviewStep ? STEP_TO_PATCH_GROUPS[currentStep.key] : undefined
   // CORE-01: the shell's secondaryActions slot replaces the old `canSaveDraft && (<button .../>)`
-  // JSX directly — a future "Save changes" entry (PF-1) is mutually exclusive with this one, so
-  // the array never holds more than one item today.
+  // JSX directly — "Save as draft" and PF-1's "Save changes" are mutually exclusive (their gates
+  // are exact complements), so the array never holds more than one item today.
   const secondaryActions: WizardSecondaryAction[] = canSaveDraft
     ? [{
         key: 'save-draft',
         label: savingDraft ? 'Saving draft...' : 'Save as draft',
         onClick: handleSaveDraft,
         disabled: savingDraft || mutation.isPending,
+      }]
+    : canSavePartial && patchGroupsForCurrentStep
+    ? [{
+        key: 'save-changes',
+        label: savingPartial ? 'Saving changes...' : 'Save changes',
+        onClick: handleSavePartial,
+        disabled: savingPartial || mutation.isPending,
       }]
     : []
 
@@ -2055,6 +2213,18 @@ export default function ParticipantCreatePage() {
       {draftError && (
         <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {draftError}
+        </div>
+      )}
+
+      {partialSaveError && (
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          {partialSaveError}
+        </div>
+      )}
+
+      {partialSaveSuccess && (
+        <div role="status" className="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--color-success)] text-sm border border-[var(--color-success)]/20">
+          Saved
         </div>
       )}
 
