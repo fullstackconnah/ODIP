@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -23,7 +24,12 @@ namespace Odip.Api.Controllers;
 public class ParticipantRiskEntriesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ParticipantRiskEntriesController(OdipDbContext db) => _db = db;
+    private readonly SafetyNoteSyncService _safetyNoteSync;
+    public ParticipantRiskEntriesController(OdipDbContext db, SafetyNoteSyncService safetyNoteSync)
+    {
+        _db = db;
+        _safetyNoteSync = safetyNoteSync;
+    }
 
     [HttpGet("participants/{participantId:guid}/risk-entries")]
     public async Task<ActionResult<ApiResponse<List<ParticipantRiskEntryDto>>>> GetForParticipant(
@@ -59,6 +65,9 @@ public class ParticipantRiskEntriesController : ControllerBase
             IsActive = dto.IsActive,
         };
         _db.ParticipantRiskEntries.Add(entry);
+        // PD-5: closes the "ParticipantRiskEntry rows" hole for the ongoing (post-creation) create
+        // path — same "sync-write in the same SaveChangesAsync" shape as RestrictivePracticesController.
+        await _safetyNoteSync.SyncRiskEntryNotesAsync(participantId, ct);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantRiskEntryDto>.Ok(ToDto(entry)));
@@ -78,6 +87,8 @@ public class ParticipantRiskEntriesController : ControllerBase
         entry.IsActive = dto.IsActive;
         entry.UpdatedAt = DateTime.UtcNow;
 
+        // PD-5: closes the "ParticipantRiskEntry rows" hole for the ongoing edit path.
+        await _safetyNoteSync.SyncRiskEntryNotesAsync(entry.ParticipantId, ct);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantRiskEntryDto>.Ok(ToDto(entry)));
@@ -90,7 +101,11 @@ public class ParticipantRiskEntriesController : ControllerBase
         var entry = await _db.ParticipantRiskEntries.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (entry == null) return NotFound(ApiResponse<bool>.Fail("Risk entry not found"));
 
+        var participantId = entry.ParticipantId;
         _db.ParticipantRiskEntries.Remove(entry);
+        // PD-5: closes the "ParticipantRiskEntry rows" hole for the delete path — deleting the
+        // last active entry archives the risks/hazards auto-note (unless manually edited).
+        await _safetyNoteSync.SyncRiskEntryNotesAsync(participantId, ct);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<bool>.Ok(true));

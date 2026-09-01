@@ -36,3 +36,29 @@ export function useUpdateNote() {
     },
   })
 }
+
+/** PD-5: "Dismiss" — acknowledges source drift without touching the note's text. */
+export function useDismissNoteDrift() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPutRaw<ParticipantNoteDto>(`/participants/notes/${id}/dismiss-drift`),
+    onSuccess: (res) => {
+      if (res.data?.participantId) {
+        qc.invalidateQueries({ queryKey: ['participant-notes', res.data.participantId] })
+      }
+    },
+  })
+}
+
+/** PD-5: "Regenerate" — restores machine-generated text and re-arms auto-sync. */
+export function useRegenerateNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPutRaw<ParticipantNoteDto>(`/participants/notes/${id}/regenerate`),
+    onSuccess: (res) => {
+      if (res.data?.participantId) {
+        qc.invalidateQueries({ queryKey: ['participant-notes', res.data.participantId] })
+      }
+    },
+  })
+}
