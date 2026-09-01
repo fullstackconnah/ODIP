@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useBillableEvents, useParticipants, useValidateClaimBatch, useCreateClaimBatch } from '@/api/hooks'
+import { useBillableEvents, useValidateClaimBatch, useCreateClaimBatch } from '@/api/hooks'
 import type { BillableEventDto, BillingValidationResultDto } from '@/api/types'
 import { INCOME_STREAMS, INCOME_STREAM_LABELS } from '@/api/types'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
-import { SearchableSelect } from '@/components/SearchableSelect'
+import { ParticipantPicker } from '@/components/ParticipantPicker'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import {
@@ -111,8 +111,6 @@ export default function ClaimBatchBuilderPage() {
 
   const { data, isLoading, isFetching, isError } = useBillableEvents(queryParams)
   const events = data ?? NO_EVENTS
-  // INTAKE-08: claims/billing surfaces exclude drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
   // ── Selection — survives filter changes ─────────────────────────────────
   // `selectedIds` is never touched by a refetch. `knownEvents` accumulates event records we've
@@ -312,13 +310,12 @@ export default function ClaimBatchBuilderPage() {
       <div className="flex flex-wrap items-end gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl p-4">
         <div>
           <label id="filter-participant-label" className={filterLabelClass}>Participant</label>
-          <SearchableSelect
+          <ParticipantPicker
             id="filter-participant"
             aria-labelledby="filter-participant-label"
             value={participantId}
             onChange={setParticipantId}
             placeholder="All participants"
-            items={participants.map(p => ({ value: p.id, label: p.fullName }))}
           />
         </div>
         <div>
