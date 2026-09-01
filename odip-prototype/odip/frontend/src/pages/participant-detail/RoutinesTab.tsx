@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
-import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock } from 'lucide-react'
+import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock, CalendarDays } from 'lucide-react'
 import type { AxiosError } from 'axios'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
 import { formatShiftTime } from '@/lib/utils'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { FormField } from '@/components/FormField'
+import { FormField, labelClass } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
@@ -21,6 +21,24 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 
 /** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
+
+const WEEKDAY_ABBREVIATIONS: Record<string, string> = {
+  Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
+}
+
+/**
+ * Readable label for a routine's day set (PD-4) — "Every day" for all 7, "Weekdays"/"Weekends"
+ * for those two common subsets, otherwise a Monday-first comma list of abbreviations (e.g.
+ * "Mon, Wed, Fri"). Re-sorts to Monday-first order regardless of the input array's order, since
+ * the days array is built by toggling individual checkboxes and isn't guaranteed to arrive sorted.
+ */
+function formatDaySet(days: string[]): string {
+  const sorted = WEEKDAYS.filter(d => days.includes(d))
+  if (sorted.length === 7) return 'Every day'
+  if (sorted.length === 5 && WEEKDAYS.slice(0, 5).every(d => sorted.includes(d))) return 'Weekdays'
+  if (sorted.length === 2 && WEEKDAYS.slice(5).every(d => sorted.includes(d))) return 'Weekends'
+  return sorted.map(d => WEEKDAY_ABBREVIATIONS[d]).join(', ')
+}
 
 /** Normalises a "HH:mm:ss"/"HH:mm" time from the API to what an <input type="time"> needs. */
 function toTimeInputValue(time: string | null | undefined): string {
@@ -43,7 +61,12 @@ function formatRoutineTime(startTime: string | null, endTime: string | null): st
   return 'Untimed'
 }
 
-/** Groups active routines into "Every day" plus one bucket per weekday that has entries, each sorted critical-first then by time (untimed last). */
+/**
+ * Groups active routines into "Every day" plus one bucket per weekday that has entries, each
+ * sorted critical-first then by time (untimed last). A routine spanning multiple days but not
+ * all 7 (e.g. Mon/Wed/Fri) appears once in EACH of its applicable weekday buckets — never in
+ * "Every day" — so a support worker checking any one of those days sees it (PD-4).
+ */
 function groupRoutines(routines: ParticipantRoutineDto[]): { label: string; items: ParticipantRoutineDto[] }[] {
   const sortWithin = (items: ParticipantRoutineDto[]) =>
     [...items].sort((a, b) => {
@@ -60,11 +83,11 @@ function groupRoutines(routines: ParticipantRoutineDto[]): { label: string; item
 
   const groups: { label: string; items: ParticipantRoutineDto[] }[] = []
 
-  const everyDay = routines.filter(r => !r.dayOfWeek)
+  const everyDay = routines.filter(r => r.days.length === 7)
   if (everyDay.length > 0) groups.push({ label: 'Every day', items: sortWithin(everyDay) })
 
   for (const day of WEEKDAYS) {
-    const items = routines.filter(r => r.dayOfWeek === day)
+    const items = routines.filter(r => r.days.includes(day) && r.days.length < 7)
     if (items.length > 0) groups.push({ label: day, items: sortWithin(items) })
   }
 
@@ -75,15 +98,16 @@ type RoutineFormState = {
   title: string
   description: string
   category: RoutineCategory
-  dayOfWeek: string
+  days: string[]
   startTime: string
   endTime: string
   isCritical: boolean
   isActive: boolean
 }
 
+// Defaults to every day, same as the old dayOfWeek === null default.
 const EMPTY_FORM: RoutineFormState = {
-  title: '', description: '', category: 'PersonalCare', dayOfWeek: '',
+  title: '', description: '', category: 'PersonalCare', days: [...WEEKDAYS],
   startTime: '', endTime: '', isCritical: false, isActive: true,
 }
 
@@ -145,9 +169,17 @@ function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
           </div>
         )}
       </div>
-      <p className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)] mt-1.5">
-        <Clock className="w-3 h-3" /> {formatRoutineTime(routine.startTime, routine.endTime)}
-      </p>
+      <div className="flex items-center gap-3 text-xs text-[var(--color-muted-foreground)] mt-1.5">
+        <p className="flex items-center gap-1">
+          <Clock className="w-3 h-3" /> {formatRoutineTime(routine.startTime, routine.endTime)}
+        </p>
+        {/* Shown even inside a single weekday's group — a Mon/Wed/Fri routine appears in three
+            groups (see groupRoutines), so its own day set is the only place staff can see the
+            full picture rather than assuming it's specific to just the group they're looking at. */}
+        <p className="flex items-center gap-1">
+          <CalendarDays className="w-3 h-3" /> {formatDaySet(routine.days)}
+        </p>
+      </div>
       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap mt-1.5">{routine.description}</p>
     </div>
   )
@@ -166,7 +198,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; routine?: ParticipantRoutineDto } | null>(null)
   const [form, setForm] = useState<RoutineFormState>(EMPTY_FORM)
-  const [errors, setErrors] = useState<{ title?: string; description?: string; time?: string }>({})
+  const [errors, setErrors] = useState<{ title?: string; description?: string; time?: string; days?: string }>({})
   const [modalError, setModalError] = useState<string | null>(null)
   const [deletingRoutine, setDeletingRoutine] = useState<ParticipantRoutineDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -188,7 +220,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       title: routine.title,
       description: routine.description,
       category: routine.category,
-      dayOfWeek: routine.dayOfWeek ?? '',
+      days: routine.days,
       startTime: toTimeInputValue(routine.startTime),
       endTime: toTimeInputValue(routine.endTime),
       isCritical: routine.isCritical,
@@ -205,10 +237,11 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   }
 
   function validate(): boolean {
-    const next: { title?: string; description?: string; time?: string } = {}
+    const next: { title?: string; description?: string; time?: string; days?: string } = {}
     if (!form.title.trim()) next.title = 'Title is required'
     if (!form.description.trim()) next.description = 'Description is required'
     if (form.startTime && form.endTime && form.endTime <= form.startTime) next.time = 'End time must be after start time'
+    if (form.days.length === 0) next.days = 'Select at least one day'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -220,7 +253,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       title: form.title.trim(),
       description: form.description.trim(),
       category: form.category,
-      dayOfWeek: form.dayOfWeek || null,
+      days: form.days,
       startTime: form.startTime ? toApiTime(form.startTime) : null,
       endTime: form.endTime ? toApiTime(form.endTime) : null,
       isCritical: form.isCritical,
@@ -390,14 +423,44 @@ export default function RoutinesTab({ participantId }: { participantId: string |
               items={ROUTINE_CATEGORIES.map(c => ({ value: c, label: ROUTINE_CATEGORY_LABELS[c] }))}
             />
           </FormField>
-          <FormField label="Day" hint="Leave as Every day if this applies every day of the week">
-            <Dropdown
-              variant="form"
-              value={form.dayOfWeek}
-              onChange={v => setForm(f => ({ ...f, dayOfWeek: v }))}
-              items={[{ value: '', label: 'Every day' }, ...WEEKDAYS.map(d => ({ value: d, label: d }))]}
-            />
-          </FormField>
+          <fieldset className="m-0 p-0 border-0">
+            <legend className={labelClass}>Days *</legend>
+            {/* "Every day" is derived, not independently stored: checked iff all 7 days are
+                selected. Checking it selects all 7; unchecking it (only reachable when all 7 are
+                already checked) clears the selection to force an explicit re-pick rather than
+                falling back to some arbitrary default day. Toggling an individual day just
+                adds/removes it from `days` — "Every day" naturally ticks itself once all 7 end up
+                selected that way too, with no separate code path. */}
+            <label className="flex items-center gap-3 py-1 min-h-[44px]">
+              <input
+                type="checkbox"
+                checked={form.days.length === 7}
+                onChange={e => setForm(f => ({ ...f, days: e.target.checked ? [...WEEKDAYS] : [] }))}
+                className="w-4 h-4 rounded border-[var(--color-border)]"
+              />
+              <span className="text-sm font-medium text-[var(--color-foreground)]">Every day</span>
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4">
+              {WEEKDAYS.map(day => {
+                const checked = form.days.includes(day)
+                return (
+                  <label key={day} className="flex items-center gap-3 py-1 min-h-[44px]">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => setForm(f => ({
+                        ...f,
+                        days: e.target.checked ? [...f.days, day] : f.days.filter(d => d !== day),
+                      }))}
+                      className="w-4 h-4 rounded border-[var(--color-border)]"
+                    />
+                    <span className="text-sm text-[var(--color-foreground)]">{day}</span>
+                  </label>
+                )
+              })}
+            </div>
+            {errors.days && <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.days}</p>}
+          </fieldset>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Start time" error={errors.time} hint="Leave blank if this task has no fixed start">
               <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />

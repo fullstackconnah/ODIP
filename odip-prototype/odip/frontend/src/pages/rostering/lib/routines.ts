@@ -26,7 +26,9 @@ export function getRelevantRoutines(
 
   const relevant = routines.filter(r => {
     if (!r.isActive) return false
-    if (r.dayOfWeek && r.dayOfWeek !== shiftDay) return false
+    // PD-4: r.days is a non-empty day-name list (the full 7 for "every day") — a routine applies
+    // to this shift's day when that day is in the set, not via an every-day/single-day distinction.
+    if (!r.days.includes(shiftDay)) return false
 
     if (!r.startTime || !r.endTime) return r.isCritical
 

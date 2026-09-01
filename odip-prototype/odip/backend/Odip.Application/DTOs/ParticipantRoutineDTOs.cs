@@ -14,7 +14,8 @@ public record ParticipantRoutineDto
     public string Title { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public RoutineCategory Category { get; init; }
-    public DayOfWeek? DayOfWeek { get; init; }
+    /// <summary>Non-empty set of days the routine applies on (PD-4) — e.g. <c>["Monday","Wednesday"]</c>. Every day is the full 7-element list, not an empty one or a null sentinel.</summary>
+    public IReadOnlyList<DayOfWeek> Days { get; init; } = Array.Empty<DayOfWeek>();
     public TimeOnly? StartTime { get; init; }
     public TimeOnly? EndTime { get; init; }
     public bool IsCritical { get; init; }
@@ -32,7 +33,8 @@ public record CreateParticipantRoutineDto
     public string Description { get; init; } = string.Empty;
 
     public RoutineCategory Category { get; init; }
-    public DayOfWeek? DayOfWeek { get; init; }
+    /// <summary>Non-empty set of days the routine applies on (PD-4) — e.g. <c>["Monday","Wednesday"]</c>. Every day is the full 7-element list, not an empty one or a null sentinel.</summary>
+    public IReadOnlyList<DayOfWeek> Days { get; init; } = Array.Empty<DayOfWeek>();
     public TimeOnly? StartTime { get; init; }
     public TimeOnly? EndTime { get; init; }
     public bool IsCritical { get; init; }
@@ -48,7 +50,8 @@ public record UpdateParticipantRoutineDto
     public string Description { get; init; } = string.Empty;
 
     public RoutineCategory Category { get; init; }
-    public DayOfWeek? DayOfWeek { get; init; }
+    /// <summary>Non-empty set of days the routine applies on (PD-4) — e.g. <c>["Monday","Wednesday"]</c>. Every day is the full 7-element list, not an empty one or a null sentinel.</summary>
+    public IReadOnlyList<DayOfWeek> Days { get; init; } = Array.Empty<DayOfWeek>();
     public TimeOnly? StartTime { get; init; }
     public TimeOnly? EndTime { get; init; }
     public bool IsCritical { get; init; }

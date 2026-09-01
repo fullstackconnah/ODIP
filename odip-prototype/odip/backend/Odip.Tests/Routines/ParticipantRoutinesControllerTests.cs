@@ -54,15 +54,18 @@ public class ParticipantRoutinesControllerTests
         return participant;
     }
 
+    /// <summary>Every day, Monday-first — the "every day" wire shape (a full 7-element list, not null/empty).</summary>
+    private static readonly IReadOnlyList<DayOfWeek> AllDays = ParticipantRoutineDayMapper.ToDayList(ParticipantRoutineDays.All);
+
     private static CreateParticipantRoutineDto CreateDto(
         string title = "Morning routine", string description = "Wake gently, offer a warm drink.",
-        RoutineCategory category = RoutineCategory.PersonalCare, DayOfWeek? dayOfWeek = null,
+        RoutineCategory category = RoutineCategory.PersonalCare, IReadOnlyList<DayOfWeek>? days = null,
         TimeOnly? startTime = null, TimeOnly? endTime = null, bool isCritical = false, bool isActive = true) => new()
     {
         Title = title,
         Description = description,
         Category = category,
-        DayOfWeek = dayOfWeek,
+        Days = days ?? AllDays,
         StartTime = startTime,
         EndTime = endTime,
         IsCritical = isCritical,
@@ -102,15 +105,16 @@ public class ParticipantRoutinesControllerTests
         Assert.Equal(participant.Id, body.Data.ParticipantId);
         Assert.Equal(RoutineCategory.Medication, body.Data.Category);
         Assert.True(body.Data.IsCritical);
-        Assert.Null(body.Data.DayOfWeek);
+        Assert.Equal(AllDays, body.Data.Days);
 
         var saved = await db.ParticipantRoutines.SingleAsync();
         Assert.Equal(participant.Id, saved.ParticipantId);
         Assert.True(saved.IsCritical);
+        Assert.Equal(ParticipantRoutineDays.All, saved.Days);
     }
 
     [Fact]
-    public async Task Create_WithDayAndTimeWindow_PersistsThem()
+    public async Task Create_WithSingleDayAndTimeWindow_PersistsThem()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
@@ -118,14 +122,52 @@ public class ParticipantRoutinesControllerTests
 
         var dto = CreateDto(
             title: "Saturday swimming", category: RoutineCategory.Activity,
-            dayOfWeek: DayOfWeek.Saturday, startTime: new TimeOnly(9, 30), endTime: new TimeOnly(11, 30));
+            days: new[] { DayOfWeek.Saturday }, startTime: new TimeOnly(9, 30), endTime: new TimeOnly(11, 30));
 
         var result = await controller.Create(participant.Id, dto, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantRoutineDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(DayOfWeek.Saturday, body.Data!.DayOfWeek);
+        Assert.Equal(new[] { DayOfWeek.Saturday }, body.Data!.Days);
         Assert.Equal(new TimeOnly(9, 30), body.Data.StartTime);
         Assert.Equal(new TimeOnly(11, 30), body.Data.EndTime);
+    }
+
+    [Fact]
+    public async Task Create_WithMultipleButNotAllDays_PersistsAndRoundTripsExactSet()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRoutinesController(db);
+
+        // Mon/Wed/Fri — the spec's own example of "some tasks could be every other day."
+        var dto = CreateDto(days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday });
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantRoutineDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday }, body.Data!.Days);
+
+        var saved = await db.ParticipantRoutines.SingleAsync();
+        Assert.Equal(
+            ParticipantRoutineDays.Monday | ParticipantRoutineDays.Wednesday | ParticipantRoutineDays.Friday,
+            saved.Days);
+    }
+
+    [Fact]
+    public async Task Create_EmptyDays_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRoutinesController(db);
+
+        var dto = CreateDto(days: Array.Empty<DayOfWeek>());
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantRoutineDto>>(bad.Value);
+        Assert.False(body.Success);
+        Assert.False(await db.ParticipantRoutines.AnyAsync());
     }
 
     // ── List / filtering ─────────────────────────────────────────────────
@@ -209,7 +251,9 @@ public class ParticipantRoutinesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantRoutinesController(db);
 
-        var dto = new UpdateParticipantRoutineDto { Title = "t", Description = "d" };
+        // Days must be non-empty so this exercises the "routine not found" path specifically,
+        // not the (also BadRequest-returning) empty-days validation checked separately below.
+        var dto = new UpdateParticipantRoutineDto { Title = "t", Description = "d", Days = AllDays };
         var result = await controller.Update(Guid.NewGuid(), dto, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -232,7 +276,7 @@ public class ParticipantRoutinesControllerTests
         var dto = new UpdateParticipantRoutineDto
         {
             Title = "Updated", Description = "Updated desc", Category = RoutineCategory.Mobility,
-            DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(9, 0),
+            Days = new[] { DayOfWeek.Monday }, StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(9, 0),
             IsCritical = true, IsActive = false,
         };
 
@@ -248,8 +292,39 @@ public class ParticipantRoutinesControllerTests
 
         var saved = await db.ParticipantRoutines.SingleAsync();
         Assert.Equal("Updated desc", saved.Description);
-        Assert.Equal(DayOfWeek.Monday, saved.DayOfWeek);
+        Assert.Equal(ParticipantRoutineDays.Monday, saved.Days);
         Assert.False(saved.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_EmptyDays_ReturnsBadRequestAndDoesNotModifyRoutine()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var routine = new ParticipantRoutine
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Original", Description = "Original desc",
+            Category = RoutineCategory.Other, Days = ParticipantRoutineDays.Monday, IsActive = true,
+        };
+        db.ParticipantRoutines.Add(routine);
+        db.SaveChanges();
+
+        var controller = new ParticipantRoutinesController(db);
+        var dto = new UpdateParticipantRoutineDto
+        {
+            Title = "Updated", Description = "Updated desc", Category = RoutineCategory.Mobility,
+            Days = Array.Empty<DayOfWeek>(),
+        };
+
+        var result = await controller.Update(routine.Id, dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantRoutineDto>>(bad.Value);
+        Assert.False(body.Success);
+
+        var saved = await db.ParticipantRoutines.SingleAsync();
+        Assert.Equal("Original", saved.Title);
+        Assert.Equal(ParticipantRoutineDays.Monday, saved.Days);
     }
 
     // ── Delete ────────────────────────────────────────────────────────────
