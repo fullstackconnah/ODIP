@@ -9,3 +9,16 @@ export { default as ParticipantAdlAssessmentsSection } from './ParticipantAdlAss
 export { default as ContactsTab } from './ContactsTab'
 export { default as SupportProfileTab } from './SupportProfileTab'
 export { SectionEditPanel } from './SectionEditPanel'
+
+// PD-7 — Details tab section-edit components, one per SPEC-03 field-group row.
+export { default as ParticipantIdentitySection } from './ParticipantIdentitySection'
+export { default as ParticipantAddressLivingSection } from './ParticipantAddressLivingSection'
+export { default as ParticipantNdisFundingSection } from './ParticipantNdisFundingSection'
+export { default as ParticipantKeyIdentifiersSection } from './ParticipantKeyIdentifiersSection'
+export { default as ParticipantCulturalBackgroundSection } from './ParticipantCulturalBackgroundSection'
+export { default as ParticipantMedicalSection } from './ParticipantMedicalSection'
+export { default as ParticipantBehaviourCommunicationSection } from './ParticipantBehaviourCommunicationSection'
+export { default as ParticipantCommunityAccessSection } from './ParticipantCommunityAccessSection'
+export { default as ParticipantMealsDietSection } from './ParticipantMealsDietSection'
+export { default as ParticipantAboutMeSection } from './ParticipantAboutMeSection'
+export { default as ParticipantRisksHazardsSummarySection } from './ParticipantRisksHazardsSummarySection'
