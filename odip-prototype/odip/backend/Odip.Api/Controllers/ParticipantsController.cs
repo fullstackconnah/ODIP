@@ -952,6 +952,273 @@ public class ParticipantsController : ControllerBase
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
     }
 
+    /// <summary>
+    /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>
+    /// (16 scalar + 4 collection groups — see PatchParticipantDto's doc for the full partition);
+    /// every absent group's columns are left completely untouched. Presence is all-or-nothing at
+    /// the GROUP level, not the field level: a present group's own null member DOES clear that
+    /// field (mirrors a mini full-submit for just that group), matching every existing
+    /// validator/assignment's self-contained-within-one-group behaviour. Concurrency is
+    /// last-write-wins per group — no RowVersion/ETag, same policy as today's whole-payload PUT,
+    /// just scoped to a smaller blast radius. This DTO structurally cannot express IsDraft or
+    /// IsActive — those stay PUT's job exclusively; a partial save can neither finalise nor
+    /// un-finalise a draft.
+    /// </summary>
+    [HttpPatch("{id:guid}")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Patch(Guid id, [FromBody] PatchParticipantDto dto, CancellationToken ct)
+    {
+        // Tenant scoping comes for free from OdipDbContext's ambient ITenantEntity query filter on
+        // Participants (see GetById/Update above) — a wrong-tenant id simply isn't found.
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        // ── Validate — only for present groups, each checked purely from its own incoming values
+        // (no merge with the existing entity needed: every validator below is already confirmed
+        // self-contained within one group — see SPEC-00's field-by-field walk). Minimal transient
+        // CreateParticipantDto instances let the existing validator methods be reused verbatim
+        // without touching Create/Update's own call sites. Groups with no existing server-side
+        // validator (ServiceProfile, CulturalBackground, BehaviourCommunication,
+        // CommunityAccessBehaviour, MealsAndDiet, AboutMe, SupportsLookLike, RisksHazardsSummary)
+        // have nothing to check here, matching today's full submit exactly.
+        if (dto.PersonalDetails is { } pdValidate)
+        {
+            var transient = new CreateParticipantDto
+            {
+                FirstName = pdValidate.FirstName, LastName = pdValidate.LastName,
+                Gender = pdValidate.Gender, GenderSelfDescription = pdValidate.GenderSelfDescription,
+                Phone = pdValidate.Phone, Email = pdValidate.Email,
+            };
+            var namesError = ValidateNames(transient);
+            if (namesError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
+            var genderError = ValidateGender(transient);
+            if (genderError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
+            var phoneError = ValidatePhone(transient);
+            if (phoneError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
+            var emailError = ValidateEmail(transient);
+            if (emailError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
+        }
+
+        if (dto.PreferredStaff is { } psdValidate && !await IsValidPreferredUserRefAsync(psdValidate.PreferredStaffId, ct))
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
+
+        if (dto.Address is { } adValidate)
+        {
+            var postcodeError = ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = adValidate.AddressPostcode });
+            if (postcodeError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
+        }
+
+        if (dto.LivingArrangement is { } ladValidate)
+        {
+            var transient = new CreateParticipantDto
+            {
+                LivingArrangement = ladValidate.LivingArrangement, MainSupportPersonName = ladValidate.MainSupportPersonName,
+                LivesWithOthers = ladValidate.LivesWithOthers, WhoLivesWith = ladValidate.WhoLivesWith,
+                SilProviderName = ladValidate.SilProviderName,
+            };
+            var livingError = ValidateLivingArrangement(transient);
+            if (livingError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
+        }
+
+        if (dto.NdisPlan is { } npValidate)
+        {
+            var fundingError = ValidateFundingSource(new CreateParticipantDto { FundingSource = npValidate.FundingSource, FundingOrganisation = npValidate.FundingOrganisation });
+            if (fundingError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
+        }
+
+        if (dto.KeyIdentifiers is { } kiValidate)
+        {
+            var weightError = ValidateWeight(new CreateParticipantDto { WeightKg = kiValidate.WeightKg });
+            if (weightError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
+            var heightError = ValidateHeight(new CreateParticipantDto { HeightCm = kiValidate.HeightCm });
+            if (heightError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
+        }
+
+        if (dto.SupportNeedsMobility is { } snmValidate)
+        {
+            // Same inline check Create/Update run — the only server-side rule this group has
+            // today. equipmentRefine (the frontend's "notes without a ticked item" cross-field
+            // rule) has no backend twin anywhere in this codebase and Create/Update don't enforce
+            // it either, so Patch doesn't invent one here — see this PR's report.
+            var invalidOptions = snmValidate.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
+            if (invalidOptions.Count > 0)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
+                    $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
+        }
+
+        if (dto.Medical is { } medValidate)
+        {
+            var diagnosesError = ValidateDiagnoses(new CreateParticipantDto { PrimaryDiagnosis = medValidate.PrimaryDiagnosis, OtherDiagnoses = medValidate.OtherDiagnoses });
+            if (diagnosesError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
+        }
+
+        // ── Apply — plain property assignment, scoped to present group(s) only. Literally the
+        // same statements Update already has above, just gated on group presence.
+        if (dto.PersonalDetails is { } pd)
+        {
+            p.FirstName = pd.FirstName; p.LastName = pd.LastName; p.PreferredName = pd.PreferredName;
+            p.MiddleName = pd.MiddleName; p.DateOfBirth = pd.DateOfBirth; p.Gender = pd.Gender;
+            p.GenderSelfDescription = pd.GenderSelfDescription; p.PlaceOfBirth = pd.PlaceOfBirth;
+            p.Country = pd.Country; p.Phone = pd.Phone; p.Email = pd.Email;
+        }
+
+        // Task 6d, gated on group presence instead of always running (§5 of PreferredStaff's
+        // controller-behaviour doc): only diff/sync when this call actually touches PreferredStaff.
+        Guid? previousPreferredStaffId = null;
+        var preferredStaffChanged = false;
+        if (dto.PreferredStaff is { } psd)
+        {
+            previousPreferredStaffId = p.PreferredUserId;
+            preferredStaffChanged = previousPreferredStaffId != psd.PreferredStaffId;
+            p.PreferredUserId = psd.PreferredStaffId;
+        }
+
+        if (dto.Address is { } ad)
+        {
+            p.AddressStreet = ad.AddressStreet; p.AddressSuburb = ad.AddressSuburb;
+            p.AddressState = ad.AddressState; p.AddressPostcode = ad.AddressPostcode;
+        }
+
+        if (dto.LivingArrangement is { } lad)
+        {
+            // Reuses ApplyLivingArrangementFields verbatim — same arrangement-type clearing rules
+            // Create/Update already apply.
+            var transient = new CreateParticipantDto
+            {
+                LivingArrangement = lad.LivingArrangement, MainSupportPersonName = lad.MainSupportPersonName,
+                MainSupportPersonRelationship = lad.MainSupportPersonRelationship, OthersLivingInAccommodation = lad.OthersLivingInAccommodation,
+                ResidentialInfo = lad.ResidentialInfo, LivesWithOthers = lad.LivesWithOthers, WhoLivesWith = lad.WhoLivesWith,
+                SilProviderName = lad.SilProviderName, SilProviderContactPhone = lad.SilProviderContactPhone,
+                AccommodationType = lad.AccommodationType, OnSiteSupportHours = lad.OnSiteSupportHours,
+                LivingArrangementNotes = lad.LivingArrangementNotes,
+            };
+            ApplyLivingArrangementFields(p, transient);
+        }
+
+        if (dto.NdisPlan is { } np)
+        {
+            p.NdisNumber = np.NdisNumber; p.PlanStartDate = np.PlanStartDate; p.PlanEndDate = np.PlanEndDate;
+            p.PlanType = np.PlanType; p.FundingSource = np.FundingSource;
+            // Ndis ignores whatever the client sent for the reused "Other — specify" field — same
+            // server-side clearing as Create/Update.
+            p.FundingOrganisation = np.FundingSource == ParticipantFundingSource.Other ? np.FundingOrganisation : null;
+            p.IsDsoa = np.IsDsoa; p.IsRepeatClient = np.IsRepeatClient;
+        }
+
+        if (dto.ServiceProfile is { } sp)
+        {
+            p.Region = sp.Region; p.ServiceStreams = sp.ServiceStreams;
+        }
+
+        if (dto.KeyIdentifiers is { } ki)
+        {
+            p.PensionCardNumber = ki.PensionCardNumber; p.PensionCardExpiry = ki.PensionCardExpiry;
+            p.MedicareNumber = ki.MedicareNumber; p.MedicareExpiry = ki.MedicareExpiry;
+            p.CompanionCardNumber = ki.CompanionCardNumber; p.CompanionCardExpiry = ki.CompanionCardExpiry;
+            p.PrivateHealthFund = ki.PrivateHealthFund; p.PrivateHealthMembershipNumber = ki.PrivateHealthMembershipNumber;
+            p.TaxiCardNumber = ki.TaxiCardNumber; p.HairColour = ki.HairColour; p.EyeColour = ki.EyeColour;
+            p.WeightKg = ki.WeightKg; p.HeightCm = ki.HeightCm;
+        }
+
+        if (dto.CulturalBackground is { } cb)
+        {
+            p.IsCald = cb.IsCald; p.IsLgbtqi = cb.IsLgbtqi; p.IsFamilyCommunity = cb.IsFamilyCommunity;
+            p.IsAboriginalOrTorresStraitIslander = cb.IsAboriginalOrTorresStraitIslander;
+            p.ReceivedRightsAndResponsibilitiesInfo = cb.ReceivedRightsAndResponsibilitiesInfo;
+            p.ReceivedPrivacyAndConfidentialityInfo = cb.ReceivedPrivacyAndConfidentialityInfo;
+            p.ReceivedFeedbackInfo = cb.ReceivedFeedbackInfo; p.ReceivedBeingSafeInfo = cb.ReceivedBeingSafeInfo;
+            p.ReceivedAdvocacyInfo = cb.ReceivedAdvocacyInfo;
+            p.PersonalInterests = cb.PersonalInterests; p.ChoiceControlNotes = cb.ChoiceControlNotes;
+        }
+
+        if (dto.SupportNeedsMobility is { } snm)
+        {
+            p.IsHighSupport = snm.IsHighSupport; p.IsIntensiveSupport = snm.IsIntensiveSupport;
+            p.SupportRatio = snm.SupportRatio; p.MobilityAidWheelchair = snm.MobilityAidWheelchair;
+            p.MobilityAidWalker = snm.MobilityAidWalker; p.MobilitySupportOptions = snm.MobilitySupportOptions;
+            p.OvernightSupport = snm.OvernightSupport; p.OvernightRatio = snm.OvernightRatio;
+            p.RequiresHiLoBed = snm.RequiresHiLoBed; p.RequiresHoist = snm.RequiresHoist;
+            p.RequiresShowerChair = snm.RequiresShowerChair; p.RequiresCommode = snm.RequiresCommode;
+            p.RequiresStandingMachine = snm.RequiresStandingMachine; p.MobilityNotes = snm.MobilityNotes;
+            p.EquipmentRequirements = snm.EquipmentRequirements; p.TransportRequirements = snm.TransportRequirements;
+            p.AmbulantStatus = snm.AmbulantStatus; p.FallsRiskRating = snm.FallsRiskRating;
+            p.UnevenGroundFlag = snm.UnevenGroundFlag; p.LevelOfPersonalCare = snm.LevelOfPersonalCare;
+            p.Orthotics = snm.Orthotics; p.ContinenceSupportDetail = snm.ContinenceSupportDetail;
+            p.BowelCareDetail = snm.BowelCareDetail; p.MenstruationSupport = snm.MenstruationSupport;
+            p.SkinIntegrity = snm.SkinIntegrity;
+        }
+
+        if (dto.Medical is { } med)
+        {
+            p.PrimaryDiagnosis = med.PrimaryDiagnosis?.Trim();
+            p.OtherDiagnoses = med.OtherDiagnoses.Select(d => d.Trim()).ToList();
+            p.HidpaSupportCategories = med.HidpaSupportCategories; p.HidpaNotes = med.HidpaNotes;
+            p.MedicalSummary = med.MedicalSummary; p.AllergiesDetail = med.AllergiesDetail;
+            p.IsAnaphylaxisRisk = med.IsAnaphylaxisRisk; p.AllergyManagementNotes = med.AllergyManagementNotes;
+        }
+
+        if (dto.BehaviourCommunication is { } bc)
+        {
+            p.Memory = bc.Memory; p.MemoryAids = bc.MemoryAids; p.ImpairedUnderstanding = bc.ImpairedUnderstanding;
+            p.ImpairedJudgementReasoning = bc.ImpairedJudgementReasoning; p.BehavioursOfConcernCurrent = bc.BehavioursOfConcernCurrent;
+            p.BehavioursOfConcernFiveYearHistory = bc.BehavioursOfConcernFiveYearHistory; p.BehaviourRiskRating = bc.BehaviourRiskRating;
+            p.RidsLogged = bc.RidsLogged; p.BspPlanProvided = bc.BspPlanProvided; p.BocChartProvided = bc.BocChartProvided;
+            p.ExpressiveSkills = bc.ExpressiveSkills; p.ReceptiveSkills = bc.ReceptiveSkills;
+            p.ReadingAbility = bc.ReadingAbility; p.CommunicationAids = bc.CommunicationAids;
+        }
+
+        if (dto.CommunityAccessBehaviour is { } cab)
+        {
+            p.SignsHappyAndSettled = cab.SignsHappyAndSettled; p.WhatHelpsMeCalmDown = cab.WhatHelpsMeCalmDown;
+            p.BocTriggers = cab.BocTriggers; p.BocEarlyWarningSigns = cab.BocEarlyWarningSigns;
+            p.BocDeEscalationStrategies = cab.BocDeEscalationStrategies; p.BocWhatNotToDo = cab.BocWhatNotToDo;
+        }
+
+        if (dto.MealsAndDiet is { } mad)
+        {
+            p.MealAssistanceDetail = mad.MealAssistanceDetail; p.ChokingRiskMealDetail = mad.ChokingRiskMealDetail;
+            p.ModifiedDietDetail = mad.ModifiedDietDetail; p.PegRegimeMealDetail = mad.PegRegimeMealDetail;
+            p.SpecialUtensilsDetail = mad.SpecialUtensilsDetail; p.SpecialDietaryNeedsDetail = mad.SpecialDietaryNeedsDetail;
+            p.FavouriteBreakfast = mad.FavouriteBreakfast; p.FavouriteLunch = mad.FavouriteLunch; p.FavouriteDinner = mad.FavouriteDinner;
+            p.MedicationTricks = mad.MedicationTricks; p.FoodsAlwaysEaten = mad.FoodsAlwaysEaten;
+        }
+
+        if (dto.AboutMe is { } am)
+        {
+            p.Goals = am.Goals; p.SupportAreas = am.SupportAreas; p.StrengthsFears = am.StrengthsFears;
+            p.ThingsToKnow = am.ThingsToKnow; p.WhoIsImportant = am.WhoIsImportant; p.LikesDislikes = am.LikesDislikes;
+        }
+
+        if (dto.SupportsLookLike is { } sll)
+        {
+            p.SupportsLookLikeMorning = sll.SupportsLookLikeMorning; p.SupportsLookLikeDay = sll.SupportsLookLikeDay;
+            p.SupportsLookLikeAfternoonEvening = sll.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = sll.SupportsLookLikeOvernight;
+        }
+
+        if (dto.RisksHazardsSummary is { } rhs)
+        {
+            p.BehaviourRiskSummary = rhs.BehaviourRiskSummary; p.Notes = rhs.Notes;
+        }
+
+        p.UpdatedAt = DateTime.UtcNow;
+
+        // Task 6d: only sync the compatibility matrix when PreferredStaff was actually touched AND
+        // actually changed — see PatchPreferredStaffDto's doc for why this group is isolated.
+        if (preferredStaffChanged)
+            await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaff!.PreferredStaffId, ct);
+
+        // ── Collections — upserted via the existing helpers verbatim, only when present. See
+        // PatchParticipantDto's per-member doc for the upsert-by-key/leave-alone-on-omission
+        // contract these share with Create/Update.
+        if (dto.Consents != null) await UpsertConsentsAsync(p.Id, dto.Consents, ct);
+        if (dto.HealthConditions != null) await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
+        if (dto.AdlAssessments != null) await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
+        if (dto.ChecklistItems != null) await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt }));
+    }
+
     /// <summary>Get bookings for a participant.</summary>
     [HttpGet("{id:guid}/bookings")]
     public async Task<ActionResult<ApiResponse<List<BookingListDto>>>> GetBookings(Guid id, CancellationToken ct)
