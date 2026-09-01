@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
 import { useCreateParticipant, useUpdateParticipant, useParticipant, useStaff, usePersons } from '@/api/hooks'
-import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -13,6 +13,10 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
+import {
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
+  type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup,
+} from '@/components/wizard'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
 import type { SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, PlanType, ContactRoleType, ConsentType, HealthConditionType, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, AdlType, AdlLevel, ChecklistItemType } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_FIELD_MAP, availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
@@ -781,13 +785,9 @@ const STEP_DAILY_LIVING_FIELDS = [
 const STEP_RISK_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const
 const STEP_REVIEW_FIELDS = [] as const
 
-type WizardStep = {
-  key: string
-  label: string
-  fields: readonly (keyof ParticipantFormData)[]
-}
-
-const WIZARD_STEPS: WizardStep[] = [
+// CORE-01: WizardStepDef<V> (frontend/src/components/wizard/types.ts) replaces the page-local
+// `WizardStep` type — same shape, now shared with every other wizard consumer.
+const WIZARD_STEPS: WizardStepDef<ParticipantFormData>[] = [
   { key: 'identity', label: 'Identity', fields: STEP_IDENTITY_FIELDS },
   { key: 'ndis', label: 'NDIS & Funding', fields: STEP_NDIS_FIELDS },
   // INTAKE sub-wave A — see STEP_KEY_IDENTIFIERS_FIELDS's doc comment above for placement.
@@ -809,23 +809,32 @@ const WIZARD_STEPS: WizardStep[] = [
   // (this one carried none to begin with: just Behaviour Risk Summary/General Notes/INTAKE-09
   // risk entries, nothing consent-shaped), so the two step names no longer overlap.
   { key: 'risks', label: 'Risks & Hazards', fields: STEP_RISK_FIELDS },
-  { key: 'review', label: 'Review', fields: STEP_REVIEW_FIELDS },
+  // CORE-01: the trailing { key: 'review', ... } entry that used to live in this array is gone —
+  // the wizard shell owns the review pseudo-step internally (see useWizard's REVIEW_STEP_KEY).
+  // A separate, rail-only list re-adds a "Review" pill (below) purely for display purposes.
 ]
-const REVIEW_STEP_INDEX = WIZARD_STEPS.length - 1
+// Rail-display-only: the shell's `steps` option must NOT include the review step (see
+// useWizard.ts), but the step-pill nav still needs a visible "Review" pill — REVIEW_STEP_KEY is
+// the shell's own reserved key, so this reappears as `currentKey`/`visitedSteps` automatically
+// once the wizard reaches Review, with no extra plumbing.
+const WIZARD_STEPS_FOR_RAIL: WizardStepDef<ParticipantFormData>[] = [
+  ...WIZARD_STEPS,
+  { key: REVIEW_STEP_KEY, label: 'Review', fields: STEP_REVIEW_FIELDS },
+]
 
 // Per-step schemas driving "Next" validation — derived from the same base schema/refine
 // used by the final-submit resolver above, via zod's .pick(), so a step only ever validates
-// the fields it owns. The Review step (index REVIEW_STEP_INDEX) has no schema — it has no
-// inputs of its own, so there is nothing to validate before landing on it besides the
-// preceding step.
-const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
+// the fields it owns. The Review step has no schema — it has no inputs of its own, so there is
+// nothing to validate before landing on it besides the preceding step.
+const STEP_SCHEMAS: z.ZodTypeAny[] = [
   baseParticipantSchema.pick(pickShape(STEP_IDENTITY_FIELDS)).superRefine(genderRefine).superRefine(livingArrangementRefine).superRefine(addressPostcodeRefine).superRefine(contactMethodRefine),
   baseParticipantSchema.pick(pickShape(STEP_NDIS_FIELDS)).superRefine(fundingSourceRefine),
   // INTAKE sub-wave A — Key Identifiers: every field optional except the weight/height bounds.
   baseParticipantSchema.pick(pickShape(STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
   // planType is added to the pick shape (not to STEP_CONTACTS_FIELDS itself) so contactRolesRefine
-  // can see it here without also reassigning fieldToStepIndex['planType'] to this step — planType
-  // errors must still route back to the NDIS & Funding step, not here.
+  // can see it here without also reassigning fieldToStepKey['planType'] to this step — planType
+  // errors must still route back to the NDIS & Funding step, not here (fieldToStepKey is built
+  // from WIZARD_STEPS' own `fields` lists, entirely independent of this pick shape).
   baseParticipantSchema.pick({ ...pickShape(STEP_CONTACTS_FIELDS), planType: true }).superRefine(contactRolesRefine),
   // INTAKE sub-wave B — every field optional, no cross-field requirement.
   baseParticipantSchema.pick(pickShape(STEP_CULTURAL_CONSENT_FIELDS)),
@@ -836,8 +845,12 @@ const STEP_SCHEMAS: (z.ZodTypeAny | null)[] = [
   // INTAKE sub-wave C2 — every field optional, no cross-field requirement.
   baseParticipantSchema.pick(pickShape(STEP_DAILY_LIVING_FIELDS)),
   baseParticipantSchema.pick(pickShape(STEP_RISK_FIELDS)),
-  null,
 ]
+// CORE-01: STEP_SCHEMAS_BY_KEY replaces the old positional STEP_SCHEMAS[stepIndex] lookup — built
+// by zipping WIZARD_STEPS against STEP_SCHEMAS in the same order (no schema content changes).
+const STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = Object.fromEntries(
+  WIZARD_STEPS.map((step, i) => [step.key, STEP_SCHEMAS[i]]),
+)
 
 const PLAN_TYPE_LABELS: Record<string, string> = {
   SelfManaged: 'Self Managed',
@@ -1056,34 +1069,21 @@ export default function ParticipantCreatePage() {
   const { fields: contactRoleFields, append: appendContactRole, remove: removeContactRole } = useFieldArray({ control, name: 'contactRoles' })
   const { data: people = [] } = usePersons()
 
-  // Edit mode loads an already-complete record — every step is immediately explorable rather
-  // than gated behind a linear Next walk, which only makes sense for a blank intake form.
-  const [stepIndex, setStepIndex] = useState(0)
-  const [visitedSteps, setVisitedSteps] = useState<Set<number>>(
-    () => new Set(isEdit ? WIZARD_STEPS.map((_, i) => i) : [0])
-  )
   // Field to focus once the DOM for its step has (re-)rendered. A fresh object each request
   // (rather than the field name alone) guarantees the effect below re-fires even when the
   // same field is re-requested twice in a row; the effect only reads it, it never needs to
   // clear it back out via setState.
   //
-  // Deliberately depends on `focusRequest` ONLY, not `stepIndex`: a plain step change (Back,
-  // or clicking a step pill) never creates a new focusRequest object, so it must not re-run
-  // this effect — otherwise a stale request from an earlier failure would silently re-steal
-  // focus on every later, unrelated visit to that step. When a request IS created together
-  // with a step change (handleNext / handleInvalidSubmit call setStepIndex and requestFocus
-  // in the same handler, batched into one commit), the effect still sees the already-updated
-  // DOM for the new step by the time it runs, since effects fire after the full commit.
+  // Deliberately depends on `focusRequest` ONLY, not the wizard's current step: a plain step
+  // change (Back, or clicking a step pill) never creates a new focusRequest object, so it must
+  // not re-run this effect — otherwise a stale request from an earlier failure would silently
+  // re-steal focus on every later, unrelated visit to that step. When a request IS created
+  // together with a step change (useWizard's handleNext/handleInvalidSubmit call
+  // onValidationFailed, which calls requestFocus, in the same handler/commit), the effect still
+  // sees the already-updated DOM for the new step by the time it runs, since effects fire after
+  // the full commit.
   const [focusRequest, setFocusRequest] = useState<{ field: string } | null>(null)
   const requestFocus = (fieldName: string) => setFocusRequest({ field: fieldName })
-
-  const fieldToStepIndex = useMemo(() => {
-    const map: Partial<Record<keyof ParticipantFormData, number>> = {}
-    WIZARD_STEPS.forEach((step, idx) => {
-      for (const f of step.fields) map[f] = idx
-    })
-    return map
-  }, [])
 
   useEffect(() => {
     if (focusRequest) focusField(focusRequest.field)
@@ -1097,56 +1097,43 @@ export default function ParticipantCreatePage() {
     focusField('firstName')
   }, [])
 
-  const currentStep = WIZARD_STEPS[stepIndex]
+  // CORE-01: the wizard shell owns step-key state, visited-set bookkeeping, and Back/Next/
+  // handleInvalidSubmit — see frontend/src/components/wizard/useWizard.ts. `validate` stays a
+  // thin adapter over the same per-step Zod schemas this file already had; `initialVisited`
+  // expresses today's edit-mode-is-jump-anywhere / create-mode-is-linear policy as the caller's
+  // own choice rather than a binary the shell hard-codes.
+  const validateStep: WizardValidate<ParticipantFormData> = (step, values) => {
+    const schema = STEP_SCHEMAS_BY_KEY[step.key]
+    if (!schema) return null
+    const result = schema.safeParse(values)
+    if (result.success) return null
+    // Full dot/index path (e.g. "riskEntries.0.description"), not just issue.path[0] — a
+    // row-level error must land on that row, not collapse onto the whole array field, or
+    // FormField's per-row `error={errors.riskEntries?.[i]?.description?.message}` lookup below
+    // would never find it.
+    return result.error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      message: issue.message,
+      code: issue.code,
+    }))
+  }
+
+  const wizard = useWizard<ParticipantFormData>({
+    steps: WIZARD_STEPS,
+    initialVisited: isEdit ? 'all' : 'linear',
+    validate: validateStep,
+    getValues,
+    setError: (path, err) => setError(path as keyof ParticipantFormData, err),
+    clearErrors: (paths) => clearErrors(paths as (keyof ParticipantFormData)[]),
+    onValidationFailed: (firstPath) => requestFocus(firstPath),
+  })
+  const { currentStep, isReviewStep } = wizard
+
   const currentStepFieldSet = useMemo(() => new Set<keyof ParticipantFormData>(currentStep.fields), [currentStep])
   const currentStepErrorMessages = Object.entries(errors)
     .filter(([key]) => currentStepFieldSet.has(key as keyof ParticipantFormData))
     .map(([, err]) => (err as { message?: string } | undefined)?.message)
     .filter((m): m is string => !!m)
-
-  const goToStep = (index: number) => {
-    if (!visitedSteps.has(index)) return
-    setStepIndex(index)
-  }
-
-  const handleBack = () => setStepIndex(i => Math.max(0, i - 1))
-
-  const handleNext = () => {
-    const schema = STEP_SCHEMAS[stepIndex]
-    if (!schema) return
-    for (const f of currentStep.fields) clearErrors(f)
-    const result = schema.safeParse(getValues())
-    if (!result.success) {
-      let firstField: string | null = null
-      for (const issue of result.error.issues) {
-        // Full dot/index path (e.g. "riskEntries.0.description"), not just issue.path[0] — a
-        // row-level error must land on that row, not collapse onto the whole array field, or
-        // FormField's per-row `error={errors.riskEntries?.[i]?.description?.message}` lookup
-        // below would never find it.
-        const field = issue.path.map(String).join('.')
-        if (!firstField) firstField = field
-        setError(field as keyof ParticipantFormData, { type: issue.code, message: issue.message })
-      }
-      if (firstField) requestFocus(firstField)
-      return
-    }
-    setVisitedSteps(prev => new Set(prev).add(stepIndex + 1))
-    setStepIndex(i => Math.min(i + 1, REVIEW_STEP_INDEX))
-  }
-
-  // Safety net for the case where a value edited from the Review step's "Edit" link becomes
-  // invalid again without the user re-running Next: the final-submit resolver (full schema)
-  // still catches it, but the Review step renders no inputs to show the error against — so
-  // jump back to whichever step owns the first invalid field and focus it there.
-  const handleInvalidSubmit = (formErrors: FieldErrors<ParticipantFormData>) => {
-    const firstField = Object.keys(formErrors)[0] as keyof ParticipantFormData | undefined
-    if (!firstField) return
-    const targetStep = fieldToStepIndex[firstField]
-    if (targetStep === undefined) return
-    setVisitedSteps(prev => new Set(prev).add(targetStep))
-    setStepIndex(targetStep)
-    requestFocus(firstField)
-  }
 
   const overnightSupportValue = useWatch({ control, name: 'overnightSupport' })
 
@@ -1712,6 +1699,17 @@ export default function ParticipantCreatePage() {
   // an already-finalised participant. `existing` is guaranteed resolved here (the loading guard
   // above already returned for edit mode while it was pending).
   const canSaveDraft = !isEdit || existing?.isDraft === true
+  // CORE-01: the shell's secondaryActions slot replaces the old `canSaveDraft && (<button .../>)`
+  // JSX directly — a future "Save changes" entry (PF-1) is mutually exclusive with this one, so
+  // the array never holds more than one item today.
+  const secondaryActions: WizardSecondaryAction[] = canSaveDraft
+    ? [{
+        key: 'save-draft',
+        label: savingDraft ? 'Saving draft...' : 'Save as draft',
+        onClick: handleSaveDraft,
+        disabled: savingDraft || mutation.isPending,
+      }]
+    : []
 
   const preferredStaffName = activeStaff.find(s => s.id === watchedValues.preferredStaffId)?.fullName ?? 'None'
   const supportRatioLabel = OVERNIGHT_RATIO_LABELS[(watchedValues.supportRatio as SupportRatio) ?? 'SharedSupport'] ?? '—'
@@ -1720,9 +1718,13 @@ export default function ParticipantCreatePage() {
     ? OVERNIGHT_RATIO_LABELS[(watchedValues.overnightRatio as SupportRatio) ?? 'OneToOne'] ?? '—'
     : 'N/A'
 
-  const reviewGroups: { step: number; rows: { label: string; value: string }[] }[] = [
+  // CORE-01: `reviewGroups` is now a `ReviewGroup[]` — `step: N` (positional) became
+  // `stepKey: '<key>'` (WIZARD_STEPS' own literal keys, matching the "PF-9 living-arrangement-
+  // step-move" resilience CORE-01 was built for: reordering WIZARD_STEPS below no longer risks
+  // silently mis-routing a review group's Edit link).
+  const reviewGroups: ReviewGroup[] = [
     {
-      step: 0,
+      stepKey: 'identity',
       rows: [
         { label: 'First Name', value: watchedValues.firstName || '—' },
         { label: 'Last Name', value: watchedValues.lastName || '—' },
@@ -1767,7 +1769,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 1,
+      stepKey: 'ndis',
       rows: [
         {
           label: 'Funding Source',
@@ -1795,7 +1797,7 @@ export default function ParticipantCreatePage() {
     },
     {
       // INTAKE sub-wave A — Key Identifiers step review summary.
-      step: 2,
+      stepKey: 'keyIdentifiers',
       rows: [
         { label: 'Pension Card Number', value: watchedValues.pensionCardNumber || '—' },
         { label: 'Pension Card Expiry', value: watchedValues.pensionCardExpiry || '—' },
@@ -1817,7 +1819,7 @@ export default function ParticipantCreatePage() {
       // entries) — one row per contact, "New: Firstname Lastname" or "Existing: <personId>"
       // depending on personMode, since the person's real name isn't known client-side for a
       // not-yet-saved "existing person" selection beyond whatever the picker already resolved.
-      step: 3,
+      stepKey: 'contacts',
       rows: (watchedValues.contactRoles?.length ?? 0) === 0
         ? [{ label: 'Contacts', value: 'None added' }]
         : (watchedValues.contactRoles ?? []).map((row, i) => ({
@@ -1831,7 +1833,7 @@ export default function ParticipantCreatePage() {
     },
     {
       // INTAKE sub-wave B — Cultural & Consent step review summary.
-      step: 4,
+      stepKey: 'culturalConsent',
       rows: [
         { label: 'CALD', value: yesNoUnknown(watchedValues.isCald) },
         { label: 'LGBTIQA+', value: yesNoUnknown(watchedValues.isLgbtqi) },
@@ -1851,7 +1853,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 5,
+      stepKey: 'support',
       rows: [
         { label: 'High Support', value: watchedValues.isHighSupport ? 'Yes' : 'No' },
         { label: 'Intensive Support (NDIS billing)', value: watchedValues.isIntensiveSupport ? 'Yes' : 'No' },
@@ -1890,7 +1892,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 6,
+      stepKey: 'medical',
       rows: [
         {
           label: 'Primary Diagnosis',
@@ -1921,7 +1923,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 7,
+      stepKey: 'behaviourCommunication',
       rows: [
         { label: 'Memory', value: watchedValues.memory ? (MEMORY_LEVEL_LABELS[watchedValues.memory as MemoryLevel] ?? watchedValues.memory) : '—' },
         { label: 'Memory Aids', value: yesNoUnknown(watchedValues.memoryAids) },
@@ -1958,7 +1960,7 @@ export default function ParticipantCreatePage() {
       // INTAKE sub-wave C2 — Daily Living step review summary. Only rows with a recorded level
       // are worth summarising for the ADL grid (same "only answered rows" convention as the
       // health-condition grid's review summary above); meals/about-me only show filled fields.
-      step: 8,
+      stepKey: 'dailyLiving',
       rows: [
         ...ADL_TYPES.map((type, index) => {
           const row = watchedValues.adlAssessments?.[index]
@@ -1995,7 +1997,7 @@ export default function ParticipantCreatePage() {
       ],
     },
     {
-      step: 9,
+      stepKey: 'risks',
       rows: [
         { label: 'Behaviour Risk Summary', value: watchedValues.behaviourRiskSummary || '—' },
         { label: 'General Notes', value: watchedValues.notes || '—' },
@@ -2056,48 +2058,12 @@ export default function ParticipantCreatePage() {
         </div>
       )}
 
-      <nav aria-label="Intake wizard steps" className="overflow-x-auto">
-        <ol className="flex items-center gap-2 md:gap-4 min-w-max pb-2">
-          {WIZARD_STEPS.map((step, idx) => {
-            const isCurrent = idx === stepIndex
-            const isCompleted = idx < stepIndex
-            const isClickable = visitedSteps.has(idx)
-            return (
-              <li key={step.key} className="flex items-center gap-2 md:gap-4">
-                <button
-                  type="button"
-                  aria-current={isCurrent ? 'step' : undefined}
-                  disabled={!isClickable}
-                  onClick={() => goToStep(idx)}
-                  className={`flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
-                    isCurrent
-                      ? 'bg-[var(--color-primary)] text-white'
-                      : isCompleted
-                      ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
-                      : 'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]'
-                  } ${!isClickable ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                >
-                  <span
-                    className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
-                      isCurrent ? 'bg-white/20' : isCompleted ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-border)]'
-                    }`}
-                  >
-                    {isCompleted ? <Check className="w-3 h-3" /> : idx + 1}
-                  </span>
-                  {/* Visually hidden below sm rather than removed from the DOM (a plain
-                      `hidden` utility would strip it from the accessible name too, leaving
-                      screen reader users with only a bare digit like "2" for the button) —
-                      the full step label stays available to assistive tech at every width. */}
-                  <span className="sr-only sm:not-sr-only sm:inline">{step.label}</span>
-                </button>
-                {idx < WIZARD_STEPS.length - 1 && (
-                  <span className="w-4 md:w-8 h-px bg-[var(--color-border)]" aria-hidden="true" />
-                )}
-              </li>
-            )
-          })}
-        </ol>
-      </nav>
+      <WizardStepRail
+        steps={WIZARD_STEPS_FOR_RAIL}
+        visitedSteps={wizard.visitedSteps}
+        currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+        onSelect={wizard.goToStep}
+      />
 
       {currentStepErrorMessages.length > 0 && (
         <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
@@ -2108,8 +2074,8 @@ export default function ParticipantCreatePage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit, handleInvalidSubmit)} noValidate>
-        {stepIndex === 0 && (
+      <form onSubmit={handleSubmit(onSubmit, wizard.handleInvalidSubmit)} noValidate>
+        {!isReviewStep && wizard.stepIndex === 0 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Personal Information" className="space-y-4">
               <FormField label="First Name" required error={errors.firstName?.message}>
@@ -2290,7 +2256,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 1 && (
+        {!isReviewStep && wizard.stepIndex === 1 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="NDIS & Funding" className="space-y-4">
               <FormField label="Funding Source" required error={errors.fundingSource?.message}>
@@ -2414,7 +2380,7 @@ export default function ParticipantCreatePage() {
             "NDIS & Funding" and before "Contacts" — see STEP_KEY_IDENTIFIERS_FIELDS' doc. Every
             field optional; expiries are date inputs, weight/height are numeric with
             unit-labelled fields. */}
-        {stepIndex === 2 && (
+        {!isReviewStep && wizard.stepIndex === 2 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Identification Cards" className="space-y-4">
               <FormField label="Pension Card Number">
@@ -2472,7 +2438,7 @@ export default function ParticipantCreatePage() {
         {/* CONTACT-02 — the Contacts step, placed after NDIS & Funding since available role
             types depend on the funding/plan-type answers captured there (plus, for Plan Nominee,
             the date of birth captured on the Identity step) — see STEP_CONTACTS_FIELDS' doc. */}
-        {stepIndex === 3 && (
+        {!isReviewStep && wizard.stepIndex === 3 && (
           <div className="grid md:grid-cols-1 gap-6">
             {isEdit ? (
               <Card title="Contacts" className="space-y-3">
@@ -2625,7 +2591,7 @@ export default function ParticipantCreatePage() {
             WIZARD_STEPS' doc). The old "Risks & Consents" step carried no consent content at all
             (just Behaviour Risk Summary/General Notes/INTAKE-09 risk entries) — renamed to
             "Risks & Hazards" below rather than moved from, since there was nothing to move. */}
-        {stepIndex === 4 && (
+        {!isReviewStep && wizard.stepIndex === 4 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Cultural Background" className="space-y-4">
               <YesNoToggleField control={control} name="isCald" label="Culturally and Linguistically Diverse (CALD)" />
@@ -2694,7 +2660,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 5 && (
+        {!isReviewStep && wizard.stepIndex === 5 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Support Needs" className="space-y-4">
               <FormField label="High Support" layout="checkbox">
@@ -2939,7 +2905,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 6 && (
+        {!isReviewStep && wizard.stepIndex === 6 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Diagnoses" className="space-y-4">
               <FormField label="Primary Diagnosis">
@@ -3183,7 +3149,7 @@ export default function ParticipantCreatePage() {
         {/* INTAKE sub-wave C1 — Behaviour & Communication (new step, research spec §5). All
             optional — placed between Medical and Risks & Hazards, see STEP_BEHAVIOUR_COMMUNICATION_FIELDS'
             doc comment above for why this is its own step rather than folded into Medical. */}
-        {stepIndex === 7 && (
+        {!isReviewStep && wizard.stepIndex === 7 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Cognitive" className="space-y-4">
               <FormField label="Memory">
@@ -3304,7 +3270,7 @@ export default function ParticipantCreatePage() {
             allergiesDetail/isAnaphylaxisRisk (Medical step) is NOT repeated here (dedup, see this
             PR's report). Hobbies is likewise NOT repeated here — see personalInterests on the
             Cultural & Consent step (dedup, this PR's report). */}
-        {stepIndex === 8 && (
+        {!isReviewStep && wizard.stepIndex === 8 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Personal ADLs" className="space-y-4 md:col-span-2">
               <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -3464,7 +3430,7 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === 9 && (
+        {!isReviewStep && wizard.stepIndex === 9 && (
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Risks & Hazards" className="space-y-4">
               {isEdit && existing?.hasRestrictivePracticeFlag && (
@@ -3561,88 +3527,25 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
-        {stepIndex === REVIEW_STEP_INDEX && (
-          <div className="grid md:grid-cols-2 gap-6">
-            {reviewGroups.map((group) => (
-              <Card
-                key={group.step}
-                title={WIZARD_STEPS[group.step].label}
-                action={
-                  <button
-                    type="button"
-                    onClick={() => goToStep(group.step)}
-                    aria-label={`Edit ${WIZARD_STEPS[group.step].label}`}
-                    className="min-h-[44px] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
-                  >
-                    Edit
-                  </button>
-                }
-                className="space-y-2"
-              >
-                <dl className="space-y-2 text-sm">
-                  {group.rows.map((row) => (
-                    <div key={row.label} className="flex justify-between gap-4">
-                      <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
-                      <dd className="font-medium text-right min-w-0 break-words">{row.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </Card>
-            ))}
-          </div>
+        {isReviewStep && (
+          <WizardReviewStep
+            groups={reviewGroups}
+            steps={WIZARD_STEPS}
+            onEdit={wizard.goToStep}
+          />
         )}
 
         {/* Wizard navigation */}
-        <div className="md:col-span-2 flex flex-wrap justify-between items-center gap-3 mt-6">
-          <div className="flex items-center gap-3">
-            {stepIndex > 0 && (
-              <button
-                type="button"
-                onClick={handleBack}
-                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              >
-                Back
-              </button>
-            )}
-            {/* INTAKE-08 fix round 1 (Finding 1a, controller ruling): un-finalising is not a
-                product capability — this button exists on create and on draft-resume only, never
-                while editing an already-finalised participant (available on EVERY step of those
-                two flows, not just Review). Mirrors the server-side rejection in
-                ParticipantsController.Update (see its Finding 1b comment). */}
-            {canSaveDraft && (
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={savingDraft || mutation.isPending}
-                className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              >
-                {savingDraft ? 'Saving draft...' : 'Save as draft'}
-              </button>
-            )}
-          </div>
-          <div className="flex justify-end gap-3">
-            {stepIndex < REVIEW_STEP_INDEX && (
-              <button
-                type="button"
-                onClick={handleNext}
-                className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              >
-                Next
-              </button>
-            )}
-            {stepIndex === REVIEW_STEP_INDEX && (
-              <>
-                <Link to="/participants" className="px-6 py-2.5 min-h-[44px] flex items-center rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-                  Cancel
-                </Link>
-                <button type="submit" disabled={mutation.isPending}
-                  className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-                  {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Participant')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <WizardNavFooter
+          showBack={wizard.stepIndex > 0}
+          onBack={wizard.handleBack}
+          onNext={wizard.handleNext}
+          isReviewStep={isReviewStep}
+          secondaryActions={secondaryActions}
+          cancelTo="/participants"
+          submitLabel={mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Participant')}
+          isSubmitting={mutation.isPending}
+        />
       </form>
     </div>
   )
