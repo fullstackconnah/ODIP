@@ -1131,6 +1131,14 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.ParticipantId);
+
+            // PD-5: idempotency mechanism for the safety-critical auto-note generator — a partial
+            // unique index (manual notes have SourceKey == null and are therefore never
+            // constrained) so the (ParticipantId, SourceKey) lookup the sync service relies on can
+            // never find more than one row.
+            entity.HasIndex(e => new { e.ParticipantId, e.SourceKey })
+                .IsUnique()
+                .HasFilter("\"SourceKey\" IS NOT NULL");
         });
 
         // ── ParticipantRoutine ────────────────────────────────────

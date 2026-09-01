@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
-import { StickyNote, Pin, ChevronDown, Plus } from 'lucide-react'
+import { StickyNote, Pin, ChevronDown, Plus, Sparkles, AlertTriangle } from 'lucide-react'
 import type { AxiosError } from 'axios'
-import { useParticipantNotes, useCreateNote, useUpdateNote } from '@/api/hooks'
+import { useParticipantNotes, useCreateNote, useUpdateNote, useDismissNoteDrift, useRegenerateNote } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
@@ -41,12 +41,15 @@ function NoteSkeleton() {
   )
 }
 
-function NoteCard({ note, canWrite, onEdit, onArchive, onRestore }: {
+function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift, onRegenerate, isDriftActionPending }: {
   note: ParticipantNoteDto
   canWrite: boolean
   onEdit: () => void
   onArchive: () => void
   onRestore: () => void
+  onDismissDrift: () => void
+  onRegenerate: () => void
+  isDriftActionPending: boolean
 }) {
   return (
     <div
@@ -55,9 +58,14 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore }: {
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-1.5">
+        <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
           {note.isPinned && <Pin className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" aria-label="Pinned note" />}
           <p className="font-medium text-[var(--color-foreground)] truncate">{note.title}</p>
+          {note.sourceKey && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+              <Sparkles className="w-3 h-3" /> Auto-generated
+            </span>
+          )}
         </div>
         {canWrite && (
           <div className="flex items-center gap-1 shrink-0">
@@ -89,6 +97,34 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore }: {
         )}
       </div>
       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap mt-1.5">{note.description}</p>
+      {note.hasSourceDrift && (
+        <div className="flex items-start gap-2 mt-3 p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p>Source data has changed since this note was edited.</p>
+            {canWrite && (
+              <div className="flex items-center gap-3 mt-1.5">
+                <button
+                  type="button"
+                  onClick={onDismissDrift}
+                  disabled={isDriftActionPending}
+                  className="font-medium hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  onClick={onRegenerate}
+                  disabled={isDriftActionPending}
+                  className="font-medium hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+                >
+                  Regenerate
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <p className="text-xs text-[var(--color-muted-foreground)] mt-3">
         {note.createdByName ?? 'Unknown'} · {relativeTime(note.createdAt)}
       </p>
@@ -102,6 +138,8 @@ export default function NotesTab({ participantId }: { participantId: string | un
   const { data: notes = [], isLoading } = useParticipantNotes(participantId, true)
   const createNote = useCreateNote()
   const updateNote = useUpdateNote()
+  const dismissDrift = useDismissNoteDrift()
+  const regenerateNote = useRegenerateNote()
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; note?: ParticipantNoteDto } | null>(null)
   const [form, setForm] = useState<NoteFormState>(EMPTY_FORM)
@@ -203,7 +241,26 @@ export default function NotesTab({ participantId }: { participantId: string | un
     }
   }
 
+  async function handleDismissDrift(note: ParticipantNoteDto) {
+    setListError(null)
+    try {
+      await dismissDrift.mutateAsync(note.id)
+    } catch (err) {
+      setListError(extractErrorMessage(err, 'Failed to dismiss the drift hint.'))
+    }
+  }
+
+  async function handleRegenerate(note: ParticipantNoteDto) {
+    setListError(null)
+    try {
+      await regenerateNote.mutateAsync(note.id)
+    } catch (err) {
+      setListError(extractErrorMessage(err, 'Failed to regenerate note.'))
+    }
+  }
+
   const isSaving = createNote.isPending || updateNote.isPending
+  const isDriftActionPending = dismissDrift.isPending || regenerateNote.isPending
 
   return (
     <div className="space-y-6">
@@ -248,7 +305,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
       ) : (
         <div className="space-y-3">
           {activeNotes.map(n => (
-            <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} />
+            <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} onDismissDrift={() => handleDismissDrift(n)} onRegenerate={() => handleRegenerate(n)} isDriftActionPending={isDriftActionPending} />
           ))}
         </div>
       )}
@@ -267,7 +324,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
           {showArchivedSection && (
             <div className="space-y-3 mt-3">
               {archivedNotes.map(n => (
-                <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} />
+                <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} onDismissDrift={() => handleDismissDrift(n)} onRegenerate={() => handleRegenerate(n)} isDriftActionPending={isDriftActionPending} />
               ))}
             </div>
           )}

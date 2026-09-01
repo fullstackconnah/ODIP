@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -25,7 +26,12 @@ namespace Odip.Api.Controllers;
 public class RestrictivePracticesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public RestrictivePracticesController(OdipDbContext db) => _db = db;
+    private readonly SafetyNoteSyncService _safetyNoteSync;
+    public RestrictivePracticesController(OdipDbContext db, SafetyNoteSyncService safetyNoteSync)
+    {
+        _db = db;
+        _safetyNoteSync = safetyNoteSync;
+    }
 
     [HttpGet("participants/{participantId:guid}/restrictive-practices")]
     public async Task<ActionResult<ApiResponse<List<RestrictivePracticeDto>>>> GetForParticipant(
@@ -83,6 +89,10 @@ public class RestrictivePracticesController : ControllerBase
             .Where(rp => rp.ParticipantId == participantId && rp.IsActive)
             .AnyAsync(ct);
         participant.HasRestrictivePracticeFlag = practice.IsActive || hasOtherActiveEntry;
+
+        // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above, in
+        // the same SaveChangesAsync.
+        await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
 
         await _db.SaveChangesAsync(ct);
 
@@ -178,6 +188,9 @@ public class RestrictivePracticesController : ControllerBase
             .AnyAsync(ct);
         participant.HasRestrictivePracticeFlag = practices.Any(p => p.IsActive) || hasOtherActiveEntry;
 
+        // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above.
+        await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
@@ -216,6 +229,9 @@ public class RestrictivePracticesController : ControllerBase
                 .Where(rp => rp.ParticipantId == practice.ParticipantId && rp.Id != practice.Id && rp.IsActive)
                 .AnyAsync(ct);
             participant.HasRestrictivePracticeFlag = dto.IsActive || hasOtherActiveEntry;
+
+            // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above.
+            await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -241,6 +257,11 @@ public class RestrictivePracticesController : ControllerBase
                 .Where(rp => rp.ParticipantId == practice.ParticipantId && rp.Id != practice.Id && rp.IsActive)
                 .AnyAsync(ct);
             participant.HasRestrictivePracticeFlag = hasOtherActiveEntry;
+
+            // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above —
+            // when the last active entry is deleted, this archives the note (unless a human
+            // manually edited it).
+            await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
         }
 
         await _db.SaveChangesAsync(ct);

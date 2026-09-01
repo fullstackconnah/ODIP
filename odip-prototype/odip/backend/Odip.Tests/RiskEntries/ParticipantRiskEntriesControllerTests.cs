@@ -8,6 +8,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.RiskEntries;
@@ -73,7 +74,7 @@ public class ParticipantRiskEntriesControllerTests
     public async Task Create_ParticipantMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Create(Guid.NewGuid(), CreateDto(), CancellationToken.None);
 
@@ -85,7 +86,7 @@ public class ParticipantRiskEntriesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(
             atRiskParty: AtRiskParty.Staff, description: "Risk of aggression towards support staff.",
@@ -112,7 +113,7 @@ public class ParticipantRiskEntriesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(description: "  Risk of wandering.  ", mitigationNotes: "  Door alarms fitted.  ");
 
@@ -128,7 +129,7 @@ public class ParticipantRiskEntriesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var dto = CreateDto(mitigationNotes: "   ");
 
@@ -150,7 +151,7 @@ public class ParticipantRiskEntriesControllerTests
             new ParticipantRiskEntry { Id = Guid.NewGuid(), ParticipantId = participant.Id, AtRiskParty = AtRiskParty.Staff, Description = "Retired risk", IsActive = false });
         db.SaveChanges();
 
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeInactive: false, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<ParticipantRiskEntryDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -168,7 +169,7 @@ public class ParticipantRiskEntriesControllerTests
             new ParticipantRiskEntry { Id = Guid.NewGuid(), ParticipantId = participant.Id, AtRiskParty = AtRiskParty.Staff, Description = "Retired risk", IsActive = false });
         db.SaveChanges();
 
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeInactive: true, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<ParticipantRiskEntryDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -186,7 +187,7 @@ public class ParticipantRiskEntriesControllerTests
             new ParticipantRiskEntry { Id = Guid.NewGuid(), ParticipantId = participantB.Id, AtRiskParty = AtRiskParty.Participant, Description = "B's risk", IsActive = true });
         db.SaveChanges();
 
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participantA.Id, includeInactive: false, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<ParticipantRiskEntryDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -200,7 +201,7 @@ public class ParticipantRiskEntriesControllerTests
     public async Task Update_EntryMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var dto = new UpdateParticipantRiskEntryDto { AtRiskParty = AtRiskParty.Public, Description = "d" };
         var result = await controller.Update(Guid.NewGuid(), dto, CancellationToken.None);
@@ -221,7 +222,7 @@ public class ParticipantRiskEntriesControllerTests
         db.ParticipantRiskEntries.Add(entry);
         db.SaveChanges();
 
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateParticipantRiskEntryDto
         {
             AtRiskParty = AtRiskParty.OtherParticipants, Description = "Updated", MitigationNotes = "Now mitigated", IsActive = false,
@@ -248,7 +249,7 @@ public class ParticipantRiskEntriesControllerTests
     public async Task Delete_EntryMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
@@ -264,7 +265,7 @@ public class ParticipantRiskEntriesControllerTests
         db.ParticipantRiskEntries.Add(entry);
         db.SaveChanges();
 
-        var controller = new ParticipantRiskEntriesController(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
         var result = await controller.Delete(entry.Id, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -297,7 +298,7 @@ public class ParticipantRiskEntriesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
-        var controller = new ParticipantRiskEntriesController(scopedDb);
+        var controller = new ParticipantRiskEntriesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var result = await controller.GetForParticipant(participantId, includeInactive: false, CancellationToken.None);
 
@@ -322,7 +323,7 @@ public class ParticipantRiskEntriesControllerTests
         }
 
         using var scopedDb = CreateTenantScopedDb(dbName, tenantId);
-        var controller = new ParticipantRiskEntriesController(scopedDb);
+        var controller = new ParticipantRiskEntriesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
         var result = await controller.Create(participantId, CreateDto(), CancellationToken.None);
 
@@ -331,5 +332,57 @@ public class ParticipantRiskEntriesControllerTests
         using var verifyDb = CreateDb(dbName);
         var saved = await verifyDb.ParticipantRiskEntries.IgnoreQueryFilters().SingleAsync();
         Assert.Equal(tenantId, saved.TenantId);
+    }
+
+    // ── PD-5 item 5b: ongoing (post-creation) risk-entry edit path syncs the auto-note ──────
+
+    [Fact]
+    public async Task Create_ActiveEntry_SyncsRisksHazardsSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
+
+        await controller.Create(participant.Id, CreateDto(description: "Risk of choking on hard foods."), CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:risksHazards");
+        Assert.Contains("choking on hard foods", note.Description);
+    }
+
+    [Fact]
+    public async Task Update_ChangingDescription_SyncsRisksHazardsSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
+
+        var createResult = await controller.Create(participant.Id, CreateDto(), CancellationToken.None);
+        var created = Assert.IsType<ApiResponse<ParticipantRiskEntryDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+
+        var updateDto = new UpdateParticipantRiskEntryDto
+        {
+            AtRiskParty = AtRiskParty.Participant, Description = "Risk of skin breakdown from prolonged sitting.", IsActive = true,
+        };
+        await controller.Update(created.Data!.Id, updateDto, CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:risksHazards");
+        Assert.Contains("skin breakdown", note.Description);
+    }
+
+    [Fact]
+    public async Task Delete_LastActiveEntry_ArchivesRisksHazardsSafetyAutoNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
+
+        var createResult = await controller.Create(participant.Id, CreateDto(), CancellationToken.None);
+        var created = Assert.IsType<ApiResponse<ParticipantRiskEntryDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+        Assert.False((await db.ParticipantNotes.SingleAsync(n => n.SourceKey == "safety:risksHazards")).IsArchived);
+
+        await controller.Delete(created.Data!.Id, CancellationToken.None);
+
+        var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:risksHazards");
+        Assert.True(note.IsArchived);
     }
 }

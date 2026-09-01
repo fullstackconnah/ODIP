@@ -7,6 +7,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Notes;
@@ -51,7 +52,7 @@ public class ParticipantNotesControllerTests
     public async Task Create_ParticipantMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Create(Guid.NewGuid(), CreateDto(), CancellationToken.None);
 
@@ -63,7 +64,7 @@ public class ParticipantNotesControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
 
         var result = await controller.Create(participant.Id, CreateDto(), CancellationToken.None);
 
@@ -108,7 +109,7 @@ public class ParticipantNotesControllerTests
             });
         db.SaveChanges();
 
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeArchived: false, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -131,7 +132,7 @@ public class ParticipantNotesControllerTests
             new ParticipantNote { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Archived note", Description = "d", CreatedByName = "Test", IsArchived = true });
         db.SaveChanges();
 
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeArchived: false, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<ParticipantNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -149,7 +150,7 @@ public class ParticipantNotesControllerTests
             new ParticipantNote { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Archived note", Description = "d", CreatedByName = "Test", IsArchived = true });
         db.SaveChanges();
 
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
         var result = await controller.GetForParticipant(participant.Id, includeArchived: true, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<List<ParticipantNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -162,7 +163,7 @@ public class ParticipantNotesControllerTests
     public async Task Update_NoteMissing_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
 
         var dto = new UpdateParticipantNoteDto { Title = "t", Description = "d", IsPinned = false, IsArchived = false };
         var result = await controller.Update(Guid.NewGuid(), dto, CancellationToken.None);
@@ -183,7 +184,7 @@ public class ParticipantNotesControllerTests
         db.ParticipantNotes.Add(note);
         db.SaveChanges();
 
-        var controller = new ParticipantNotesController(db);
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
         var dto = new UpdateParticipantNoteDto { Title = "Updated", Description = "Updated desc", IsPinned = true, IsArchived = true };
 
         var result = await controller.Update(note.Id, dto, CancellationToken.None);
@@ -198,5 +199,142 @@ public class ParticipantNotesControllerTests
         var saved = await db.ParticipantNotes.SingleAsync();
         Assert.Equal("Updated desc", saved.Description);
         Assert.True(saved.IsArchived);
+    }
+
+    // ── PD-5 ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Update_OnAutoNote_SetsIsManuallyEdited()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var note = new ParticipantNote
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Allergies (auto)", Description = "Auto text",
+            CreatedByName = "System", SourceKey = "safety:allergies", SourceValueSnapshot = "Peanuts||",
+        };
+        db.ParticipantNotes.Add(note);
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        // Title-only edit — still counts as a human edit per spec.
+        var dto = new UpdateParticipantNoteDto { Title = "Allergies (edited)", Description = "Auto text", IsPinned = false, IsArchived = false };
+        await controller.Update(note.Id, dto, CancellationToken.None);
+
+        var saved = await db.ParticipantNotes.SingleAsync();
+        Assert.True(saved.IsManuallyEdited);
+        Assert.Equal("safety:allergies", saved.SourceKey); // SourceKey never cleared — keeps the idempotency slot
+    }
+
+    [Fact]
+    public async Task GetForParticipant_ReconciliationCreatesMissingSafetyAutoNote()
+    {
+        // PD-5 item 5d: a write path that (hypothetically) forgot to call the sync service still
+        // shows the correct auto-note the next time the Notes tab loads.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.AllergiesDetail = "Latex";
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        var result = await controller.GetForParticipant(participant.Id, includeArchived: false, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ParticipantNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var note = Assert.Single(body.Data!);
+        Assert.Equal("safety:allergies", note.SourceKey);
+        Assert.Contains("Latex", note.Description);
+    }
+
+    [Fact]
+    public async Task GetForParticipant_ReconciliationDoesNotDuplicateExistingNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.AllergiesDetail = "Latex";
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        await controller.GetForParticipant(participant.Id, includeArchived: false, CancellationToken.None);
+        await controller.GetForParticipant(participant.Id, includeArchived: false, CancellationToken.None);
+
+        var count = await db.ParticipantNotes.CountAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:allergies");
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task DismissDrift_NoteNotFound_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.DismissDrift(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task DismissDrift_OnManualNote_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var note = new ParticipantNote { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Manual", Description = "d", CreatedByName = "Test" };
+        db.ParticipantNotes.Add(note);
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        var result = await controller.DismissDrift(note.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task DismissDrift_OnDriftedAutoNote_ClearsDriftAndLeavesTextAlone()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var note = new ParticipantNote
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Allergies (auto)", Description = "Custom clinician wording",
+            CreatedByName = "System", SourceKey = "safety:allergies", IsManuallyEdited = true,
+            SourceValueSnapshot = "Peanuts||", HasSourceDrift = true,
+        };
+        db.ParticipantNotes.Add(note);
+        db.SaveChanges();
+        participant.AllergiesDetail = "Peanuts and tree nuts";
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        var result = await controller.DismissDrift(note.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantNoteDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(body.Data!.HasSourceDrift);
+        var saved = await db.ParticipantNotes.SingleAsync();
+        Assert.Equal("Custom clinician wording", saved.Description);
+        Assert.True(saved.IsManuallyEdited);
+    }
+
+    [Fact]
+    public async Task Regenerate_OnDriftedAutoNote_RestoresMachineTextAndClearsManualFlag()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.AllergiesDetail = "Peanuts and tree nuts";
+        var note = new ParticipantNote
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Allergies (auto)", Description = "Custom clinician wording",
+            CreatedByName = "System", SourceKey = "safety:allergies", IsManuallyEdited = true,
+            SourceValueSnapshot = "Peanuts||", HasSourceDrift = true,
+        };
+        db.ParticipantNotes.Add(note);
+        db.SaveChanges();
+
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+        var result = await controller.Regenerate(note.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantNoteDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(body.Data!.HasSourceDrift);
+        var saved = await db.ParticipantNotes.SingleAsync();
+        Assert.Contains("Peanuts and tree nuts", saved.Description);
+        Assert.False(saved.IsManuallyEdited);
     }
 }

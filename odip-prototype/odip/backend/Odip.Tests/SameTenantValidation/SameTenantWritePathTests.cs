@@ -497,7 +497,7 @@ public class SameTenantWritePathTests
     {
         var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
         var foreignPreferred = SeedUserInTenant(db, tenantBId, "Foreign", "Preferred");
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db));
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var dto = new CreateParticipantDto { FirstName = "Amy", LastName = "Ng", PreferredStaffId = foreignPreferred.Id };
         var result = await controller.Create(dto, CancellationToken.None);
