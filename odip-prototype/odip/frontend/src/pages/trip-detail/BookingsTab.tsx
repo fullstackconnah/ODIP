@@ -1,15 +1,35 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
-import { Dropdown } from '@/components/Dropdown'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { getStatusColor } from '@/lib/utils'
-import type { BookingStatus, InsuranceStatus, PaymentStatus, SupportRatio } from '@/api/types/enums'
+import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
+
+// Create-form subset of BOOKING_STATUSES — Cancelled/Completed/NoLongerAttending are reached via
+// dedicated actions elsewhere, not offered when first adding a participant to a trip.
+const NEW_BOOKING_STATUS_ITEMS: DropdownItem[] = ['Enquiry', 'Held', 'Confirmed', 'Waitlist'].map(s => ({ value: s, label: s }))
+
+const SUPPORT_RATIO_LABELS: Record<SupportRatio, string> = {
+  OneToOne: '1:1',
+  OneToTwo: '1:2',
+  OneToThree: '1:3',
+  OneToFour: '1:4',
+  OneToFive: '1:5',
+  TwoToOne: '2:1',
+  SharedSupport: 'Shared',
+  Other: 'Other',
+}
+const SUPPORT_RATIO_ITEMS: DropdownItem[] = (['OneToOne', 'OneToTwo', 'OneToThree', 'OneToFour', 'OneToFive', 'TwoToOne', 'SharedSupport', 'Other'] as SupportRatio[])
+  .map(v => ({ value: v, label: SUPPORT_RATIO_LABELS[v] }))
+
+const INSURANCE_STATUS_ITEMS: DropdownItem[] = INSURANCE_STATUSES.map(s => ({ value: s, label: s }))
 
 interface BookingsTabProps {
   tripId: string
@@ -228,14 +248,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             <div className="space-y-4">
               {/* Participant Select */}
               <div>
-                <label className="block text-sm font-medium mb-1">Participant *</label>
-                <select value={selectedParticipantId} onChange={e => setSelectedParticipantId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  <option value="">Select a participant...</option>
-                  {availableParticipants.map((p: ParticipantListDto) => (
-                    <option key={p.id} value={p.id}>{p.fullName}</option>
-                  ))}
-                </select>
+                <label id="addBookingParticipantLabel" className="block text-sm font-medium mb-1">Participant *</label>
+                <SearchableSelect
+                  aria-labelledby="addBookingParticipantLabel"
+                  value={selectedParticipantId}
+                  onChange={setSelectedParticipantId}
+                  placeholder="Select a participant..."
+                  items={availableParticipants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName }))}
+                />
                 {availableParticipants.length === 0 && (
                   <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
                 )}
@@ -243,13 +263,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
               {/* Booking Status */}
               <div>
-                <label className="block text-sm font-medium mb-1">Booking Status</label>
-                <select value={bookingStatus} onChange={e => setBookingStatus(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  {['Enquiry', 'Held', 'Confirmed', 'Waitlist'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <label id="addBookingStatusLabel" className="block text-sm font-medium mb-1">Booking Status</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="addBookingStatusLabel"
+                  value={bookingStatus}
+                  onChange={setBookingStatus}
+                  items={NEW_BOOKING_STATUS_ITEMS}
+                />
               </div>
 
               {/* Support Overrides */}
@@ -281,14 +302,15 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
               {/* Support Ratio Override */}
               <div>
-                <label className="block text-sm font-medium mb-1">Support Ratio Override</label>
-                <select value={supportRatioOverride} onChange={e => setSupportRatioOverride(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  <option value="">No override</option>
-                  {[['OneToOne','1:1'],['OneToTwo','1:2'],['OneToThree','1:3'],['OneToFour','1:4'],['OneToFive','1:5'],['TwoToOne','2:1'],['SharedSupport','Shared'],['Other','Other']].map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
+                <label id="addBookingSupportRatioLabel" className="block text-sm font-medium mb-1">Support Ratio Override</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="addBookingSupportRatioLabel"
+                  label="No override"
+                  value={supportRatioOverride}
+                  onChange={setSupportRatioOverride}
+                  items={SUPPORT_RATIO_ITEMS}
+                />
               </div>
 
               {/* Notes */}
@@ -304,13 +326,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 <label className="block text-sm font-medium mb-3">Travel Insurance</label>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
-                    <select value={insuranceStatus} onChange={e => setInsuranceStatus(e.target.value)}
-                      className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                      {['None', 'Pending', 'Confirmed', 'Expired', 'Cancelled'].map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                    <label id="addBookingInsuranceStatusLabel" className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
+                    <Dropdown
+                      variant="form"
+                      aria-labelledby="addBookingInsuranceStatusLabel"
+                      value={insuranceStatus}
+                      onChange={setInsuranceStatus}
+                      items={INSURANCE_STATUS_ITEMS}
+                    />
                   </div>
                   {insuranceStatus !== 'None' && (
                     <>

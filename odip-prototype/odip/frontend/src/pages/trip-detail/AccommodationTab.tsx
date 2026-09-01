@@ -10,10 +10,15 @@ import {
   useCancelReservation,
 } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { formatDateAu, getStatusColor } from '@/lib/utils'
+import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
+
+const RESERVATION_STATUS_ITEMS: DropdownItem[] = RESERVATION_STATUSES.map(s => ({ value: s, label: s }))
 
 interface AccommFormState {
   accommodationPropertyId: string
@@ -424,7 +429,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               {/* Property Select or Create */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium">Property</label>
+                  <label id="addAccommPropertyLabel" className="block text-sm font-medium">Property</label>
                   <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
                     className="text-xs text-[var(--color-primary)] hover:underline">
                     {creatingNewProperty ? 'Select existing' : '+ Create new'}
@@ -471,13 +476,13 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                     </div>
                   </div>
                 ) : (
-                  <select value={accommForm.accommodationPropertyId} onChange={e => setAccommForm({ ...accommForm, accommodationPropertyId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                    <option value="">Select property...</option>
-                    {allAccommodation.map((a: AccommodationListDto) => (
-                      <option key={a.id} value={a.id}>{a.propertyName} — {a.location || 'No location'}</option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    aria-labelledby="addAccommPropertyLabel"
+                    value={accommForm.accommodationPropertyId}
+                    onChange={val => setAccommForm({ ...accommForm, accommodationPropertyId: val })}
+                    placeholder="Select property..."
+                    items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
+                  />
                 )}
               </div>
 
@@ -518,13 +523,14 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select value={accommForm.reservationStatus} onChange={e => setAccommForm({ ...accommForm, reservationStatus: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  {['Researching', 'Requested', 'Booked', 'Confirmed', 'Cancelled', 'Unavailable'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <label id="addAccommStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="addAccommStatusLabel"
+                  value={accommForm.reservationStatus}
+                  onChange={val => setAccommForm({ ...accommForm, reservationStatus: val })}
+                  items={RESERVATION_STATUS_ITEMS}
+                />
               </div>
 
               {/* Comments */}
@@ -571,13 +577,13 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <div className="space-y-4">
               {/* Property */}
               <div>
-                <label className="block text-sm font-medium mb-1">Property</label>
-                <select value={editReservationForm.accommodationPropertyId} onChange={e => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  {allAccommodation.map((a: AccommodationListDto) => (
-                    <option key={a.id} value={a.id}>{a.propertyName} — {a.location || 'No location'}</option>
-                  ))}
-                </select>
+                <label id="editReservationPropertyLabel" className="block text-sm font-medium mb-1">Property</label>
+                <SearchableSelect
+                  aria-labelledby="editReservationPropertyLabel"
+                  value={editReservationForm.accommodationPropertyId}
+                  onChange={val => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: val })}
+                  items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
+                />
               </div>
 
               {/* Dates */}
@@ -615,13 +621,14 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select value={editReservationForm.reservationStatus} onChange={e => setEditReservationForm({ ...editReservationForm, reservationStatus: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all">
-                  {['Researching', 'Requested', 'Booked', 'Confirmed', 'Cancelled', 'Unavailable'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <label id="editReservationStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+                <Dropdown
+                  variant="form"
+                  aria-labelledby="editReservationStatusLabel"
+                  value={editReservationForm.reservationStatus}
+                  onChange={val => setEditReservationForm({ ...editReservationForm, reservationStatus: val })}
+                  items={RESERVATION_STATUS_ITEMS}
+                />
               </div>
 
               {/* Confirmation Reference */}

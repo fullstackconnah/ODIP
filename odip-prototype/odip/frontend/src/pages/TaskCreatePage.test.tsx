@@ -10,7 +10,8 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync } = vi.hoisted(() => ({
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
-// actual Owner picker wiring (UX-01: migrated from a native <select> to SearchableSelect).
+// actual Owner picker wiring (UX-01: migrated from a native <select> to SearchableSelect) and the
+// Trip picker (GEN-1: also migrated from a native <select> to SearchableSelect).
 vi.mock('@/api/hooks', () => ({
   useCreateTask: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
   useUpdateTask: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
@@ -58,7 +59,8 @@ describe('TaskCreatePage — UX-01 Owner picker (SearchableSelect)', () => {
     renderCreatePage()
 
     await user.type(screen.getByLabelText('Title *'), 'Confirm accommodation booking')
-    await user.selectOptions(screen.getByLabelText('Trip *'), 'trip-1')
+    await user.click(screen.getByPlaceholderText('Select a trip...'))
+    await user.click(screen.getByRole('option', { name: 'Gold Coast Beach Break' }))
 
     await user.click(screen.getByDisplayValue('Unassigned'))
     await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
