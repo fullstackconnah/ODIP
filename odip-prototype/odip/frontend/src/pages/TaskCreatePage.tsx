@@ -10,7 +10,38 @@ import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+
+const TASK_TYPE_ITEMS: DropdownItem[] = [
+  { value: 'AccommodationRequest', label: 'Accommodation Request' },
+  { value: 'AccommodationConfirmation', label: 'Accommodation Confirmation' },
+  { value: 'VehicleRequest', label: 'Vehicle Request' },
+  { value: 'VehicleConfirmation', label: 'Vehicle Confirmation' },
+  { value: 'ParticipantConfirmation', label: 'Participant Confirmation' },
+  { value: 'FamilyContact', label: 'Family Contact' },
+  { value: 'InvoiceOop', label: 'Invoice / OOP' },
+  { value: 'StaffingAllocation', label: 'Staffing Allocation' },
+  { value: 'RiskReview', label: 'Risk Review' },
+  { value: 'MedicationCheck', label: 'Medication Check' },
+  { value: 'PreDeparture', label: 'Pre-Departure' },
+  { value: 'PostTrip', label: 'Post-Trip' },
+  { value: 'Other', label: 'Other' },
+]
+
+const TASK_PRIORITY_ITEMS: DropdownItem[] = [
+  { value: 'Low', label: 'Low' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'High', label: 'High' },
+  { value: 'Urgent', label: 'Urgent' },
+]
+
+const TASK_STATUS_EDIT_ITEMS: DropdownItem[] = [
+  { value: 'NotStarted', label: 'Not Started' },
+  { value: 'InProgress', label: 'In Progress' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Cancelled', label: 'Cancelled' },
+]
 
 const taskSchema = z.object({
   tripInstanceId: z.string().min(1, 'Trip is required'),
@@ -128,30 +159,35 @@ export default function TaskCreatePage() {
           </FormField>
 
           <FormField label="Trip" required error={errors.tripInstanceId?.message}>
-            <select {...register('tripInstanceId')}>
-              <option value="">Select a trip...</option>
-              {trips.map((t: any) => (
-                <option key={t.id} value={t.id}>{t.tripName}</option>
-              ))}
-            </select>
+            <Controller
+              control={control}
+              name="tripInstanceId"
+              render={({ field }) => (
+                <SearchableSelect
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder="Select a trip..."
+                  items={trips.map((t: any) => ({ value: t.id, label: t.tripName }))}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Task Type" required>
-            <select {...register('taskType')}>
-              <option value="AccommodationRequest">Accommodation Request</option>
-              <option value="AccommodationConfirmation">Accommodation Confirmation</option>
-              <option value="VehicleRequest">Vehicle Request</option>
-              <option value="VehicleConfirmation">Vehicle Confirmation</option>
-              <option value="ParticipantConfirmation">Participant Confirmation</option>
-              <option value="FamilyContact">Family Contact</option>
-              <option value="InvoiceOop">Invoice / OOP</option>
-              <option value="StaffingAllocation">Staffing Allocation</option>
-              <option value="RiskReview">Risk Review</option>
-              <option value="MedicationCheck">Medication Check</option>
-              <option value="PreDeparture">Pre-Departure</option>
-              <option value="PostTrip">Post-Trip</option>
-              <option value="Other">Other</option>
-            </select>
+            <Controller
+              control={control}
+              name="taskType"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={TASK_TYPE_ITEMS}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Notes">
@@ -182,12 +218,19 @@ export default function TaskCreatePage() {
           </FormField>
 
           <FormField label="Priority" required>
-            <select {...register('priority')}>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-              <option value="Urgent">Urgent</option>
-            </select>
+            <Controller
+              control={control}
+              name="priority"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={TASK_PRIORITY_ITEMS}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Due Date">
@@ -197,12 +240,19 @@ export default function TaskCreatePage() {
           {isEdit && (
             <>
               <FormField label="Status">
-                <select {...register('status')}>
-                  <option value="NotStarted">Not Started</option>
-                  <option value="InProgress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
+                <Controller
+                  control={control}
+                  name="status"
+                  render={({ field }) => (
+                    <Dropdown
+                      variant="form"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      items={TASK_STATUS_EDIT_ITEMS}
+                    />
+                  )}
+                />
               </FormField>
 
               <FormField label="Completed Date">

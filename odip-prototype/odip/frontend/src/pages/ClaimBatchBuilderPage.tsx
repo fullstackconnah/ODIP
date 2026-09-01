@@ -7,6 +7,8 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Dropdown } from '@/components/Dropdown'
+import { SearchableSelect } from '@/components/SearchableSelect'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import {
@@ -30,10 +32,6 @@ const STREAM_OPTIONS = INCOME_STREAMS.map(value => ({ value, label: INCOME_STREA
 // `events`'s referential identity — a fresh literal every render never settles, causing
 // "Too many re-renders".
 const NO_EVENTS: BillableEventDto[] = []
-
-const selectClass =
-  'px-3 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm appearance-none ' +
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-50 disabled:cursor-not-allowed transition-all'
 
 const dateInputClass =
   'px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm ' +
@@ -313,32 +311,28 @@ export default function ClaimBatchBuilderPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl p-4">
         <div>
-          <label htmlFor="filter-participant" className={filterLabelClass}>Participant</label>
-          <select
+          <label id="filter-participant-label" className={filterLabelClass}>Participant</label>
+          <SearchableSelect
             id="filter-participant"
+            aria-labelledby="filter-participant-label"
             value={participantId}
-            onChange={e => setParticipantId(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">All participants</option>
-            {participants.map(p => (
-              <option key={p.id} value={p.id}>{p.fullName}</option>
-            ))}
-          </select>
+            onChange={setParticipantId}
+            placeholder="All participants"
+            items={participants.map(p => ({ value: p.id, label: p.fullName }))}
+          />
         </div>
         <div>
-          <label htmlFor="filter-stream" className={filterLabelClass}>Stream</label>
-          <select
+          <label id="filter-stream-label" className={filterLabelClass}>Stream</label>
+          <Dropdown
+            variant="pill"
             id="filter-stream"
+            aria-labelledby="filter-stream-label"
             value={stream}
-            onChange={e => setStream(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">All streams</option>
-            {STREAM_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            onChange={setStream}
+            label="All streams"
+            items={STREAM_OPTIONS}
+            colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+          />
         </div>
         <div>
           <label htmlFor="filter-from" className={filterLabelClass}>From</label>

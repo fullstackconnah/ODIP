@@ -1,14 +1,24 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateVehicle, useUpdateVehicle, useVehicleDetail } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+
+const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
+  { value: 'Car', label: 'Car' },
+  { value: 'Van', label: 'Van' },
+  { value: 'Bus', label: 'Bus' },
+  { value: 'MiniBus', label: 'Mini Bus' },
+  { value: 'AccessibleVan', label: 'Accessible Van' },
+  { value: 'Other', label: 'Other' },
+]
 
 const vehicleSchema = z.object({
   vehicleName: z.string().min(1, 'Vehicle name is required'),
@@ -35,7 +45,7 @@ export default function VehicleCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useVehicleDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateVehicle : createVehicle
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<VehicleFormData>({
+  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<VehicleFormData>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
       vehicleType: 'Van',
@@ -121,14 +131,19 @@ export default function VehicleCreatePage() {
           </FormField>
 
           <FormField label="Vehicle Type" required>
-            <select {...register('vehicleType')}>
-              <option value="Car">Car</option>
-              <option value="Van">Van</option>
-              <option value="Bus">Bus</option>
-              <option value="MiniBus">Mini Bus</option>
-              <option value="AccessibleVan">Accessible Van</option>
-              <option value="Other">Other</option>
-            </select>
+            <Controller
+              control={control}
+              name="vehicleType"
+              render={({ field }) => (
+                <Dropdown
+                  variant="form"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={VEHICLE_TYPE_ITEMS}
+                />
+              )}
+            />
           </FormField>
 
           <FormField label="Internal Vehicle" layout="checkbox">
