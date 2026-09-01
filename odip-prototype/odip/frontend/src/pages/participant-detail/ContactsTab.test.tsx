@@ -119,7 +119,10 @@ describe('ContactsTab', () => {
     render(<ContactsTab participantId="participant-1" />)
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
-    await user.click(screen.getByRole('radio', { name: 'New person' }))
+    // PF-6: the person picker is now a single search-first name field — "New person" is reached
+    // via "None of these — create new" rather than an upfront Existing/New toggle.
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('button', { name: /none of these/i }))
     await user.type(screen.getByLabelText('First name *'), 'Denise')
     await user.type(screen.getByLabelText('Last name'), 'Wilson')
     await user.click(screen.getByRole('button', { name: 'Save contact' }))
@@ -132,13 +135,13 @@ describe('ContactsTab', () => {
     })
   })
 
-  it('adds an existing-person contact via the SearchableSelect picker', async () => {
+  it('adds an existing-person contact via the search-first picker', async () => {
     const user = userEvent.setup()
     render(<ContactsTab participantId="participant-1" />)
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
     await user.click(screen.getByPlaceholderText('Search people…'))
-    await user.click(screen.getByRole('option', { name: 'David Brown' }))
+    await user.click(screen.getByRole('option', { name: /David Brown/ }))
     await user.click(screen.getByRole('button', { name: 'Save contact' }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -156,13 +159,13 @@ describe('ContactsTab', () => {
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('disables Plan Manager for a non-plan-managed participant', async () => {
+  // PF-5: the single-select Role type Dropdown is now a multi-select checkbox group.
+  it('disables the Plan Manager checkbox for a non-plan-managed participant', async () => {
     const user = userEvent.setup()
     render(<ContactsTab participantId="participant-1" />)
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
-    await user.click(screen.getByRole('button', { name: /role type/i }))
-    expect(screen.getByRole('option', { name: 'Plan Manager' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('checkbox', { name: 'Plan Manager' })).toBeDisabled()
   })
 
   it('opens the edit modal pre-filled with the role\'s existing values', async () => {

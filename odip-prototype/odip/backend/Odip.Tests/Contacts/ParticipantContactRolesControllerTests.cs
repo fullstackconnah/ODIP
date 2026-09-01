@@ -312,6 +312,80 @@ public class ParticipantContactRolesControllerTests
         Assert.Empty(body.Data.OrderScopeDomains);
     }
 
+    // ── PF-5/PF-6 (SPEC-02): multi-role contacts ────────────────────────────
+
+    [Fact]
+    public async Task Create_TwoRolesForSamePersonAndParticipant_BothPersistIndependently()
+    {
+        // PF-5: "multiple roles" is multiple ParticipantContactRole rows sharing one PersonId —
+        // no backend change is required to support it (the frontend just POSTs twice), but this
+        // pins that the existing single-role endpoint really does allow it and keeps each row's
+        // fields independent of the other.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, PlanType.PlanManaged);
+        var controller = new ParticipantContactRolesController(db);
+
+        var firstResult = await controller.Create(
+            participant.Id,
+            new CreateParticipantContactRoleDto
+            {
+                NewPersonFirstName = "Karen", NewPersonLastName = "Johnson",
+                RoleType = ContactRoleType.PlanManager, OrganisationName = "Plan Partners",
+            },
+            CancellationToken.None);
+        var firstBody = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(firstResult.Result).Value);
+        var personId = firstBody.Data!.PersonId;
+
+        var secondResult = await controller.Create(
+            participant.Id,
+            new CreateParticipantContactRoleDto
+            {
+                PersonId = personId, RoleType = ContactRoleType.Specialist,
+                Discipline = "Occupational Therapy", OrganisationName = "OT Clinic",
+            },
+            CancellationToken.None);
+        var secondBody = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(secondResult.Result).Value);
+
+        Assert.Equal(1, await db.People.CountAsync());
+        Assert.Equal(2, await db.ParticipantContactRoles.CountAsync(r => r.PersonId == personId));
+
+        var roles = await db.ParticipantContactRoles.Where(r => r.PersonId == personId).ToListAsync();
+        var planManagerRow = Assert.Single(roles, r => r.RoleType == ContactRoleType.PlanManager);
+        var specialistRow = Assert.Single(roles, r => r.RoleType == ContactRoleType.Specialist);
+        Assert.Equal("Plan Partners", planManagerRow.OrganisationName);
+        Assert.Equal("OT Clinic", specialistRow.OrganisationName);
+        Assert.Equal("Occupational Therapy", specialistRow.Discipline);
+        Assert.NotEqual(secondBody.Data!.Id, firstBody.Data.Id);
+    }
+
+    [Fact]
+    public async Task Create_NewPersonWithFullOptionalFields_PersistsAddressAndDateOfBirth()
+    {
+        // PF-6: "closing a small existing gap" — the new-person path now accepts the rest of
+        // CreatePersonDto's optional fields, not just first/last name.
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+
+        var dto = new CreateParticipantContactRoleDto
+        {
+            NewPersonFirstName = "Denise", NewPersonLastName = "Wilson",
+            NewPersonAddressLine = "12 High St", NewPersonSuburb = "Northgate",
+            NewPersonState = "QLD", NewPersonPostcode = "4013",
+            NewPersonDateOfBirth = new DateOnly(1980, 5, 1),
+            RoleType = ContactRoleType.NextOfKin,
+        };
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var person = await db.People.SingleAsync();
+        Assert.Equal("12 High St", person.AddressLine);
+        Assert.Equal("Northgate", person.Suburb);
+        Assert.Equal("QLD", person.State);
+        Assert.Equal("4013", person.Postcode);
+        Assert.Equal(new DateOnly(1980, 5, 1), person.DateOfBirth);
+    }
+
     // ── Delete ────────────────────────────────────────────────────────────
 
     [Fact]

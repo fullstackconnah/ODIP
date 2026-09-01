@@ -695,6 +695,17 @@ public record CreateParticipantContactRoleDto
     public string? NewPersonEmail { get; init; }
     [StringLength(200)]
     public string? NewPersonOrganisation { get; init; }
+    /// <summary>PF-6 (SPEC-02): the rest of CreatePersonDto's optional fields, so a genuinely new
+    /// person can be captured with more than just a name/phone/email/org on first add.</summary>
+    [StringLength(200)]
+    public string? NewPersonAddressLine { get; init; }
+    [StringLength(100)]
+    public string? NewPersonSuburb { get; init; }
+    [StringLength(10)]
+    public string? NewPersonState { get; init; }
+    [StringLength(4)]
+    public string? NewPersonPostcode { get; init; }
+    public DateOnly? NewPersonDateOfBirth { get; init; }
 
     public ContactRoleType RoleType { get; init; }
     [StringLength(100)]

@@ -79,6 +79,12 @@ public class ParticipantContactRolesController : ControllerBase
                 FirstName = (dto.NewPersonFirstName ?? "").Trim(), LastName = (dto.NewPersonLastName ?? "").Trim(),
                 Phone = dto.NewPersonPhone, Mobile = dto.NewPersonMobile, Email = dto.NewPersonEmail,
                 Organisation = dto.NewPersonOrganisation,
+                // PF-6 (SPEC-02): closes the gap where the wizard's "new person" branch only ever
+                // captured a name — the search-first AddContactRoleForm now offers the rest of
+                // CreatePersonDto's optional fields too.
+                AddressLine = dto.NewPersonAddressLine, Suburb = dto.NewPersonSuburb,
+                State = dto.NewPersonState, Postcode = dto.NewPersonPostcode,
+                DateOfBirth = dto.NewPersonDateOfBirth,
             };
             _db.People.Add(person);
         }

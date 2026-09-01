@@ -1465,13 +1465,40 @@ describe('ParticipantCreatePage — CONTACT-02/03 contacts (create mode)', () =>
     await advanceToContacts(user)
 
     await user.click(screen.getByRole('button', { name: /add contact/i }))
-    await user.click(screen.getByRole('button', { name: /role type/i }))
-    expect(screen.getByRole('option', { name: 'Plan Manager' })).toHaveAttribute('aria-disabled', 'true')
+    // PF-5 (SPEC-02): role types render as a multi-select checkbox group, not a single Dropdown.
+    expect(screen.getByRole('checkbox', { name: 'Plan Manager' })).toBeDisabled()
     // A role type the newly-added row is NOT currently pointed at (NextOfKin, the first
     // available type) stays disabled without a gate-error hint cluttering the row — the hint
     // only appears once a since-invalidated role is actually selected (see ContactRoleRules'
     // Update-path equivalent for that scenario).
     expect(screen.queryByText(/plan manager contacts are only available/i)).not.toBeInTheDocument()
+  })
+
+  // PF-5 (SPEC-02): multi-select roles fan out to N join rows sharing one Person — the create-mode
+  // wizard's transactional contactRoles payload must reflect that fan-out identically to the
+  // nested-CRUD path (AddContactRoleForm), since the acceptance criteria is the same shape either
+  // way: one entry per selected role, all sharing the same person fields.
+  it('selecting 2 roles for one new person produces 2 contactRoles entries sharing one newPersonFirstName/newPersonLastName', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await advanceToContacts(user)
+
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('radio', { name: 'New person' }))
+    await user.type(screen.getByLabelText('First name *'), 'Karen')
+    await user.type(screen.getByLabelText('Last name'), 'Johnson')
+    // NextOfKin is selected by default (the row's initial roleTypes); add Guardian too.
+    await user.click(screen.getByRole('checkbox', { name: 'Guardian' }))
+
+    await finishFromContacts(user)
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.contactRoles).toHaveLength(2)
+    expect(payload.contactRoles.map((r: { roleType: string }) => r.roleType).sort()).toEqual(['Guardian', 'NextOfKin'])
+    for (const role of payload.contactRoles) {
+      expect(role).toMatchObject({ newPersonFirstName: 'Karen', newPersonLastName: 'Johnson', personId: null })
+    }
   })
 })
 
@@ -1526,7 +1553,10 @@ describe('ParticipantCreatePage — PF-4 edit-mode add-contact (nested-CRUD, via
     await goToContactsStep(user)
 
     await user.click(screen.getByRole('button', { name: /add contact/i }))
-    await user.click(screen.getByRole('radio', { name: 'New person' }))
+    // PF-6: the person picker is a single search-first name field — "New person" is reached via
+    // "None of these — create new" rather than an upfront Existing/New toggle.
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('button', { name: /none of these/i }))
     await user.type(screen.getByLabelText('First name *'), 'Denise')
     await user.type(screen.getByLabelText('Last name'), 'Wilson')
     await user.click(screen.getByRole('button', { name: 'Save contact' }))
@@ -1578,8 +1608,11 @@ describe('ParticipantCreatePage — bug fix: registeredProviderFlag on ProviderC
   // answered before Contacts) forces this sequence in practice.
   async function addProviderContactRow(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: /add contact/i }))
-    await user.click(screen.getByRole('button', { name: /role type/i }))
-    await user.click(screen.getByRole('option', { name: 'Support Worker / Provider Contact' }))
+    // PF-5: role types render as a multi-select checkbox group — swap out the row's default
+    // (NextOfKin, the first available type) for Provider Contact, so this row ends up single-role
+    // exactly as it did with the old single-select Dropdown.
+    await user.click(screen.getByRole('checkbox', { name: 'Next of Kin' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Support Worker / Provider Contact' }))
     await user.click(screen.getByPlaceholderText('Search people…'))
     await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
   }
@@ -3369,8 +3402,10 @@ describe('ParticipantCreatePage — PF-2 plan-type compliance warning', () => {
       expect(screen.getByRole('status')).toHaveTextContent(PLAN_MANAGER_WARNING)
 
       await user.click(screen.getByRole('button', { name: /add contact/i }))
-      await user.click(screen.getByRole('button', { name: /role type/i }))
-      await user.click(screen.getByRole('option', { name: 'Plan Manager' }))
+      // PF-5: role types render as a multi-select checkbox group — adding Plan Manager alongside
+      // the row's default (NextOfKin) is enough to satisfy the warning; it doesn't need to be the
+      // row's only role.
+      await user.click(screen.getByRole('checkbox', { name: 'Plan Manager' }))
       await user.click(screen.getByPlaceholderText('Search people…'))
       await user.click(screen.getByRole('option', { name: 'Karen Johnson' }))
 
