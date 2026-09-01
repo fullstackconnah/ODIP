@@ -94,14 +94,16 @@ export default function ParticipantDetailPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">{p.fullName}</h1>
             <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
-            {p.isDraft && (
-              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
-            )}
           </div>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
           <div className="mt-2">
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
+          {p.isDraft && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
+            </div>
+          )}
           {p.isDraft && (
             <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">

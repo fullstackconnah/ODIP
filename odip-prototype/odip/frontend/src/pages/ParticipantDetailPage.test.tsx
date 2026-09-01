@@ -372,3 +372,59 @@ describe('ParticipantDetailPage — DOC-01 Documents header buttons', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
   })
 })
+
+// PD-1 — the Draft warning pill lives in its own full-width row underneath the header details,
+// independent of the name row and the right-side button cluster, so its size/wrap point never
+// depends on the button cluster's width (Edit button present/absent, PDF download state).
+describe('ParticipantDetailPage — PD-1 header warning pill', () => {
+  it('renders the Draft pill, in its own row, for a draft participant', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    const { container } = renderAt('participant-1')
+
+    const pill = screen.getByText('Draft')
+    expect(pill).toBeInTheDocument()
+
+    // The pill's row is its own dedicated block-level container (mt-2 flex flex-wrap gap-2),
+    // separate from the name row that holds the <h1> and Active/Inactive badge — this is what
+    // decouples its wrap point from that row's other occupants.
+    const pillRow = container.querySelector('.mt-2.flex.flex-wrap.gap-2')
+    expect(pillRow).toBeInTheDocument()
+    expect(pillRow).toContainElement(pill)
+    expect(pillRow).not.toContainElement(screen.getByRole('heading', { level: 1 }))
+  })
+
+  it('does not render the Draft pill, nor a leftover empty container, for a non-draft participant', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false }), isLoading: false })
+    const { container } = renderAt('participant-1')
+
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+    // The pill row itself must not render at all when there's nothing to put in it — no stray
+    // wrapper reserving vertical space.
+    expect(container.querySelector('.mt-2.flex.flex-wrap.gap-2')).not.toBeInTheDocument()
+  })
+
+  it('still renders the header correctly for a role without canWrite (no Edit button), with the Draft pill unaffected', () => {
+    // beforeEach already sets role to 'SupportWorker', which usePermissions.canWrite excludes.
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sophie Brown' })).toBeInTheDocument()
+  })
+
+  it('keeps the Draft pill in its own row regardless of the button cluster width (Edit button present, PDF download pending)', () => {
+    setUserRole('Admin')
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    const { container } = renderAt('participant-1')
+
+    // Widened cluster: Edit button shown, one download button in its longer "Preparing…" state.
+    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /preparing/i })).toBeInTheDocument()
+
+    const pill = screen.getByText('Draft')
+    const pillRow = container.querySelector('.mt-2.flex.flex-wrap.gap-2')
+    expect(pillRow).toContainElement(pill)
+  })
+})
