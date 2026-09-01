@@ -2830,8 +2830,26 @@ export default function ParticipantCreatePage() {
           </div>
         )}
 
+        {/* PD-6: in edit mode, Support Needs & Mobility is now managed from the participant's
+            Support Profile tab (merged with the /support-profile sub-resource fields there and
+            made section-editable) — same "step becomes edit-mode-inert read-only summary + link"
+            pattern already used for Contacts (stepIndex 3) and Risk Entries (stepIndex 9) above.
+            Create mode is unaffected: SupportProfileDto fields can't be entered here regardless
+            (that sub-resource's PUT needs an existing participant id), so this step still collects
+            its 6 cards' fields exactly as before when creating a brand-new participant. */}
         {!isReviewStep && wizard.stepIndex === 5 && (
           <div className="grid md:grid-cols-2 gap-6">
+            {isEdit ? (
+              <Card title="Support Needs & Mobility" className="space-y-3 md:col-span-2">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Support Needs & Mobility is now managed from the{' '}
+                  <Link to={`/participants/${id}?tab=support`} className="text-[var(--color-primary)] hover:underline">
+                    participant's Support Profile tab
+                  </Link>.
+                </p>
+              </Card>
+            ) : (
+              <>
             <Card title="Support Needs" className="space-y-4">
               <FormField label="High Support" layout="checkbox">
                 <input id="isHighSupport" type="checkbox" {...register('isHighSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
@@ -3039,10 +3057,18 @@ export default function ParticipantCreatePage() {
                 <textarea id="skinIntegrity" {...register('skinIntegrity')} rows={2} placeholder="Skin integrity notes..." />
               </FormField>
             </Card>
+              </>
+            )}
 
             {/* INTAKE-03 — Community Mobility & Transport Risk checklist (research spec §3,
                 Section 7), CA-gated: only shown when CommunityAccessDailyLiving is one of the
-                selected service streams (see the NDIS & Funding step). */}
+                selected service streams (see the NDIS & Funding step). PD-6: this checklist card
+                is explicitly excluded from PD-6's move to the Support Profile tab (it's backed by
+                the checklistItems collection's own independent CRUD, a structurally different
+                partial-update shape than the 6 flat-field cards above — see SPEC-03's PD-6
+                "Excluded, with reasoning") and — unlike those 6 cards — stays wizard-editable in
+                BOTH create and edit mode, so it renders regardless of isEdit, alongside whichever
+                branch above is showing. */}
             {isVisible('checklistItems.0.value') && (
               <Card title="Community Access — additional" className="space-y-4 md:col-span-2">
                 <p className="text-sm text-[var(--color-muted-foreground)]">
