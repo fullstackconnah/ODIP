@@ -9,6 +9,7 @@ import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf,
+  mockPatchMutateAsync, mockUseStaff,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockUseParticipantBookings: vi.fn(() => ({ data: [] })),
@@ -17,6 +18,12 @@ const {
   // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
   mockUseDownloadIntakeFormPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   mockUseDownloadParticipantProfilePdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  // PD-7 — the real Details-tab section components (kept real below, see the './participant-detail'
+  // mock) call usePatchParticipant()/useStaff() directly. Every PDETAIL-01 test in this file uses
+  // the default 'SupportWorker' role (canWriteParticipantDetails === false), so no section's Edit
+  // button/mutateAsync path is actually exercised here — these exist only so the modules resolve.
+  mockPatchMutateAsync: vi.fn(),
+  mockUseStaff: vi.fn(() => ({ data: [] })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -30,23 +37,35 @@ vi.mock('@/api/hooks', () => ({
   useParticipantAlerts: mockUseParticipantAlerts,
   useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
   useDownloadParticipantProfilePdf: mockUseDownloadParticipantProfilePdf,
+  usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
+  useStaff: mockUseStaff,
 }))
 
-vi.mock('./participant-detail', () => ({
-  MedicationsTab: () => <div data-testid="medications-tab" />,
-  NotesTab: () => <div data-testid="notes-tab" />,
-  RoutinesTab: () => <div data-testid="routines-tab" />,
-  RestrictivePracticesTab: () => <div data-testid="restrictive-practices-tab" />,
-  RiskEntriesSection: () => <div data-testid="risk-entries-section" />,
-  ParticipantConsentsSection: () => <div data-testid="consents-section" />,
-  ParticipantHealthConditionsSection: () => <div data-testid="health-conditions-section" />,
-  ParticipantAdlAssessmentsSection: () => <div data-testid="adl-assessments-section" />,
-  ContactsTab: () => <div data-testid="contacts-tab" />,
-  // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
-  // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
-  // have their own test file" approach as every other nested-CRUD section above.
-  SupportProfileTab: () => <div data-testid="support-profile-tab" />,
-}))
+vi.mock('./participant-detail', async () => {
+  // PD-7 — the 11 Details-tab section-edit components (ParticipantIdentitySection etc.) are kept
+  // REAL via importActual: this page's own PDETAIL-01 tests assert on text those components
+  // render, and each section also has its own dedicated test file for edit/save/cancel/gate
+  // behaviour (mirroring SupportProfileTab's "own hooks have their own test file" approach).
+  // Only the nested-CRUD tabs/sections below (which have PRE-EXISTING dedicated test files of
+  // their own and whose hooks this page's tests don't stub) are replaced with lightweight stubs.
+  const actual = await vi.importActual<typeof import('./participant-detail')>('./participant-detail')
+  return {
+    ...actual,
+    MedicationsTab: () => <div data-testid="medications-tab" />,
+    NotesTab: () => <div data-testid="notes-tab" />,
+    RoutinesTab: () => <div data-testid="routines-tab" />,
+    RestrictivePracticesTab: () => <div data-testid="restrictive-practices-tab" />,
+    RiskEntriesSection: () => <div data-testid="risk-entries-section" />,
+    ParticipantConsentsSection: () => <div data-testid="consents-section" />,
+    ParticipantHealthConditionsSection: () => <div data-testid="health-conditions-section" />,
+    ParticipantAdlAssessmentsSection: () => <div data-testid="adl-assessments-section" />,
+    ContactsTab: () => <div data-testid="contacts-tab" />,
+    // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
+    // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
+    // have their own test file" approach as every other nested-CRUD section above.
+    SupportProfileTab: () => <div data-testid="support-profile-tab" />,
+  }
+})
 
 function setUserRole(role: string) {
   localStorage.setItem('odip_user', JSON.stringify({ role }))
