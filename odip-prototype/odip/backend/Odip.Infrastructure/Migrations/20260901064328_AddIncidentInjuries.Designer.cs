@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901064328_AddIncidentInjuries")]
+    partial class AddIncidentInjuries
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2400,13 +2403,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
-                    b.Property<bool>("HasSourceDrift")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsArchived")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsManuallyEdited")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsPinned")
@@ -2414,12 +2411,6 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("ParticipantId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("SourceKey")
-                        .HasColumnType("text");
-
-                    b.Property<string>("SourceValueSnapshot")
-                        .HasColumnType("text");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -2437,10 +2428,6 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("TenantId");
-
-                    b.HasIndex("ParticipantId", "SourceKey")
-                        .IsUnique()
-                        .HasFilter("\"SourceKey\" IS NOT NULL");
 
                     b.ToTable("ParticipantNotes");
                 });
@@ -2499,7 +2486,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("Days")
+                    b.Property<int?>("DayOfWeek")
                         .HasColumnType("integer");
 
                     b.Property<string>("Description")
