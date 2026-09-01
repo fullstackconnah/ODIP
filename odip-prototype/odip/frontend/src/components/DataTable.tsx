@@ -3,6 +3,7 @@ import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
+import { useUiPreferences } from '@/hooks/useUiPreferences'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -81,8 +82,9 @@ export type DataTableProps<T> = {
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
   /** Adds a vertical border between every column (header + body cells), for tables dense enough
-   * that scanning across a row benefits from a rule to track against. Off by default — most
-   * tables read fine with only the horizontal row dividers already in place. */
+   * that scanning across a row benefits from a rule to track against. When omitted, falls back
+   * to the user's `tableVerticalDividers` preference (GEN-2, see `useUiPreferences`) — pass an
+   * explicit `true`/`false` here to override that preference for this table specifically. */
   verticalDividers?: boolean
 }
 
@@ -154,8 +156,10 @@ export function DataTable<T>({
   selectable = false,
   selectedRows,
   onSelectionChange,
-  verticalDividers = false,
+  verticalDividers,
 }: DataTableProps<T>) {
+  const { prefs } = useUiPreferences()
+  const showVerticalDividers = verticalDividers ?? prefs.tableVerticalDividers
   const [internalSort, setInternalSort] = useState<SortState | null>(defaultSort ?? null)
   const isControlled = controlledSort !== undefined
   const activeSort = isControlled ? controlledSort ?? null : internalSort
@@ -209,7 +213,7 @@ export function DataTable<T>({
   }
 
   const cellPadding = compact ? 'px-2 py-1.5' : 'p-3'
-  const dividerClass = verticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
+  const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
     <div className={className ?? 'relative bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-x-auto'}>

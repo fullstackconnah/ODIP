@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
+import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
@@ -73,13 +74,15 @@ function PatternRowActions({
 
 /** Loading state — a skeleton matching the final table's shape, no spinner. */
 function PatternsSkeleton() {
+  const { prefs } = useUiPreferences()
+  const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
   const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'Status', '']
   const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-14', 'w-8']
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-card" aria-hidden="true">
       <table className="w-full text-sm">
         <thead className="bg-accent">
-          <tr>
+          <tr className={dividerClass}>
             {headers.map(h => (
               <th key={h} className="p-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">{h}</th>
             ))}
@@ -87,7 +90,7 @@ function PatternsSkeleton() {
         </thead>
         <tbody className="divide-y divide-border">
           {Array.from({ length: 6 }, (_, rowIdx) => (
-            <tr key={rowIdx}>
+            <tr key={rowIdx} className={dividerClass}>
               {widths.map((w, colIdx) => (
                 <td key={colIdx} className="p-3">
                   <div className={`h-3.5 ${w} animate-pulse rounded-sm bg-muted`} />

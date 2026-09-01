@@ -3,6 +3,7 @@ import { Route, Navigate, Outlet, RouterProvider, createBrowserRouter, createRou
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePermissions, type PageKey } from './lib/permissions'
+import { UiPreferencesProvider } from './hooks/useUiPreferences'
 import AppLayout from './components/layout/AppLayout'
 import './index.css'
 
@@ -66,7 +67,7 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}><Outlet /></Suspense>}>
       <Route path="/login" element={<LoginPage />} />
-      <Route element={<ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary>}>
+      <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>
         <Route path="/" element={<PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>} />
         <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />
         <Route path="/trips/new" element={<PrivateRoute page="trips" requiresWrite><TripCreatePage /></PrivateRoute>} />

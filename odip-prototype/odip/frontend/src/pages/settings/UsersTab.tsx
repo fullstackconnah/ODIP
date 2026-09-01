@@ -3,6 +3,7 @@ import { Search, Pencil } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
+import { DataTable } from '@/components/DataTable'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -156,83 +157,69 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
       </div>
 
       {/* Table */}
-      <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-border)]">
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Name</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Email</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Tenant</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Role</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Last Login</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-[var(--color-muted-foreground)]">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-[var(--color-muted-foreground)]">
-                  Loading...
-                </td>
-              </tr>
-            ) : users.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-[var(--color-muted-foreground)]">
-                  No users found.
-                </td>
-              </tr>
-            ) : (
-              users.map(user => (
-                <tr
-                  key={user.id}
-                  className="border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-accent)]/50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
-                    {user.fullName}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {user.email}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs px-2 py-0.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)]">
-                      {user.tenantName}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {ROLE_LABELS[user.role] ?? user.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
-                        user.isActive
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-50 text-red-600'
-                      }`}
-                    >
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {formatRelativeTime(user.lastLoginAt)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => onEditUser(user)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
-                      title="Edit user"
-                    >
-                      <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        data={users}
+        keyField="id"
+        loading={isLoading}
+        emptyMessage="No users found."
+        columns={[
+          { key: 'fullName', header: 'Name', className: 'font-medium' },
+          { key: 'email', header: 'Email', className: 'text-[var(--color-muted-foreground)]' },
+          {
+            key: 'tenantName',
+            header: 'Tenant',
+            render: (user: AdminUserDto) => (
+              <span className="text-xs px-2 py-0.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)]">
+                {user.tenantName}
+              </span>
+            ),
+          },
+          {
+            key: 'role',
+            header: 'Role',
+            render: (user: AdminUserDto) => (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                {ROLE_LABELS[user.role] ?? user.role}
+              </span>
+            ),
+          },
+          {
+            key: 'isActive',
+            header: 'Status',
+            render: (user: AdminUserDto) => (
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full ${
+                  user.isActive
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-50 text-red-600'
+                }`}
+              >
+                {user.isActive ? 'Active' : 'Inactive'}
+              </span>
+            ),
+          },
+          {
+            key: 'lastLoginAt',
+            header: 'Last Login',
+            className: 'text-[var(--color-muted-foreground)]',
+            render: (user: AdminUserDto) => formatRelativeTime(user.lastLoginAt),
+          },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (user: AdminUserDto) => (
+              <button
+                onClick={() => onEditUser(user)}
+                className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+                title="Edit user"
+              >
+                <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+              </button>
+            ),
+          },
+        ]}
+      />
 
       {/* Pagination */}
       {totalCount > 0 && (

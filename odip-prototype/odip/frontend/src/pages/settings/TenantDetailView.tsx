@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Users, UserCheck, Clock, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
+import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 
 // ---------------------------------------------------------------------------
@@ -137,65 +138,56 @@ export default function TenantDetailView({
             No users in this tenant yet.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-border)]">
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Name
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Role
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Status
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-[var(--color-muted-foreground)]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr
-                  key={user.id}
-                  className="border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-accent)]/50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
-                    {user.fullName}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onEditUser(user.id)}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            data={users}
+            keyField="id"
+            className="w-full"
+            columns={[
+              { key: 'fullName', header: 'Name', className: 'font-medium' },
+              {
+                key: 'role',
+                header: 'Role',
+                render: (user: TenantUserDto) => (
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {user.role}
+                  </span>
+                ),
+              },
+              {
+                key: 'isActive',
+                header: 'Status',
+                render: (user: TenantUserDto) => (
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      user.isActive
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                ),
+              },
+              {
+                key: 'actions',
+                header: '',
+                align: 'right',
+                render: (user: TenantUserDto) => (
+                  <button
+                    type="button"
+                    onClick={() => onEditUser(user.id)}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
+                  >
+                    Edit
+                  </button>
+                ),
+              },
+            ]}
+          />
         )}
       </div>
 
