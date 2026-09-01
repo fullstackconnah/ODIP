@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RoutinesTab from './RoutinesTab'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
@@ -158,5 +158,141 @@ describe('RoutinesTab', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'routine-1', participantId: 'participant-1' })
+  })
+
+  // PD-3: start/end time are independent optional fields with no "has a specific time window"
+  // gate — a routine's time window may be a start only, an end only, both, or neither.
+  describe('PD-3 — partial time windows', () => {
+    it('saves a routine with only a start time set', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'Take morning tablets')
+      await user.type(screen.getByLabelText(/description/i), 'Must start no earlier than this time.')
+      fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '07:00' } })
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+      const [call] = mockCreateMutateAsync.mock.calls[0]
+      expect(call.data.startTime).toBe('07:00:00')
+      expect(call.data.endTime).toBeNull()
+    })
+
+    it('saves a routine with only an end time set', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'Finish evening chores')
+      await user.type(screen.getByLabelText(/description/i), 'Must be wrapped up by this time.')
+      fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '17:00' } })
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+      const [call] = mockCreateMutateAsync.mock.calls[0]
+      expect(call.data.startTime).toBeNull()
+      expect(call.data.endTime).toBe('17:00:00')
+    })
+
+    it('renders "From {time}" for a start-only routine and "By {time}" for an end-only routine', () => {
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [
+          makeRoutine({ id: 'r1', title: 'Start-only task', dayOfWeek: null, startTime: '07:00:00', endTime: null }),
+          makeRoutine({ id: 'r2', title: 'End-only task', dayOfWeek: null, startTime: null, endTime: '17:00:00' }),
+        ],
+        isLoading: false,
+      })
+
+      render(<RoutinesTab participantId="participant-1" />)
+
+      expect(screen.getByText('From 7am')).toBeInTheDocument()
+      expect(screen.getByText('By 5pm')).toBeInTheDocument()
+    })
+
+    it('still renders "Untimed" when neither time is set, and a range when both are set', () => {
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [
+          makeRoutine({ id: 'r1', title: 'Untimed task', dayOfWeek: null, startTime: null, endTime: null }),
+          makeRoutine({ id: 'r2', title: 'Ranged task', dayOfWeek: null, startTime: '09:30:00', endTime: '11:30:00' }),
+        ],
+        isLoading: false,
+      })
+
+      render(<RoutinesTab participantId="participant-1" />)
+
+      expect(screen.getByText('Untimed')).toBeInTheDocument()
+      expect(screen.getByText('9:30am–11:30am')).toBeInTheDocument()
+    })
+
+    it('shows an end-before-start validation error only when both times are present', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'Bad window')
+      await user.type(screen.getByLabelText(/description/i), 'End is before start.')
+      fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '17:00' } })
+      fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '07:00' } })
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(screen.getByText('End time must be after start time')).toBeInTheDocument()
+      expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+
+      // Clearing the end time (start-only) removes the ordering error entirely — the rule only
+      // fires when both times are present.
+      fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '' } })
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(screen.queryByText('End time must be after start time')).not.toBeInTheDocument()
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    it('round-trips all three time states through edit-mode hydration', async () => {
+      const user = userEvent.setup()
+
+      // Start-only
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ startTime: '07:00:00', endTime: null })],
+        isLoading: false,
+      })
+      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(screen.getByLabelText(/start time/i)).toHaveValue('07:00')
+      expect(screen.getByLabelText(/end time/i)).toHaveValue('')
+      unmount1()
+
+      // End-only
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ startTime: null, endTime: '17:00:00' })],
+        isLoading: false,
+      })
+      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(screen.getByLabelText(/start time/i)).toHaveValue('')
+      expect(screen.getByLabelText(/end time/i)).toHaveValue('17:00')
+      unmount2()
+
+      // Both
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ startTime: '09:30:00', endTime: '11:30:00' })],
+        isLoading: false,
+      })
+      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(screen.getByLabelText(/start time/i)).toHaveValue('09:30')
+      expect(screen.getByLabelText(/end time/i)).toHaveValue('11:30')
+      unmount3()
+
+      // Neither
+      mockUseParticipantRoutines.mockReturnValue({
+        data: [makeRoutine({ startTime: null, endTime: null })],
+        isLoading: false,
+      })
+      render(<RoutinesTab participantId="participant-1" />)
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(screen.getByLabelText(/start time/i)).toHaveValue('')
+      expect(screen.getByLabelText(/end time/i)).toHaveValue('')
+    })
   })
 })

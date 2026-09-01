@@ -33,10 +33,14 @@ function toApiTime(time: string): string {
 }
 
 /** Same "h:mma–h:mma" formatting as the rostering board's shift times, plus an "Untimed" fallback
- * for routines with no start/end — delegates to the shared formatShiftTime instead of duplicating it. */
+ * for routines with no start/end — delegates to the shared formatShiftTime instead of duplicating it.
+ * A routine may also have only a start ("the task needs to be done from this time") or only an end
+ * ("the task needs to be done by this time") — both render as a single time with a directional word. */
 function formatRoutineTime(startTime: string | null, endTime: string | null): string {
-  if (!startTime || !endTime) return 'Untimed'
-  return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}`
+  if (startTime && endTime) return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}`
+  if (startTime) return `From ${formatShiftTime(startTime)}`
+  if (endTime) return `By ${formatShiftTime(endTime)}`
+  return 'Untimed'
 }
 
 /** Groups active routines into "Every day" plus one bucket per weekday that has entries, each sorted critical-first then by time (untimed last). */
@@ -44,10 +48,14 @@ function groupRoutines(routines: ParticipantRoutineDto[]): { label: string; item
   const sortWithin = (items: ParticipantRoutineDto[]) =>
     [...items].sort((a, b) => {
       if (a.isCritical !== b.isCritical) return a.isCritical ? -1 : 1
-      if (!a.startTime && !b.startTime) return 0
-      if (!a.startTime) return 1
-      if (!b.startTime) return -1
-      return a.startTime.localeCompare(b.startTime)
+      // An end-only routine ("By 5pm") still carries a real time constraint, so it sorts among
+      // timed routines by its deadline rather than being lumped in with true "Untimed" routines.
+      const aTime = a.startTime ?? a.endTime
+      const bTime = b.startTime ?? b.endTime
+      if (!aTime && !bTime) return 0
+      if (!aTime) return 1
+      if (!bTime) return -1
+      return aTime.localeCompare(bTime)
     })
 
   const groups: { label: string; items: ParticipantRoutineDto[] }[] = []
@@ -68,7 +76,6 @@ type RoutineFormState = {
   description: string
   category: RoutineCategory
   dayOfWeek: string
-  timed: boolean
   startTime: string
   endTime: string
   isCritical: boolean
@@ -76,7 +83,7 @@ type RoutineFormState = {
 }
 
 const EMPTY_FORM: RoutineFormState = {
-  title: '', description: '', category: 'PersonalCare', dayOfWeek: '', timed: false,
+  title: '', description: '', category: 'PersonalCare', dayOfWeek: '',
   startTime: '', endTime: '', isCritical: false, isActive: true,
 }
 
@@ -182,7 +189,6 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       description: routine.description,
       category: routine.category,
       dayOfWeek: routine.dayOfWeek ?? '',
-      timed: !!(routine.startTime && routine.endTime),
       startTime: toTimeInputValue(routine.startTime),
       endTime: toTimeInputValue(routine.endTime),
       isCritical: routine.isCritical,
@@ -202,7 +208,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
     const next: { title?: string; description?: string; time?: string } = {}
     if (!form.title.trim()) next.title = 'Title is required'
     if (!form.description.trim()) next.description = 'Description is required'
-    if (form.timed && (!form.startTime || !form.endTime)) next.time = 'Start and end time are required for a timed routine'
+    if (form.startTime && form.endTime && form.endTime <= form.startTime) next.time = 'End time must be after start time'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -215,8 +221,8 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       description: form.description.trim(),
       category: form.category,
       dayOfWeek: form.dayOfWeek || null,
-      startTime: form.timed ? toApiTime(form.startTime) : null,
-      endTime: form.timed ? toApiTime(form.endTime) : null,
+      startTime: form.startTime ? toApiTime(form.startTime) : null,
+      endTime: form.endTime ? toApiTime(form.endTime) : null,
       isCritical: form.isCritical,
       isActive: form.isActive,
     }
@@ -392,24 +398,14 @@ export default function RoutinesTab({ participantId }: { participantId: string |
               items={[{ value: '', label: 'Every day' }, ...WEEKDAYS.map(d => ({ value: d, label: d }))]}
             />
           </FormField>
-          <FormField label="Has a specific time window" layout="checkbox">
-            <input
-              type="checkbox"
-              checked={form.timed}
-              onChange={e => setForm(f => ({ ...f, timed: e.target.checked }))}
-              className="w-4 h-4 rounded border-[var(--color-border)]"
-            />
-          </FormField>
-          {form.timed && (
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Start time" required error={errors.time}>
-                <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
-              </FormField>
-              <FormField label="End time" required>
-                <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
-              </FormField>
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Start time" error={errors.time} hint="Leave blank if this task has no fixed start">
+              <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
+            </FormField>
+            <FormField label="End time" hint="Leave blank if this task has no fixed end">
+              <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
+            </FormField>
+          </div>
           <FormField label="Critical — must-know for shifts" layout="checkbox" hint="Critical routines are visually flagged and always surfaced on the shift slide-over, even if untimed">
             <input
               type="checkbox"
