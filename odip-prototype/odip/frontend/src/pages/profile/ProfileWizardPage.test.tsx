@@ -217,6 +217,62 @@ describe('ProfileWizardPage — per-step PATCH and the collection-group trap', (
     expect(data.ndisPlan.planType).toBe('SelfManaged')
   })
 
+  // Re-verified 2026-09 in response to a coordinator review of the PF-10.7 re-homing map: the old
+  // wizard's single big Zod schema needed an explicit test proving an invalid field elsewhere
+  // didn't block the current step's save. The Profile wizard's per-step-keyed schema
+  // (PROFILE_STEP_SCHEMAS_BY_KEY[step.key]) makes this true by construction, but nothing
+  // previously exercised the negative case directly.
+  it('validates only the current step — an invalid field on a different, not-yet-visited step does not block saving this one', async () => {
+    const user = userEvent.setup()
+    // primaryDiagnosis 'Other — specify' with an empty primaryDiagnosisOther fails the Medical
+    // Detail step's own diagnosisOtherRefine — but Key Identifiers' schema never picks either
+    // field, so it must have no bearing on saving Key Identifiers.
+    renderProfilePage(makeParticipant({ primaryDiagnosis: 'Other — specify', otherDiagnoses: [] }))
+    await expectStep(/key identifiers/i)
+
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  // Re-verified 2026-09 (see comment above) — checklistItems (the 21-row Community
+  // Mobility/Transport Risk + Behaviours of Concern grid) is owned entirely by ONE step here
+  // (participantPatchGroups.ts: `communityAccess: [..., 'checklistItems']`), unlike the old wizard
+  // where it was split across two separate steps (Support Needs & Mobility / Behaviour &
+  // Communication) each required to send only its own item types — that specific cross-step
+  // filtering hazard is architecturally impossible now, since no other step ever touches this
+  // collection. Nothing previously confirmed the collection round-trips through this single step
+  // at all, so this fills that gap.
+  it('saving the Community Access step sends the full checklistItems collection in one PATCH', async () => {
+    const user = userEvent.setup()
+    const participant = makeParticipant({
+      serviceStreams: 'CommunityAccessDailyLiving',
+      checklistItems: [{ id: 'ci-1', participantId: 'participant-1', itemType: 'FallsRisk', value: 'Yes', notes: 'note', createdAt: null, updatedAt: null }],
+    })
+    renderProfilePage(participant)
+    await expectStep(/key identifiers/i)
+
+    // 6 clicks: keyIdentifiers->culturalDepth->medical->mobility->behaviourCognition->dailyLiving->
+    // communityAccess (matches the drift-guard test's own step-traversal pattern above).
+    const clicksToReachCommunityAccess = 6
+    for (let i = 0; i < clicksToReachCommunityAccess; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+    await expectStep(/community access/i)
+
+    // The 7th "Next" click saves the Community Access step itself and advances to Review.
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(clicksToReachCommunityAccess + 1))
+    const { data } = mockPatchMutateAsync.mock.calls[clicksToReachCommunityAccess][0]
+    expect(data).toHaveProperty('checklistItems')
+    const sentTypes = (data.checklistItems as { itemType: string }[]).map((c) => c.itemType)
+    expect(sentTypes).toContain('FallsRisk')
+    expect(sentTypes.length).toBeGreaterThan(1) // the full 21-row grid, not just the one pre-filled row
+  })
+
   it('THE TRAP: saving Cultural Depth/Consents while STA is absent omits the 4 gated consent types entirely (never sends them as null), so previously-recorded values are retained server-side', async () => {
     const user = userEvent.setup()
     const participant = makeParticipant({
