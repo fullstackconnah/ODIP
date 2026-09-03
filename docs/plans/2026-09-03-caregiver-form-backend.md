@@ -600,7 +600,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces every DTO the two controllers and the frontend use. Field names are the wire contract for the frontend plan.
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -694,7 +694,7 @@ public record RejectCaregiverSubmissionDto
 }
 ```
 
-- [ ] **Step 2: Build + commit**
+- [x] **Step 2: Build + commit**
 
 Run: `dotnet build` → 0 errors.
 
