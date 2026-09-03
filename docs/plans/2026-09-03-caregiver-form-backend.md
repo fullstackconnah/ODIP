@@ -718,7 +718,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Consumes: `CaregiverTokenService.Hash`, `AuditInterceptor.ActorItemKey`, the DTOs from Task 6.
 - Produces: `GET/PUT draft/POST submit` under `api/v1/public/caregiver/{token}`. For cg01 the `Current` projection is a **placeholder empty object** with `Editable` empty — Task 11 replaces it. Everything else is final.
 
-- [ ] **Step 1: Failing tests — the 404 matrix and the name gate**
+- [x] **Step 1: Failing tests — the 404 matrix and the name gate**
 
 ```csharp
 using Microsoft.AspNetCore.Http;
@@ -926,12 +926,12 @@ public class CaregiverControllerTests
 
 If `PatchAboutMeDto.PersonalInterests` is not the real member name, use any string member of any `Patch*Dto` group — the test only needs the payload to serialise with a recognisable value.
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverControllerTests"`
 Expected: build error — `CaregiverController` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Text.Json;
@@ -1057,12 +1057,12 @@ public class CaregiverController : ControllerBase
 
 Register `IHttpContextAccessor` if not already: search `Program.cs` for `AddHttpContextAccessor` — it is already present because `CurrentTenant` and `AuditInterceptor` depend on it.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverControllerTests"`
 Expected: all pass. If `HttpContext.Items` is null in the actor test, ensure `MakeController` sets `ControllerContext.HttpContext` (it does above).
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 Run: `dotnet test` → `Failed: 0`.
 
