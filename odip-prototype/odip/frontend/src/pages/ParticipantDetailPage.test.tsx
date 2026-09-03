@@ -8,7 +8,7 @@ import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
-  mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf,
+  mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
@@ -18,6 +18,8 @@ const {
   // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
   mockUseDownloadIntakeFormPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   mockUseDownloadParticipantProfilePdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  // PF-10.6 — same reasoning as the two DOC-01 hooks above.
+  mockUseDownloadClientOverviewPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   // PD-7 — the real Details-tab section components (kept real below, see the './participant-detail'
   // mock) call usePatchParticipant()/useStaff() directly. Every PDETAIL-01 test in this file uses
   // the default 'SupportWorker' role (canWriteParticipantDetails === false), so no section's Edit
@@ -37,6 +39,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipantAlerts: mockUseParticipantAlerts,
   useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
   useDownloadParticipantProfilePdf: mockUseDownloadParticipantProfilePdf,
+  useDownloadClientOverviewPdf: mockUseDownloadClientOverviewPdf,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
 }))
@@ -385,6 +388,39 @@ describe('ParticipantDetailPage — DOC-01 Documents header buttons', () => {
 
   it('shows an error alert under the Participant Profile button when its mutation errors', () => {
     mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    setup()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
+  })
+
+  // PF-10.6 — third Documents button (Client Overview PDF), no tripId since this page has no
+  // trip context (the safer-default, more-availability product call — see this branch's report).
+  it('renders the Client Overview PDF button', () => {
+    setup()
+
+    expect(screen.getByRole('button', { name: /client overview pdf/i })).toBeInTheDocument()
+  })
+
+  it('calls the client overview mutation with the participant id (no tripId) and a filename when clicked', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate, isPending: false, isError: false })
+    setup()
+
+    await user.click(screen.getByRole('button', { name: /client overview pdf/i }))
+
+    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
+  })
+
+  it('disables the Client Overview button and shows loading state while its mutation is pending', () => {
+    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    setup()
+
+    expect(screen.getAllByRole('button', { name: /preparing/i })).toHaveLength(1)
+  })
+
+  it('shows an error alert under the Client Overview button when its mutation errors', () => {
+    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
     setup()
 
     expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)

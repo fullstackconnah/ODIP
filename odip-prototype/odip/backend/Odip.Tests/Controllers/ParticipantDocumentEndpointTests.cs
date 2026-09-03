@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -95,6 +96,120 @@ public class ParticipantDocumentEndpointTests
 
         db.SaveChanges();
         return participant;
+    }
+
+    /// <summary>PF-10.6 fixture — an active RestrictivePractice row so the composer's active-only table has content, plus a bookable TripInstance for the "with trip" endpoint variant.</summary>
+    private static TripInstance SeedTrip(OdipDbContext db, Guid? tenantId = null)
+    {
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Spring Coastal Trip", StartDate = new DateOnly(2026, 10, 12), DurationDays = 3,
+        };
+        if (tenantId.HasValue) trip.TenantId = tenantId.Value;
+        db.TripInstances.Add(trip);
+        db.SaveChanges();
+        return trip;
+    }
+
+    [Fact]
+    public async Task DownloadClientOverviewPdf_WithTripId_ReturnsNonTrivialPdf()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedRepresentativeParticipant(db);
+        db.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.ChemicalRestraint,
+            Description = "PRN sedative on outings", IsActive = true,
+        });
+        var trip = SeedTrip(db);
+        db.SaveChanges();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.DownloadClientOverviewPdf(participant.Id, trip.Id, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/pdf", file.ContentType);
+        Assert.True(file.FileContents.Length > 500, $"Expected a non-trivial PDF, got {file.FileContents.Length} bytes.");
+    }
+
+    /// <summary>Acceptance: the Participant-detail-page surface (no tripId) must produce the same document with a blank header, not an exception or 404.</summary>
+    [Fact]
+    public async Task DownloadClientOverviewPdf_WithoutTripId_ReturnsNonTrivialPdf()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedRepresentativeParticipant(db);
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.DownloadClientOverviewPdf(participant.Id, tripId: null, CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/pdf", file.ContentType);
+        Assert.True(file.FileContents.Length > 500, $"Expected a non-trivial PDF, got {file.FileContents.Length} bytes.");
+    }
+
+    [Fact]
+    public async Task DownloadClientOverviewPdf_UnknownParticipantId_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.DownloadClientOverviewPdf(Guid.NewGuid(), tripId: null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DownloadClientOverviewPdf_ParticipantInDifferentTenant_ReturnsNotFound()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantAId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+        db.Tenants.AddRange(
+            new Tenant { Id = tenantAId, Name = "Tenant A", EmailDomain = $"{Guid.NewGuid()}.example.com", IsActive = true },
+            new Tenant { Id = tenantBId, Name = "Tenant B", EmailDomain = $"{Guid.NewGuid()}.example.com", IsActive = true });
+        db.SaveChanges();
+
+        // Seeded under Tenant B, while the ambient ICurrentTenant above is scoped to Tenant A.
+        var participant = SeedRepresentativeParticipant(db, tenantBId);
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.DownloadClientOverviewPdf(participant.Id, tripId: null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    // ── Role gate ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// PF-10.6 — "the endpoint is role-gated the same as the existing document endpoints": neither
+    /// DownloadIntakeFormPdf nor DownloadParticipantProfilePdf carries a method-level [Authorize]
+    /// (they rely solely on the controller's class-level [Authorize] — any authenticated user, no
+    /// role restriction), unlike e.g. Delete/UpdateSupportProfile's [Authorize(Roles = "...")].
+    /// DownloadClientOverviewPdf must match that same (weaker, read-action) posture, not the
+    /// stricter one.
+    /// </summary>
+    [Fact]
+    public void DownloadClientOverviewPdf_HasSameMethodLevelAuthorizePosture_AsExistingDocumentEndpoints()
+    {
+        var intakeAttrs = typeof(ParticipantsController).GetMethod(nameof(ParticipantsController.DownloadIntakeFormPdf))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false);
+        var profileAttrs = typeof(ParticipantsController).GetMethod(nameof(ParticipantsController.DownloadParticipantProfilePdf))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false);
+        var clientOverviewAttrs = typeof(ParticipantsController).GetMethod(nameof(ParticipantsController.DownloadClientOverviewPdf))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false);
+
+        Assert.Empty(intakeAttrs);
+        Assert.Empty(profileAttrs);
+        Assert.Empty(clientOverviewAttrs);
     }
 
     [Fact]

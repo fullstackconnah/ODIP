@@ -171,3 +171,33 @@ export function useDownloadParticipantProfilePdf() {
     },
   })
 }
+
+/**
+ * PF-10.6: downloads the Client Overview ("Client Support Needs Summary") cheat-sheet PDF and
+ * saves it via the browser. Same blob/Content-Disposition pattern as useDownloadIntakeFormPdf
+ * above. `tripId` is optional — the Trip-detail roster surface passes it (populates the
+ * TRIP/DATE/GROUP header), the Participant-detail surface omits it (blank header, same document).
+ */
+export function useDownloadClientOverviewPdf() {
+  return useMutation({
+    mutationFn: async ({ id, tripId, fileName }: { id: string; tripId?: string; fileName: string }) => {
+      const response = await apiClient.get<Blob>(`/participants/${id}/documents/client-overview`, {
+        responseType: 'blob',
+        params: tripId ? { tripId } : undefined,
+      })
+
+      const disposition = response.headers['content-disposition'] as string | undefined
+      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
+      const downloadName = match?.[1] ? decodeURIComponent(match[1]) : fileName
+
+      const url = window.URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = downloadName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    },
+  })
+}
