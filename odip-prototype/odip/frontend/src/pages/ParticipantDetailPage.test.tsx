@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
@@ -10,6 +10,7 @@ const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
+  mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockUseParticipantBookings: vi.fn(() => ({ data: [] })),
@@ -26,6 +27,11 @@ const {
   // button/mutateAsync path is actually exercised here — these exist only so the modules resolve.
   mockPatchMutateAsync: vi.fn(),
   mockUseStaff: vi.fn(() => ({ data: [] })),
+  // cg04 Task 9 — the header's CaregiverLinkControl. Mocked the same way as the DOC-01 hooks
+  // above so its own tests never run the real axios mutationFn body.
+  mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
+  mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  mockUseCaregiverSubmissions: vi.fn(() => ({ data: [] })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -42,6 +48,9 @@ vi.mock('@/api/hooks', () => ({
   useDownloadClientOverviewPdf: mockUseDownloadClientOverviewPdf,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
+  useGenerateCaregiverLink: mockUseGenerateCaregiverLink,
+  useRevokeCaregiverLink: mockUseRevokeCaregiverLink,
+  useCaregiverSubmissions: mockUseCaregiverSubmissions,
 }))
 
 vi.mock('./participant-detail', async () => {
@@ -113,6 +122,9 @@ beforeEach(() => {
   mockUseParticipantAlerts.mockReturnValue({ data: undefined })
   mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+  mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn(), isPending: false, isError: false })
+  mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+  mockUseCaregiverSubmissions.mockReturnValue({ data: [] })
   // A role without canViewAlerts keeps the alerts banner path (and its own separate hook
   // contract) out of scope for these tests — see ParticipantAlertsBanner's own test file for that.
   setUserRole('SupportWorker')
@@ -512,5 +524,91 @@ describe('ParticipantDetailPage — PF-10.5 three-way resume banner', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /continue profile/i })).not.toBeInTheDocument()
+  })
+})
+
+// cg04 Task 9 — the header's caregiver-link control (design §5): gated on
+// canWriteParticipantDetails (not canWrite — see B14 in the discovery fact sheet), showing a
+// status chip plus Generate/Regenerate and, once a link is active, Revoke. A freshly generated
+// URL is shown exactly once with a Copy button.
+describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
+  function activeSubmission(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'submission-1', participantId: 'participant-1', participantName: 'Sophie Brown',
+      status: 'Submitted', caregiverName: 'Jane Doe', createdAt: '2026-08-01T00:00:00Z',
+      expiresAt: '2026-09-17T00:00:00Z', submittedAt: '2026-08-02T00:00:00Z',
+      ...overrides,
+    }
+  }
+
+  function setup() {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    return renderAt('participant-1')
+  }
+
+  it('hides the control for a role without canWriteParticipantDetails', () => {
+    setUserRole('SupportWorker')
+    setup()
+
+    expect(screen.queryByRole('button', { name: /generate caregiver link/i })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('caregiver-link-control')).not.toBeInTheDocument()
+  })
+
+  it('shows Generate link for a role with canWriteParticipantDetails (Coordinator)', () => {
+    setUserRole('Coordinator')
+    setup()
+
+    expect(screen.getByRole('button', { name: /generate caregiver link/i })).toBeInTheDocument()
+  })
+
+  it('after generating, shows the URL once with a Copy button and the expiry, and never again once dismissed by navigation away', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const mutateAsync = vi.fn(async () => ({ success: true, data: { token: 'tok-123', expiresAt: '2026-09-17T00:00:00Z' } }))
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync, isPending: false, isError: false })
+    const first = setup()
+
+    await user.click(screen.getByRole('button', { name: /generate caregiver link/i }))
+
+    expect(mutateAsync).toHaveBeenCalledWith({ participantId: 'participant-1' })
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(within(control).getByText(`${window.location.origin}/caregiver/tok-123`)).toBeInTheDocument()
+    expect(within(control).getByRole('button', { name: /copy/i })).toBeInTheDocument()
+    expect(within(control).getByText(/won't be shown again/i)).toBeInTheDocument()
+
+    // Unmounting and re-rendering the page (simulating navigating away and back) must not
+    // resurrect the URL — it lives only in this render's local state, never in the query cache
+    // or anywhere else the UI could recover it from.
+    first.unmount()
+    setup()
+    expect(screen.queryByText(`${window.location.origin}/caregiver/tok-123`)).not.toBeInTheDocument()
+  })
+
+  it('shows a status chip and Revoke when a link is active', () => {
+    setUserRole('Admin')
+    mockUseCaregiverSubmissions.mockImplementation((status: string) => ({
+      data: status === 'Submitted' ? [activeSubmission()] : [],
+    }))
+    setup()
+
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(within(control).getByText('Submitted')).toBeInTheDocument()
+    expect(within(control).getByRole('button', { name: /^revoke$/i })).toBeInTheDocument()
+    expect(within(control).getByRole('button', { name: /regenerate caregiver link/i })).toBeInTheDocument()
+  })
+
+  it('Revoke calls the mutation with the participant id', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const revokeMutate = vi.fn()
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: revokeMutate, isPending: false, isError: false })
+    mockUseCaregiverSubmissions.mockImplementation((status: string) => ({
+      data: status === 'Submitted' ? [activeSubmission()] : [],
+    }))
+    setup()
+
+    await user.click(screen.getByRole('button', { name: /^revoke$/i }))
+
+    expect(revokeMutate).toHaveBeenCalledWith({ participantId: 'participant-1' })
   })
 })
