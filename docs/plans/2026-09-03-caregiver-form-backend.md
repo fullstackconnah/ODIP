@@ -346,7 +346,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `public static class CaregiverTokenService { static string GenerateRawToken(); static string Hash(string rawToken); }` — raw token is 43-char base64url; hash is 64-char lowercase hex.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```csharp
 using Odip.Infrastructure.Services;
@@ -392,12 +392,12 @@ public class CaregiverTokenServiceTests
 }
 ```
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverTokenServiceTests"`
 Expected: build error — `CaregiverTokenService` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Security.Cryptography;
@@ -425,12 +425,12 @@ public static class CaregiverTokenService
 }
 ```
 
-- [ ] **Step 4: Run to confirm pass**
+- [x] **Step 4: Run to confirm pass**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverTokenServiceTests"`
 Expected: `Passed: 4`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Odip.Infrastructure/Services/CaregiverTokenService.cs Odip.Tests/Caregiver/CaregiverTokenServiceTests.cs
