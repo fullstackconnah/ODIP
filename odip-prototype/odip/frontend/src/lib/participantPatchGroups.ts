@@ -1,7 +1,7 @@
 /**
  * PF-10.4 (SPEC-05) — the Profile wizard's CORE-02 PATCH-group plumbing: which semantic field
  * group(s) each Profile step patches, and how to build a group's payload from the wizard's live
- * form values. Mirrors `ParticipantCreatePage.tsx`'s own `PATCH_GROUP_FIELDS`/`STEP_TO_PATCH_GROUPS`/
+ * form values. Mirrors `the retired single-step wizard`'s own `PATCH_GROUP_FIELDS`/`STEP_TO_PATCH_GROUPS`/
  * `extractGroupFields`/`handleSavePartial` machinery — copied (behaviour-preserving) rather than
  * imported, since that file is untouched (PF-10.7 retires it) and none of this was exported from
  * it. The 16 SCALAR group field-lists below are IDENTICAL to that file's own (the backend's group
@@ -30,7 +30,7 @@ import { triStateToBool } from '@/pages/intake/intakeFormat'
 const DIAGNOSIS_OTHER_SENTINEL = 'Other — specify'
 
 /** Every scalar (non-collection) group's member fields, keyed by PatchParticipantDto's own group
- * names — copied verbatim from ParticipantCreatePage.tsx's PATCH_GROUP_FIELDS. */
+ * names — copied verbatim from the retired single-step wizard's PATCH_GROUP_FIELDS. */
 type ScalarPatchGroup = Exclude<keyof PatchParticipantDto, 'consents' | 'healthConditions' | 'adlAssessments' | 'checklistItems'>
 export const PATCH_GROUP_FIELDS: Record<ScalarPatchGroup, readonly (keyof ParticipantFormData)[]> = {
   personalDetails: ['firstName', 'lastName', 'preferredName', 'middleName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'placeOfBirth', 'country', 'phone', 'email'],
@@ -53,7 +53,7 @@ export const PATCH_GROUP_FIELDS: Record<ScalarPatchGroup, readonly (keyof Partic
 
 /**
  * PF-10.4 — which CORE-02 group(s) a Profile step's "Next"/"Save" patches. Unlike
- * ParticipantCreatePage.tsx's STEP_TO_PATCH_GROUPS (one step per group, mostly), several groups
+ * the retired single-step wizard's STEP_TO_PATCH_GROUPS (one step per group, mostly), several groups
  * here are split ACROSS steps by field (not by row, like the collection trap) because the Profile
  * wizard's step boundaries don't align 1:1 with the backend's group boundaries — e.g.
  * `culturalBackground` is entirely owned by `culturalDepth` (personalInterests/choiceControlNotes
@@ -79,7 +79,7 @@ export const PROFILE_STEP_TO_PATCH_GROUPS: Partial<Record<string, (keyof PatchPa
 }
 
 /** Pulls one scalar group's fields out of an already wire-shaped payload — verbatim copy of
- * ParticipantCreatePage.tsx's extractGroupFields. */
+ * the retired single-step wizard's extractGroupFields. */
 export function extractGroupFields(payload: Record<string, unknown>, fields: readonly (keyof ParticipantFormData)[]): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const f of fields) out[f as string] = payload[f as string]
@@ -88,7 +88,7 @@ export function extractGroupFields(payload: Record<string, unknown>, fields: rea
 
 /** Every scalar-tri-state field (both Shared/Intake-owned and Profile-owned) that must be
  * collapsed from the wizard's 'true'|'false'|'' UI shape to boolean|null before any group extract
- * — union of IntakeWizardPage.tsx's CULTURAL_TRI_STATE_FIELDS and ParticipantCreatePage.tsx's
+ * — union of IntakeWizardPage.tsx's CULTURAL_TRI_STATE_FIELDS and the retired single-step wizard's
  * clinicalField list, since a Profile-step PATCH group can carry either kind (the trap above). */
 const TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
@@ -102,7 +102,7 @@ const TRI_STATE_FIELDS = [
 /**
  * Transforms the wizard's live RHF values (the FULL form — shared fields included) into a flat,
  * wire-shaped payload covering every field either wizard's PATCH groups might read — same
- * responsibility as ParticipantCreatePage.tsx's buildPayload, scoped to what the Profile wizard's
+ * responsibility as the retired single-step wizard's buildPayload, scoped to what the Profile wizard's
  * groups actually touch (no contactRoles/riskEntries expansion — Profile never owns those).
  */
 export function buildParticipantWirePayload(data: ParticipantFormData): Record<string, unknown> {
@@ -110,14 +110,14 @@ export function buildParticipantWirePayload(data: ParticipantFormData): Record<s
 
   // Not editable by the Profile wizard (Intake-owned), but must round-trip in wire format for the
   // final full-PUT (see ProfileWizardPage.tsx's completion handler) — same convention as
-  // ParticipantCreatePage.tsx's buildPayload.
+  // the retired single-step wizard's buildPayload.
   payload.serviceStreams = formatServiceStreams(data.serviceStreams as ServiceStream[] | undefined)
 
   for (const field of TRI_STATE_FIELDS) {
     payload[field] = triStateToBool(data[field] as string | undefined)
   }
 
-  // DIAG-01 — same two-field-to-one collapse as ParticipantCreatePage.tsx's buildPayload.
+  // DIAG-01 — same two-field-to-one collapse as the retired single-step wizard's buildPayload.
   payload.primaryDiagnosis = data.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL
     ? data.primaryDiagnosisOther
     : data.primaryDiagnosis

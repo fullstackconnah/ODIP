@@ -45,6 +45,7 @@ import {
 import { buildProfileStepPatch, buildParticipantWirePayload } from '@/lib/participantPatchGroups'
 import { parseServiceStreams, parseHidpaCategories, DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL } from '@/api/types/participants'
 import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_ACCESS_RISK_ITEM_TYPES } from '@/api/types/enums'
+import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
 import type { UpdateParticipantDto } from '@/api/types/participants'
 import { boolToTriState, focusField, extractErrorMessage } from '../intake/intakeFormat'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
@@ -58,6 +59,42 @@ import { CommunityAccessStep } from './steps/CommunityAccessStep'
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
 
+// DIAG-02 (re-homed from the retired single-step wizard by PF-10.7): the epilepsy ->
+// epilepsy-management HIDPA default, and the epilepsy -> health-conditions-grid "has" default.
+// Both primaryDiagnosis/otherDiagnoses (DIAG-01) and hidpaSupportCategories/healthConditions
+// (INTAKE sub-wave C1) are Profile-owned fields, both rendered together on this wizard's Medical
+// Detail step, so both derivations are wired here — see conditionalFields.ts's VALUE DERIVATION
+// doc for the full transition-only/user-override/edit-mode-safe semantics this relies on.
+// INTAKE sub-wave C1: index of the Epilepsy row within the fixed healthConditions array — the
+// array is always in HEALTH_CONDITION_TYPES order (see the reset() healthConditions mapping
+// above), so this is a stable constant, not a runtime search per keystroke.
+const EPILEPSY_CONDITION_INDEX = HEALTH_CONDITION_TYPES.indexOf('Epilepsy')
+
+const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
+  {
+    when: (v) => v.primaryDiagnosis === 'Epilepsy' || !!v.otherDiagnoses?.includes('Epilepsy'),
+    apply: (v, setValue) => {
+      const current = (v.hidpaSupportCategories ?? []) as string[]
+      if (!current.includes('EpilepsyManagement')) {
+        setValue('hidpaSupportCategories', [...current, 'EpilepsyManagement'], { shouldDirty: true })
+      }
+    },
+  },
+  // Epilepsy grid/diagnosis reconciliation: an Epilepsy diagnosis pre-selects the health-condition
+  // grid's Epilepsy row's `has` to true, as a DEFAULT not a lock — only fires when that row is
+  // still unanswered ('') — never overrides an explicit "No" the user already recorded.
+  {
+    when: (v) => v.primaryDiagnosis === 'Epilepsy' || !!v.otherDiagnoses?.includes('Epilepsy'),
+    apply: (v, setValue) => {
+      const rows = v.healthConditions as ParticipantFormData['healthConditions']
+      const current = rows?.[EPILEPSY_CONDITION_INDEX]?.has
+      if (current === '' || current === undefined) {
+        setValue(`healthConditions.${EPILEPSY_CONDITION_INDEX}.has`, 'true', { shouldDirty: true })
+      }
+    },
+  },
+]
+
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -68,7 +105,7 @@ export default function ProfileWizardPage() {
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
 
-  const { register, handleSubmit, control, getValues, setError, clearErrors, reset, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, control, getValues, setValue, setError, clearErrors, reset, formState: { errors } } = useForm<ParticipantFormData>({
     defaultValues: { consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [] },
   })
 
@@ -83,9 +120,21 @@ export default function ProfileWizardPage() {
     if (focusRequest) focusField(focusRequest.field)
   }, [focusRequest])
 
+  // Guards useDeriveFieldValues' resetKey (below): `participant` itself changes identity from
+  // undefined to a real object as soon as the query resolves, but `watchedValues` (useWatch)
+  // still reflects the OLD/default form state for that same render — reset() only applies the
+  // real data in the reset-effect below, whose resulting form-value change lands one render
+  // later. Gating resetKey on `hydrated` (flipped true in that same reset-effect, right after
+  // calling reset()) means resetKey and the reset() values it re-baselines against always change
+  // together in the same render, so the derivation engine never mistakes "data just landed" for
+  // a genuine user-driven false->true transition. The setState-in-effect this requires matches
+  // the same accepted "sync local state from just-arrived external data" pattern already used by
+  // SettingsPage.tsx/TenantFormPanel.tsx/UserFormPanel.tsx/BookingsTab.tsx in this codebase.
+  const [hydrated, setHydrated] = useState(false)
+
   // Full round-trip — every field either wizard touches, both Shared/Intake-owned (read-only here,
   // but must still be echoed back on every PATCH group that carries one — see THE TRAP note in
-  // participantPatchGroups.ts) and Profile-owned. Mirrors ParticipantCreatePage.tsx's edit-mode
+  // participantPatchGroups.ts) and Profile-owned. Mirrors the retired single-step wizard's edit-mode
   // reset() conversions exactly (tri-state round-trip, fixed-grid materialize-all-N-rows, DIAG-01's
   // two-field diagnosis split) so a value saved by either wizard displays identically in this one.
   useEffect(() => {
@@ -93,7 +142,7 @@ export default function ProfileWizardPage() {
     // `as unknown as ...`: react-hook-form's DeepPartial helper doesn't recurse into array-of-object
     // fields (contactRoles/riskEntries), keeping their nested item shape non-optional — a spurious
     // mismatch against this literal's own (correctly non-optional-per-field) shape, not a real one.
-    // Same cast ParticipantCreatePage.tsx's own edit-mode reset() uses for the identical reason.
+    // Same cast the retired single-step wizard's own edit-mode reset() uses for the identical reason.
     reset({
       firstName: participant.firstName ?? '', lastName: participant.lastName ?? '',
       preferredName: participant.preferredName ?? '', middleName: participant.middleName ?? '',
@@ -207,6 +256,10 @@ export default function ProfileWizardPage() {
       // Not editable/displayed by this wizard, but a live array so useFieldArray hooks stay valid.
       riskEntries: [], contactRoles: [],
     } as unknown as Parameters<typeof reset>[0])
+    // See the `hydrated` flag doc below — flips true in the SAME effect flush as this reset(),
+    // so useDeriveFieldValues' resetKey and the reset() values it re-baselines against always
+    // change together, never one render apart.
+    setHydrated(true)
   }, [participant, reset])
 
   const serviceStreamsList = useMemo(() => parseServiceStreams(participant?.serviceStreams), [participant?.serviceStreams])
@@ -285,6 +338,13 @@ export default function ProfileWizardPage() {
   })
   const { currentStep, isReviewStep } = wizard
   const watchedValues = useWatch({ control })
+  // resetKey: `hydrated ? participant : undefined` — undefined before useParticipant resolves
+  // AND before its reset() has actually applied, then a stable object reference from the exact
+  // render where the loaded values land (see the `hydrated` flag doc above). Re-baselines the
+  // derivation's internal "previous state" for that load without firing `apply`, so an existing
+  // participant's deliberately-unticked EpilepsyManagement selection is never silently re-ticked
+  // on page load (see conditionalFields.ts).
+  useDeriveFieldValues(watchedValues as Partial<ParticipantFormData>, FIELD_DERIVATIONS, setValue, hydrated ? participant : undefined)
 
   const [completing, setCompleting] = useState(false)
   const onComplete = async () => {

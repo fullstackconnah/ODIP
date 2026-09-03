@@ -2,7 +2,7 @@
  * PF-10.3 — plain (non-component) data helpers for the Intake wizard, split out of
  * `intakeHelpers.tsx` so that file can stay component-only (`react-refresh/only-export-components`
  * — Fast Refresh requires a .tsx file to export nothing but components). Copied verbatim
- * (behaviour-preserving) from `ParticipantCreatePage.tsx`'s equivalent module-local helpers, since
+ * (behaviour-preserving) from `the retired single-step wizard`'s equivalent module-local helpers, since
  * that file is not modified by this branch (PF-10.7 retires it later) and none of these were
  * exported from it.
  */
@@ -24,7 +24,7 @@ export function focusField(fieldName: string) {
 }
 
 /** Surfaces the server's ApiResponse error message for the Save-as-draft banner, same shape as
- * ParticipantCreatePage.tsx's extractErrorMessage. */
+ * the retired single-step wizard's extractErrorMessage. */
 export function extractErrorMessage(err: unknown, fallback: string): string {
   const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
   return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback

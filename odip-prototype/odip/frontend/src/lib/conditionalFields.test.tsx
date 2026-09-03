@@ -218,7 +218,7 @@ describe('useFocusFallbackOnHide — accessible reveal/hide (no focus loss)', ()
 
 // ── useDeriveFieldValues — value derivation (DIAG-02's engine extension point) ──────────────
 // Deliberately generic field names ("source"/"derived"), not epilepsy/diagnosis-specific — this
-// tests the reusable capability itself; ParticipantCreatePage.test.tsx covers the concrete
+// tests the reusable capability itself; the retired create-wizard's test suite covers the concrete
 // epilepsy -> HIDPA consumer end to end.
 
 type DerivedValues = { source?: string; derived?: string; other?: string }
@@ -336,7 +336,7 @@ describe('useDeriveFieldValues — generic capability (no field-specific knowled
 })
 
 describe('useDeriveFieldValues — resetKey re-baselines without firing apply (edit-mode safe)', () => {
-  // Mirrors exactly how ParticipantCreatePage.tsx wires this: an "existing" record that starts
+  // Mirrors exactly how the retired single-step wizard wires this: an "existing" record that starts
   // undefined (create mode / fetch not yet resolved) and later lands with real data via reset() —
   // the SAME update that both changes `source` to a triggering value AND changes resetKey's
   // identity must not fire `apply`, since that's loaded data, not a user's edit.

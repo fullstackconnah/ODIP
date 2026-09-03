@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP } from './contacts'
+import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP, planTypeComplianceWarning } from './contacts'
 
 /**
  * PF-5 (SPEC-02): unionRelevantFields dedups CONTACT_ROLE_FIELD_MAP entries across a multi-role
@@ -45,5 +45,64 @@ describe('unionRelevantFields', () => {
       'organisationName', 'startDate', 'endDate',
       'roleTitle', 'registeredProviderFlag', 'registrationNumber',
     ])
+  })
+})
+
+// PF-2 (SPEC-02) — re-homed from the retired create wizard's test suite by PF-10.7. That suite's
+// "PF-2 plan-type compliance warning" describe block covered both an "edit mode — backend-computed
+// value" path (obsolete: IntakeWizardPage.tsx, this rule's only remaining production consumer,
+// deliberately always live-computes via this function regardless of create/edit mode — see
+// NdisFundingStep.tsx's own "scope simplification vs. the retired single-step wizard" doc for the
+// same kind of deliberate simplification) and a "create mode — live client-side computation" path,
+// which is this exact pure function. Unit-tested here directly, at the function level, rather than
+// re-driving the whole wizard UI to exercise it end-to-end.
+describe('planTypeComplianceWarning', () => {
+  const PLAN_MANAGER_WARNING = 'This plan-managed participant has no active Plan Manager contact recorded.'
+  const AGENCY_WARNING = 'This agency-managed participant has no active registered-provider contact with agency details recorded.'
+
+  it('SelfManaged never warns, regardless of contact roles', () => {
+    expect(planTypeComplianceWarning('SelfManaged', [])).toBeNull()
+    expect(planTypeComplianceWarning('SelfManaged', null)).toBeNull()
+    expect(planTypeComplianceWarning('SelfManaged', [{ roleType: 'NextOfKin' }])).toBeNull()
+  })
+
+  it('PlanManaged with no PlanManager role warns', () => {
+    expect(planTypeComplianceWarning('PlanManaged', [])).toBe(PLAN_MANAGER_WARNING)
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleType: 'NextOfKin' }])).toBe(PLAN_MANAGER_WARNING)
+  })
+
+  it('PlanManaged with an active PlanManager role (via roleType or roleTypes) clears the warning', () => {
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleType: 'PlanManager' }])).toBeNull()
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleTypes: ['NextOfKin', 'PlanManager'] }])).toBeNull()
+  })
+
+  it('PlanManaged with only an INACTIVE PlanManager role still warns', () => {
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleType: 'PlanManager', status: 'Inactive' }])).toBe(PLAN_MANAGER_WARNING)
+  })
+
+  it('a row with no explicit status is treated as Active (matches the create-mode field array, which has no status concept before submit)', () => {
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleType: 'PlanManager', status: undefined }])).toBeNull()
+  })
+
+  it('AgencyManaged with no registered-provider ProviderContact role warns', () => {
+    expect(planTypeComplianceWarning('AgencyManaged', [])).toBe(AGENCY_WARNING)
+    // A ProviderContact row without registeredProviderFlag=true does not satisfy the condition.
+    expect(planTypeComplianceWarning('AgencyManaged', [{ roleType: 'ProviderContact' }])).toBe(AGENCY_WARNING)
+    expect(planTypeComplianceWarning('AgencyManaged', [{ roleType: 'ProviderContact', registeredProviderFlag: false }])).toBe(AGENCY_WARNING)
+  })
+
+  it('AgencyManaged with an active registered-provider ProviderContact role clears the warning', () => {
+    expect(planTypeComplianceWarning('AgencyManaged', [{ roleType: 'ProviderContact', registeredProviderFlag: true }])).toBeNull()
+    expect(planTypeComplianceWarning('AgencyManaged', [{ roleTypes: ['ProviderContact'], registeredProviderFlag: true }])).toBeNull()
+  })
+
+  it('a PlanManager role never satisfies the AgencyManaged condition, and vice versa', () => {
+    expect(planTypeComplianceWarning('AgencyManaged', [{ roleType: 'PlanManager' }])).toBe(AGENCY_WARNING)
+    expect(planTypeComplianceWarning('PlanManaged', [{ roleType: 'ProviderContact', registeredProviderFlag: true }])).toBe(PLAN_MANAGER_WARNING)
+  })
+
+  it('null/undefined planType never warns', () => {
+    expect(planTypeComplianceWarning(null, [])).toBeNull()
+    expect(planTypeComplianceWarning(undefined, [])).toBeNull()
   })
 })

@@ -39,7 +39,7 @@ export type CompactGridRowProps = {
 export function CompactGridRow(props: CompactGridRowProps) {
   const { label, control, expanded } = props
   // Plain destructuring can't tell "expanded={undefined}" (a row that CAN expand but is
-  // currently collapsed — every real caller in ParticipantCreatePage.tsx always passes this,
+  // currently collapsed — every real caller in the retired single-step wizard always passes this,
   // via `cond ? (...) : undefined`) apart from the prop being omitted entirely (a row with no
   // expand capability at all). `'expanded' in props` can: JSX only adds the key to the props
   // object when the attribute is written at the call site, even if its value is `undefined`.

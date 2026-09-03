@@ -1,7 +1,8 @@
 /**
  * PF-10.3 (SPEC-05 `docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md`) — the new
- * Intake wizard. Replaces `ParticipantCreatePage.tsx` at the `/participants/new` route (that file
- * itself is untouched — PF-10.7 retires it later, once PF-10.4's Profile wizard also exists).
+ * Intake wizard. Replaces the old single 11-step wizard at the `/participants/new` route (that
+ * wizard's own `/participants/:id/edit` route was retired and deleted by PF-10.7, once PF-10.4's
+ * Profile wizard also existed).
  *
  * Field set: every `entryPhase: 'intake'` entry in `src/lib/documentMapping.ts`
  * (`fieldsForEntry('intake')`), re-grouped into 8 steps under `src/lib/participantSchema.ts`'s
@@ -25,7 +26,7 @@
  * `CompleteIntake: true` on the edit-mode "Complete Intake" call stamps IntakeCompletedAt via the
  * same server-side handling Update now has (SPEC-05 PF-10.5, see ParticipantsController.Update).
  * Contacts/Risks are edit-mode-omitted from the PUT payload entirely, matching
- * ParticipantCreatePage.tsx's own established edit-mode convention (those two rows-collections are
+ * the retired single-step wizard's own established edit-mode convention (those two rows-collections are
  * create-mode-only on this DTO; Update never reads them) — existing rows are shown read-only
  * (fetched via their own nested-CRUD endpoints) rather than re-editable here, so nothing already
  * recorded is lost or silently resubmitted.

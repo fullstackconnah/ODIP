@@ -259,3 +259,77 @@ describe('ProfileWizardPage — per-step PATCH and the collection-group trap', (
   // exercised by, CORE-01's own `useWizard.test.ts` (steps-array-identity-change clamping). The
   // two tests above already cover both visible/absent forms of each gate.
 })
+
+// DIAG-02 — re-homed from the retired single-step wizard's test suite by PF-10.7. The engine
+// (useDeriveFieldValues) itself is generically covered by conditionalFields.test.tsx; this is the
+// concrete epilepsy -> HIDPA / epilepsy -> health-conditions-grid consumer, wired into this wizard
+// (not the Intake wizard) because primaryDiagnosis/hidpaSupportCategories/healthConditions are all
+// Profile-owned and rendered together on the Medical Detail step.
+describe('ProfileWizardPage — DIAG-02 epilepsy derivation (re-homed from the retired create wizard)', () => {
+  async function advanceToMedical(user: ReturnType<typeof userEvent.setup>) {
+    await expectStep(/key identifiers/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Cultural Depth
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
+    await expectStep(/cultural depth/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Medical
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(2))
+    await expectStep(/medical/i)
+  }
+
+  it('selecting Epilepsy as Primary Diagnosis pre-selects Epilepsy and Seizure Management by default', async () => {
+    const user = userEvent.setup()
+    renderProfilePage()
+    await advanceToMedical(user)
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+  })
+
+  it('also pre-fills the Epilepsy health-condition grid row to "Yes" when unanswered', async () => {
+    const user = userEvent.setup()
+    renderProfilePage()
+    await advanceToMedical(user)
+
+    // getByRole (not getByLabelText) — the health-condition grid row is a CompactGridRow, whose
+    // outer `role="group"` element ALSO carries `aria-label="Epilepsy"` (see CompactGridRow.tsx),
+    // so a plain label-text query is ambiguous between that group and this select.
+    const epilepsyRow = screen.getByRole('combobox', { name: 'Epilepsy' }) as HTMLSelectElement
+    expect(epilepsyRow.value).toBe('')
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+
+    expect(epilepsyRow.value).toBe('true')
+  })
+
+  it('the derived default is a DEFAULT not a lock: the user can untick it, and it survives further unrelated edits', async () => {
+    const user = userEvent.setup()
+    renderProfilePage()
+    await advanceToMedical(user)
+
+    await user.selectOptions(screen.getByLabelText('Primary Diagnosis'), 'Epilepsy')
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).toBeChecked()
+
+    await user.click(screen.getByLabelText('Epilepsy and Seizure Management')) // untick
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+
+    // A further, unrelated edit on the same step (`when` stays true — no new false->true
+    // transition) must not silently re-force it back on.
+    await user.type(screen.getByLabelText(/allergies detail/i), 'Peanuts')
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+  })
+
+  it('does NOT re-tick an existing participant\'s deliberately-unticked selection on load (edit-mode-safe resetKey)', async () => {
+    const participant = makeParticipant({
+      primaryDiagnosis: 'Epilepsy',
+      hidpaSupportCategories: 'None', // already saved without EpilepsyManagement
+      healthConditions: [{ id: 'hc-1', participantId: 'participant-1', conditionType: 'Epilepsy', has: true, severity: '', planProvided: null, trainingRequired: null, notes: '', createdAt: null, updatedAt: null }],
+    })
+    renderProfilePage(participant)
+    await advanceToMedical(userEvent.setup())
+
+    expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+  })
+})

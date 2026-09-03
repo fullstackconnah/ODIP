@@ -89,7 +89,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
  * so a section here avoids further tab-bar crowding. UI/CRUD wiring otherwise mirrors
  * RoutinesTab.tsx closely (Modal add/edit, ConfirmDialog delete, EmptyState, active/inactive
  * split) — new participants instead get their initial risk entries created transactionally with
- * the participant via the intake wizard (see ParticipantCreatePage.tsx's riskEntries field);
+ * the participant via the intake wizard (see the retired single-step wizard's riskEntries field);
  * this section is the only write path from here on.
  */
 export default function RiskEntriesSection({ participantId }: { participantId: string | undefined }) {

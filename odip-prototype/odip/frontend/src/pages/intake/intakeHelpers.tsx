@@ -1,6 +1,6 @@
 /**
  * PF-10.3 — small UI helpers (components only) shared across the Intake wizard's step
- * components. Copied verbatim (behaviour-preserving) from `ParticipantCreatePage.tsx`'s
+ * components. Copied verbatim (behaviour-preserving) from `the retired single-step wizard`'s
  * equivalent module-local helpers, since that file is not modified by this branch (PF-10.7
  * retires it later) and none of these were exported from it.
  *
@@ -23,7 +23,7 @@ const YES_NO_UNANSWERED_OPTIONS = [
 
 /**
  * A Yes/No/Not-recorded ToggleGroup bound to a tri-state string field via Controller — same
- * three-explicit-options shape as ParticipantCreatePage.tsx's YesNoToggleField, so a compliance
+ * three-explicit-options shape as the retired single-step wizard's YesNoToggleField, so a compliance
  * flag can always go back to "not recorded", never silently sticks on its last answer.
  */
 export function YesNoToggleField({ control, name, label, hint, ariaLabel, hideLabel }: {
@@ -58,7 +58,7 @@ export function YesNoToggleField({ control, name, label, hint, ariaLabel, hideLa
 
 /**
  * PF-2's advisory, never-dismissable plan-type/contact-role compliance banner — same visual
- * treatment as ParticipantCreatePage.tsx's PlanTypeComplianceBanner. Renders nothing when
+ * treatment as the retired single-step wizard's PlanTypeComplianceBanner. Renders nothing when
  * `message` is null.
  */
 export function PlanTypeComplianceBanner({ message }: { message: string | null | undefined }) {

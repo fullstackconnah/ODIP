@@ -41,7 +41,7 @@ function makeStaff(overrides: Partial<StaffDetailDto> = {}): StaffDetailDto {
 
 // StaffCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
 // throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router (same
-// requirement ParticipantCreatePage.test.tsx documents).
+// requirement the retired create-wizard's test suite documents).
 function renderEditPage(id: string) {
   const router = createMemoryRouter(
     [

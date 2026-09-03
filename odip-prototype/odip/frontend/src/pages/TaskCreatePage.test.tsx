@@ -24,7 +24,7 @@ vi.mock('@/api/hooks', () => ({
 
 // TaskCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
 // throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router (same
-// requirement IncidentCreatePage.test.tsx/ParticipantCreatePage.test.tsx document).
+// requirement IncidentCreatePage.test.tsx/the retired create-wizard's test suite document).
 function renderCreatePage() {
   const router = createMemoryRouter(
     [
@@ -45,7 +45,7 @@ beforeEach(() => {
 describe('TaskCreatePage — UX-01 Owner picker (SearchableSelect)', () => {
   // The Owner field's SearchableSelect is wrapped in react-hook-form's <Controller>, which does
   // not forward FormField's aria-labelledby clone to the render-prop child, so it isn't reachable
-  // via getByRole(..., { name }) (same pre-existing gap ParticipantCreatePage.test.tsx documents
+  // via getByRole(..., { name }) (same pre-existing gap the retired create-wizard's test suite documents
   // for Preferred Staff Member) — query the combobox by its current displayed value instead.
 
   it('shows a combobox (not a native select) for Owner, defaulting to Unassigned', () => {

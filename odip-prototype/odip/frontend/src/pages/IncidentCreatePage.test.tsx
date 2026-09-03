@@ -51,7 +51,7 @@ vi.mock('@/api/client', async () => {
 
 // IncidentCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker —
 // that throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router
-// (same requirement ParticipantCreatePage.test.tsx documents).
+// (same requirement the retired create-wizard's test suite documents).
 function renderCreatePage(initialEntry: string | { pathname: string; state?: unknown } = '/incidents/new') {
   const router = createMemoryRouter(
     [
@@ -795,7 +795,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
 
 // INC-04: the determination is frozen at creation — editing an existing incident must never
 // silently re-run it against today's register, even if the participant/type fields are changed.
-// Edit mode's initialVisited: 'all' (same jump-anywhere convention as ParticipantCreatePage) means
+// Edit mode's initialVisited: 'all' (same jump-anywhere convention as the retired single-step wizard) means
 // every step's rail button is clickable immediately — these tests jump directly rather than
 // stepping through Next, since nothing here is testing the Next-validation gate itself.
 describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
