@@ -233,6 +233,19 @@ public class CaregiverControllerTests
     }
 
     [Fact]
+    public async Task Get_ProjectionOmitsInternalFields_AndListsEditable()
+    {
+        using var db = CreateDb();
+        var (p, _, raw) = Seed(db);
+        var result = await MakeController(db).Get(raw, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<CaregiverFormDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("Sophie", body.Data!.Current["firstName"]!.GetValue<string>());
+        foreach (var f in CaregiverFieldPolicy.InternalFields)
+            Assert.False(body.Data.Current.ContainsKey(f), $"leaked '{f}'");
+        Assert.NotEmpty(body.Data.Editable);
+    }
+
+    [Fact]
     public void CaregiverController_IsRateLimitedAsPublic()
     {
         var attr = typeof(CaregiverController).GetCustomAttributes(typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), true)
