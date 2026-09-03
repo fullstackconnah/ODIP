@@ -76,6 +76,38 @@ public class ParticipantDocumentService
         return ParticipantDocumentComposer.ComposeParticipantProfile(participant, riskEntries);
     }
 
+    /// <summary>PF-10.6: returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant).</summary>
+    public async Task<(byte[] Content, string FileName)?> GenerateClientOverviewAsync(Guid participantId, Guid? tripId, CancellationToken ct = default)
+    {
+        var model = await ComposeClientOverviewAsync(participantId, tripId, ct);
+        if (model == null) return null;
+
+        var bytes = ParticipantDocumentRenderer.Render(model);
+        return (bytes, BuildFileName(model.ParticipantFullName, "Client-Overview"));
+    }
+
+    /// <summary>
+    /// PF-10.6 — same "load+compose extracted for direct testability" reasoning as
+    /// <see cref="ComposeIntakeFormAsync"/>'s doc comment. <paramref name="tripId"/> is optional:
+    /// when omitted (Participant-detail-page surface) or when it doesn't resolve to a visible
+    /// <see cref="TripInstance"/>, the composer is called with a null trip and renders a blank
+    /// (not omitted) TRIP/DATE/GROUP header — never a 404, since the participant itself still
+    /// resolved.
+    /// </summary>
+    public async Task<ParticipantDocumentModel?> ComposeClientOverviewAsync(Guid participantId, Guid? tripId, CancellationToken ct = default)
+    {
+        var participant = await LoadParticipantAsync(participantId, ct);
+        if (participant == null) return null;
+
+        TripInstance? trip = tripId.HasValue
+            ? await _db.TripInstances
+                .Include(t => t.DefaultActivityGroup)
+                .FirstOrDefaultAsync(t => t.Id == tripId.Value, ct)
+            : null;
+
+        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip);
+    }
+
     private async Task<Participant?> LoadParticipantAsync(Guid participantId, CancellationToken ct) =>
         await _db.Participants
             .Include(x => x.ContactRoles).ThenInclude(cr => cr.Person)
@@ -83,6 +115,9 @@ public class ParticipantDocumentService
             .Include(x => x.HealthConditions)
             .Include(x => x.AdlAssessments)
             .Include(x => x.ChecklistItems)
+            // PF-10.6 — Client Overview's Restrictive Practice grid needs this collection loaded;
+            // harmless additional include for the Intake/Profile composers, which don't reference it.
+            .Include(x => x.RestrictivePractices)
             .FirstOrDefaultAsync(x => x.Id == participantId, ct);
 
     /// <summary>ParticipantRiskEntry is NOT a Participant nav collection — queried separately, filtered by ParticipantId, same as the composer's method signatures expect.</summary>

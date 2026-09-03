@@ -8,12 +8,25 @@ namespace Odip.Infrastructure.Services;
 /// and <see cref="ParticipantDocumentRenderer"/> can be unit-tested (or swapped) against a hand-built
 /// model with no EF/QuestPDF entanglement either.
 /// </summary>
+/// <summary>
+/// PF-10.6 — the three trailing parameters are only populated by
+/// <see cref="ParticipantDocumentComposer.ComposeClientOverview"/> (null for the Intake Form /
+/// Participant Profile, which have no per-trip header). <see cref="ParticipantDocumentRenderer"/>
+/// renders the "TRIP | DATE | GROUP" header line only when <see cref="TripName"/> is non-null,
+/// so the two existing documents' header layout is unchanged. When Client Overview is generated
+/// with no trip context (e.g. from the Participant detail page), the composer still sets these to
+/// the placeholder string (blank, not omitted) rather than leaving them null — see
+/// ComposeClientOverview's own doc comment.
+/// </summary>
 public sealed record ParticipantDocumentModel(
     string Title,
     string ParticipantFullName,
     string? NdisNumber,
     DateTime GeneratedAtUtc,
-    IReadOnlyList<ParticipantDocumentSection> Sections);
+    IReadOnlyList<ParticipantDocumentSection> Sections,
+    string? TripName = null,
+    string? TripDate = null,
+    string? TripGroup = null);
 
 /// <summary>
 /// One wizard-step-family grouping (e.g. "Participant Details", "Medical") in the composed

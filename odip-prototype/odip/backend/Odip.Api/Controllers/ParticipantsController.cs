@@ -1343,6 +1343,21 @@ public class ParticipantsController : ControllerBase
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
 
+    /// <summary>
+    /// PF-10.6: download the Client Overview ("Client Support Needs Summary") PDF for a
+    /// participant — a condensed per-trip staff cheat-sheet. <paramref name="tripId"/> is optional:
+    /// when supplied (primary Trip-detail surface), the header's TRIP/DATE/GROUP fields are
+    /// populated from that trip; when omitted (secondary Participant-detail surface), the same
+    /// document renders with a blank header, same 404 contract as the other two document endpoints.
+    /// </summary>
+    [HttpGet("{id:guid}/documents/client-overview")]
+    public async Task<IActionResult> DownloadClientOverviewPdf(Guid id, [FromQuery] Guid? tripId, CancellationToken ct)
+    {
+        var result = await _documentService.GenerateClientOverviewAsync(id, tripId, ct);
+        if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        return File(result.Value.Content, "application/pdf", result.Value.FileName);
+    }
+
     /// <summary>Archive (soft-delete) a participant.</summary>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]

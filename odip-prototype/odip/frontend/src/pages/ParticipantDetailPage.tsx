@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf } from '@/api/hooks'
+import { useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -36,6 +36,11 @@ export default function ParticipantDetailPage() {
   // early returns below, per the rules of hooks.
   const downloadIntakeForm = useDownloadIntakeFormPdf()
   const downloadParticipantProfile = useDownloadParticipantProfilePdf()
+  // PF-10.6 — third Documents button, no tripId: SPEC-05 flagged this Participant-detail surface
+  // as an open product question (Client Overview only really makes sense per-trip) but included
+  // it as the safer default (more availability, not less) — same document, blank TRIP/DATE/GROUP
+  // header. See this branch's report for the reversible product call.
+  const downloadClientOverview = useDownloadClientOverviewPdf()
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!p) return <div className="text-center py-12">Participant not found</div>
@@ -108,6 +113,22 @@ export default function ParticipantDetailPage() {
               {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
             </button>
             {downloadParticipantProfile.isError && (
+              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-start gap-1">
+            <button
+              type="button"
+              onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
+              disabled={downloadClientOverview.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
+            >
+              {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
+            </button>
+            {downloadClientOverview.isError && (
               <p role="alert" className="text-xs text-[var(--color-destructive)]">
                 Couldn't download the file. Try again, or contact support if this keeps happening.
               </p>

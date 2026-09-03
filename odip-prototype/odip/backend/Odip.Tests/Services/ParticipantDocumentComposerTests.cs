@@ -250,4 +250,109 @@ public class ParticipantDocumentComposerTests
         var profileContacts = profile.Sections.Single(s => s.Heading == "Contacts").Tables.Single(t => t.Heading == "Contacts");
         Assert.Single(profileContacts.Rows);
     }
+
+    // ── PF-10.6 — Client Overview ────────────────────────────────────────────────────────
+
+    private static TripInstance BuildTrip(string groupName = "Group A") => new()
+    {
+        Id = Guid.NewGuid(),
+        TripName = "Spring Coastal Trip",
+        StartDate = new DateOnly(2026, 10, 12),
+        DefaultActivityGroup = new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP-A", DisplayName = groupName },
+    };
+
+    /// <summary>
+    /// The exact, fixed field list per SPEC-05 PF-10.6 — asserting the full label set (not just
+    /// "contains") means an accidental future addition/removal of a field is caught here, which is
+    /// the closest a composer-level test can get to "every field it renders is sourced from an
+    /// existing Participant/RestrictivePractice property, not a new writable field": every label
+    /// below is produced via FormatParticipantProperty's reflection lookup against Participant,
+    /// which throws if the referenced property doesn't exist — so this test passing at all already
+    /// proves every scalar field resolves to a real, pre-existing Participant property.
+    /// </summary>
+    [Fact]
+    public void ComposeClientOverview_RendersFixedFieldList()
+    {
+        var participant = BuildParticipant();
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+
+        var section = Assert.Single(model.Sections);
+        Assert.Equal("Client Support Needs Summary", section.Heading);
+        Assert.Equal(
+            new[]
+            {
+                "Personal Care", "Night Support", "Night Support Ratio", "Modified Diet",
+                "Thickened Fluids / Choking Risk", "Medication Approach",
+                "Behaviours of Concern (Current)", "Behaviour Risk Rating", "Health Conditions Alerts",
+            },
+            section.Fields.Select(f => f.Label).ToArray());
+    }
+
+    [Fact]
+    public void ComposeClientOverview_WithTrip_PopulatesTripHeaderFields()
+    {
+        var participant = BuildParticipant();
+        var trip = BuildTrip("Coastal Explorers");
+
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip);
+
+        Assert.Equal("Spring Coastal Trip", model.TripName);
+        Assert.Equal("12 Oct 2026", model.TripDate);
+        Assert.Equal("Coastal Explorers", model.TripGroup);
+    }
+
+    /// <summary>Acceptance: generating with no trip context (Participant-detail-page surface) must not throw, and header fields render blank, not omitted.</summary>
+    [Fact]
+    public void ComposeClientOverview_WithoutTrip_HeaderFieldsAreBlankPlaceholder_NoException()
+    {
+        var participant = BuildParticipant();
+
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip: null);
+
+        Assert.Equal("—", model.TripName);
+        Assert.Equal("—", model.TripDate);
+        Assert.Equal("—", model.TripGroup);
+    }
+
+    [Fact]
+    public void ComposeClientOverview_RestrictivePracticeTable_OmittedWhenNoActiveEntries()
+    {
+        var participant = BuildParticipant();
+        participant.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.Seclusion,
+            Description = "Retired practice", IsActive = false,
+        });
+
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+
+        var section = Assert.Single(model.Sections);
+        Assert.Empty(section.Tables);
+    }
+
+    [Fact]
+    public void ComposeClientOverview_RestrictivePracticeTable_IncludesOnlyActiveEntries()
+    {
+        var participant = BuildParticipant();
+        participant.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.ChemicalRestraint,
+            Description = "PRN sedative on outings", AuthorisedBy = "Dr Lee", IsActive = true,
+        });
+        participant.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.MechanicalRestraint,
+            Description = "Retired practice", IsActive = false,
+        });
+
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+
+        var section = Assert.Single(model.Sections);
+        var table = Assert.Single(section.Tables);
+        Assert.Equal("Restrictive Practices (Active)", table.Heading);
+        var row = Assert.Single(table.Rows);
+        Assert.Equal("Chemical Restraint", row[0]);
+        Assert.Equal("PRN sedative on outings", row[1]);
+        Assert.Equal("Dr Lee", row[2]);
+    }
 }

@@ -35,6 +35,64 @@ public static class ParticipantDocumentComposer
             tag => tag is ParticipantDocumentTag.Profile or ParticipantDocumentTag.Shared,
             includeCommunityAccess: participant.ServiceStreams.HasFlag(ServiceStreams.CommunityAccessDailyLiving));
 
+    /// <summary>
+    /// PF-10.6 — the "CLIENT SUPPORT NEEDS SUMMARY" per-trip staff cheat-sheet. Unlike
+    /// <see cref="ComposeIntakeForm"/>/<see cref="ComposeParticipantProfile"/>'s tag-filtered union
+    /// over <see cref="ParticipantDocumentFieldMap.Entries"/>, this is a fixed, hand-picked field
+    /// list (per SPEC-05 PF-10.6 / discovery/05-oassist-forms.md's Client Overview inventory) —
+    /// every field already exists elsewhere on <see cref="Participant"/>; nothing new is captured
+    /// here. <paramref name="trip"/> is nullable (a genuine null, not a sentinel Trip) so the same
+    /// method serves both the primary Trip-detail surface and the secondary Participant-detail
+    /// surface (SPEC-05's flagged open question — included as the safer, more-available default);
+    /// when null the TRIP/DATE/GROUP header line still renders with the placeholder dash rather
+    /// than being omitted, since it's a fixed cheat-sheet layout, not a conditional section.
+    /// </summary>
+    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip)
+    {
+        var fields = new List<ParticipantDocumentField>
+        {
+            new("Personal Care", FormatParticipantProperty(participant, nameof(Participant.LevelOfPersonalCare))),
+            new("Night Support", FormatParticipantProperty(participant, nameof(Participant.OvernightSupport))),
+            new("Night Support Ratio", FormatParticipantProperty(participant, nameof(Participant.OvernightRatio))),
+            new("Modified Diet", FormatParticipantProperty(participant, nameof(Participant.ModifiedDietDetail))),
+            // "Thickened" on the source cheat-sheet has no dedicated Participant field — per
+            // Participant.cs's MEAL-002 doc comment, fluid-intake/choking-risk detail (which
+            // covers thickened-fluid handling) lives on ChokingRiskMealDetail. Reused rather than
+            // adding a new field (constraint: presentation/export only, no schema change).
+            new("Thickened Fluids / Choking Risk", FormatParticipantProperty(participant, nameof(Participant.ChokingRiskMealDetail))),
+            // "How I take my Medication" on the source form maps to MedicationTricks (MEAL-011:
+            // "how medication is best given alongside food") — the closest existing field, not a
+            // full medications list/table.
+            new("Medication Approach", FormatParticipantProperty(participant, nameof(Participant.MedicationTricks))),
+            new("Behaviours of Concern (Current)", FormatParticipantProperty(participant, nameof(Participant.BehavioursOfConcernCurrent))),
+            new("Behaviour Risk Rating", FormatParticipantProperty(participant, nameof(Participant.BehaviourRiskRating))),
+            new("Health Conditions Alerts", FormatParticipantProperty(participant, nameof(Participant.MedicalSummary))),
+        };
+
+        var tables = new List<ParticipantDocumentTable>();
+        var restrictivePracticeTable = BuildRestrictivePracticesTable("Restrictive Practices (Active)", participant.RestrictivePractices);
+        // "Omit, don't blank" — same DOC-01 contract the other two composers apply at the section
+        // level, applied here at the table level: an active-RP-free participant gets no
+        // "Restrictive Practices" table at all on the cheat-sheet, not an empty one with just
+        // column headers.
+        if (restrictivePracticeTable.Rows.Count > 0) tables.Add(restrictivePracticeTable);
+
+        var sections = new List<ParticipantDocumentSection>
+        {
+            new("Client Support Needs Summary", fields, tables),
+        };
+
+        return new ParticipantDocumentModel(
+            "Client Support Needs Summary",
+            participant.FullName,
+            participant.NdisNumber,
+            DateTime.UtcNow,
+            sections,
+            TripName: trip != null ? OrPlaceholder(trip.TripName) : EmptyPlaceholder,
+            TripDate: trip != null ? trip.StartDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
+            TripGroup: trip?.DefaultActivityGroup != null ? OrPlaceholder(trip.DefaultActivityGroup.DisplayName) : EmptyPlaceholder);
+    }
+
     private static ParticipantDocumentModel Compose(
         string title,
         Participant participant,
@@ -268,6 +326,30 @@ public static class ParticipantDocumentComposer
                 Humanize(row!.ItemType.ToString()),
                 Humanize(row.Value!.Value.ToString()),
                 OrPlaceholder(row.Notes),
+            })
+            .ToList();
+        return new ParticipantDocumentTable(heading, columns, rows);
+    }
+
+    /// <summary>
+    /// PF-10.6 — Restrictive Practices, rows with IsActive == true only. Columns: Type,
+    /// Description, Authorised By, Authorisation Date, Review Date. The source cheat-sheet's
+    /// "Routine vs PRN" sub-grid has no equivalent split on <see cref="RestrictivePractice"/> (only
+    /// <see cref="RestrictivePracticeType"/>'s five categories exist) — rendered as a flat active
+    /// register instead of fabricating a routine/PRN distinction the schema doesn't carry.
+    /// </summary>
+    private static ParticipantDocumentTable BuildRestrictivePracticesTable(string heading, IEnumerable<RestrictivePractice> restrictivePractices)
+    {
+        var columns = new[] { "Type", "Description", "Authorised By", "Authorisation Date", "Review Date" };
+        var rows = restrictivePractices
+            .Where(rp => rp.IsActive)
+            .Select(rp => (IReadOnlyList<string>) new[]
+            {
+                Humanize(rp.Type.ToString()),
+                OrPlaceholder(rp.Description),
+                OrPlaceholder(rp.AuthorisedBy),
+                rp.AuthorisationDate is { } authDate ? authDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
+                rp.ReviewDate is { } reviewDate ? reviewDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
             })
             .ToList();
         return new ParticipantDocumentTable(heading, columns, rows);

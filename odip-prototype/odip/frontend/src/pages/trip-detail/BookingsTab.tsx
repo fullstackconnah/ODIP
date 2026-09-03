@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
+import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { getStatusColor } from '@/lib/utils'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
-import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2 } from 'lucide-react'
+import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
@@ -95,6 +95,20 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const patchBooking = usePatchBooking()
   const deleteBooking = useDeleteBooking()
   const cancelBooking = useCancelBooking()
+  // PF-10.6 — primary Client Overview PDF surface: the trip context gives the header its
+  // Trip/Date/Group fields, which the Participant-detail button cannot provide. One mutation
+  // instance shared across every row; `downloadingBookingId` tracks which row's button should
+  // show the pending/spinner state so a click on one row doesn't spin every row's button.
+  const downloadClientOverview = useDownloadClientOverviewPdf()
+  const [downloadingBookingId, setDownloadingBookingId] = useState<string | null>(null)
+
+  const handleDownloadClientOverview = (b: BookingListDto) => {
+    setDownloadingBookingId(b.id)
+    downloadClientOverview.mutate(
+      { id: b.participantId, tripId, fileName: `${b.participantName || 'Participant'} - Client Overview.pdf` },
+      { onSettled: () => setDownloadingBookingId(null) },
+    )
+  }
 
   // Filter out participants already booked on this trip
   const bookedParticipantIds = new Set(bookings.map((b: BookingListDto) => b.participantId))
@@ -537,6 +551,17 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                     <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleDownloadClientOverview(b)}
+                  disabled={downloadingBookingId === b.id}
+                  className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors disabled:opacity-50"
+                  title="Client Overview PDF"
+                >
+                  {downloadingBookingId === b.id
+                    ? <Loader2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] animate-spin" />
+                    : <Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />}
+                </button>
                 <Link to={`/participants/${b.participantId}`} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="View participant">
                   <ExternalLink className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                 </Link>

@@ -41,6 +41,19 @@ public static class ParticipantDocumentRenderer
                             c.Item().Text($"Generated: {model.GeneratedAtUtc:dd MMM yyyy HH:mm}").FontSize(9);
                         });
                     });
+                    // PF-10.6 — the Client Overview's "TRIP | DATE | GROUP" header line. Only
+                    // ComposeClientOverview sets TripName (never null there — see its doc comment),
+                    // so this is a no-op for the Intake Form / Participant Profile.
+                    if (model.TripName != null)
+                    {
+                        col.Item().PaddingTop(4).Row(row =>
+                        {
+                            row.RelativeItem().Text($"TRIP: {model.TripName}").SemiBold().FontSize(9);
+                            row.RelativeItem().Text($"DATE: {model.TripDate}").SemiBold().FontSize(9);
+                            row.RelativeItem().Text($"GROUP: {model.TripGroup}").SemiBold().FontSize(9);
+                        });
+                    }
+
                     col.Item().PaddingTop(8).LineHorizontal(1);
                 });
 
