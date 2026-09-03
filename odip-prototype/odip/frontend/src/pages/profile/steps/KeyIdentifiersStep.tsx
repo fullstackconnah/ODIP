@@ -15,13 +15,19 @@ import { GENDER_LABELS } from '@/api/types/participants'
 import { GENDERS } from '@/api/types/enums'
 import { ReadOnlyField, ReadOnlyGroupField } from '../profileHelpers'
 
-export function KeyIdentifiersStep({ control, register, errors, participant, activeStaff }: {
+const EMPTY: ReadonlySet<string> = new Set()
+
+export function KeyIdentifiersStep({ control, register, errors, participant, activeStaff, hiddenFields }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   errors: FieldErrors<ParticipantFormData>
   participant: ParticipantDetailDto
   activeStaff: { id: string; fullName: string }[]
+  /** Field ids to omit entirely — e.g. the caregiver wizard's CAREGIVER_INTERNAL_FIELDS. Defaults
+   * to empty, so every existing Profile-wizard caller is unaffected. */
+  hiddenFields?: ReadonlySet<string>
 }) {
+  const hidden = hiddenFields ?? EMPTY
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card title="Identity (from Intake)" className="space-y-4">
@@ -65,21 +71,23 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
           <FormField label="Country">
             <input id="country" {...register('country')} />
           </FormField>
-          <FormField label="Preferred Staff Member">
-            <Controller
-              control={control}
-              name="preferredStaffId"
-              render={({ field }) => (
-                <SearchableSelect
-                  id="preferredStaffId"
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={[{ value: '', label: 'None' }, ...activeStaff.map((s) => ({ value: s.id, label: s.fullName }))]}
-                />
-              )}
-            />
-          </FormField>
+          {!hidden.has('preferredStaffId') && (
+            <FormField label="Preferred Staff Member">
+              <Controller
+                control={control}
+                name="preferredStaffId"
+                render={({ field }) => (
+                  <SearchableSelect
+                    id="preferredStaffId"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={[{ value: '', label: 'None' }, ...activeStaff.map((s) => ({ value: s.id, label: s.fullName }))]}
+                  />
+                )}
+              />
+            </FormField>
+          )}
           <FormField label="Disability Support for Older Australians (DSOA)" layout="checkbox">
             <input type="checkbox" id="isDsoa" {...register('isDsoa')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>

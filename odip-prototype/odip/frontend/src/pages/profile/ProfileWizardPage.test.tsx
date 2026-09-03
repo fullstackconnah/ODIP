@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
 import ProfileWizardPage from './ProfileWizardPage'
+import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
+import { BehaviourCognitionStep } from './steps/BehaviourCognitionStep'
 import { fieldsForEntry, sharedFieldsDisplayedOnProfile } from '@/lib/documentMapping'
 import {
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
-  PROFILE_STEP_COMMUNITY_ACCESS_FIELDS,
+  PROFILE_STEP_COMMUNITY_ACCESS_FIELDS, type ParticipantFormData,
 } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
@@ -387,5 +390,57 @@ describe('ProfileWizardPage — DIAG-02 epilepsy derivation (re-homed from the r
     await advanceToMedical(userEvent.setup())
 
     expect(screen.getByLabelText('Epilepsy and Seizure Management')).not.toBeChecked()
+  })
+})
+
+// PF-cg03 — the caregiver wizard reuses these two Profile step components with a `hiddenFields`
+// prop, so it never renders the two allocation-contract fields classified internal
+// (CAREGIVER_INTERNAL_FIELDS: preferredStaffId, behaviourRiskRating).
+describe('KeyIdentifiersStep / BehaviourCognitionStep — hiddenFields prop', () => {
+  function KeyIdentifiersHarness({ hiddenFields }: { hiddenFields?: ReadonlySet<string> }) {
+    const { control, register, formState: { errors } } = useForm<ParticipantFormData>()
+    return (
+      <KeyIdentifiersStep
+        control={control}
+        register={register}
+        errors={errors}
+        participant={makeParticipant()}
+        activeStaff={[{ id: 'staff-1', fullName: 'Alex Rivera' }]}
+        hiddenFields={hiddenFields}
+      />
+    )
+  }
+
+  function BehaviourCognitionHarness({ hiddenFields }: { hiddenFields?: ReadonlySet<string> }) {
+    const { control, register } = useForm<ParticipantFormData>()
+    return (
+      <BehaviourCognitionStep
+        control={control}
+        register={register}
+        participant={makeParticipant()}
+        hiddenFields={hiddenFields}
+      />
+    )
+  }
+
+  it('KeyIdentifiersStep renders the Preferred Staff Member control (id="preferredStaffId") by default, and omits it when hidden', () => {
+    // SearchableSelect is a Controller-wrapped custom control (not a native input), so — same
+    // convention as this file's own "seenIds" drift guard above — presence is asserted via the
+    // field's own DOM id rather than getByLabelText.
+    const { unmount } = render(<KeyIdentifiersHarness />)
+    expect(document.getElementById('preferredStaffId')).not.toBeNull()
+    unmount()
+
+    render(<KeyIdentifiersHarness hiddenFields={new Set(['preferredStaffId'])} />)
+    expect(document.getElementById('preferredStaffId')).toBeNull()
+  })
+
+  it('BehaviourCognitionStep renders the Behaviour Risk Rating control by default, and omits it when hidden', () => {
+    const { unmount } = render(<BehaviourCognitionHarness />)
+    expect(screen.getByLabelText(/behaviour risk rating/i)).toBeInTheDocument()
+    unmount()
+
+    render(<BehaviourCognitionHarness hiddenFields={new Set(['behaviourRiskRating'])} />)
+    expect(screen.queryByLabelText(/behaviour risk rating/i)).not.toBeInTheDocument()
   })
 })

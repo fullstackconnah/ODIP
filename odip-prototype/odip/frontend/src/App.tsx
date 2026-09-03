@@ -18,6 +18,8 @@ const IntakeWizardPage = React.lazy(() => import('./pages/intake/IntakeWizardPag
 // PF-10.4 (SPEC-05): the new Profile wizard, second half of the intake/profile split. Edits an
 // existing participant (created by Intake) at /participants/:id/profile.
 const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizardPage'))
+// cg03: the public, session-free caregiver profile form — see its route placement below.
+const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
 const AccommodationPage = React.lazy(() => import('./pages/AccommodationPage'))
 const AccommodationDetailPage = React.lazy(() => import('./pages/AccommodationDetailPage'))
@@ -80,6 +82,9 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}><Outlet /></Suspense>}>
       <Route path="/login" element={<LoginPage />} />
+      {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
+          authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
+      <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
       <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>
         <Route path="/" element={<PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>} />
         <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />

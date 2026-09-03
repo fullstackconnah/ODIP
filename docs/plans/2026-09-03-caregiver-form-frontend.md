@@ -71,7 +71,7 @@
 **Interfaces:**
 - Produces: `caregiverApiClient` (AxiosInstance), `caregiverGet<T>(url)`, `caregiverPut(url, body)`, `caregiverPost(url, body)` — thin typed helpers; the `CaregiverFormDto`, `CaregiverDraftDto`, `CaregiverLinkDto`, `CaregiverSubmissionListItemDto`, `CaregiverSubmissionDetailDto`, `CaregiverSubmissionStatus` types.
 
-- [ ] **Step 1: Failing test — no auth headers, no cookies**
+- [x] **Step 1: Failing test — no auth headers, no cookies**
 
 ```ts
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -106,9 +106,9 @@ describe('caregiverApiClient', () => {
 })
 ```
 
-- [ ] **Step 2: Run to confirm failure** — `npx vitest run src/api/caregiverClient.test.ts` → module not found.
+- [x] **Step 2: Run to confirm failure** — `npx vitest run src/api/caregiverClient.test.ts` → module not found.
 
-- [ ] **Step 3: Implement the client**
+- [x] **Step 3: Implement the client**
 
 ```ts
 import axios from 'axios'
@@ -144,7 +144,7 @@ export async function caregiverPost(url: string, body: unknown): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Types**
+- [x] **Step 4: Types**
 
 ```ts
 import type { PatchParticipantDto } from './participant-patch'
@@ -193,7 +193,7 @@ export type CaregiverSubmissionDetailDto = CaregiverSubmissionListItemDto & {
 
 Export these from `src/api/types/index.ts` following its existing barrel pattern.
 
-- [ ] **Step 5: Run test → pass. Commit.**
+- [x] **Step 5: Run test → pass. Commit.**
 
 ```bash
 git add src/api/caregiverClient.ts src/api/caregiverClient.test.ts src/api/types/caregiver.ts src/api/types/index.ts
@@ -215,7 +215,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Produces (public, via `caregiverApiClient`): `usePublicCaregiverForm(token)`, `useSaveCaregiverDraft(token)`, `useSubmitCaregiverForm(token)`.
 - Produces (admin, via `apiClient`): `useGenerateCaregiverLink()`, `useRevokeCaregiverLink()`, `useCaregiverSubmissions(status?)`, `useCaregiverSubmission(id)`, `useAcceptCaregiverSubmission()`, `useRejectCaregiverSubmission()`.
 
-- [ ] **Step 1: Failing test — admin mutations invalidate the right keys; public hooks use the public client**
+- [x] **Step 1: Failing test — admin mutations invalidate the right keys; public hooks use the public client**
 
 ```tsx
 import { describe, it, expect, vi } from 'vitest'
@@ -269,9 +269,9 @@ describe('caregiver hooks', () => {
 
 Check `src/api/client.ts` for the actual exported helper names (`apiGetWithDefault`, `apiPostRaw`, `apiDeleteRaw`, etc. — quote them from `src/api/hooks/participants.ts`'s imports) and adjust the mock.
 
-- [ ] **Step 2: Run to confirm failure.**
+- [x] **Step 2: Run to confirm failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -378,7 +378,7 @@ export function useRejectCaregiverSubmission() {
 
 Export from `src/api/hooks/index.ts` following its barrel pattern. If `apiDeleteRaw` does not exist in `client.ts`, add it beside `apiPostRaw` with the same shape.
 
-- [ ] **Step 4: Test → pass. Commit.**
+- [x] **Step 4: Test → pass. Commit.**
 
 ```bash
 git add src/api/hooks/caregiver.ts src/api/hooks/caregiver.test.tsx src/api/hooks/index.ts src/api/client.ts
@@ -402,7 +402,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 
 The backend's `InternalFields` is keyed by DTO JSON property name; this side is keyed by allocation-contract field id. The two are reconciled by the backend's drift guard (field id → `ParticipantPropertyName` → JSON name). **Do not read the C# file from a test** — that fails in Docker.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -441,9 +441,9 @@ describe('caregiverFields', () => {
 })
 ```
 
-- [ ] **Step 2: Run to confirm failure.**
+- [x] **Step 2: Run to confirm failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 import { fieldsForEntry, sharedFieldsDisplayedOnProfile, type DocumentMappingEntry } from './documentMapping'
@@ -482,7 +482,7 @@ export function caregiverReadOnlyFields(): DocumentMappingEntry[] {
 
 Iterate on the set until all five tests pass. Do not weaken a test.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add src/lib/caregiverFields.ts src/lib/caregiverFields.test.ts
@@ -504,7 +504,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: each step accepts `hiddenFields?: ReadonlySet<string>` (default empty). When a field id is in the set, that control is not rendered. Existing callers pass nothing and are unchanged.
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```tsx
 it('KeyIdentifiersStep and BehaviourCognitionStep omit fields listed in hiddenFields', () => {
@@ -517,7 +517,7 @@ it('KeyIdentifiersStep and BehaviourCognitionStep omit fields listed in hiddenFi
 
 Write the full harness by copying the pattern already in `ProfileWizardPage.test.tsx` for rendering a single step; assert both steps, with and without the prop.
 
-- [ ] **Step 2: Implement** — in each step, add the prop and wrap the one control:
+- [x] **Step 2: Implement** — in each step, add the prop and wrap the one control:
 
 ```tsx
 type Props = { /* existing props */; hiddenFields?: ReadonlySet<string> }
@@ -530,7 +530,7 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
 ```
 with `const EMPTY: ReadonlySet<string> = new Set()` at module scope.
 
-- [ ] **Step 3: Run `npm test` for `ProfileWizardPage.test.tsx` → all pass (existing tests unchanged). Commit.**
+- [x] **Step 3: Run `npm test` for `ProfileWizardPage.test.tsx` → all pass (existing tests unchanged). Commit.**
 
 ```bash
 git add src/pages/profile/steps/KeyIdentifiersStep.tsx src/pages/profile/steps/BehaviourCognitionStep.tsx src/pages/profile/ProfileWizardPage.test.tsx
@@ -553,7 +553,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Consumes: `usePublicCaregiverForm`, `useSaveCaregiverDraft`, `useSubmitCaregiverForm`; `useWizard`, `WizardNavFooter`, `WizardStepRail`, `WizardReviewStep` from `src/components/wizard`; the Profile step components + `hiddenFields`; `buildProfileStepPatch` from `src/lib/participantPatchGroups`; `PROFILE_STEP_*_FIELDS`, `PROFILE_STEP_SCHEMAS_BY_KEY` from `src/lib/participantSchema`; `CAREGIVER_INTERNAL_FIELDS`.
 - Produces: default export `CaregiverWizardPage`.
 
-- [ ] **Step 1: Failing tests** (`CaregiverWizardPage.test.tsx`)
+- [x] **Step 1: Failing tests** (`CaregiverWizardPage.test.tsx`)
 
 Mock `../../api/hooks/caregiver`. Cover:
 
@@ -573,9 +573,9 @@ describe('CaregiverWizardPage', () => {
 
 Fill each body with real Testing Library code against the mocked hooks — the harness for a `useForm`-driven wizard page already exists in `IntakeWizardPage.test.tsx`; copy its `renderWithRouter` and mock-shape.
 
-- [ ] **Step 2: Run to confirm failure.**
+- [x] **Step 2: Run to confirm failure.**
 
-- [ ] **Step 3: `AboutYouStep`**
+- [x] **Step 3: `AboutYouStep`**
 
 ```tsx
 import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
@@ -599,7 +599,7 @@ export function AboutYouStep({ register, errors }: { control: Control<CaregiverF
 }
 ```
 
-- [ ] **Step 4: The page**
+- [x] **Step 4: The page**
 
 ```tsx
 import { useParams } from 'react-router-dom'
@@ -791,7 +791,7 @@ function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<Caregiver
 
 Match the real prop names of `WizardStepRail`, `WizardNavFooter` and `WizardReviewStep` — open `src/components/wizard/` and use exactly what they export. The `import` line for `participantFormSchemaBase` may be unnecessary; remove any unused import so lint stays at 77.
 
-- [ ] **Step 5: `hydrate.ts`**
+- [x] **Step 5: `hydrate.ts`**
 
 ```ts
 import type { CaregiverFormDto } from '@/api/types/caregiver'
@@ -818,7 +818,7 @@ export function hydrateFormFromProjection(dto: CaregiverFormDto): Record<string,
 
 Add `src/pages/caregiver/hydrate.test.ts` with two cases: draft absent → projection values; draft present → draft scalar overrides projection, collection replaced.
 
-- [ ] **Step 6: Run the page tests → pass. Full gates. Commit.**
+- [x] **Step 6: Run the page tests → pass. Full gates. Commit.**
 
 ```bash
 git add src/pages/caregiver/
@@ -836,7 +836,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Modify: `src/App.tsx` (~line 82)
 - Test: add to `src/App.test.tsx` if one exists, else to `CaregiverWizardPage.test.tsx`
 
-- [ ] **Step 1:** Add the lazy import beside the others:
+- [x] **Step 1:** Add the lazy import beside the others:
 
 ```tsx
 const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
@@ -851,9 +851,9 @@ and the route as a sibling of `/login`, **before** the `<Route element={<UiPrefe
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
 ```
 
-- [ ] **Step 2:** Test that rendering the router at `/caregiver/abc` does not render the app nav (e.g. `queryByRole('navigation')` absent) and does not redirect to `/login` when unauthenticated.
+- [x] **Step 2:** Test that rendering the router at `/caregiver/abc` does not render the app nav (e.g. `queryByRole('navigation')` absent) and does not redirect to `/login` when unauthenticated.
 
-- [ ] **Step 3: Full gates, commit, push, PR**
+- [x] **Step 3: Full gates, commit, push, PR**
 
 ```bash
 npm run build && npm test && npm run lint    # lint: exactly 77
