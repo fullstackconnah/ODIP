@@ -36,13 +36,22 @@ export type CompactGridRowProps = {
  * bordered card. Collapses roughly 3-4x the vertical space these fixed-row grids used to take
  * when few/no rows have an answer yet (the common fresh-intake state).
  */
-export function CompactGridRow({ label, control, expanded }: CompactGridRowProps) {
-  const isExpanded = expanded != null
+export function CompactGridRow(props: CompactGridRowProps) {
+  const { label, control, expanded } = props
+  // Plain destructuring can't tell "expanded={undefined}" (a row that CAN expand but is
+  // currently collapsed — every real caller in ParticipantCreatePage.tsx always passes this,
+  // via `cond ? (...) : undefined`) apart from the prop being omitted entirely (a row with no
+  // expand capability at all). `'expanded' in props` can: JSX only adds the key to the props
+  // object when the attribute is written at the call site, even if its value is `undefined`.
+  // Only a row that can genuinely expand gets `aria-expanded` at all — a row that never can
+  // must not be announced as a disclosure with nothing behind it.
+  const canExpand = 'expanded' in props
+  const isExpanded = canExpand && expanded != null
   return (
     <div
       role="group"
       aria-label={label}
-      aria-expanded={isExpanded}
+      {...(canExpand ? { 'aria-expanded': isExpanded } : {})}
       className="border-b border-[var(--color-border)] last:border-b-0"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
