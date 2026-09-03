@@ -11,10 +11,9 @@
  * Progression model (SPEC-05 §PF-10.5, fixed): a normal `POST /api/participants` creates the
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
- * mid-intake abandon doesn't falsely mark intake complete. On success, navigates to the
- * participant detail page — see the `onSubmit` TODO below: this should become the Profile
- * wizard's route (`/participants/{id}/profile`) once PF-10.4 builds it, but that route doesn't
- * exist yet, so routing there today would be a dead link.
+ * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
+ * "Save as draft" still lands on the detail page), navigates to the Profile wizard
+ * (`/participants/{id}/profile`, PF-10.4) — see the `onSubmit` handler below.
  */
 import { useNavigate, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
@@ -195,11 +194,10 @@ export default function IntakeWizardPage() {
     try {
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
-        // TODO(PF-10.4): re-point to /participants/:id/profile once the Profile wizard exists.
-        // Until then, the detail page (which exists today) shows the draft banner with a
-        // "Resume intake" link into the old /edit wizard for any remaining fields — PF-10.5 owns
-        // the proper three-way resume banner described in SPEC-05.
-        navigate(`/participants/${res.data.id}`)
+        // PF-10.4: the Profile wizard now exists — hand off there directly instead of the detail
+        // page. PF-10.5 still owns the fuller three-way resume-banner logic described in SPEC-05
+        // (e.g. resuming a not-yet-profile-completed participant from the detail page later).
+        navigate(`/participants/${res.data.id}/profile`)
       }
     } catch {
       // error handled by mutation state

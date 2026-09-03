@@ -105,6 +105,140 @@ export const baseParticipantSchema = z.object({
     description: z.string().min(1, 'Description is required'),
     mitigationNotes: z.string().optional(),
   })).optional(),
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PF-10.4 (SPEC-05) — Profile wizard fields. Every entryPhase:'profile' field, per
+  // fieldsForEntry('profile') (85 fields). Field defs copied verbatim (behaviour-preserving) from
+  // ParticipantCreatePage.tsx's baseParticipantSchema, same convention PF-10.3 used above for the
+  // 61 intake fields. Kept in this SAME flat object (not a second schema) per this file's own
+  // header doc — a single ParticipantFormData type covers both wizards' payload shapes.
+  // ─────────────────────────────────────────────────────────────────────────────
+  middleName: z.string().optional(),
+  gender: z.string().optional(),
+  genderSelfDescription: z.string().optional(),
+  placeOfBirth: z.string().optional(),
+  country: z.string().optional(),
+  preferredStaffId: z.string().optional().nullable(),
+  isDsoa: z.boolean().optional(),
+  pensionCardNumber: z.string().optional(),
+  pensionCardExpiry: z.string().optional(),
+  medicareNumber: z.string().optional(),
+  medicareExpiry: z.string().optional(),
+  companionCardNumber: z.string().optional(),
+  companionCardExpiry: z.string().optional(),
+  privateHealthFund: z.string().optional(),
+  privateHealthMembershipNumber: z.string().optional(),
+  taxiCardNumber: z.string().optional(),
+  hairColour: z.string().optional(),
+  eyeColour: z.string().optional(),
+  weightKg: z.coerce.number().optional(),
+  heightCm: z.coerce.number().optional(),
+  mobilitySupportOptions: z.array(z.string()).optional(),
+  mobilityNotes: z.string().optional(),
+  equipmentRequirements: z.string().optional(),
+  transportRequirements: z.string().optional(),
+  ambulantStatus: z.string().optional(),
+  fallsRiskRating: z.string().optional(),
+  unevenGroundFlag: z.enum(['true', 'false', '']).optional(),
+  levelOfPersonalCare: z.string().optional(),
+  orthotics: z.string().optional(),
+  continenceSupportDetail: z.string().optional(),
+  bowelCareDetail: z.string().optional(),
+  menstruationSupport: z.string().optional(),
+  skinIntegrity: z.string().optional(),
+  // DIAG-01. primaryDiagnosis holds either a curated DIAGNOSIS_OPTIONS value or the
+  // DIAGNOSIS_OTHER_SENTINEL; primaryDiagnosisOther is the "Other — specify" UI-only helper field
+  // collapsed into primaryDiagnosis before submit (not itself a DocumentMapping/DTO field).
+  primaryDiagnosis: z.string().optional(),
+  primaryDiagnosisOther: z.string().optional(),
+  otherDiagnoses: z.array(z.string()).optional(),
+  hidpaSupportCategories: z.array(z.string()).optional(),
+  allergiesDetail: z.string().optional(),
+  isAnaphylaxisRisk: z.enum(['true', 'false', '']).optional(),
+  allergyManagementNotes: z.string().optional(),
+  // Fixed 10-row array (one per HealthConditionType, never user-add/remove).
+  healthConditions: z.array(z.object({
+    conditionType: z.string(),
+    has: z.enum(['true', 'false', '']).optional(),
+    severity: z.string().optional(),
+    planProvided: z.enum(['true', 'false', '']).optional(),
+    trainingRequired: z.enum(['true', 'false', '']).optional(),
+    notes: z.string().optional(),
+  })).optional(),
+  personalInterests: z.string().optional(),
+  choiceControlNotes: z.string().optional(),
+  // Fixed 7-row array (one per ConsentType, never user-add/remove) — PhotoVideo/Privacy/
+  // EmergencyMedical always shown; Alcohol/OtcMedication/TravelInsurance/TermsAndConditions
+  // gated on serviceStreams.includes('STA') (see the Profile wizard's Consents step).
+  consents: z.array(z.object({
+    consentType: z.string(),
+    granted: z.enum(['true', 'false', '']).optional(),
+    signedByName: z.string().optional(),
+    signedDate: z.string().optional(),
+  })).optional(),
+  memory: z.string().optional(),
+  memoryAids: z.enum(['true', 'false', '']).optional(),
+  impairedUnderstanding: z.enum(['true', 'false', '']).optional(),
+  impairedJudgementReasoning: z.enum(['true', 'false', '']).optional(),
+  behaviourRiskRating: z.string().optional(),
+  ridsLogged: z.enum(['true', 'false', '']).optional(),
+  bspPlanProvided: z.enum(['true', 'false', '']).optional(),
+  bocChartProvided: z.enum(['true', 'false', '']).optional(),
+  receptiveSkills: z.string().optional(),
+  readingAbility: z.string().optional(),
+  communicationAids: z.string().optional(),
+  // Fixed 20-row array (one per AdlType, never user-add/remove).
+  adlAssessments: z.array(z.object({
+    adlType: z.string(),
+    level: z.string().optional(),
+    notes: z.string().optional(),
+    // CommunityAccessDailyLiving-gated column — see the Daily Living step.
+    howToHelpNotes: z.string().optional(),
+  })).optional(),
+  mealAssistanceDetail: z.string().optional(),
+  chokingRiskMealDetail: z.string().optional(),
+  modifiedDietDetail: z.string().optional(),
+  pegRegimeMealDetail: z.string().optional(),
+  specialUtensilsDetail: z.string().optional(),
+  specialDietaryNeedsDetail: z.string().optional(),
+  favouriteBreakfast: z.string().optional(),
+  favouriteLunch: z.string().optional(),
+  favouriteDinner: z.string().optional(),
+  medicationTricks: z.string().optional(),
+  foodsAlwaysEaten: z.string().optional(),
+  goals: z.string().optional(),
+  supportAreas: z.string().optional(),
+  strengthsFears: z.string().optional(),
+  thingsToKnow: z.string().optional(),
+  whoIsImportant: z.string().optional(),
+  likesDislikes: z.string().optional(),
+  // ── Community Access section (CommunityAccessDailyLiving-gated in the Profile wizard) ──
+  signsHappyAndSettled: z.string().optional(),
+  whatHelpsMeCalmDown: z.string().optional(),
+  bocTriggers: z.string().optional(),
+  bocEarlyWarningSigns: z.string().optional(),
+  bocDeEscalationStrategies: z.string().optional(),
+  bocWhatNotToDo: z.string().optional(),
+  // Fixed 21-row array (one per ChecklistItemType, never user-add/remove) — the whole field is
+  // CommunityAccessDailyLiving-gated (unlike adlAssessments, where only howToHelpNotes is gated).
+  checklistItems: z.array(z.object({
+    itemType: z.string(),
+    value: z.string().optional(),
+    notes: z.string().optional(),
+  })).optional(),
+  // PF-10.2 — fixed 22-row array (one per CommunityAccessRiskItemType, never user-add/remove).
+  // Saved via the dedicated nested-CRUD endpoint (one PUT per row), not a PatchParticipantDto
+  // collection group — see the Profile wizard's Community Access step.
+  communityAccessRiskItems: z.array(z.object({
+    itemType: z.string(),
+    rating: z.string().optional(),
+    strategyNotes: z.string().optional(),
+  })).optional(),
+  overallCommunityAccessRiskRating: z.string().optional(),
+  supportsLookLikeMorning: z.string().optional(),
+  supportsLookLikeDay: z.string().optional(),
+  supportsLookLikeAfternoonEvening: z.string().optional(),
+  supportsLookLikeOvernight: z.string().optional(),
 })
 
 export type ParticipantFormData = z.infer<typeof baseParticipantSchema>
@@ -303,3 +437,160 @@ export const INTAKE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
   behaviour: baseParticipantSchema.pick(pickShape(STEP_BEHAVIOUR_FIELDS)),
   risks: baseParticipantSchema.pick(pickShape(STEP_RISKS_FIELDS)),
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PF-10.4 (SPEC-05) — the Profile wizard's field set/steps/schemas. Same "reuse this one file"
+// convention PF-10.3 established above for Intake — no second schema file.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// weightHeightRefine/diagnosisOtherRefine — copied verbatim from ParticipantCreatePage.tsx (both
+// target only entryPhase:'profile' fields: weightKg/heightCm are Key Identifiers; primaryDiagnosis/
+// primaryDiagnosisOther are Medical Detail).
+type WeightHeightFields = { weightKg?: number; heightCm?: number }
+export function weightHeightRefine(data: WeightHeightFields, ctx: z.RefinementCtx) {
+  if (data.weightKg && (data.weightKg <= 0 || data.weightKg > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['weightKg'], message: 'Weight must be greater than 0 and no more than 999.99 kg.' })
+  }
+  if (data.heightCm && (data.heightCm <= 0 || data.heightCm > 999.99)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['heightCm'], message: 'Height must be greater than 0 and no more than 999.99 cm.' })
+  }
+}
+
+type DiagnosisFields = { primaryDiagnosis?: string; primaryDiagnosisOther?: string }
+export function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx) {
+  if (data.primaryDiagnosis === 'Other — specify' && !data.primaryDiagnosisOther?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['primaryDiagnosisOther'], message: 'Please specify the primary diagnosis.' })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PF-10.1's contract, applied to Profile: the wizard's field set IS fieldsForEntry('profile') —
+// no hand-authored duplicate list. `primaryDiagnosisOther` is a UI-only helper field (the "Other —
+// specify" typed value collapsed into `primaryDiagnosis` before submit, same convention as
+// ParticipantCreatePage.tsx) — it has no DOCUMENT_MAPPING entry of its own (neither does its
+// Intake-side counterpart), so it is deliberately excluded from PROFILE_FIELD_NAMES but still
+// picked into profileParticipantSchema and included in the Medical Detail step's own field list.
+// ─────────────────────────────────────────────────────────────────────────────
+export const PROFILE_FIELD_NAMES = fieldsForEntry('profile').map((e) => e.field) as (keyof ParticipantFormData)[]
+
+export const profileParticipantSchema = baseParticipantSchema
+  .pick({ ...pickShape(PROFILE_FIELD_NAMES), primaryDiagnosisOther: true })
+  .superRefine(weightHeightRefine)
+  .superRefine(diagnosisOtherRefine)
+
+/** Same hand-rolled-resolver workaround as intakeParticipantResolver above — used only by the
+ * Profile wizard's final Review step (a full-payload PUT, see ProfileWizardPage.tsx). */
+export const profileParticipantResolver: Resolver<ParticipantFormData> = (values) => {
+  const result = profileParticipantSchema.safeParse(values)
+  if (result.success) return { values: result.data, errors: {} }
+  const errors: FieldErrors<ParticipantFormData> = {}
+  for (const issue of result.error.issues) {
+    setPathError(errors as Record<string, unknown>, issue.path, issue.message, issue.code)
+  }
+  return { values: {}, errors }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile wizard step field groups. The UNION of these arrays, MINUS the one documented UI-only
+// exception (primaryDiagnosisOther, Medical Detail), must equal PROFILE_FIELD_NAMES exactly, with
+// no field repeated — enforced by ProfileWizardPage.test.tsx's "drift guard" describe block.
+//
+// Placement note (spec ambiguity, resolved — see this branch's report): SPEC-05's PF-10.4 prose
+// names 8 sections but never says where the leftover Profile-entry Identity fields (middleName,
+// gender, genderSelfDescription, placeOfBirth, country, preferredStaffId, isDsoa) live — every
+// other Profile-entry field maps cleanly onto one of the 8 named sections, these 7 do not. They
+// are folded into "Key Identifiers" (the closest existing "additional profile-only personal detail"
+// home, and the only step that otherwise has no natural claimant for them) rather than inventing a
+// 9th, unnamed step.
+// ─────────────────────────────────────────────────────────────────────────────
+export const PROFILE_STEP_KEY_IDENTIFIERS_FIELDS = [
+  'middleName', 'gender', 'genderSelfDescription', 'placeOfBirth', 'country', 'preferredStaffId', 'isDsoa',
+  'pensionCardNumber', 'pensionCardExpiry', 'medicareNumber', 'medicareExpiry',
+  'companionCardNumber', 'companionCardExpiry', 'privateHealthFund', 'privateHealthMembershipNumber',
+  'taxiCardNumber', 'hairColour', 'eyeColour', 'weightKg', 'heightCm',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+/** "Cultural depth / Consents" per this branch's task brief — Personal Interests/Choice & Control
+ * plus the full Consent & Terms block (ungated PhotoVideo/Privacy/EmergencyMedical always shown;
+ * Alcohol/OtcMedication/TravelInsurance/TermsAndConditions gated on serviceStreams.includes('STA')
+ * — see PROFILE_CONDITIONAL_SECTIONS below and the Cultural Depth step component). */
+export const PROFILE_STEP_CULTURAL_DEPTH_FIELDS = [
+  'personalInterests', 'choiceControlNotes', 'consents',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+export const PROFILE_STEP_MEDICAL_FIELDS = [
+  'primaryDiagnosis', 'primaryDiagnosisOther', 'otherDiagnoses', 'hidpaSupportCategories',
+  'allergiesDetail', 'isAnaphylaxisRisk', 'allergyManagementNotes', 'healthConditions',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+export const PROFILE_STEP_MOBILITY_FIELDS = [
+  'mobilitySupportOptions', 'mobilityNotes', 'equipmentRequirements', 'transportRequirements',
+  'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
+  'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+export const PROFILE_STEP_BEHAVIOUR_FIELDS = [
+  'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
+  'behaviourRiskRating', 'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
+  'receptiveSkills', 'readingAbility', 'communicationAids',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+export const PROFILE_STEP_DAILY_LIVING_FIELDS = [
+  'adlAssessments',
+  'mealAssistanceDetail', 'chokingRiskMealDetail', 'modifiedDietDetail', 'pegRegimeMealDetail',
+  'specialUtensilsDetail', 'specialDietaryNeedsDetail',
+  'favouriteBreakfast', 'favouriteLunch', 'favouriteDinner', 'medicationTricks', 'foodsAlwaysEaten',
+  'goals', 'supportAreas', 'strengthsFears', 'thingsToKnow', 'whoIsImportant', 'likesDislikes',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+/** CommunityAccessDailyLiving-gated (entire step) — see PROFILE_CONDITIONAL_SECTIONS below. */
+export const PROFILE_STEP_COMMUNITY_ACCESS_FIELDS = [
+  'signsHappyAndSettled', 'whatHelpsMeCalmDown', 'bocTriggers', 'bocEarlyWarningSigns',
+  'bocDeEscalationStrategies', 'bocWhatNotToDo', 'checklistItems',
+  'communityAccessRiskItems', 'overallCommunityAccessRiskRating',
+  'supportsLookLikeMorning', 'supportsLookLikeDay', 'supportsLookLikeAfternoonEvening', 'supportsLookLikeOvernight',
+] as const satisfies readonly (keyof ParticipantFormData)[]
+
+/** Per-step Next-validation schemas, keyed by step key — mirrors INTAKE_STEP_SCHEMAS_BY_KEY above. */
+export const PROFILE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
+  keyIdentifiers: baseParticipantSchema.pick(pickShape(PROFILE_STEP_KEY_IDENTIFIERS_FIELDS)).superRefine(weightHeightRefine),
+  culturalDepth: baseParticipantSchema.pick(pickShape(PROFILE_STEP_CULTURAL_DEPTH_FIELDS)),
+  medical: baseParticipantSchema.pick({ ...pickShape(PROFILE_STEP_MEDICAL_FIELDS), primaryDiagnosisOther: true }).superRefine(diagnosisOtherRefine),
+  mobility: baseParticipantSchema.pick(pickShape(PROFILE_STEP_MOBILITY_FIELDS)),
+  behaviourCognition: baseParticipantSchema.pick(pickShape(PROFILE_STEP_BEHAVIOUR_FIELDS)),
+  dailyLiving: baseParticipantSchema.pick(pickShape(PROFILE_STEP_DAILY_LIVING_FIELDS)),
+  communityAccess: baseParticipantSchema.pick(pickShape(PROFILE_STEP_COMMUNITY_ACCESS_FIELDS)),
+}
+
+/**
+ * SPEC-05's PF-10.4 generic conditional-section shape — `{ key, label, fields, isVisible }` — used
+ * for BOTH of the Profile wizard's independently-gated regions, not two special cases:
+ *  - `communityAccess`: gates whether the whole Community Access STEP appears in the wizard's step
+ *    list (ProfileWizardPage.tsx filters WIZARD_STEPS by this entry's `isVisible`).
+ *  - `holidaySta`: gates a SUB-BLOCK within the Cultural Depth/Consents step (the Alcohol/
+ *    OtcMedication/TravelInsurance/TermsAndConditions consent rows) — same shape, consumed by that
+ *    step component to decide what to render AND by the save path to decide which consent types
+ *    to include in the PATCH payload (see participantPatchGroups.ts's HOLIDAY_STA_CONSENT_TYPES).
+ * A third future gate is a new entry here, not a new branch of conditional logic.
+ */
+export type ProfileConditionalSection = {
+  key: string
+  label: string
+  fields: readonly (keyof ParticipantFormData)[]
+  isVisible: (serviceStreams: readonly string[]) => boolean
+}
+
+export const PROFILE_CONDITIONAL_SECTIONS: ProfileConditionalSection[] = [
+  {
+    key: 'communityAccess',
+    label: 'Community Access',
+    fields: PROFILE_STEP_COMMUNITY_ACCESS_FIELDS,
+    isVisible: (serviceStreams) => serviceStreams.includes('CommunityAccessDailyLiving'),
+  },
+  {
+    key: 'holidaySta',
+    label: 'Holiday / STA Consents',
+    fields: ['consents'] as const satisfies readonly (keyof ParticipantFormData)[],
+    isVisible: (serviceStreams) => serviceStreams.includes('STA'),
+  },
+]

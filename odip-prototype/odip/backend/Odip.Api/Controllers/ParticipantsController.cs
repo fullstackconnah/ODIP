@@ -1263,6 +1263,9 @@ public class ParticipantsController : ControllerBase
             p.SignsHappyAndSettled = cab.SignsHappyAndSettled; p.WhatHelpsMeCalmDown = cab.WhatHelpsMeCalmDown;
             p.BocTriggers = cab.BocTriggers; p.BocEarlyWarningSigns = cab.BocEarlyWarningSigns;
             p.BocDeEscalationStrategies = cab.BocDeEscalationStrategies; p.BocWhatNotToDo = cab.BocWhatNotToDo;
+            // PF-10.4 (SPEC-05): see PatchCommunityAccessBehaviourDto's doc for why this scalar
+            // rides alongside the CA narrative fields rather than opening a new group.
+            p.OverallCommunityAccessRiskRating = cab.OverallCommunityAccessRiskRating;
         }
 
         if (dto.MealsAndDiet is { } mad)

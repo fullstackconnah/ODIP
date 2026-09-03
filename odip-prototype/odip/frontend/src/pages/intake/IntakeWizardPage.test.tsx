@@ -28,10 +28,10 @@ function renderIntakePage() {
   const router = createMemoryRouter(
     [
       { path: '/participants/new', element: <IntakeWizardPage /> },
-      // Both "Complete Intake" and "Save as draft" currently land here — PF-10.4 doesn't exist
-      // yet, so there is no /participants/:id/profile route to register (see the onSubmit TODO
-      // in IntakeWizardPage.tsx).
+      // "Save as draft" still lands on the detail page; "Complete Intake" now hands off to the
+      // PF-10.4 Profile wizard route instead (see IntakeWizardPage.tsx's onSubmit).
       { path: '/participants/:id', element: <div>Participant detail</div> },
+      { path: '/participants/:id/profile', element: <div>Profile wizard</div> },
       { path: '/participants', element: <div>Participants list</div> },
     ],
     { initialEntries: ['/participants/new'] },
@@ -124,7 +124,7 @@ describe('IntakeWizardPage — completion and draft-save', () => {
     await expectStep(/review/i)
   }
 
-  it('completing intake POSTs isDraft=true and completeIntake=true, then routes to the detail page (PF-10.4 hand-off pending)', async () => {
+  it('completing intake POSTs isDraft=true and completeIntake=true, then hands off to the Profile wizard route', async () => {
     const user = userEvent.setup()
     renderIntakePage()
     await walkToReview(user)
@@ -138,9 +138,9 @@ describe('IntakeWizardPage — completion and draft-save', () => {
     expect(payload.firstName).toBe('Jamie')
     expect(payload.lastName).toBe('Rivers')
 
-    // TODO(PF-10.4): once the Profile wizard exists at /participants/:id/profile, this should
-    // route there instead — see IntakeWizardPage.tsx's onSubmit TODO.
-    expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
+    // PF-10.4: the Profile wizard now exists — "Complete Intake" hands off there directly,
+    // carrying the new participant's id.
+    expect(await screen.findByText(/profile wizard/i)).toBeInTheDocument()
   })
 
   it('"Save as draft" POSTs isDraft=true and completeIntake=false from any step, and routes to the detail page', async () => {

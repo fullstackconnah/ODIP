@@ -607,6 +607,45 @@ public class ParticipantsControllerPatchTests
         Assert.Equal(ChecklistItemValue.Yes, detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.UsesWheelchair).Value);
     }
 
+    // ── PF-10.4 (SPEC-05): communityAccessBehaviour also carries OverallCommunityAccessRiskRating ──
+
+    [Fact]
+    public async Task Patch_CommunityAccessBehaviourGroup_SetsOverallCommunityAccessRiskRating_WithoutTouchingTheRiskItemsCollection()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        // Seed a risk-item row directly (the Profile wizard's Community Access section saves this
+        // 22-row collection via its own nested-CRUD endpoint, not this PATCH group — see
+        // PatchCommunityAccessBehaviourDto's doc).
+        db.ParticipantCommunityAccessRiskItems.Add(new ParticipantCommunityAccessRiskItem
+        {
+            Id = Guid.NewGuid(), ParticipantId = id, ItemType = CommunityAccessRiskItemType.GeneralRoadAwareness,
+            Rating = RiskRatingLevel.High, StrategyNotes = "Always accompanied near roads.",
+        });
+        await db.SaveChangesAsync();
+
+        var patchDto = new PatchParticipantDto
+        {
+            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto
+            {
+                SignsHappyAndSettled = "Humming quietly.",
+                OverallCommunityAccessRiskRating = RiskRatingLevel.Medium,
+            },
+        };
+        var result = await controller.Patch(id, patchDto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var detail = await GetByIdData(controller, id);
+        Assert.Equal("Humming quietly.", detail.SignsHappyAndSettled);
+        Assert.Equal(RiskRatingLevel.Medium, detail.OverallCommunityAccessRiskRating);
+        // The nested-CRUD-owned risk-items collection is untouched by this PATCH group.
+        var roadAwareness = detail.CommunityAccessRiskItems.Single(r => r.ItemType == CommunityAccessRiskItemType.GeneralRoadAwareness);
+        Assert.Equal(RiskRatingLevel.High, roadAwareness.Rating);
+        Assert.Equal("Always accompanied near roads.", roadAwareness.StrategyNotes);
+    }
+
     // ── PD-5 item 5c: the 4 safety-critical partial-save groups sync the auto-note ──────────
 
     [Fact]
