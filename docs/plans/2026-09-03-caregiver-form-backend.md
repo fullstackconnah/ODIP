@@ -175,7 +175,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `CaregiverProfileSubmission` entity; `db.CaregiverProfileSubmissions` DbSet; enum with **int values Draft=0, Submitted=1, Accepted=2, Rejected=3, Revoked=4** (the partial-index filter depends on these).
 
-- [ ] **Step 1: Enum**
+- [x] **Step 1: Enum**
 
 ```csharp
 namespace Odip.Domain.Enums;
@@ -195,7 +195,7 @@ public enum CaregiverSubmissionStatus
 }
 ```
 
-- [ ] **Step 2: Entity**
+- [x] **Step 2: Entity**
 
 Check `Odip.Domain/Interfaces/ITenantEntity.cs` for its exact members (expect `Guid TenantId { get; set; }`). Then:
 
@@ -243,7 +243,7 @@ public class CaregiverProfileSubmission : ITenantEntity
 }
 ```
 
-- [ ] **Step 3: DbContext**
+- [x] **Step 3: DbContext**
 
 In `OdipDbContext.cs`, next to the `IncidentWitnesses` DbSet (~line 70):
 
@@ -289,12 +289,12 @@ In `OnModelCreating`, after the `IncidentWitness` block (~line 617):
 
 Add the tenant global query filter the same way every other `ITenantEntity` gets one — find the existing pattern (search `HasQueryFilter` in `OdipDbContext.cs`) and add `CaregiverProfileSubmission` to it identically.
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `dotnet build`
 Expected: 0 errors.
 
-- [ ] **Step 5: Generate the migration**
+- [x] **Step 5: Generate the migration**
 
 ```bash
 POSTGRES_CONNECTION_STRING="Host=localhost;Database=odip_design;Username=x;Password=x" \
@@ -304,14 +304,14 @@ dotnet ef migrations add AddCaregiverProfileSubmissions --project Odip.Infrastru
 
 If `Program.cs`'s Firebase guard blocks design-time startup, add an `IDesignTimeDbContextFactory<OdipDbContext>` in `Odip.Infrastructure/Data/OdipDbContextFactory.cs` that builds the context from `POSTGRES_CONNECTION_STRING` alone and a null-tenant `ICurrentTenant` stub — that is a legitimate, common EF pattern and is worth keeping.
 
-- [ ] **Step 6: Inspect the generated migration**
+- [x] **Step 6: Inspect the generated migration**
 
 Open the new `Odip.Infrastructure/Migrations/<ts>_AddCaregiverProfileSubmissions.cs`. Confirm `Up()` contains `CreateTable("CaregiverProfileSubmissions", ...)`, the `jsonb` column, and a `CreateIndex(... unique: true, filter: "\"Status\" IN (0, 1)")`. Confirm **no other migration file changed** except `OdipDbContextModelSnapshot.cs`:
 
 Run: `git status --short Odip.Infrastructure/Migrations/`
 Expected: two new files (`.cs` + `.Designer.cs`) and one modified (`OdipDbContextModelSnapshot.cs`). Nothing else.
 
-- [ ] **Step 7: Render and eyeball the SQL**
+- [x] **Step 7: Render and eyeball the SQL**
 
 ```bash
 POSTGRES_CONNECTION_STRING="Host=localhost;Database=x;Username=x;Password=x" JWT_SECRET="design-time-only-secret-that-is-at-least-32-chars-long" \
@@ -319,7 +319,7 @@ dotnet ef migrations script <previous-migration-id> AddCaregiverProfileSubmissio
 ```
 (`<previous-migration-id>` is the newest existing migration's full name, e.g. `20260903100734_BackfillParticipantIntakeCompletedAt`.) Confirm the `CREATE UNIQUE INDEX ... WHERE "Status" IN (0, 1)` line is present.
 
-- [ ] **Step 8: Test + commit**
+- [x] **Step 8: Test + commit**
 
 Run: `dotnet build && dotnet test`
 Expected: 0 errors, `Failed: 0`.

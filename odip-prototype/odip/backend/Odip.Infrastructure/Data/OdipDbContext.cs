@@ -69,6 +69,8 @@ public class OdipDbContext : DbContext
     public DbSet<IncidentInjury> IncidentInjuries => Set<IncidentInjury>();
     /// <summary>IN-7: see <see cref="Entities.IncidentWitness"/>'s type doc.</summary>
     public DbSet<IncidentWitness> IncidentWitnesses => Set<IncidentWitness>();
+    /// <summary>Caregiver profile form: see <see cref="Entities.CaregiverProfileSubmission"/>.</summary>
+    public DbSet<CaregiverProfileSubmission> CaregiverProfileSubmissions => Set<CaregiverProfileSubmission>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<TripClaim> TripClaims => Set<TripClaim>();
     public DbSet<ClaimLineItem> ClaimLineItems => Set<ClaimLineItem>();
@@ -615,6 +617,37 @@ public class OdipDbContext : DbContext
 
             e.HasIndex(x => x.IncidentReportId);
             e.HasIndex(x => x.WitnessUserId);
+        });
+
+        // ── CaregiverProfileSubmission (caregiver profile form) ──
+        modelBuilder.Entity<CaregiverProfileSubmission>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CaregiverName).HasMaxLength(300);
+            e.Property(x => x.CaregiverRelationship).HasMaxLength(100);
+            e.Property(x => x.Payload).HasColumnType("jsonb");
+            e.Property(x => x.RejectionNote).HasMaxLength(4000);
+
+            e.HasOne(x => x.Participant)
+                .WithMany()
+                .HasForeignKey(x => x.ParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.TenantId);
+
+            // One ACTIVE link per participant, enforced at the database. Status ints:
+            // Draft = 0, Submitted = 1 (see CaregiverSubmissionStatus).
+            e.HasIndex(x => x.ParticipantId)
+                .IsUnique()
+                .HasDatabaseName("IX_CaregiverProfileSubmissions_ParticipantId_Active")
+                .HasFilter("\"Status\" IN (0, 1)");
         });
 
         // ── User ─────────────────────────────────────────────────
@@ -1364,6 +1397,11 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Participant>()
             .HasIndex(e => e.TenantId);
+
+        // TenantId index for CaregiverProfileSubmission is declared on its own configuration
+        // block above, so only the query filter is added here.
+        modelBuilder.Entity<CaregiverProfileSubmission>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<Vehicle>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
