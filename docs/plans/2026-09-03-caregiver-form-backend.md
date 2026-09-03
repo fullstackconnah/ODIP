@@ -1090,7 +1090,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Consumes: `ParticipantPatchApplier.ApplyAsync` (Task 1), `CaregiverTokenService`, DTOs (Task 6), `IConfiguration["Caregiver:LinkExpiryDays"]` (default 14).
 - Produces the six admin endpoints in the spec §3. For cg01, `Accept` applies the payload **unsanitised** — Task 12 adds the sanitiser call. `Get` returns `Current = new JsonObject()` — Task 11 fills it.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 Mirror `IncidentsControllerTests`' tenant-scoped helper. Key tests:
 
@@ -1213,11 +1213,11 @@ public void IsRoleGated_AdminCoordinatorSuperAdmin()
 
 Write `CreateTenantDb`, `SeedParticipant`, `SeedSubmission(db, tenantId, participantId, status, PatchParticipantDto? payload = null)` and `MakeController(db, tenantId, userId)` helpers inline. `MakeController` must set a `ClaimsPrincipal` with a `sub`/`NameIdentifier` claim equal to `userId` on `ControllerContext.HttpContext.User` — read how `PortalControllerTests.MakeController` fakes the current user and copy that.
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverSubmissionsControllerTests"` → build error.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Security.Claims;
@@ -1402,7 +1402,7 @@ public class CaregiverSubmissionsController : ControllerBase
 
 `ParticipantPatchApplier.ApplyAsync` saves changes itself (it moved the `SaveChangesAsync`), so the subsequent status update is a second save — that is fine and keeps the applier's contract identical to the original action.
 
-- [ ] **Step 4: Run tests, full suite, commit**
+- [x] **Step 4: Run tests, full suite, commit**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverSubmissionsControllerTests"` → all pass.
 Run: `dotnet test` → `Failed: 0`.
