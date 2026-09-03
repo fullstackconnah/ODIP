@@ -649,4 +649,216 @@ public class PortalControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // IN-7: witness requests — medication + incident merge
+    // ══════════════════════════════════════════════════════════════
+
+    private static IncidentReport SeedIncident(OdipDbContext db, Guid reportedByUserId, Guid? participantId = null, string title = "Slip in hallway")
+    {
+        var incident = new IncidentReport
+        {
+            Id = Guid.NewGuid(),
+            ReportedByUserId = reportedByUserId,
+            InvolvedParticipantId = participantId,
+            IncidentType = IncidentType.PropertyDamage,
+            Severity = IncidentSeverity.Medium,
+            Title = title,
+            Description = "Something happened.",
+            IncidentDateTime = DateTime.UtcNow.AddHours(-2),
+        };
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+        return incident;
+    }
+
+    private static IncidentWitness SeedIncidentWitness(
+        OdipDbContext db, Guid incidentReportId, Guid? witnessUserId, string witnessName = "Priya Nair",
+        WitnessStatus status = WitnessStatus.Pending)
+    {
+        var witness = new IncidentWitness
+        {
+            Id = Guid.NewGuid(),
+            IncidentReportId = incidentReportId,
+            WitnessUserId = witnessUserId,
+            WitnessName = witnessName,
+            WitnessStatus = status,
+            WitnessRequestedAt = witnessUserId.HasValue ? DateTime.UtcNow.AddHours(-1) : null,
+        };
+        db.IncidentWitnesses.Add(witness);
+        db.SaveChanges();
+        return witness;
+    }
+
+    private static MedicationAdministration SeedMedicationWitnessRequest(OdipDbContext db, Guid witnessUserId, Guid participantId)
+    {
+        // A dangling ParticipantMedicationId (no matching row) would make GetWitnessRequests'
+        // .Include(a => a.ParticipantMedication) — a required navigation — inner-join the row
+        // away entirely, so a real ParticipantMedication must exist for this test to be valid.
+        var medication = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Paracetamol",
+            Form = MedicationForm.Tablet, Route = MedicationRoute.Oral, DoseDescription = "500mg",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            SupportLevel = MedicationSupportLevel.Assist,
+        };
+        db.ParticipantMedications.Add(medication);
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(),
+            ParticipantId = participantId,
+            ParticipantMedicationId = medication.Id,
+            RecordedByName = "Someone Else",
+            Status = MedicationAdministrationStatus.Administered,
+            WitnessUserId = witnessUserId,
+            WitnessStatus = WitnessStatus.Pending,
+            WitnessRequestedAt = DateTime.UtcNow.AddHours(-1),
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        return admin;
+    }
+
+    [Fact]
+    public async Task GetWitnessRequests_MergesMedicationAndIncidentRowsDiscriminated()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        SeedMedicationWitnessRequest(db, myUser.Id, participant.Id);
+        var incident = SeedIncident(db, reporter.Id, participant.Id);
+        SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.GetWitnessRequests(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<PortalWitnessRequestDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Contains(body.Data, r => r.SourceType == "Medication");
+        Assert.Contains(body.Data, r => r.SourceType == "Incident" && r.IncidentReportId == incident.Id && r.IncidentTitle == incident.Title);
+    }
+
+    [Fact]
+    public async Task GetWitnessRequests_ExcludesIncidentRowsNotPendingOrBelongingToSomeoneElse()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var otherUser = SeedUser(db, "Cara", "Lee");
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        SeedIncidentWitness(db, incident.Id, myUser.Id, status: WitnessStatus.Approved); // already responded
+        SeedIncidentWitness(db, incident.Id, otherUser.Id); // someone else's request
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.GetWitnessRequests(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<PortalWitnessRequestDto>>>(ok.Value);
+        Assert.Empty(body.Data!);
+    }
+
+    [Fact]
+    public async Task ApproveIncidentWitnessRequest_NamedWitness_SetsApprovedAndOptionalStatement()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.ApproveIncidentWitnessRequest(
+            witness.Id, new PortalRespondIncidentWitnessRequestDto("I confirm I saw this."), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalWitnessRequestDto>>(ok.Value);
+        Assert.Equal(WitnessStatus.Approved, body.Data!.WitnessStatus);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Equal(WitnessStatus.Approved, reloaded.WitnessStatus);
+        Assert.NotNull(reloaded.WitnessRespondedAt);
+        Assert.Equal("I confirm I saw this.", reloaded.StatementText);
+    }
+
+    [Fact]
+    public async Task ApproveIncidentWitnessRequest_NoStatementProvided_LeavesStatementNull()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.ApproveIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Null(reloaded.StatementText);
+    }
+
+    [Fact]
+    public async Task DeclineIncidentWitnessRequest_NamedWitness_SetsDeclined()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.DeclineIncidentWitnessRequest(
+            witness.Id, new PortalRespondIncidentWitnessRequestDto("Wasn't actually there."), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Equal(WitnessStatus.Declined, reloaded.WitnessStatus);
+        Assert.Equal("Wasn't actually there.", reloaded.StatementText);
+    }
+
+    [Fact]
+    public async Task ApproveIncidentWitnessRequest_NotTheNamedWitness_Returns404()
+    {
+        var (db, tenant) = CreateDb();
+        var namedWitness = SeedUser(db, "Priya", "Nair");
+        var impersonator = SeedUser(db, "Cara", "Lee");
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var witness = SeedIncidentWitness(db, incident.Id, namedWitness.Id);
+        var controller = MakeController(db, tenant.Object, impersonator.Id);
+
+        var result = await controller.ApproveIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Equal(WitnessStatus.Pending, reloaded.WitnessStatus);
+    }
+
+    [Fact]
+    public async Task ApproveIncidentWitnessRequest_NonexistentId_Returns404()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.ApproveIncidentWitnessRequest(Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task ApproveIncidentWitnessRequest_AlreadyResponded_ReturnsBadRequest()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id, status: WitnessStatus.Approved);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        var result = await controller.DeclineIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
 }

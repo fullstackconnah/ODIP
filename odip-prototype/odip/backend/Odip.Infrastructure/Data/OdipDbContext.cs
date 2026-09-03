@@ -65,6 +65,8 @@ public class OdipDbContext : DbContext
     public DbSet<IncidentReport> IncidentReports => Set<IncidentReport>();
     /// <summary>IN-5: see <see cref="Entities.IncidentInjury"/>'s type doc.</summary>
     public DbSet<IncidentInjury> IncidentInjuries => Set<IncidentInjury>();
+    /// <summary>IN-7: see <see cref="Entities.IncidentWitness"/>'s type doc.</summary>
+    public DbSet<IncidentWitness> IncidentWitnesses => Set<IncidentWitness>();
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<TripClaim> TripClaims => Set<TripClaim>();
     public DbSet<ClaimLineItem> ClaimLineItems => Set<ClaimLineItem>();
@@ -586,6 +588,31 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => x.IncidentReportId);
+        });
+
+        // ── IncidentWitness (IN-7) ───────────────────────────────
+        modelBuilder.Entity<IncidentWitness>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.WitnessName).HasMaxLength(300).IsRequired();
+            e.Property(x => x.StatementText).HasMaxLength(4000);
+
+            // Cascade: same as IncidentInjury — a witness row has no meaning once its parent
+            // incident is gone.
+            e.HasOne(x => x.IncidentReport)
+                .WithMany(i => i.Witnesses)
+                .HasForeignKey(x => x.IncidentReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Restrict: mirrors MedicationAdministration.WitnessUserId's own FK behaviour — don't
+            // cascade-delete a witness record if a user row is ever removed.
+            e.HasOne(x => x.WitnessUser)
+                .WithMany()
+                .HasForeignKey(x => x.WitnessUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(x => x.IncidentReportId);
+            e.HasIndex(x => x.WitnessUserId);
         });
 
         // ── User ─────────────────────────────────────────────────

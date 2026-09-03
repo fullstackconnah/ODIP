@@ -20,10 +20,8 @@ export type IncidentDetailsStepProps = {
  * here, gated on incidentType === 'Injury' — the injuries[] field array backing it is owned by
  * this step since it lives in the same schema slice (STEP_DETAILS_FIELDS includes 'injuries').
  *
- * witnessNames/witnessStatements (free text) stay here, unchanged, as the clean seam IN-7 (a
- * later branch, out of this one's scope) will replace with the full witnesses[] entity — the
- * backlog's own wizard structure moves them to a dedicated Witnesses step, which this branch was
- * explicitly asked not to build.
+ * The old free-text witnessNames/witnessStatements fields that used to sit here have moved to
+ * IN-7's dedicated Witnesses step (WitnessesStep.tsx), replaced by the full witnesses[] entity.
  */
 export function IncidentDetailsStep({ register, control, errors, incidentType, wereEmergencyServicesCalled }: IncidentDetailsStepProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'injuries' })
@@ -70,17 +68,6 @@ export function IncidentDetailsStep({ register, control, errors, incidentType, w
           />
         </Card>
       )}
-
-      {/* IN-7 seam: free-text witnesses, unchanged pending the dedicated Witnesses step. */}
-      <Card title="Witnesses" className="md:col-span-2 space-y-4">
-        <FormField label="Witness Names">
-          <input {...register('witnessNames')} placeholder="Names of witnesses (comma-separated)" />
-        </FormField>
-
-        <FormField label="Witness Statements">
-          <textarea {...register('witnessStatements')} rows={3} placeholder="Summary of witness accounts..." />
-        </FormField>
-      </Card>
     </div>
   )
 }

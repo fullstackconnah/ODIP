@@ -118,12 +118,14 @@ async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>,
   await clickNext(user)
 }
 
-/** Fills Incident Details' two required fields (description, date/time) and clicks Next —
- * lands on Review (create mode) or Review & Compliance (edit mode). */
+/** Fills Incident Details' two required fields (description, date/time) and clicks Next twice —
+ * once off Incident Details onto the (always-optional, so immediately-passable) Witnesses step,
+ * once more off Witnesses — landing on Review (create mode) or Review & Compliance (edit mode). */
 async function fillDetailsMinimallyAndNext(user: ReturnType<typeof userEvent.setup>, description = 'Details here') {
   await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), description)
   await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
-  await clickNext(user)
+  await clickNext(user) // Incident Details -> Witnesses
+  await clickNext(user) // Witnesses -> Review (or Review & Compliance)
 }
 
 /** IN-5: adds one injury row via BodyDiagram's always-available button list — required before
@@ -348,7 +350,8 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     // Every Basics-required field (title/reportedBy/incidentType/severity) arrived pre-filled —
     // Next succeeds immediately, same for Incident Details' description/incidentDateTime.
     await clickNext(user) // Basics -> Incident Details
-    await clickNext(user) // Incident Details -> Review
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
@@ -429,7 +432,8 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     await clickNext(user) // Basics -> Incident Details
     // Falls -> Injury: at least one injury row is required before Next succeeds.
     await addMinimalInjury(user)
-    await clickNext(user) // Incident Details -> Review
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
@@ -454,9 +458,10 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     mockApiPost.mockRejectedValue(new Error('network error'))
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
-    await clickNext(user)
+    await clickNext(user) // Basics -> Incident Details
     await addMinimalInjury(user)
-    await clickNext(user)
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
@@ -616,7 +621,8 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     await clickNext(user) // Restrictive Practice -> Incident Details
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), ' Details here')
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
-    await clickNext(user) // Incident Details -> Review
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
 
     await user.click(screen.getByRole('button', { name: /submit incident report/i }))
 
@@ -791,5 +797,168 @@ describe('IncidentCreatePage — IN-3 reportedByStaffId defaults to the signed-i
     const options = screen.getAllByRole('option', { name: 'Alex Rivera' })
     expect(options[0]).toHaveAttribute('aria-selected', 'false')
     expect(options[1]).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+// IN-7: the dedicated Witnesses step, replacing the old free-text witnessNames/witnessStatements
+// pair — a single witnesses[] list mixing approvable staff rows and free-text external rows.
+describe('IncidentCreatePage — IN-7 Witnesses step', () => {
+  /** Reaches the Witnesses step (one Next click past Incident Details) without skipping over it
+   * the way fillDetailsMinimallyAndNext deliberately does for tests that don't care about it. */
+  async function reachWitnessesStep(user: ReturnType<typeof userEvent.setup>, opts: Parameters<typeof fillBasicsMinimallyAndNext>[1] = {}) {
+    await fillBasicsMinimallyAndNext(user, opts)
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Details here')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user) // Incident Details -> Witnesses
+  }
+
+  it('renders the Witnesses step with an add-row control and an empty table', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await reachWitnessesStep(user)
+
+    expect(screen.getByRole('heading', { name: 'Witnesses' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+    expect(screen.getByText('No witnesses added yet')).toBeInTheDocument()
+  })
+
+  it('excludes the current reporter from the staff witness picker', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    // fillBasicsMinimallyAndNext selects the FIRST 'Alex Rivera' option, which is staff-1.
+    await reachWitnessesStep(user)
+
+    await user.click(screen.getByLabelText('Staff member'))
+    const options = screen.getAllByRole('option', { name: 'Alex Rivera' })
+    expect(options).toHaveLength(1) // only staff-3 remains selectable
+  })
+
+  it('adds a staff witness, showing a Staff badge and a not-yet-submitted hint', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    await user.click(screen.getByLabelText('Staff member'))
+    await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(screen.getByText('Staff')).toBeInTheDocument()
+    expect(screen.getByText(/will be asked to approve after this report is submitted/i)).toBeInTheDocument()
+  })
+
+  it('adds an external witness via free text, showing an External badge and no status hint', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    await user.click(screen.getByRole('radio', { name: 'Someone else' }))
+    await user.type(screen.getByLabelText('Name'), 'Jamie Passerby')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(screen.getByText('Jamie Passerby')).toBeInTheDocument()
+    expect(screen.getByText('External')).toBeInTheDocument()
+    expect(screen.queryByText(/will be asked to approve/i)).not.toBeInTheDocument()
+  })
+
+  it('removes a witness row', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    await user.click(screen.getByRole('radio', { name: 'Someone else' }))
+    await user.type(screen.getByLabelText('Name'), 'Jamie Passerby')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByText('Jamie Passerby')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove witness' }))
+
+    expect(screen.queryByText('Jamie Passerby')).not.toBeInTheDocument()
+    expect(screen.getByText('No witnesses added yet')).toBeInTheDocument()
+  })
+
+  it('submits with both a staff and an external witness in the payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    await user.click(screen.getByLabelText('Staff member'))
+    await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('radio', { name: 'Someone else' }))
+    await user.type(screen.getByLabelText('Name'), 'Jamie Passerby')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    await clickNext(user) // Witnesses -> Review
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.witnesses).toEqual([
+      { id: undefined, witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
+      { id: undefined, witnessUserId: null, witnessName: 'Jamie Passerby' },
+    ])
+  })
+
+  it('submits with an empty witnesses array when none are added (optional, matching today\'s form)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    await clickNext(user) // Witnesses -> Review
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0].witnesses).toEqual([])
+  })
+
+  // Edit mode: a witness who has already responded must show their live status, and resubmitting
+  // the form unmodified must echo their persisted id back so the backend preserves it (rather
+  // than resetting to Pending) — see IncidentsController.Update's own regression coverage for the
+  // server-side half of this contract.
+  describe('edit mode — approval status display and preservation', () => {
+    const existingIncidentWithWitnesses = {
+      id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
+      severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+      location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+      involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+      participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
+      immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+      witnessNames: null, witnessStatements: null, injuries: [],
+      witnesses: [
+        { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera', isStaffWitness: true, witnessStatus: 'Approved', witnessRequestedAt: '2026-08-01T09:00:00Z', witnessRespondedAt: '2026-08-01T10:00:00Z', statementText: 'I saw it.' },
+      ],
+      qscReportedAt: null, qscReferenceNumber: null,
+      reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+      resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+      supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+    }
+
+    it('shows the persisted witness\'s live approval status, not the unsubmitted hint', async () => {
+      mockUseIncident.mockReturnValue({ data: existingIncidentWithWitnesses })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Witnesses$/i }))
+
+      expect(screen.getByText('Approved')).toBeInTheDocument()
+      expect(screen.queryByText(/will be asked to approve/i)).not.toBeInTheDocument()
+    })
+
+    it('echoes the persisted witness id back on an unmodified resubmit, so the server can preserve its Approved status', async () => {
+      mockUseIncident.mockReturnValue({ data: existingIncidentWithWitnesses })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload.witnesses).toEqual([
+        { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
+      ])
+    })
   })
 })

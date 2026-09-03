@@ -71,6 +71,11 @@ public class IncidentsController : ControllerBase
         // outright rather than silently picking one side to honour.
         if (dto.RestrictivePracticeId.HasValue && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
             return "An incident cannot both link an approved restrictive practice and describe an unapproved one.";
+        // IN-7: a nominated staff witness must not be the incident's own reporter — mirrors the
+        // medication witness flow's own self-witness rule, adapted to this form's equivalent
+        // identity (the reporter, not an "administerer").
+        if (dto.Witnesses.Any(w => w.WitnessUserId.HasValue && w.WitnessUserId.Value == dto.ReportedByStaffId))
+            return "A staff member cannot witness their own incident report.";
         return null;
     }
 
@@ -95,6 +100,21 @@ public class IncidentsController : ControllerBase
             return "Linked restrictive practice entry does not belong to the involved participant.";
         if (rpType.HasValue && practice.Type != rpType.Value)
             return "Linked restrictive practice entry does not match the selected restrictive practice type.";
+        return null;
+    }
+
+    /// <summary>
+    /// IN-7: every nominated staff witness (WitnessUserId set) must resolve to an active User —
+    /// same tenant-scoped check as <see cref="IsValidUserRefAsync"/>, applied per-row. Returns an
+    /// error message, or null when every row passes.
+    /// </summary>
+    private async Task<string?> ValidateWitnessesAsync(List<CreateIncidentWitnessDto> witnesses, CancellationToken ct)
+    {
+        foreach (var w in witnesses)
+        {
+            if (w.WitnessUserId.HasValue && !await IsValidUserRefAsync(w.WitnessUserId, ct))
+                return "One of the nominated staff witnesses was not found.";
+        }
         return null;
     }
 
@@ -179,6 +199,7 @@ public class IncidentsController : ControllerBase
             .Include(i => i.ReviewedByUser)
             .Include(i => i.RestrictivePractice)
             .Include(i => i.Injuries)
+            .Include(i => i.Witnesses).ThenInclude(w => w.WitnessUser)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -227,6 +248,17 @@ public class IncidentsController : ControllerBase
                     InjuryType = inj.InjuryType,
                     Description = inj.Description
                 }).ToList(),
+                Witnesses = i.Witnesses.Select(w => new IncidentWitnessDto
+                {
+                    Id = w.Id,
+                    WitnessUserId = w.WitnessUserId,
+                    WitnessName = w.WitnessName,
+                    IsStaffWitness = w.WitnessUserId != null,
+                    WitnessStatus = w.WitnessStatus,
+                    WitnessRequestedAt = w.WitnessRequestedAt,
+                    WitnessRespondedAt = w.WitnessRespondedAt,
+                    StatementText = w.StatementText,
+                }).ToList(),
                 QscReportedAt = i.QscReportedAt,
                 QscReferenceNumber = i.QscReferenceNumber,
                 ReviewedByStaffId = i.ReviewedByUserId,
@@ -263,6 +295,9 @@ public class IncidentsController : ControllerBase
         var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
         if (rpLinkError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
+        var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
+        if (witnessError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
 
         // INC-04: determined once here, from the register as it stood right now — see
         // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
@@ -329,6 +364,25 @@ public class IncidentsController : ControllerBase
             });
         }
 
+        // IN-7: every witness submitted with a new incident is a fresh row — a staff witness
+        // (WitnessUserId set) starts Pending with WitnessRequestedAt stamped now (surfaces on the
+        // nominated user's portal witness-requests list); a free-text/external witness has
+        // nothing to approve, so it starts NotRequired.
+        var now = DateTime.UtcNow;
+        foreach (var witness in dto.Witnesses)
+        {
+            var isStaff = witness.WitnessUserId.HasValue;
+            _db.IncidentWitnesses.Add(new IncidentWitness
+            {
+                Id = Guid.NewGuid(),
+                IncidentReportId = incident.Id,
+                WitnessUserId = witness.WitnessUserId,
+                WitnessName = witness.WitnessName.Trim(),
+                WitnessStatus = isStaff ? WitnessStatus.Pending : WitnessStatus.NotRequired,
+                WitnessRequestedAt = isStaff ? now : null,
+            });
+        }
+
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
@@ -380,6 +434,9 @@ public class IncidentsController : ControllerBase
         var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
         if (rpLinkError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
+        var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
+        if (witnessError != null)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
 
         i.ServiceType = dto.ServiceType;
         i.TripInstanceId = dto.TripInstanceId;
@@ -446,6 +503,44 @@ public class IncidentsController : ControllerBase
                 InjuryType = injury.InjuryType,
                 Description = injury.Description.Trim(),
             });
+        }
+
+        // IN-7: NOT a straightforward full-replace like Injuries above — a witness who has already
+        // Approved/Declined carries state the reporter does not own, and resubmitting the full
+        // witnesses list must never silently reset it back to Pending. Match incoming rows to
+        // existing ones by Id: a row with no Id (or an Id that doesn't match anything persisted) is
+        // a newly-added witness, inserted fresh exactly like Create does; a row matched by Id keeps
+        // its existing WitnessStatus/WitnessRequestedAt/WitnessRespondedAt/StatementText untouched —
+        // only WitnessName is updatable (mirrors the medication amend flow's "amending only edits
+        // the legacy free-text name" convention). A persisted row whose Id is absent from the
+        // submitted list has been deliberately removed by the reporter and is deleted.
+        var existingWitnesses = await _db.IncidentWitnesses.Where(x => x.IncidentReportId == id).ToListAsync(ct);
+        var submittedIds = dto.Witnesses.Where(w => w.Id.HasValue).Select(w => w.Id!.Value).ToHashSet();
+        var toDelete = existingWitnesses.Where(x => !submittedIds.Contains(x.Id)).ToList();
+        _db.IncidentWitnesses.RemoveRange(toDelete);
+
+        var updateNow = DateTime.UtcNow;
+        foreach (var witness in dto.Witnesses)
+        {
+            var existing = witness.Id.HasValue ? existingWitnesses.FirstOrDefault(x => x.Id == witness.Id.Value) : null;
+            if (existing != null)
+            {
+                // Matched by id — preserve everything but the display name.
+                existing.WitnessName = witness.WitnessName.Trim();
+            }
+            else
+            {
+                var isStaff = witness.WitnessUserId.HasValue;
+                _db.IncidentWitnesses.Add(new IncidentWitness
+                {
+                    Id = Guid.NewGuid(),
+                    IncidentReportId = i.Id,
+                    WitnessUserId = witness.WitnessUserId,
+                    WitnessName = witness.WitnessName.Trim(),
+                    WitnessStatus = isStaff ? WitnessStatus.Pending : WitnessStatus.NotRequired,
+                    WitnessRequestedAt = isStaff ? updateNow : null,
+                });
+            }
         }
 
         await _db.SaveChangesAsync(ct);

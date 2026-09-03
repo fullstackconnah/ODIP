@@ -39,10 +39,19 @@ export const incidentBaseSchema = z.object({
     injuryType: z.string().min(1, 'Injury type is required'),
     description: z.string().min(1, 'Description is required'),
   })).optional().default([]),
-  // IN-7 (a later branch) will replace these two free-text fields with the full witnesses[]
-  // entity — left here, unchanged, as the clean seam this branch was asked not to build past.
-  witnessNames: z.string().optional(),
-  witnessStatements: z.string().optional(),
+
+  // Step 3 — Witnesses (IN-7). Replaces the old free-text witnessNames/witnessStatements pair —
+  // one witnessUserId (staff, approvable) or witnessName-only (external, not approvable) row per
+  // entry. `existingId` (deliberately NOT named `id` — useFieldArray injects its own `id` onto
+  // every field object, which would silently shadow a schema field of the same name) is set only
+  // when echoing back an already-persisted row on Update, so the backend can preserve that row's
+  // approval state instead of resetting it to Pending — see WitnessesStep's own doc comment. None
+  // of this is required — witnesses are optional, matching today's form.
+  witnesses: z.array(z.object({
+    existingId: z.string().optional(),
+    witnessUserId: z.string().nullable(),
+    witnessName: z.string().min(1, 'Name is required'),
+  })).optional().default([]),
 
   participantBookingId: z.string().optional(),
 
@@ -81,7 +90,10 @@ export const STEP_RESTRICTIVE_PRACTICE_FIELDS = [
 export const STEP_DETAILS_FIELDS = [
   'incidentDateTime', 'location', 'description', 'immediateActionsTaken',
   'wereEmergencyServicesCalled', 'emergencyServicesDetails', 'injuries',
-  'witnessNames', 'witnessStatements',
+] as const satisfies readonly (keyof IncidentFormData)[]
+
+export const STEP_WITNESSES_FIELDS = [
+  'witnesses',
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_COMPLIANCE_FIELDS = [
@@ -154,6 +166,11 @@ export const restrictivePracticeSchema = incidentBaseSchema
 export const detailsSchema = incidentBaseSchema
   .pick({ ...pickShape(STEP_DETAILS_FIELDS), incidentType: true })
   .superRefine(detailsRefine)
+
+// IN-7: no cross-field refine needed — a witness row's own `witnessName` non-empty check is
+// already enforced by the array item schema above, and the array itself is optional (zero
+// witnesses is valid, matching today's form).
+export const witnessesSchema = incidentBaseSchema.pick(pickShape(STEP_WITNESSES_FIELDS))
 
 export const complianceSchema = incidentBaseSchema.pick(pickShape(STEP_COMPLIANCE_FIELDS))
 

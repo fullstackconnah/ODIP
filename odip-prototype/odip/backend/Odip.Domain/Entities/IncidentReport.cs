@@ -111,6 +111,14 @@ public class IncidentReport
     /// </summary>
     public List<IncidentInjury> Injuries { get; set; } = new();
 
+    /// <summary>
+    /// IN-7: witnesses to this incident — staff (approvable, <see cref="IncidentWitness.WitnessUserId"/>
+    /// set) and free-text external witnesses (not approvable) coexist in this one collection. See
+    /// <see cref="IncidentWitness"/> for the approval mechanism and its Update preserve-by-id
+    /// contract (NOT a straightforward full-replace like <see cref="Injuries"/>).
+    /// </summary>
+    public List<IncidentWitness> Witnesses { get; set; } = new();
+
     // QSC compliance
     public QscReportingStatus QscReportingStatus { get; set; } = QscReportingStatus.NotRequired;
     public DateTime? QscReportedAt { get; set; }

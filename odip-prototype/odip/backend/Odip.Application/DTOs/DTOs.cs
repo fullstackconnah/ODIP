@@ -1942,6 +1942,8 @@ public record IncidentDetailDto : IncidentListDto
     public string? WitnessStatements { get; init; }
     /// <summary>IN-5: recorded injuries, populated only when <see cref="IncidentListDto.IncidentType"/> is <see cref="IncidentType.Injury"/> (empty list otherwise).</summary>
     public List<IncidentInjuryDto> Injuries { get; init; } = new();
+    /// <summary>IN-7: witnesses — staff (approvable) and free-text external witnesses in one list. See <see cref="Entities.IncidentWitness"/>.</summary>
+    public List<IncidentWitnessDto> Witnesses { get; init; } = new();
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
     public Guid? ReviewedByStaffId { get; init; }
@@ -2011,6 +2013,16 @@ public record CreateIncidentDto
     /// <see cref="Entities.IncidentInjury"/>'s type doc).
     /// </summary>
     public List<CreateIncidentInjuryDto> Injuries { get; init; } = new();
+
+    /// <summary>
+    /// IN-7: repeatable witness rows — staff (<see cref="CreateIncidentWitnessDto.WitnessUserId"/>
+    /// set) and free-text external witnesses coexist in this one list. On Create every row is
+    /// inserted fresh. On Update, a row whose <see cref="CreateIncidentWitnessDto.Id"/> matches an
+    /// existing persisted witness has its already-set approval state preserved (see
+    /// <see cref="IncidentsController.Update"/>) — only a row with no <see cref="CreateIncidentWitnessDto.Id"/>
+    /// is treated as newly added.
+    /// </summary>
+    public List<CreateIncidentWitnessDto> Witnesses { get; init; } = new();
 }
 
 /// <summary>IN-5: one submitted injury row — see <see cref="Entities.IncidentInjury"/>.</summary>
@@ -2029,6 +2041,40 @@ public record IncidentInjuryDto
     public BodyRegion Region { get; init; }
     public InjuryType InjuryType { get; init; }
     public string Description { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// IN-7: one submitted witness row. <see cref="Id"/> is null/omitted for a newly-added witness
+/// (Create, or a row added during an edit) and set to an existing <see cref="Entities.IncidentWitness.Id"/>
+/// when the frontend is echoing back an already-persisted row on Update — see
+/// <see cref="IncidentsController.Update"/> for why that distinction matters (preserving an
+/// already-responded row's approval state rather than resetting it to Pending).
+/// </summary>
+public record CreateIncidentWitnessDto
+{
+    public Guid? Id { get; init; }
+    /// <summary>Set for a staff witness — must resolve to an active User, and must not equal the
+    /// incident's own ReportedByStaffId (self-witness is rejected, mirroring the medication
+    /// witness flow's own rule). Null for a free-text/external witness.</summary>
+    public Guid? WitnessUserId { get; init; }
+    [Required, StringLength(300, MinimumLength = 1)]
+    public string WitnessName { get; init; } = string.Empty;
+}
+
+/// <summary>IN-7: one persisted witness row, as returned by <c>GET /incidents/{id}</c>.</summary>
+public record IncidentWitnessDto
+{
+    public Guid Id { get; init; }
+    public Guid? WitnessUserId { get; init; }
+    public string WitnessName { get; init; } = string.Empty;
+    /// <summary>True when this is a staff witness (<see cref="WitnessUserId"/> set) — drives the
+    /// frontend's Staff/External type badge.</summary>
+    public bool IsStaffWitness { get; init; }
+    public WitnessStatus WitnessStatus { get; init; }
+    public DateTime? WitnessRequestedAt { get; init; }
+    public DateTime? WitnessRespondedAt { get; init; }
+    /// <summary>Optional, supplied by the witness themself at approval/decline time — see <see cref="Entities.IncidentWitness.StatementText"/>.</summary>
+    public string? StatementText { get; init; }
 }
 
 public record UpdateIncidentDto : CreateIncidentDto

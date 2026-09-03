@@ -80,3 +80,23 @@ export function useDeclineWitnessRequest() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-witness-requests'] }),
   })
 }
+
+// IN-7: incident-side counterparts — a different table, and an optional witness statement the
+// medication flow has no equivalent for.
+export function useApproveIncidentWitnessRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, statementText }: { id: string; statementText?: string }) =>
+      apiPostRaw<PortalWitnessRequestDto>(`/portal/incident-witness-requests/${id}/approve`, { statementText }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-witness-requests'] }),
+  })
+}
+
+export function useDeclineIncidentWitnessRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, statementText }: { id: string; statementText?: string }) =>
+      apiPostRaw<PortalWitnessRequestDto>(`/portal/incident-witness-requests/${id}/decline`, { statementText }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-witness-requests'] }),
+  })
+}

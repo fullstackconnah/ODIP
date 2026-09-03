@@ -33,12 +33,13 @@ import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
 import {
   incidentResolver, type IncidentFormData,
-  basicsSchema, restrictivePracticeSchema, detailsSchema, complianceSchema,
-  STEP_BASICS_FIELDS, STEP_RESTRICTIVE_PRACTICE_FIELDS, STEP_DETAILS_FIELDS, STEP_COMPLIANCE_FIELDS,
+  basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
+  STEP_BASICS_FIELDS, STEP_RESTRICTIVE_PRACTICE_FIELDS, STEP_DETAILS_FIELDS, STEP_WITNESSES_FIELDS, STEP_COMPLIANCE_FIELDS,
 } from './incidents/incidentFormSchema'
 import { BasicsStep } from './incidents/steps/BasicsStep'
 import { RestrictivePracticeStep } from './incidents/steps/RestrictivePracticeStep'
 import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
+import { WitnessesStep } from './incidents/steps/WitnessesStep'
 import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
 
@@ -50,6 +51,7 @@ const STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
   basics: basicsSchema,
   restrictivePractice: restrictivePracticeSchema,
   details: detailsSchema,
+  witnesses: witnessesSchema,
   compliance: complianceSchema,
 }
 
@@ -66,8 +68,7 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
     steps.push({ key: 'restrictivePractice', label: 'Restrictive Practice', fields: STEP_RESTRICTIVE_PRACTICE_FIELDS })
   }
   steps.push({ key: 'details', label: 'Incident Details', fields: STEP_DETAILS_FIELDS })
-  // (Witnesses is IN-7, a later branch — deliberately not in this list; see IncidentDetailsStep's
-  // own doc comment for the free-text seam it leaves in the meantime.)
+  steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
   if (isEdit) {
     steps.push({ key: 'compliance', label: 'Review & Compliance', fields: STEP_COMPLIANCE_FIELDS })
   }
@@ -109,9 +110,11 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       immediateActionsTaken: i.immediateActionsTaken ?? '',
       wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
       emergencyServicesDetails: i.emergencyServicesDetails ?? '',
-      witnessNames: i.witnessNames ?? '',
-      witnessStatements: i.witnessStatements ?? '',
       injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
+      // IN-7: existingId carries the persisted witness id forward so Update can match rows by id
+      // and preserve an already-Approved/Declined row's status — see incidentFormSchema's doc
+      // comment on why this is NOT named `id` (useFieldArray reserves that name).
+      witnesses: (i.witnesses ?? []).map((w) => ({ existingId: w.id, witnessUserId: w.witnessUserId, witnessName: w.witnessName })),
       status: i.status ?? 'Draft',
       qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
       qscReferenceNumber: i.qscReferenceNumber ?? '',
@@ -135,6 +138,7 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
     familyNotified: false,
     supportCoordinatorNotified: false,
     injuries: [],
+    witnesses: [],
     // IN-3: defaults to the signed-in user — a DEFAULT, not a lock. The reporter can still pick
     // someone else. Falls back to '' (today's untouched behaviour) when there's no resolvable
     // signed-in user id.
@@ -207,6 +211,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
+  const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
   // a native input register() can bind to, so it's tracked the same way: watched here, written
   // back via setValue on change.
@@ -257,9 +262,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         immediateActionsTaken: i.immediateActionsTaken ?? '',
         wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
         emergencyServicesDetails: i.emergencyServicesDetails ?? '',
-        witnessNames: i.witnessNames ?? '',
-        witnessStatements: i.witnessStatements ?? '',
         injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
+        witnesses: (i.witnesses ?? []).map((w) => ({ existingId: w.id, witnessUserId: w.witnessUserId, witnessName: w.witnessName })),
         status: i.status ?? 'Draft',
         qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
         qscReferenceNumber: i.qscReferenceNumber ?? '',
@@ -299,6 +303,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       familyNotified: false,
       supportCoordinatorNotified: false,
       injuries: [],
+      witnesses: [],
     })
   }, [marPrefill, reset])
 
@@ -323,6 +328,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       familyNotified: false,
       supportCoordinatorNotified: false,
       injuries: [],
+      witnesses: [],
     })
   }, [shiftNotePrefill, reset])
 
@@ -383,9 +389,15 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       immediateActionsTaken: data.immediateActionsTaken || undefined,
       wereEmergencyServicesCalled: data.wereEmergencyServicesCalled ?? false,
       emergencyServicesDetails: data.emergencyServicesDetails || undefined,
-      witnessNames: data.witnessNames || undefined,
-      witnessStatements: data.witnessStatements || undefined,
       injuries: data.incidentType === 'Injury' ? (data.injuries as CreateIncidentDto['injuries']) : [],
+      // IN-7: existingId (set only for a row echoed back from a persisted incident) becomes the
+      // wire-format `id` the backend matches on to preserve an already-Approved/Declined row —
+      // see incidentFormSchema's doc comment for why the form field isn't itself named `id`.
+      witnesses: (data.witnesses ?? []).map((w) => ({
+        id: w.existingId,
+        witnessUserId: w.witnessUserId,
+        witnessName: w.witnessName,
+      })),
     }
 
     try {
@@ -467,6 +479,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           label: 'Injuries',
           value: (getValues('injuries') ?? []).map((inj) => `${BODY_REGION_LABELS[inj.region as BodyRegion] ?? inj.region} (${INJURY_TYPE_LABELS[inj.injuryType as InjuryType] ?? inj.injuryType})`).join('; ') || 'None recorded',
         }] : []),
+      ],
+    },
+    {
+      stepKey: 'witnesses',
+      rows: [
+        {
+          label: 'Witnesses',
+          value: (witnesses ?? []).length === 0
+            ? 'None recorded'
+            : (witnesses ?? []).map((w) => `${w.witnessName}${w.witnessUserId ? ' (Staff)' : ' (External)'}`).join('; '),
+        },
       ],
     },
     ...(isEdit ? [{
@@ -566,6 +589,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             errors={errors}
             incidentType={incidentType}
             wereEmergencyServicesCalled={wereEmergencyCalled}
+          />
+        )}
+
+        {!isReviewStep && currentStep.key === 'witnesses' && (
+          <WitnessesStep
+            control={control}
+            errors={errors}
+            reportedByStaffId={reportedByStaffId}
+            staff={staff}
+            existingWitnesses={existingIncident?.witnesses ?? []}
+            isEdit={isEdit}
           />
         )}
 

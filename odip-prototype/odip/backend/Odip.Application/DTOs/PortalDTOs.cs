@@ -118,23 +118,41 @@ public record PortalShiftDetailDto(
     List<PortalMedicationSummaryDto> Medications);
 
 /// <summary>
-/// A medication administration awaiting (or already given) the caller's staff-witness sign-off —
-/// GET /api/v1/portal/witness-requests returns the caller's own Pending ones; approve/decline act
-/// on one by its administration id. Deliberately excludes anything beyond what a witness needs to
-/// confirm what they saw (no full clinical/consent detail — see PortalMedicationSummaryDto remarks).
+/// A medication administration OR an incident report (IN-7) awaiting (or already given) the
+/// caller's staff-witness sign-off — GET /api/v1/portal/witness-requests unions both sources into
+/// one list, ordered by CreatedAt, discriminated by <see cref="SourceType"/> ("Medication" |
+/// "Incident"). Deliberately non-breaking for the two existing consumers (AppLayout's sidebar
+/// badge, PortalShiftsPage's badge) — both only ever read <c>.length</c>, never an individual
+/// field, so widening every medication-only/incident-only field to nullable here costs them
+/// nothing. Approve/decline for a medication row stays on the original bodiless
+/// <c>/portal/witness-requests/{id}/approve|decline</c> endpoints; an incident row uses the new
+/// <c>/portal/incident-witness-requests/{id}/approve|decline</c> endpoints, which additionally
+/// accept an optional witness statement.
 /// </summary>
 public record PortalWitnessRequestDto(
     Guid Id,
+    string SourceType,
     Guid ParticipantId,
     string ParticipantName,
-    Guid MedicationId,
-    string MedicationName,
+    Guid? MedicationId,
+    string? MedicationName,
     string? Strength,
-    string DoseDescription,
+    string? DoseDescription,
     string? DoseGiven,
+    Guid? IncidentReportId,
+    string? IncidentTitle,
+    IncidentType? IncidentType,
+    IncidentSeverity? IncidentSeverity,
+    /// <summary>"Recorded by" for a medication row, "Reported by" for an incident row.</summary>
     string RecordedByName,
     DateTime? AdministeredAt,
     string? AdministeredAtTimeZone,
+    DateTime? IncidentDateTime,
     WitnessStatus WitnessStatus,
     DateTime? WitnessRespondedAt,
     DateTime CreatedAt);
+
+/// <summary>IN-7: optional witness statement supplied at approve/decline time — see
+/// <see cref="Odip.Domain.Entities.IncidentWitness.StatementText"/>. Never overwrites a
+/// previously-typed statement with null when omitted.</summary>
+public record PortalRespondIncidentWitnessRequestDto(string? StatementText);
