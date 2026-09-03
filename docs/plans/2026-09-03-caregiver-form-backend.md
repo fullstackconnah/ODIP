@@ -73,16 +73,16 @@
 **Interfaces:**
 - Produces: `public static Task<string?> ParticipantPatchApplier.ApplyAsync(OdipDbContext db, SafetyNoteSyncService safetyNoteSync, Participant p, PatchParticipantDto dto, CancellationToken ct)` — returns a validation error message, or `null` after a successful `SaveChangesAsync`.
 
-- [ ] **Step 1: Confirm the regression net is green before touching anything**
+- [x] **Step 1: Confirm the regression net is green before touching anything**
 
 Run: `dotnet test --filter "FullyQualifiedName~ParticipantsControllerPatchTests"`
 Expected: `Passed! - Failed: 0, Passed: 24`
 
-- [ ] **Step 2: Read the whole `Patch` action**
+- [x] **Step 2: Read the whole `Patch` action**
 
 Open `Odip.Api/Controllers/ParticipantsController.cs` and read from the `[HttpPatch("{id:guid}")]` attribute to the end of the method. Note every private helper it calls (`ValidateNames`, `ValidateGender`, `ValidatePhone`, `ValidateEmail`, `UpsertConsentsAsync`, `UpsertHealthConditionsAsync`, `UpsertAdlAssessmentsAsync`, `UpsertChecklistItemsAsync`, and any `_safetyNoteSync` / `_compatLink` calls). Write the list down — you must move or expose every one of them.
 
-- [ ] **Step 3: Create the applier with the body moved verbatim**
+- [x] **Step 3: Create the applier with the body moved verbatim**
 
 Create `Odip.Infrastructure/Services/ParticipantPatchApplier.cs`. Move everything in `Patch` **after** the `if (p == null) return NotFound(...)` line into it. Where the original did `return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(msg))`, the applier does `return msg;`. Where the original reached the end successfully, the applier returns `null`.
 
@@ -125,7 +125,7 @@ public static class ParticipantPatchApplier
 }
 ```
 
-- [ ] **Step 4: Make `Patch` delegate**
+- [x] **Step 4: Make `Patch` delegate**
 
 Replace the moved body in `ParticipantsController.Patch` with:
 
@@ -139,17 +139,17 @@ Replace the moved body in `ParticipantsController.Patch` with:
 
 If `Create`/`Update` also call the `Upsert*Async` helpers you moved, change those call sites to `ParticipantPatchApplier.UpsertConsentsAsync(_db, ...)` etc. by making those helpers `internal static` rather than `private static`. Do not duplicate them.
 
-- [ ] **Step 5: Build and run the regression net**
+- [x] **Step 5: Build and run the regression net**
 
 Run: `dotnet build && dotnet test --filter "FullyQualifiedName~ParticipantsControllerPatchTests|FullyQualifiedName~ParticipantsControllerTests|FullyQualifiedName~ParticipantsControllerCommunityAccessTests"`
 Expected: 0 errors; `Failed: 0`. If any Patch test fails, the extraction changed behaviour — fix the applier, never the test.
 
-- [ ] **Step 6: Full suite**
+- [x] **Step 6: Full suite**
 
 Run: `dotnet test`
 Expected: `Passed: 1020, Failed: 0`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Odip.Infrastructure/Services/ParticipantPatchApplier.cs Odip.Api/Controllers/ParticipantsController.cs
