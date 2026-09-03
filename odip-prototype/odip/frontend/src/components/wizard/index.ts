@@ -5,6 +5,8 @@ export { WizardNavFooter } from './WizardNavFooter'
 export type { WizardNavFooterProps } from './WizardNavFooter'
 export { WizardReviewStep } from './WizardReviewStep'
 export type { WizardReviewStepProps } from './WizardReviewStep'
+export { CompactGridRow } from './CompactGridRow'
+export type { CompactGridRowProps } from './CompactGridRow'
 export type {
   WizardStepDef,
   WizardFieldError,
