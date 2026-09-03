@@ -195,3 +195,19 @@ describe('CaregiverWizardPage — submit', () => {
     await waitFor(() => expect(mockSubmitMutateAsync).toHaveBeenCalledTimes(1))
   })
 })
+
+// Task 6 — the route is registered as a sibling of /login, outside PrivateRoute/AppLayout/
+// UiPreferencesProvider. Exercises the real App.tsx route table (not a test-only router) so a
+// future accidental move of the route back inside the authenticated shell fails this test.
+describe('App — /caregiver/:token route registration', () => {
+  it('renders the caregiver wizard directly, with no app nav and no redirect to /login', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    window.history.pushState({}, '', '/caregiver/route-test-token')
+    const { default: App } = await import('@/App')
+    render(<App />)
+
+    await screen.findByLabelText(/^your name/i)
+    expect(window.location.pathname).toBe('/caregiver/route-test-token')
+    expect(screen.queryByRole('navigation', { name: /main/i })).not.toBeInTheDocument()
+  })
+})
