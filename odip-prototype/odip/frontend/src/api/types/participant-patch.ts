@@ -225,7 +225,15 @@ export interface PatchBehaviourCommunicationDto {
   communicationAids?: string | null
 }
 
-/** communityAccessBehaviour group — Behaviour & Communication (wizard step 7, CA-gated) / Community Access tab (with supportsLookLike). */
+/**
+ * communityAccessBehaviour group — Behaviour & Communication (wizard step 7, CA-gated) / Community
+ * Access tab (with supportsLookLike). PF-10.4 (SPEC-05): also carries
+ * `overallCommunityAccessRiskRating` — PF-10.2's single overall rating alongside the 22-row
+ * communityAccessRiskItems matrix (that matrix stays on its own nested-CRUD endpoint,
+ * `/participants/{id}/community-access-risk-items/{itemType}`, unaffected by core02 — the Profile
+ * wizard's Community Access section PUTs each changed row there directly rather than through this
+ * PATCH group).
+ */
 export interface PatchCommunityAccessBehaviourDto {
   signsHappyAndSettled?: string | null
   whatHelpsMeCalmDown?: string | null
@@ -233,6 +241,7 @@ export interface PatchCommunityAccessBehaviourDto {
   bocEarlyWarningSigns?: string | null
   bocDeEscalationStrategies?: string | null
   bocWhatNotToDo?: string | null
+  overallCommunityAccessRiskRating?: RiskRatingLevel | null
 }
 
 /** mealsAndDiet group — Daily Living (wizard step 8) / Meals & Diet (detail tab). */

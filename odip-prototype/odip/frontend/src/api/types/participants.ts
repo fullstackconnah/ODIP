@@ -5,6 +5,7 @@ import type { ParticipantConsentDto, CreateParticipantConsentDto } from './conse
 import type { ParticipantHealthConditionDto, CreateParticipantHealthConditionDto } from './health-conditions'
 import type { ParticipantAdlAssessmentDto, CreateParticipantAdlAssessmentDto } from './adl-assessments'
 import type { ParticipantChecklistItemDto, CreateParticipantChecklistItemDto } from './checklist-items'
+import type { ParticipantCommunityAccessRiskItemDto, CreateParticipantCommunityAccessRiskItemDto } from './community-access-risk-items'
 
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
@@ -424,6 +425,18 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   supportsLookLikeDay: string | null
   supportsLookLikeAfternoonEvening: string | null
   supportsLookLikeOvernight: string | null
+
+  // ── PF-10.2/PF-10.4 (SPEC-05), CommunityAccessDailyLiving stream — the structured 22-item
+  // Community Access Risk Assessment matrix and its single overall rating.
+  /**
+   * Always all twenty-two CommunityAccessRiskItemType entries — see
+   * ParticipantCommunityAccessRiskItemsController.GetForParticipant. Optional (rather than
+   * required), same convention as intakeCompletedAt above, so the many pre-existing
+   * ParticipantDetailDto test fixtures across the participant-detail section tests don't all need
+   * updating for a field most of them don't assert on.
+   */
+  communityAccessRiskItems?: ParticipantCommunityAccessRiskItemDto[]
+  overallCommunityAccessRiskRating?: RiskRatingLevel | null
   /** PF-2 (SPEC-02): advisory-only plan-type↔contact-role completeness warning, computed
    * server-side from this participant's persisted active contactRoles — see
    * Odip.Domain.Enums.ContactRoleRules.PlanTypeComplianceWarning. Null when the condition for
@@ -663,6 +676,14 @@ export interface CreateParticipantDto {
   supportsLookLikeDay?: string
   supportsLookLikeAfternoonEvening?: string
   supportsLookLikeOvernight?: string
+
+  /**
+   * PF-10.2 (SPEC-05) — the structured Community Access Risk Assessment matrix, upserted
+   * transactionally with the participant on both create and update (same read-on-both-paths
+   * convention as checklistItems above).
+   */
+  communityAccessRiskItems: CreateParticipantCommunityAccessRiskItemDto[]
+  overallCommunityAccessRiskRating?: RiskRatingLevel | null
 }
 
 export interface UpdateParticipantDto extends CreateParticipantDto {

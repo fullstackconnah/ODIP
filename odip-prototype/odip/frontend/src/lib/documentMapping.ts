@@ -486,3 +486,17 @@ export function fieldsForEntry(phase: EntryPhase): DocumentMappingEntry[] {
 export function getFieldMapping(field: string): DocumentMappingEntry | undefined {
   return DOCUMENT_MAPPING.find((entry) => entry.field === field)
 }
+
+/**
+ * PF-10.4 — every `entryPhase: 'intake'` field that also renders (read-only) on the Profile
+ * wizard/detail page: exactly the fields tagged `sources: ['shared']`, per this module's own
+ * `EntryPhase` doc comment ("A field present on both Oassist source forms ... is captured once, at
+ * Intake, and merely displayed (read-only) on the Profile wizard/detail page afterwards"). Derived
+ * as `fieldsForDocument('profile')`'s intake-entryPhase subset rather than a hand-authored list —
+ * `fieldsForDocument('profile')` already matches every entry whose `sources` includes 'profile' OR
+ * 'shared' (see that function's doc), and no `entryPhase: 'profile'` entry has `sources: ['shared']`
+ * in this table, so filtering to `entryPhase === 'intake'` recovers exactly the shared set.
+ */
+export function sharedFieldsDisplayedOnProfile(): DocumentMappingEntry[] {
+  return fieldsForDocument('profile').filter((entry) => entry.entryPhase === 'intake')
+}

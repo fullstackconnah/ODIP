@@ -17,6 +17,9 @@ const ParticipantCreatePage = React.lazy(() => import('./pages/ParticipantCreate
 // PF-10.3 (SPEC-05): the new Intake wizard takes over the create route. ParticipantCreatePage
 // itself is untouched and still handles the edit route until PF-10.4/PF-10.7 land.
 const IntakeWizardPage = React.lazy(() => import('./pages/intake/IntakeWizardPage'))
+// PF-10.4 (SPEC-05): the new Profile wizard, second half of the intake/profile split. Edits an
+// existing participant (created by Intake) at /participants/:id/profile.
+const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizardPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
 const AccommodationPage = React.lazy(() => import('./pages/AccommodationPage'))
 const AccommodationDetailPage = React.lazy(() => import('./pages/AccommodationDetailPage'))
@@ -79,6 +82,7 @@ const router = createBrowserRouter(
         <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
+        <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
         <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />

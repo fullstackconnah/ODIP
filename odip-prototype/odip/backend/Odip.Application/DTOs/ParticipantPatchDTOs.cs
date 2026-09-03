@@ -339,7 +339,14 @@ public record PatchBehaviourCommunicationDto
     public string? CommunicationAids { get; init; }
 }
 
-/// <summary>communityAccessBehaviour group — Behaviour &amp; Communication (wizard step 7, CA-gated) / Community Access tab (with supportsLookLike). See PatchParticipantDto's doc.</summary>
+/// <summary>communityAccessBehaviour group — Behaviour &amp; Communication (wizard step 7, CA-gated) / Community Access tab (with supportsLookLike). See PatchParticipantDto's doc.
+/// PF-10.4 (SPEC-05): also carries <see cref="OverallCommunityAccessRiskRating"/> — PF-10.2's
+/// single, non-itemised overall rating that sits alongside the 22-row communityAccessRiskItems
+/// matrix (that matrix itself stays on its own nested-CRUD endpoint,
+/// ParticipantCommunityAccessRiskItemsController, unaffected by core02 — same "collection stays on
+/// its existing endpoint" convention as RiskEntries/ContactRoles). This scalar field has no other
+/// PATCH home and is part of the same CA-gated Profile wizard section as the rest of this group, so
+/// it is added here rather than opening a 17th single-field group.</summary>
 public record PatchCommunityAccessBehaviourDto
 {
     [StringLength(2000)]
@@ -354,6 +361,7 @@ public record PatchCommunityAccessBehaviourDto
     public string? BocDeEscalationStrategies { get; init; }
     [StringLength(2000)]
     public string? BocWhatNotToDo { get; init; }
+    public RiskRatingLevel? OverallCommunityAccessRiskRating { get; init; }
 }
 
 /// <summary>mealsAndDiet group — Daily Living (wizard step 8) / Meals &amp; Diet (detail tab). See PatchParticipantDto's doc.</summary>
