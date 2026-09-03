@@ -192,6 +192,41 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
+    /// row submitted with a create/update payload, keyed by
+    /// <see cref="Domain.Enums.CommunityAccessRiskItemType"/>. Copies UpsertChecklistItemsAsync's
+    /// documented pattern exactly, including the load-bearing empty/null guard below (same
+    /// reasoning: an Update caller that never mentions CommunityAccessRiskItems round-trips an
+    /// empty list, which must mean "leave existing rows alone", not "clear every rating"). Called
+    /// before SaveChangesAsync so every row lands in the same transaction as the participant
+    /// insert/update. Sparse on creation (see the guard inside the loop below): the wizard always
+    /// submits the full fixed twenty-two-row array with every hidden/unrated row already null (see
+    /// <see cref="CreateParticipantCommunityAccessRiskItemDto"/>'s doc), so a blank incoming row
+    /// must not become a permanent database row just because it was present in the payload.
+    /// </summary>
+    private async Task UpsertCommunityAccessRiskItemsAsync(Guid participantId, List<CreateParticipantCommunityAccessRiskItemDto> items, CancellationToken ct)
+    {
+        if (items is null || items.Count == 0) return;
+        var existing = await _db.ParticipantCommunityAccessRiskItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(a => a.ItemType);
+        foreach (var dto in items)
+        {
+            if (!byType.TryGetValue(dto.ItemType, out var row))
+            {
+                // Load-bearing skip — same reasoning as UpsertChecklistItemsAsync's: only skip
+                // when there is both no existing row for this type AND the incoming dto carries no
+                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
+                // to ApplyAnswer below and keeps the row.
+                if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
+                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                _db.ParticipantCommunityAccessRiskItems.Add(row);
+                byType[dto.ItemType] = row;
+            }
+            ParticipantCommunityAccessRiskItemsController.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
+        }
+    }
+
+    /// <summary>
     /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
     /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
     /// enough to be findable in the list (at least one of the two names), while a full
@@ -483,6 +518,7 @@ public class ParticipantsController : ControllerBase
             .Include(x => x.HealthConditions)
             .Include(x => x.AdlAssessments)
             .Include(x => x.ChecklistItems)
+            .Include(x => x.CommunityAccessRiskItems)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -584,6 +620,9 @@ public class ParticipantsController : ControllerBase
             BocDeEscalationStrategies = p.BocDeEscalationStrategies, BocWhatNotToDo = p.BocWhatNotToDo,
             SupportsLookLikeMorning = p.SupportsLookLikeMorning, SupportsLookLikeDay = p.SupportsLookLikeDay,
             SupportsLookLikeAfternoonEvening = p.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = p.SupportsLookLikeOvernight,
+            // PF-10.2, CommunityAccessDailyLiving stream — the structured risk-assessment matrix grid.
+            CommunityAccessRiskItems = ParticipantCommunityAccessRiskItemsController.MaterializeAll(p.Id, p.CommunityAccessRiskItems.ToList()),
+            OverallCommunityAccessRiskRating = p.OverallCommunityAccessRiskRating,
             PlanTypeComplianceWarning = planTypeComplianceWarning,
         }));
     }
@@ -725,6 +764,7 @@ public class ParticipantsController : ControllerBase
             BocDeEscalationStrategies = dto.BocDeEscalationStrategies, BocWhatNotToDo = dto.BocWhatNotToDo,
             SupportsLookLikeMorning = dto.SupportsLookLikeMorning, SupportsLookLikeDay = dto.SupportsLookLikeDay,
             SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight,
+            OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating,
         };
         ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
@@ -799,6 +839,9 @@ public class ParticipantsController : ControllerBase
         // INTAKE-03/04 — Community Access checklist-item grid rows submitted alongside a
         // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
         await UpsertChecklistItemsAsync(participant.Id, dto.ChecklistItems, ct);
+        // PF-10.2 — Community Access Risk Assessment matrix rows submitted alongside a
+        // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
+        await UpsertCommunityAccessRiskItemsAsync(participant.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes (allergies/behaviours-of-concern/falls-risk/
         // risks-hazards) in the same SaveChangesAsync as the participant insert. Reads
         // participant.RiskEntries via the change tracker (see SafetyNoteSyncService), which sees
@@ -963,6 +1006,7 @@ public class ParticipantsController : ControllerBase
         p.BocDeEscalationStrategies = dto.BocDeEscalationStrategies; p.BocWhatNotToDo = dto.BocWhatNotToDo;
         p.SupportsLookLikeMorning = dto.SupportsLookLikeMorning; p.SupportsLookLikeDay = dto.SupportsLookLikeDay;
         p.SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight;
+        p.OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating;
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
@@ -982,6 +1026,8 @@ public class ParticipantsController : ControllerBase
         await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
         // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
         await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
+        // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
+        await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         await _db.SaveChangesAsync(ct);

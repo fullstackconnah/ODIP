@@ -46,6 +46,8 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantAdlAssessment> ParticipantAdlAssessments => Set<ParticipantAdlAssessment>();
     /// <summary>INTAKE-03/04. See <see cref="Entities.ParticipantChecklistItem"/>'s type doc.</summary>
     public DbSet<ParticipantChecklistItem> ParticipantChecklistItems => Set<ParticipantChecklistItem>();
+    /// <summary>PF-10.2. See <see cref="Entities.ParticipantCommunityAccessRiskItem"/>'s type doc.</summary>
+    public DbSet<ParticipantCommunityAccessRiskItem> ParticipantCommunityAccessRiskItems => Set<ParticipantCommunityAccessRiskItem>();
     public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
@@ -1277,6 +1279,26 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ParticipantId, e.ItemType }).IsUnique();
         });
 
+        // ── ParticipantCommunityAccessRiskItem (PF-10.2) ─────────────
+        modelBuilder.Entity<ParticipantCommunityAccessRiskItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.StrategyNotes).HasMaxLength(2000);
+
+            // Restrict: same idiom as ParticipantChecklistItem/ParticipantAdlAssessment/
+            // ParticipantHealthCondition -> Participant — a participant with a recorded risk
+            // matrix must not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.Participant)
+                .WithMany(p => p.CommunityAccessRiskItems)
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParticipantId);
+            // One row per (participant, risk item type) — enforced at the DB level, same
+            // reasoning as ParticipantChecklistItem's unique index above.
+            entity.HasIndex(e => new { e.ParticipantId, e.ItemType }).IsUnique();
+        });
+
         // ── RestrictivePractice ───────────────────────────────────
         modelBuilder.Entity<RestrictivePractice>(entity =>
         {
@@ -1451,6 +1473,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantChecklistItem>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantChecklistItem>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantCommunityAccessRiskItem>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantCommunityAccessRiskItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RestrictivePractice>()

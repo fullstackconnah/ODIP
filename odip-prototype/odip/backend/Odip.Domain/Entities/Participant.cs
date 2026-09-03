@@ -461,6 +461,14 @@ public class Participant : ITenantEntity
     /// <summary>CA (research spec §3, Section 9): Overnight block.</summary>
     public string? SupportsLookLikeOvernight { get; set; }
 
+    /// <summary>
+    /// PF-10.2 (SPEC-05 <c>docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md</c>):
+    /// the Community Access variant's §10 "Community Access Risk Assessment" 23rd, non-itemised
+    /// value — an overall rating, distinct from the 22 itemised rows on
+    /// <see cref="CommunityAccessRiskItems"/>. CommunityAccessDailyLiving stream-specific.
+    /// </summary>
+    public RiskRatingLevel? OverallCommunityAccessRiskRating { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -484,4 +492,7 @@ public class Participant : ITenantEntity
 
     /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. See <see cref="Entities.ParticipantChecklistItem"/>'s type doc.</summary>
     public ICollection<ParticipantChecklistItem> ChecklistItems { get; set; } = new List<ParticipantChecklistItem>();
+
+    /// <summary>PF-10.2, CommunityAccessDailyLiving stream. See <see cref="Entities.ParticipantCommunityAccessRiskItem"/>'s type doc.</summary>
+    public ICollection<ParticipantCommunityAccessRiskItem> CommunityAccessRiskItems { get; set; } = new List<ParticipantCommunityAccessRiskItem>();
 }

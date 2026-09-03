@@ -418,6 +418,16 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
     notes: 'NEW (INTAKE-03/04). research spec §3, Section 7 (9-item Community Mobility & Transport Risk checklist) and Section 8 (12-item Community Behaviours of Concern checkbox list) — one ChecklistItemType row per item, 21 total, same fixed-enumerated-set "materialize all N rows" shape as adlAssessments/healthConditions above (backed by the ParticipantChecklistItem entity). One DOCUMENT_MAPPING entry for the whole grid-shaped field, matching how adlAssessments/healthConditions are represented here.',
   },
   {
+    entryPhase: 'profile',
+    field: 'communityAccessRiskItems', label: 'Community Access Risk Assessment (itemised matrix)', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'PF-10.2 (SPEC-05). research spec §10 — 22 named risk items across three categories (Road & Traffic Safety, Behaviours of Concern, Health & Personal Safety), each rated Low/Med/High/Critical with a free-text Support/Strategy note per item. Genuinely a different shape from checklistItems\' Yes/No/N-A checkbox list (structured rating + strategy note vs. tri-state answer) and from riskEntries (INTAKE-09\'s lighter at-risk-party register) — this resolves the "not yet built" FRAT-style scored register flagged on riskEntries\' own entry below. One DOCUMENT_MAPPING entry for the whole 22-row grid, same convention as checklistItems/adlAssessments/healthConditions (backed by the ParticipantCommunityAccessRiskItem entity).',
+  },
+  {
+    entryPhase: 'profile',
+    field: 'overallCommunityAccessRiskRating', label: 'Overall Community Access Risk Rating', sources: [], serviceStreams: ['CommunityAccessDailyLiving'],
+    notes: 'PF-10.2 (SPEC-05). research spec §10\'s 23rd, non-itemised rated value — a single overall rating alongside the 22-row communityAccessRiskItems matrix, not part of that collection (lives directly on Participant).',
+  },
+  {
     entryPhase: 'intake',
     field: 'hidpaNotes', label: 'HIDPA Notes', sources: [],
     notes: 'NEW (INTAKE-03). research spec §3, Section 3 — free-text elaboration alongside hidpaSupportCategories\' "None of the above" item. DELIBERATELY tagged \'all\' (not CommunityAccessDailyLiving), unlike this section\'s other new fields — ungated in the wizard, same visibility as hidpaSupportCategories itself, since this is the same general support-need concept regardless of service stream. See hidpaSupportCategories\' own entry above for the fuller reconciliation.',
@@ -451,7 +461,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   {
     entryPhase: 'intake',
     field: 'riskEntries', label: 'Risk Entries (who is at risk)', sources: [],
-    notes: 'INTAKE-09. NOT the same structured tool as the source spec\'s §4.10 Risk Assessment (FRAT-style scored register) — that is flagged there as a separate, much larger design effort, not yet built. This lighter at-risk-party/description/mitigation register has no direct backing in either of the 4 Oassist documents analysed.',
+    notes: 'INTAKE-09. NOT the same structured tool as the source spec\'s §4.10 Risk Assessment (FRAT-style scored register) — that effort is now resolved by communityAccessRiskItems above (PF-10.2). This lighter at-risk-party/description/mitigation register has no direct backing in either of the 4 Oassist documents analysed.',
   },
 ]
 

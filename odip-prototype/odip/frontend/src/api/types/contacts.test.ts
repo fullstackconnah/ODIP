@@ -30,6 +30,11 @@ describe('unionRelevantFields', () => {
     expect(union).toEqual(['organisationName', 'startDate', 'endDate', 'discipline', 'frequencyOfContact'])
   })
 
+  it('PF-10.2: FinancialAdministrator has the same field set as Solicitor and renders in a multi-role union', () => {
+    expect(CONTACT_ROLE_FIELD_MAP.FinancialAdministrator).toEqual(CONTACT_ROLE_FIELD_MAP.Solicitor)
+    expect(unionRelevantFields(['FinancialAdministrator'])).toEqual(['organisationName', 'scopeNotes', 'authorisationDocumentReference'])
+  })
+
   it('unions three roles with partial overlap into the full deduplicated field set', () => {
     // Guardian: appointingTribunal/orderScopeDomains/orderStartDate/orderReviewDate/orderEndDate
     // PlanManager: organisationName/startDate/endDate

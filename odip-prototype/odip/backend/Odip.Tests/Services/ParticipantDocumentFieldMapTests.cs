@@ -79,11 +79,17 @@ public class ParticipantDocumentFieldMapTests
     }
 
     [Fact]
+    public void CommunityAccessRiskItemsTable_BackingCollection_ExistsOnParticipant()
+    {
+        Assert.NotNull(typeof(Participant).GetProperty("CommunityAccessRiskItems"));
+    }
+
+    [Fact]
     public void EveryTableFieldId_HasARegisteredBackingAssertionAbove()
     {
-        // Guards against a 7th table being added to the field map without a matching
+        // Guards against an 8th table being added to the field map without a matching
         // backing-collection assertion above (or a composer table-builder case) being added too.
-        var knownTableFieldIds = new[] { "contactRoles", "healthConditions", "consents", "adlAssessments", "checklistItems", "riskEntries" };
+        var knownTableFieldIds = new[] { "contactRoles", "healthConditions", "consents", "adlAssessments", "checklistItems", "communityAccessRiskItems", "riskEntries" };
         var actualTableFieldIds = ParticipantDocumentFieldMap.Entries.Where(e => e.IsTable).Select(e => e.FieldId).ToList();
         Assert.Equal(knownTableFieldIds.OrderBy(x => x), actualTableFieldIds.OrderBy(x => x));
     }

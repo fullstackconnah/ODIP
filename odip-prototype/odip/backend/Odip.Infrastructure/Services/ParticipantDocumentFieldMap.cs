@@ -219,6 +219,10 @@ public static class ParticipantDocumentFieldMap
         S("supportsLookLikeAfternoonEvening", "Community Access", "What My Supports Look Like — Afternoon-Evening", ParticipantDocumentTag.Profile, "SupportsLookLikeAfternoonEvening", caGated: true),
         S("supportsLookLikeOvernight", "Community Access", "What My Supports Look Like — Overnight", ParticipantDocumentTag.Profile, "SupportsLookLikeOvernight", caGated: true),
         T("checklistItems", "Community Access", "Checklist Items", ParticipantDocumentTag.Profile, caGated: true),
+        // PF-10.2: the itemised risk-rating matrix (22 rows, Road & Traffic Safety / Behaviours of
+        // Concern / Health & Personal Safety) plus its non-itemised overall rating scalar.
+        T("communityAccessRiskItems", "Community Access", "Community Access Risk Assessment", ParticipantDocumentTag.Profile, caGated: true),
+        S("overallCommunityAccessRiskRating", "Community Access", "Overall Community Access Risk Rating", ParticipantDocumentTag.Profile, "OverallCommunityAccessRiskRating", caGated: true),
 
         // ── Risks & Hazards ──────────────────────────────────────────────────────────────
         S("behaviourRiskSummary", "Risks & Hazards", "Behaviour Risk Summary", ParticipantDocumentTag.Shared, "BehaviourRiskSummary"),

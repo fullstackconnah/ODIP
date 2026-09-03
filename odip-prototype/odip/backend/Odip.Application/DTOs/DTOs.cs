@@ -207,6 +207,11 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? SupportsLookLikeAfternoonEvening { get; init; }
     public string? SupportsLookLikeOvernight { get; init; }
 
+    /// <summary>PF-10.2. Always all twenty-two <see cref="Domain.Enums.CommunityAccessRiskItemType"/> entries — see ParticipantCommunityAccessRiskItemsController.GetForParticipant.</summary>
+    public List<ParticipantCommunityAccessRiskItemDto> CommunityAccessRiskItems { get; init; } = new();
+    /// <summary>PF-10.2 — the risk matrix's 23rd, non-itemised overall rating. See Participant.cs's field doc.</summary>
+    public RiskRatingLevel? OverallCommunityAccessRiskRating { get; init; }
+
     /// <summary>PF-2 (SPEC-02): advisory-only plan-type↔contact-role completeness warning, computed
     /// from the participant's persisted active <c>ContactRoles</c> via
     /// <see cref="ContactRoleRules.PlanTypeComplianceWarning"/>. Null when the condition for this
@@ -562,6 +567,18 @@ public record CreateParticipantDto
     public string? SupportsLookLikeAfternoonEvening { get; init; }
     [StringLength(2000)]
     public string? SupportsLookLikeOvernight { get; init; }
+
+    /// <summary>
+    /// PF-10.2 (SPEC-05 <c>docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md</c>),
+    /// CommunityAccessDailyLiving stream — the structured Community Access Risk Assessment matrix
+    /// grid, upserted transactionally with the participant on both create and update (same
+    /// read-on-both-paths convention as ChecklistItems above) — see
+    /// ParticipantsController.UpsertCommunityAccessRiskItemsAsync.
+    /// </summary>
+    public List<CreateParticipantCommunityAccessRiskItemDto> CommunityAccessRiskItems { get; init; } = new();
+
+    /// <summary>PF-10.2 — the risk matrix's 23rd, non-itemised overall rating. See Participant.cs's field doc.</summary>
+    public RiskRatingLevel? OverallCommunityAccessRiskRating { get; init; }
 }
 
 public record UpdateParticipantDto : CreateParticipantDto

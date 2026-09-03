@@ -32,6 +32,7 @@ function roleSummaryLine(role: ParticipantContactRoleDto): string {
     case 'PlanManager':
     case 'Advocate':
     case 'Solicitor':
+    case 'FinancialAdministrator':
     case 'Gp':
     case 'Specialist':
     case 'Pharmacy':

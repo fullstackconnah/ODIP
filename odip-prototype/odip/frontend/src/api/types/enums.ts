@@ -390,7 +390,7 @@ export type HidpaSupportCategory = typeof HIDPA_SUPPORT_CATEGORIES[number]
 export const CONTACT_ROLE_TYPES = [
   'NextOfKin', 'EmergencyContact', 'Guardian', 'PlanNominee', 'ChildRepresentative',
   'SupportCoordinator', 'PlanManager', 'Gp', 'Specialist', 'Pharmacy', 'ProviderContact',
-  'Advocate', 'Interpreter', 'Solicitor',
+  'Advocate', 'Interpreter', 'Solicitor', 'FinancialAdministrator',
 ] as const
 export type ContactRoleType = typeof CONTACT_ROLE_TYPES[number]
 
@@ -542,4 +542,80 @@ export const CHECKLIST_ITEM_VALUE_LABELS: Record<ChecklistItemValue, string> = {
   No: 'No',
   Yes: 'Yes',
   NotApplicable: 'N/A',
+}
+
+// ── Community Access Risk Item Type (PF-10.2 — SPEC-05 §10's 22-item itemised risk-rating
+// matrix: Road & Traffic Safety, Behaviours of Concern, Health & Personal Safety, in that fixed
+// declaration order. Mirrors the backend's CommunityAccessRiskItemType exactly. Genuinely a
+// different shape from CHECKLIST_ITEM_TYPES above — each item here is rated Low/Med/High/Critical
+// (RISK_RATING_LEVELS) with a free-text Support/Strategy note, not a Yes/No/N-A checkbox. ──
+//
+// ROAD & TRAFFIC SAFETY (first 5, research spec §10, quoted verbatim): "General Road awareness,
+// Runs across roads / bolts into traffic, Absconding/flight risk in the community, Wanders or gets
+// lost in crowds/large venues, Removes seatbelt/opens door while vehicle moving".
+// BEHAVIOURS OF CONCERN (next 8, quoted verbatim): "Harm to self (hits self, head banging,
+// scratching), Harm to others (hits, kicks, bites, spits, pushes), Break items / throws objects,
+// Property damage (windows, walls, cars, furniture), Verbal aggression/yelling in public, Refusal
+// to return to vehicle/transition refusal, Inappropriate public behaviour, Taking food or items
+// belonging to others".
+// HEALTH & PERSONAL SAFETY (remaining 9, quoted verbatim): "Choking / eating and drinking in the
+// community, Seizure in the community, Diabetes — hypo/hyper event, Asthma / breathing difficulty,
+// Allergy or anaphylaxis exposure, Falls — uneven ground, stairs, fatigue, Continence accident
+// while out, Heat/sun exposure, Water safety (pool, beach, river)".
+export const COMMUNITY_ACCESS_RISK_ITEM_TYPES = [
+  // Road & Traffic Safety (research spec §10)
+  'GeneralRoadAwareness', 'RunsAcrossRoadsOrBoltsIntoTraffic', 'AbscondingFlightRiskInCommunity',
+  'WandersOrGetsLostInCrowds', 'RemovesSeatbeltOrOpensDoorWhileMoving',
+  // Behaviours of Concern (research spec §10)
+  'HarmToSelf', 'HarmToOthers', 'BreakItemsOrThrowsObjects', 'PropertyDamage',
+  'VerbalAggressionYellingInPublic', 'RefusalToReturnToVehicleTransition', 'InappropriatePublicBehaviour',
+  'TakingFoodOrItemsBelongingToOthers',
+  // Health & Personal Safety (research spec §10)
+  'ChokingEatingDrinkingInCommunity', 'SeizureInCommunity', 'DiabetesHypoHyperEvent',
+  'AsthmaBreathingDifficulty', 'AllergyOrAnaphylaxisExposure', 'FallsUnevenGroundStairsFatigue',
+  'ContinenceAccidentWhileOut', 'HeatSunExposure', 'WaterSafety',
+] as const
+export type CommunityAccessRiskItemType = typeof COMMUNITY_ACCESS_RISK_ITEM_TYPES[number]
+
+/** The Road & Traffic Safety subset of COMMUNITY_ACCESS_RISK_ITEM_TYPES — the first 5 declaration-order entries. */
+export const ROAD_TRAFFIC_RISK_ITEM_TYPES = COMMUNITY_ACCESS_RISK_ITEM_TYPES.slice(0, 5)
+/** The Behaviours of Concern subset — the next 8 declaration-order entries. */
+export const BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES = COMMUNITY_ACCESS_RISK_ITEM_TYPES.slice(5, 13)
+/** The Health & Personal Safety subset — the remaining 9 declaration-order entries. */
+export const HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES = COMMUNITY_ACCESS_RISK_ITEM_TYPES.slice(13)
+
+export const COMMUNITY_ACCESS_RISK_CATEGORIES = ['RoadTraffic', 'BehavioursOfConcern', 'HealthAndPersonalSafety'] as const
+export type CommunityAccessRiskCategory = typeof COMMUNITY_ACCESS_RISK_CATEGORIES[number]
+
+/** CommunityAccessRiskItemType -> CommunityAccessRiskCategory lookup, derived from COMMUNITY_ACCESS_RISK_ITEM_TYPES' fixed order — mirrors the backend's CommunityAccessRiskItemTypeGroups.CategoryOf. Not a stored field on either side. Same "category derived, not stored" shape as getChecklistItemGroup/adlCategoryOf above. */
+export function getCommunityAccessRiskItemCategory(type: CommunityAccessRiskItemType): CommunityAccessRiskCategory {
+  if ((ROAD_TRAFFIC_RISK_ITEM_TYPES as readonly string[]).includes(type)) return 'RoadTraffic'
+  if ((BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES as readonly string[]).includes(type)) return 'BehavioursOfConcern'
+  return 'HealthAndPersonalSafety'
+}
+
+/** Plain-English labels for the 22 COMMUNITY_ACCESS_RISK_ITEM_TYPES, per the quoted item lists in this const's doc comment above. */
+export const COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS: Record<CommunityAccessRiskItemType, string> = {
+  GeneralRoadAwareness: 'General road awareness',
+  RunsAcrossRoadsOrBoltsIntoTraffic: 'Runs across roads / bolts into traffic',
+  AbscondingFlightRiskInCommunity: 'Absconding / flight risk in the community',
+  WandersOrGetsLostInCrowds: 'Wanders or gets lost in crowds/large venues',
+  RemovesSeatbeltOrOpensDoorWhileMoving: 'Removes seatbelt/opens door while vehicle moving',
+  HarmToSelf: 'Harm to self (hits self, head banging, scratching)',
+  HarmToOthers: 'Harm to others (hits, kicks, bites, spits, pushes)',
+  BreakItemsOrThrowsObjects: 'Break items / throws objects',
+  PropertyDamage: 'Property damage (windows, walls, cars, furniture)',
+  VerbalAggressionYellingInPublic: 'Verbal aggression/yelling in public',
+  RefusalToReturnToVehicleTransition: 'Refusal to return to vehicle/transition refusal',
+  InappropriatePublicBehaviour: 'Inappropriate public behaviour',
+  TakingFoodOrItemsBelongingToOthers: "Taking food or items belonging to others",
+  ChokingEatingDrinkingInCommunity: 'Choking / eating and drinking in the community',
+  SeizureInCommunity: 'Seizure in the community',
+  DiabetesHypoHyperEvent: 'Diabetes — hypo/hyper event',
+  AsthmaBreathingDifficulty: 'Asthma / breathing difficulty',
+  AllergyOrAnaphylaxisExposure: 'Allergy or anaphylaxis exposure',
+  FallsUnevenGroundStairsFatigue: 'Falls — uneven ground, stairs, fatigue',
+  ContinenceAccidentWhileOut: 'Continence accident while out',
+  HeatSunExposure: 'Heat/sun exposure',
+  WaterSafety: 'Water safety (pool, beach, river)',
 }

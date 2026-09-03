@@ -37,12 +37,13 @@ public class ParticipantFieldEntryMapTests
     [Fact]
     public void MatchesExpectedIntakeProfileSplit()
     {
-        // 144 total fields as of this branch: 61 Intake / 83 Profile — mirrors
+        // 146 total fields as of this branch (PF-10.2 added communityAccessRiskItems +
+        // overallCommunityAccessRiskRating, both Profile): 61 Intake / 85 Profile — mirrors
         // documentMapping.test.ts's equivalent frontend assertion. Expected to move if a future
         // branch adds/reallocates fields; exists to catch an accidental mass-reallocation.
-        Assert.Equal(144, ParticipantFieldEntryMap.Entries.Count);
+        Assert.Equal(146, ParticipantFieldEntryMap.Entries.Count);
         Assert.Equal(61, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Intake));
-        Assert.Equal(83, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Profile));
+        Assert.Equal(85, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Profile));
     }
 
     [Fact]
