@@ -5,16 +5,23 @@ import { MemoryRouter } from 'react-router-dom'
 import PortalWitnessApprovalsPage from './PortalWitnessApprovalsPage'
 import type { PortalWitnessRequestDto } from '@/api/types'
 
-const { mockUsePendingWitnessRequests, mockApproveMutateAsync, mockDeclineMutateAsync } = vi.hoisted(() => ({
+const {
+  mockUsePendingWitnessRequests, mockApproveMutateAsync, mockDeclineMutateAsync,
+  mockApproveIncidentMutateAsync, mockDeclineIncidentMutateAsync,
+} = vi.hoisted(() => ({
   mockUsePendingWitnessRequests: vi.fn(),
   mockApproveMutateAsync: vi.fn(),
   mockDeclineMutateAsync: vi.fn(),
+  mockApproveIncidentMutateAsync: vi.fn(),
+  mockDeclineIncidentMutateAsync: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   usePendingWitnessRequests: mockUsePendingWitnessRequests,
   useApproveWitnessRequest: () => ({ mutateAsync: mockApproveMutateAsync, isPending: false }),
   useDeclineWitnessRequest: () => ({ mutateAsync: mockDeclineMutateAsync, isPending: false }),
+  useApproveIncidentWitnessRequest: () => ({ mutateAsync: mockApproveIncidentMutateAsync, isPending: false }),
+  useDeclineIncidentWitnessRequest: () => ({ mutateAsync: mockDeclineIncidentMutateAsync, isPending: false }),
 }))
 
 function renderPage() {
@@ -28,6 +35,7 @@ function renderPage() {
 function makeRequest(overrides: Partial<PortalWitnessRequestDto> = {}): PortalWitnessRequestDto {
   return {
     id: 'admin-1',
+    sourceType: 'Medication',
     participantId: 'participant-1',
     participantName: 'Sophie Brown',
     medicationId: 'med-1',
@@ -35,9 +43,14 @@ function makeRequest(overrides: Partial<PortalWitnessRequestDto> = {}): PortalWi
     strength: '18 units',
     doseDescription: '18 units',
     doseGiven: '18 units',
+    incidentReportId: null,
+    incidentTitle: null,
+    incidentType: null,
+    incidentSeverity: null,
     recordedByName: 'Jordan Lee',
     administeredAt: '2026-08-24T08:05:00Z',
     administeredAtTimeZone: null,
+    incidentDateTime: null,
     witnessStatus: 'Pending',
     witnessRespondedAt: null,
     createdAt: '2026-08-24T08:05:00Z',
@@ -45,9 +58,32 @@ function makeRequest(overrides: Partial<PortalWitnessRequestDto> = {}): PortalWi
   }
 }
 
+function makeIncidentRequest(overrides: Partial<PortalWitnessRequestDto> = {}): PortalWitnessRequestDto {
+  return makeRequest({
+    id: 'witness-1',
+    sourceType: 'Incident',
+    medicationId: null,
+    medicationName: null,
+    strength: null,
+    doseDescription: null,
+    doseGiven: null,
+    incidentReportId: 'incident-1',
+    incidentTitle: 'Slip near pool',
+    incidentType: 'PropertyDamage',
+    incidentSeverity: 'Medium',
+    recordedByName: 'Alex Rivera',
+    administeredAt: null,
+    administeredAtTimeZone: null,
+    incidentDateTime: '2026-08-24T08:05:00Z',
+    ...overrides,
+  })
+}
+
 beforeEach(() => {
   mockApproveMutateAsync.mockReset()
   mockDeclineMutateAsync.mockReset()
+  mockApproveIncidentMutateAsync.mockReset()
+  mockDeclineIncidentMutateAsync.mockReset()
   mockUsePendingWitnessRequests.mockReturnValue({ data: [], isLoading: false })
 })
 
@@ -109,5 +145,88 @@ describe('PortalWitnessApprovalsPage', () => {
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
     expect(mockDeclineMutateAsync).toHaveBeenCalledWith('admin-1')
+  })
+
+  // IN-7: incident rows are discriminated by sourceType and use separate endpoints/mutations.
+  describe('IN-7 incident witness requests', () => {
+    it('renders an incident row with title, type, participant and reporter detail', () => {
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/Slip near pool/)).toBeInTheDocument()
+      expect(screen.getByText(/Sophie Brown/)).toBeInTheDocument()
+      expect(screen.getByText(/Alex Rivera/)).toBeInTheDocument()
+    })
+
+    it('routes Approve through the confirm dialog (unlike a medication row, which approves immediately)', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /approve/i }))
+
+      expect(mockApproveIncidentMutateAsync).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('approves an incident witness request with an optional statement', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      mockApproveIncidentMutateAsync.mockResolvedValue({ success: true, data: {} })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /approve/i }))
+      const dialog = screen.getByRole('dialog')
+      await user.type(within(dialog).getByLabelText(/witness statement/i), 'I saw it happen.')
+      await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
+
+      expect(mockApproveIncidentMutateAsync).toHaveBeenCalledWith({ id: 'witness-1', statementText: 'I saw it happen.' })
+    })
+
+    it('approves an incident witness request with no statement (leaves it undefined)', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      mockApproveIncidentMutateAsync.mockResolvedValue({ success: true, data: {} })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /approve/i }))
+      const dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
+
+      expect(mockApproveIncidentMutateAsync).toHaveBeenCalledWith({ id: 'witness-1', statementText: undefined })
+    })
+
+    it('declines an incident witness request with an optional statement', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      mockDeclineIncidentMutateAsync.mockResolvedValue({ success: true, data: {} })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /decline/i }))
+      const dialog = screen.getByRole('dialog')
+      await user.type(within(dialog).getByLabelText(/witness statement/i), 'Was not present.')
+      await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
+
+      expect(mockDeclineIncidentMutateAsync).toHaveBeenCalledWith({ id: 'witness-1', statementText: 'Was not present.' })
+      expect(mockDeclineMutateAsync).not.toHaveBeenCalled()
+    })
+
+    it('does not render a statement field for a medication row\'s decline dialog', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeRequest()], isLoading: false })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /decline/i }))
+
+      expect(screen.queryByLabelText(/witness statement/i)).not.toBeInTheDocument()
+    })
+
+    it('sums both medication and incident rows into a combined badge-worthy list', () => {
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeRequest(), makeIncidentRequest()], isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/Insulin 18 units/)).toBeInTheDocument()
+      expect(screen.getByText(/Slip near pool/)).toBeInTheDocument()
+    })
   })
 })

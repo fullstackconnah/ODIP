@@ -8,6 +8,8 @@ import type {
   MedicationSupportLevel,
   DrugSchedule,
   WitnessStatus,
+  IncidentType,
+  IncidentSeverity,
 } from './enums'
 import type { ParticipantRoutineDto } from './routines'
 import type { ParticipantRiskEntryDto } from './risk-entries'
@@ -112,18 +114,31 @@ export interface PortalShiftDetailDto {
 
 // ── Witness approvals ────────────────────────────────────
 
+/**
+ * IN-7: a medication administration OR an incident report awaiting (or already given) the
+ * caller's staff-witness sign-off, discriminated by `sourceType`. Medication-only and
+ * incident-only fields are nullable so a single shape covers both sources — code branching on a
+ * row should switch on `sourceType`, not on which fields happen to be non-null.
+ */
 export interface PortalWitnessRequestDto {
   id: string
+  sourceType: 'Medication' | 'Incident'
   participantId: string
   participantName: string
-  medicationId: string
-  medicationName: string
+  medicationId: string | null
+  medicationName: string | null
   strength: string | null
-  doseDescription: string
+  doseDescription: string | null
   doseGiven: string | null
+  incidentReportId: string | null
+  incidentTitle: string | null
+  incidentType: IncidentType | null
+  incidentSeverity: IncidentSeverity | null
+  /** "Recorded by" for a medication row, "Reported by" for an incident row. */
   recordedByName: string
   administeredAt: string | null
   administeredAtTimeZone: string | null
+  incidentDateTime: string | null
   witnessStatus: WitnessStatus
   witnessRespondedAt: string | null
   createdAt: string

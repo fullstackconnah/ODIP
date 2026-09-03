@@ -1,4 +1,4 @@
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType } from './enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType, WitnessStatus } from './enums'
 import type { RestrictivePracticeType } from './restrictive-practices'
 
 /** IN-5: one persisted injury row, as returned by GET /incidents/{id}. */
@@ -14,6 +14,34 @@ export interface CreateIncidentInjuryDto {
   region: BodyRegion
   injuryType: InjuryType
   description: string
+}
+
+/** IN-7: one persisted witness row, as returned by GET /incidents/{id}. */
+export interface IncidentWitnessDto {
+  id: string
+  witnessUserId: string | null
+  witnessName: string
+  /** true when this is a staff witness (witnessUserId set) — drives the Staff/External type badge. */
+  isStaffWitness: boolean
+  witnessStatus: WitnessStatus
+  witnessRequestedAt: string | null
+  witnessRespondedAt: string | null
+  /** Optional, supplied by the witness themself at approval/decline time. */
+  statementText: string | null
+}
+
+/**
+ * IN-7: one submitted witness row. `id` is omitted for a newly-added witness (create, or a row
+ * added during an edit) and set to an existing IncidentWitnessDto.id when echoing back an
+ * already-persisted row on Update — the backend preserves that row's approval state (rather than
+ * resetting it to Pending) only when it recognises the id.
+ */
+export interface CreateIncidentWitnessDto {
+  id?: string
+  /** Set for a staff witness — must not equal the incident's own reportedByStaffId (self-witness
+   * is rejected). Null for a free-text/external witness. */
+  witnessUserId: string | null
+  witnessName: string
 }
 
 /** INC-01: same value set as ServiceStream, plus "None" — the untagged default (backend ServiceStreams.None). */
@@ -75,6 +103,8 @@ export interface IncidentDetailDto extends IncidentListDto {
   witnessStatements: string | null
   /** IN-5: recorded injuries, populated only when incidentType is 'Injury' (empty array otherwise). */
   injuries: IncidentInjuryDto[]
+  /** IN-7: witnesses — staff (approvable) and free-text external witnesses in one list. */
+  witnesses: IncidentWitnessDto[]
   qscReportedAt: string | null
   qscReferenceNumber: string | null
   reviewedByStaffId: string | null
@@ -121,6 +151,8 @@ export interface CreateIncidentDto {
   witnessStatements?: string
   /** IN-5: repeatable injury rows — only meaningful (server-validated as non-empty) when incidentType is 'Injury'. */
   injuries: CreateIncidentInjuryDto[]
+  /** IN-7: repeatable witness rows — staff and free-text external witnesses coexist in one list. */
+  witnesses: CreateIncidentWitnessDto[]
 }
 
 export interface UpdateIncidentDto extends CreateIncidentDto {

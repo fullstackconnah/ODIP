@@ -695,4 +695,252 @@ public class IncidentsControllerTests
         Assert.Equal("An unregistered practice was used.", body.Data!.UnapprovedRestrictivePracticeDetails);
         Assert.Null(body.Data.RestrictivePracticeId);
     }
+
+    // ── IN-7: witnesses ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_WithStaffAndExternalWitnesses_PersistsAllWithCorrectStatuses()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var witness1 = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var witness2 = SeedUser(db, firstName: "Tom", lastName: "Baker");
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto>
+            {
+                new() { WitnessUserId = witness1.Id, WitnessName = witness1.FullName },
+                new() { WitnessUserId = witness2.Id, WitnessName = witness2.FullName },
+                new() { WitnessUserId = null, WitnessName = "Jamie Passerby" },
+            },
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var incident = await db.IncidentReports.SingleAsync();
+        var witnesses = await db.IncidentWitnesses.Where(w => w.IncidentReportId == incident.Id).ToListAsync();
+        Assert.Equal(3, witnesses.Count);
+        Assert.Equal(2, witnesses.Count(w => w.WitnessStatus == WitnessStatus.Pending && w.WitnessUserId != null));
+        var external = Assert.Single(witnesses, w => w.WitnessUserId == null);
+        Assert.Equal(WitnessStatus.NotRequired, external.WitnessStatus);
+        Assert.Equal("Jamie Passerby", external.WitnessName);
+        Assert.All(witnesses.Where(w => w.WitnessUserId != null), w => Assert.NotNull(w.WitnessRequestedAt));
+    }
+
+    [Fact]
+    public async Task Create_WitnessUserIdEqualsReporter_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = reporter.Id, WitnessName = reporter.FullName } },
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("witness their own", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await db.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_WitnessUserIdNotFound_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = Guid.NewGuid(), WitnessName = "Ghost" } },
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await db.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetById_IncludesWitnesses()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var witness = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto>
+            {
+                new() { WitnessUserId = witness.Id, WitnessName = witness.FullName },
+                new() { WitnessUserId = null, WitnessName = "Jamie Passerby" },
+            },
+        };
+        await controller.Create(dto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var result = await controller.GetById(incidentId, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, body.Data!.Witnesses.Count);
+        Assert.Contains(body.Data.Witnesses, w => w.IsStaffWitness && w.WitnessUserId == witness.Id && w.WitnessStatus == WitnessStatus.Pending);
+        Assert.Contains(body.Data.Witnesses, w => !w.IsStaffWitness && w.WitnessName == "Jamie Passerby" && w.WitnessStatus == WitnessStatus.NotRequired);
+    }
+
+    /// <summary>
+    /// THE critical regression this step must never reintroduce: resubmitting the full witnesses
+    /// list on Update (the wizard's "form owns the full list" contract) must not reset a witness
+    /// who has already Approved/Declined back to Pending.
+    /// </summary>
+    [Fact]
+    public async Task Update_ResubmitWithoutChangingApprovedWitness_PreservesApprovedStatus()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var witness = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = witness.Id, WitnessName = witness.FullName } },
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        var witnessRow = await db.IncidentWitnesses.SingleAsync(w => w.IncidentReportId == incident.Id);
+
+        // Simulate the witness already approving via the portal before the reporter edits/resaves.
+        witnessRow.WitnessStatus = WitnessStatus.Approved;
+        witnessRow.WitnessRespondedAt = DateTime.UtcNow;
+        witnessRow.StatementText = "I saw the whole thing.";
+        await db.SaveChangesAsync();
+
+        // Reporter edits the incident and resubmits the SAME witness (echoing its persisted id) —
+        // must not reset the approval.
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            Witnesses = new List<CreateIncidentWitnessDto>
+            {
+                new() { Id = witnessRow.Id, WitnessUserId = witness.Id, WitnessName = witness.FullName },
+            },
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witnessRow.Id);
+        Assert.Equal(WitnessStatus.Approved, reloaded.WitnessStatus);
+        Assert.NotNull(reloaded.WitnessRespondedAt);
+        Assert.Equal("I saw the whole thing.", reloaded.StatementText);
+    }
+
+    [Fact]
+    public async Task Update_DroppingAWitnessRowFromTheSubmittedList_DeletesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var witness1 = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var witness2 = SeedUser(db, firstName: "Tom", lastName: "Baker");
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto>
+            {
+                new() { WitnessUserId = witness1.Id, WitnessName = witness1.FullName },
+                new() { WitnessUserId = witness2.Id, WitnessName = witness2.FullName },
+            },
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        var keep = await db.IncidentWitnesses.SingleAsync(w => w.WitnessUserId == witness1.Id);
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            // witness2 dropped entirely.
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { Id = keep.Id, WitnessUserId = witness1.Id, WitnessName = witness1.FullName } },
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var remaining = await db.IncidentWitnesses.Where(w => w.IncidentReportId == incident.Id).ToListAsync();
+        var only = Assert.Single(remaining);
+        Assert.Equal(witness1.Id, only.WitnessUserId);
+    }
+
+    [Fact]
+    public async Task Update_AddingANewWitnessRowWithNoId_InsertsFreshAsPending()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var witness1 = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var witness2 = SeedUser(db, firstName: "Tom", lastName: "Baker");
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = witness1.Id, WitnessName = witness1.FullName } },
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        var existing = await db.IncidentWitnesses.SingleAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            Witnesses = new List<CreateIncidentWitnessDto>
+            {
+                new() { Id = existing.Id, WitnessUserId = witness1.Id, WitnessName = witness1.FullName },
+                new() { WitnessUserId = witness2.Id, WitnessName = witness2.FullName }, // no Id — newly added
+            },
+        };
+
+        var updateResult = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var all = await db.IncidentWitnesses.Where(w => w.IncidentReportId == incident.Id).ToListAsync();
+        Assert.Equal(2, all.Count);
+        var added = Assert.Single(all, w => w.WitnessUserId == witness2.Id);
+        Assert.Equal(WitnessStatus.Pending, added.WitnessStatus);
+        Assert.NotNull(added.WitnessRequestedAt);
+    }
 }
