@@ -546,7 +546,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Modify: `Odip.Api/Program.cs` (the `AddRateLimiter` block, ~lines 207–269)
 - Read: `Odip.Api/Middleware/ReadOnlyMiddleware.cs`
 
-- [ ] **Step 1: Add the policy**
+- [x] **Step 1: Add the policy**
 
 Inside the existing `builder.Services.AddRateLimiter(options => { ... })` block, after the `"api"` policy and before the closing `});`:
 
@@ -564,7 +564,7 @@ Inside the existing `builder.Services.AddRateLimiter(options => { ... })` block,
             }));
 ```
 
-- [ ] **Step 2: Read ReadOnlyMiddleware**
+- [x] **Step 2: Read ReadOnlyMiddleware**
 
 Open `Odip.Api/Middleware/ReadOnlyMiddleware.cs`. Find the role check. If it is `context.User.IsInRole("ReadOnly")` — an anonymous principal returns `false`, so anonymous PUT/POST pass through and **no change is needed**; record that finding in the commit message. If instead it blocks any write from a principal that is *not authenticated*, add, before the role check:
 
@@ -576,7 +576,7 @@ Open `Odip.Api/Middleware/ReadOnlyMiddleware.cs`. Find the role check. If it is 
         }
 ```
 
-- [ ] **Step 3: Build + commit**
+- [x] **Step 3: Build + commit**
 
 Run: `dotnet build` → 0 errors.
 

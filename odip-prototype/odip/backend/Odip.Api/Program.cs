@@ -266,6 +266,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    // Public, token-authenticated caregiver form. Tighter than "api": these routes carry no
+    // bearer token, so the only brake on a leaked or guessed link is this limiter.
+    options.AddPolicy("public", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "public:" + RateLimitPartitionKey(context),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 // Partition key for the rate limiter. Resolved AFTER UseForwardedHeaders() has run, so
