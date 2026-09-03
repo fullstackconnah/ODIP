@@ -16,7 +16,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import AddContactRoleForm from '@/components/contacts/AddContactRoleForm'
 import { StatusBadge } from '@/components/StatusBadge'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY, CompactGridRow,
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, SERVICE_STREAMS, GENDERS, FUNDING_SOURCES, LIVING_ARRANGEMENTS, AU_STATES, HIDPA_SUPPORT_CATEGORIES, AT_RISK_PARTIES, CONTACT_ROLE_TYPES, CONSENT_TYPES, HEALTH_CONDITION_TYPES, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS, MEMORY_LEVELS, ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS } from '@/api/types/enums'
@@ -614,7 +614,7 @@ function renderReviewRow(row: ReviewRow) {
   )
 }
 
-function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
+function YesNoToggleField({ control, name, label, hint, ariaLabel, hideLabel }: {
   control: Control<ParticipantFormData>
   name: FieldPath<ParticipantFormData>
   label: string
@@ -630,24 +630,35 @@ function YesNoToggleField({ control, name, label, hint, ariaLabel }: {
    * unaffected.
    */
   ariaLabel?: string
+  /**
+   * PF-7/PF-8 — skip FormField's own visible label when the caller (`CompactGridRow`) already
+   * renders the row's label as plain text beside the control; the radiogroup keeps a real
+   * accessible name via `ariaLabel ?? label` either way, so no name is lost, only the doubled-up
+   * visible text a stacked FormField label would otherwise add on top of the row's own label.
+   */
+  hideLabel?: boolean
 }) {
+  const toggle = (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <ToggleGroup
+          options={YES_NO_UNANSWERED_OPTIONS}
+          value={(field.value as string) ?? ''}
+          onChange={field.onChange}
+          // FormField's cloneElement labelling can't reach through this Controller (see
+          // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
+          // the radiogroup has a real accessible name instead of none at all.
+          ariaLabel={ariaLabel ?? label}
+        />
+      )}
+    />
+  )
+  if (hideLabel) return toggle
   return (
     <FormField label={label} hint={hint} className="mb-0">
-      <Controller
-        control={control}
-        name={name}
-        render={({ field }) => (
-          <ToggleGroup
-            options={YES_NO_UNANSWERED_OPTIONS}
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            // FormField's cloneElement labelling can't reach through this Controller (see
-            // ToggleGroup.tsx's ariaLabel doc) — pass the field's own label through explicitly so
-            // the radiogroup has a real accessible name instead of none at all.
-            ariaLabel={ariaLabel ?? label}
-          />
-        )}
-      />
+      {toggle}
     </FormField>
   )
 }
@@ -674,25 +685,31 @@ const ADL_LEVEL_OPTIONS = [
  * either belonged to — the C1 pattern (Plan Provided/Training Required), test-proven there with
  * two rows, extended here across many more.
  */
-function AdlLevelToggleField({ control, name, ariaLabel }: {
+function AdlLevelToggleField({ control, name, ariaLabel, hideLabel }: {
   control: Control<ParticipantFormData>
   name: FieldPath<ParticipantFormData>
   ariaLabel: string
+  /** PF-7/PF-8 — see YesNoToggleField's `hideLabel` doc; same reasoning, same contract. */
+  hideLabel?: boolean
 }) {
+  const toggle = (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <ToggleGroup
+          options={ADL_LEVEL_OPTIONS}
+          value={(field.value as string) ?? ''}
+          onChange={field.onChange}
+          ariaLabel={ariaLabel}
+        />
+      )}
+    />
+  )
+  if (hideLabel) return toggle
   return (
     <FormField label="Level" className="mb-0">
-      <Controller
-        control={control}
-        name={name}
-        render={({ field }) => (
-          <ToggleGroup
-            options={ADL_LEVEL_OPTIONS}
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            ariaLabel={ariaLabel}
-          />
-        )}
-      />
+      {toggle}
     </FormField>
   )
 }
@@ -2954,29 +2971,39 @@ export default function ParticipantCreatePage() {
               </FormField>
             </Card>
 
+            {/* PF-7 — row-per-line-with-expand via the shared CompactGridRow (see its own doc),
+                replacing the former per-row bordered-block stack. The YesNoToggleField below
+                still carries the row's real accessible name via `ariaLabel ?? label` (hideLabel
+                only suppresses the redundant *visible* FormField label CompactGridRow's own
+                `label` text would otherwise duplicate) — every existing
+                `getByRole('radiogroup', { name: ... })` query keeps matching unchanged. */}
             <Card title="Consent & Terms" className="space-y-4 md:col-span-2">
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 Record each consent decision below. Signed-by name and date appear once a consent is granted.
               </p>
-              <div className="space-y-3">
+              <div>
                 {CONSENT_TYPES.map((type, index) => {
                   const granted = watchedValues.consents?.[index]?.granted
+                  const label = CONSENT_TYPE_LABELS[type as ConsentType]
                   return (
-                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
-                      {/* Reuses the same YesNoToggleField as the cultural/rights flags above —
-                          gives this row a real accessible name via ToggleGroup's ariaLabel (see
-                          YesNoToggleField's own comment: FormField's cloneElement can't reach
-                          through the Controller wrapper, so ariaLabel is what actually carries
-                          the name here) rather than a bare unlabelled ToggleGroup next to a plain
-                          <span>. */}
-                      <YesNoToggleField control={control} name={`consents.${index}.granted` as FieldPath<ParticipantFormData>} label={CONSENT_TYPE_LABELS[type as ConsentType]} />
-                      {/* Local conditional render, not the INTAKE-07 conditionalFields engine: that
-                          engine's ConditionalFieldDef contract targets named whole-form fields, not
-                          per-row paths inside a fixed 7-row array — a narrower, per-row condition
-                          that's simpler to express inline here than as a whole-form declarative def
-                          (and this array is never user-add/remove, unlike riskEntries/contactRoles,
-                          so there's no dynamic-row-count concern either way). */}
-                      {granted === 'true' && (
+                    <CompactGridRow
+                      key={type}
+                      label={label}
+                      control={
+                        <YesNoToggleField
+                          control={control}
+                          name={`consents.${index}.granted` as FieldPath<ParticipantFormData>}
+                          label={label}
+                          hideLabel
+                        />
+                      }
+                      /* Local conditional render, not the INTAKE-07 conditionalFields engine: that
+                         engine's ConditionalFieldDef contract targets named whole-form fields, not
+                         per-row paths inside a fixed 7-row array — a narrower, per-row condition
+                         that's simpler to express inline here than as a whole-form declarative def
+                         (and this array is never user-add/remove, unlike riskEntries/contactRoles,
+                         so there's no dynamic-row-count concern either way). */
+                      expanded={granted === 'true' ? (
                         <div className="grid grid-cols-2 gap-3">
                           <FormField label="Signed by" className="mb-0">
                             <input {...register(`consents.${index}.signedByName` as const)} placeholder="Full name" />
@@ -2985,8 +3012,8 @@ export default function ParticipantCreatePage() {
                             <input type="date" {...register(`consents.${index}.signedDate` as const)} />
                           </FormField>
                         </div>
-                      )}
-                    </div>
+                      ) : undefined}
+                    />
                   )
                 })}
               </div>
@@ -3267,7 +3294,16 @@ export default function ParticipantCreatePage() {
 
         {!isReviewStep && wizard.stepIndex === 6 && (
           <div className="grid md:grid-cols-2 gap-6">
-            <Card title="Diagnoses" className="space-y-4">
+            {/* PF-7 — Diagnoses and Health Conditions merged into one Card with two labelled
+                <section>s divided by a border, replacing the former two separate Cards. Data
+                models stay separate underneath (Participant.PrimaryDiagnosis/OtherDiagnoses vs.
+                the ParticipantHealthCondition collection) — this is presentation only, no schema
+                change. The Health Conditions section below (moved up from its former standalone
+                Card further down this step) reuses the shared CompactGridRow row-per-line-with-
+                expand pattern, same as the Consent & Terms grid on the Cultural & Consent step. */}
+            <Card title="Diagnoses & Health Conditions" className="space-y-6 md:col-span-2">
+              <section className="space-y-4">
+              <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Diagnoses</h4>
               <FormField label="Primary Diagnosis">
                 <select id="primaryDiagnosis" {...register('primaryDiagnosis')}>
                   <option value="">Select a diagnosis...</option>
@@ -3372,6 +3408,77 @@ export default function ParticipantCreatePage() {
                   }}
                 />
               </fieldset>
+              </section>
+
+              <div className="border-t border-[var(--color-border)]" />
+
+              {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5:
+                  Yes-No + severity + plan-provided + training-required shape). Fixed 10-row
+                  array, never user-add/remove — CompactGridRow row-per-line-with-expand, same
+                  local per-row conditional render as the Consent & Terms grid (not the INTAKE-07
+                  conditionalFields engine). RECONCILIATION: this section is support-planning
+                  detail, not a replacement for the Diagnoses section above — see
+                  ParticipantHealthCondition's backend type doc. An Epilepsy diagnosis pre-selects
+                  this grid's Epilepsy row to "Yes" by default (see FIELD_DERIVATIONS above) —
+                  untick it if support planning doesn't actually need it. */}
+              <section className="space-y-4">
+                <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Health Conditions</h4>
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  Structured support-planning detail for each condition below — distinct from the
+                  diagnosis labels above.
+                </p>
+                <div>
+                  {HEALTH_CONDITION_TYPES.map((type, index) => {
+                    const has = watchedValues.healthConditions?.[index]?.has
+                    const conditionLabel = HEALTH_CONDITION_TYPE_LABELS[type as HealthConditionType]
+                    return (
+                      <CompactGridRow
+                        key={type}
+                        label={conditionLabel}
+                        control={
+                          <YesNoToggleField
+                            control={control}
+                            name={`healthConditions.${index}.has` as FieldPath<ParticipantFormData>}
+                            label={conditionLabel}
+                            hideLabel
+                          />
+                        }
+                        expanded={has === 'true' ? (
+                          <div className="space-y-3">
+                            <FormField label="Severity" className="mb-0">
+                              <input {...register(`healthConditions.${index}.severity` as const)} placeholder="e.g. Mild, Type 2, GrandMal..." />
+                            </FormField>
+                            <div className="grid grid-cols-2 gap-3">
+                              {/* Review-round a11y fix: with 2+ rows answered "Yes", several
+                                  radiogroups would otherwise all share the plain "Plan Provided" /
+                                  "Training Required" accessible name — indistinguishable to a
+                                  screen reader user navigating by role. ariaLabel carries the
+                                  row-qualified name; the visible FormField label (via `label`)
+                                  stays the short, unqualified text since sighted users already
+                                  see which condition's row they're in. */}
+                              <YesNoToggleField
+                                control={control}
+                                name={`healthConditions.${index}.planProvided` as FieldPath<ParticipantFormData>}
+                                label="Plan Provided"
+                                ariaLabel={`Plan Provided — ${conditionLabel}`}
+                              />
+                              <YesNoToggleField
+                                control={control}
+                                name={`healthConditions.${index}.trainingRequired` as FieldPath<ParticipantFormData>}
+                                label="Training Required"
+                                ariaLabel={`Training Required — ${conditionLabel}`}
+                              />
+                            </div>
+                            <FormField label="Notes" className="mb-0">
+                              <textarea {...register(`healthConditions.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                            </FormField>
+                          </div>
+                        ) : undefined}
+                      />
+                    )
+                  })}
+                </div>
+              </section>
             </Card>
 
             <Card title="HIDPA Support Categories" className="space-y-4">
@@ -3442,67 +3549,6 @@ export default function ParticipantCreatePage() {
               </FormField>
             </Card>
 
-            {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5:
-                Yes-No + severity + plan-provided + training-required shape). Fixed 10-row array,
-                never user-add/remove — same rendering convention as the Consent & Terms grid on
-                the Cultural & Consent step above (local per-row conditional render, not the
-                INTAKE-07 conditionalFields engine — same reasoning as that step's comment).
-                RECONCILIATION: this grid is support-planning detail, not a replacement for the
-                Diagnoses card above — see ParticipantHealthCondition's backend type doc. An
-                Epilepsy diagnosis pre-selects this grid's Epilepsy row to "Yes" by default (see
-                FIELD_DERIVATIONS above) — untick it if support planning doesn't actually need it. */}
-            <Card title="Health Conditions" className="space-y-4 md:col-span-2">
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                Structured support-planning detail for each condition below — distinct from the
-                Diagnoses card above, which records the participant's clinical diagnosis labels.
-              </p>
-              <div className="space-y-3">
-                {HEALTH_CONDITION_TYPES.map((type, index) => {
-                  const has = watchedValues.healthConditions?.[index]?.has
-                  const conditionLabel = HEALTH_CONDITION_TYPE_LABELS[type as HealthConditionType]
-                  return (
-                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
-                      <YesNoToggleField
-                        control={control}
-                        name={`healthConditions.${index}.has` as FieldPath<ParticipantFormData>}
-                        label={conditionLabel}
-                      />
-                      {has === 'true' && (
-                        <div className="space-y-3">
-                          <FormField label="Severity" className="mb-0">
-                            <input {...register(`healthConditions.${index}.severity` as const)} placeholder="e.g. Mild, Type 2, GrandMal..." />
-                          </FormField>
-                          <div className="grid grid-cols-2 gap-3">
-                            {/* Review-round a11y fix: with 2+ rows answered "Yes", several
-                                radiogroups would otherwise all share the plain "Plan Provided" /
-                                "Training Required" accessible name — indistinguishable to a
-                                screen reader user navigating by role. ariaLabel carries the
-                                row-qualified name; the visible FormField label (via `label`)
-                                stays the short, unqualified text since sighted users already see
-                                which condition's card they're in. */}
-                            <YesNoToggleField
-                              control={control}
-                              name={`healthConditions.${index}.planProvided` as FieldPath<ParticipantFormData>}
-                              label="Plan Provided"
-                              ariaLabel={`Plan Provided — ${conditionLabel}`}
-                            />
-                            <YesNoToggleField
-                              control={control}
-                              name={`healthConditions.${index}.trainingRequired` as FieldPath<ParticipantFormData>}
-                              label="Training Required"
-                              ariaLabel={`Training Required — ${conditionLabel}`}
-                            />
-                          </div>
-                          <FormField label="Notes" className="mb-0">
-                            <textarea {...register(`healthConditions.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
-                          </FormField>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
           </div>
         )}
 
@@ -3637,33 +3683,39 @@ export default function ParticipantCreatePage() {
                 I = Independent, S = Supervision, A = Assistance, F = Full Support. Levels sourced from
                 the Participant Profile's Personal Activities of Daily Living table.
               </p>
-              <div className="space-y-3">
+              <div>
                 {PERSONAL_ADL_TYPES.map((type) => {
                   const index = ADL_TYPES.indexOf(type)
                   const level = watchedValues.adlAssessments?.[index]?.level
                   const label = ADL_TYPE_LABELS[type as AdlType]
                   return (
-                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
-                      <h4 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h4>
-                      <AdlLevelToggleField
-                        control={control}
-                        name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
-                        ariaLabel={`Level — ${label}`}
-                      />
-                      {level && (
-                        <FormField label="Notes" className="mb-0">
-                          <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
-                        </FormField>
-                      )}
-                      {/* INTAKE-03: CA-gated per-row "how to help me" instruction, nested inside
-                          the same {level && ...} local conditional as Notes above — only shown
-                          once a level is set. */}
-                      {level && isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
-                        <FormField label="How To Help Me" className="mb-0">
-                          <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
-                        </FormField>
-                      )}
-                    </div>
+                    <CompactGridRow
+                      key={type}
+                      label={label}
+                      control={
+                        <AdlLevelToggleField
+                          control={control}
+                          name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
+                          ariaLabel={`Level — ${label}`}
+                          hideLabel
+                        />
+                      }
+                      /* INTAKE-03: CA-gated per-row "how to help me" instruction, nested inside
+                         the same level-gated expand as Notes below — only shown once a level is
+                         set. */
+                      expanded={level ? (
+                        <div className="space-y-3">
+                          <FormField label="Notes" className="mb-0">
+                            <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                          </FormField>
+                          {isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
+                            <FormField label="How To Help Me" className="mb-0">
+                              <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
+                            </FormField>
+                          )}
+                        </div>
+                      ) : undefined}
+                    />
                   )
                 })}
               </div>
@@ -3673,30 +3725,36 @@ export default function ParticipantCreatePage() {
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 Levels sourced from the Participant Profile's Community and Domestic ADL table.
               </p>
-              <div className="space-y-3">
+              <div>
                 {COMMUNITY_DOMESTIC_ADL_TYPES.map((type) => {
                   const index = ADL_TYPES.indexOf(type)
                   const level = watchedValues.adlAssessments?.[index]?.level
                   const label = ADL_TYPE_LABELS[type as AdlType]
                   return (
-                    <div key={type} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
-                      <h4 className="text-sm font-medium text-[var(--color-foreground)]">{label}</h4>
-                      <AdlLevelToggleField
-                        control={control}
-                        name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
-                        ariaLabel={`Level — ${label}`}
-                      />
-                      {level && (
-                        <FormField label="Notes" className="mb-0">
-                          <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
-                        </FormField>
-                      )}
-                      {level && isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
-                        <FormField label="How To Help Me" className="mb-0">
-                          <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
-                        </FormField>
-                      )}
-                    </div>
+                    <CompactGridRow
+                      key={type}
+                      label={label}
+                      control={
+                        <AdlLevelToggleField
+                          control={control}
+                          name={`adlAssessments.${index}.level` as FieldPath<ParticipantFormData>}
+                          ariaLabel={`Level — ${label}`}
+                          hideLabel
+                        />
+                      }
+                      expanded={level ? (
+                        <div className="space-y-3">
+                          <FormField label="Notes" className="mb-0">
+                            <textarea {...register(`adlAssessments.${index}.notes` as const)} rows={2} placeholder="Additional notes..." />
+                          </FormField>
+                          {isVisible(`adlAssessments.${index}.howToHelpNotes`) && (
+                            <FormField label="How To Help Me" className="mb-0">
+                              <textarea {...register(`adlAssessments.${index}.howToHelpNotes` as const)} rows={2} placeholder="How to help with this activity..." />
+                            </FormField>
+                          )}
+                        </div>
+                      ) : undefined}
+                    />
                   )
                 })}
               </div>
