@@ -1984,10 +1984,10 @@ export default function ParticipantCreatePage() {
               + (watchedValues.gender === 'Other' && watchedValues.genderSelfDescription ? ` (${watchedValues.genderSelfDescription})` : '')
             : '—',
         },
-        { label: 'Preferred Staff Member', value: preferredStaffName },
         { label: 'Place of Birth', value: watchedValues.placeOfBirth || '—' },
         { label: 'Phone', value: watchedValues.phone || '—' },
         { label: 'Email', value: watchedValues.email || '—' },
+        { label: 'Preferred Staff Member', value: preferredStaffName },
         {
           label: 'Address',
           value: [watchedValues.addressStreet, watchedValues.addressSuburb, watchedValues.addressState, watchedValues.addressPostcode, watchedValues.country]
@@ -2017,6 +2017,15 @@ export default function ParticipantCreatePage() {
     {
       stepKey: 'ndis',
       rows: [
+        // PF-9 (SPEC-02): Service Streams promoted to the top of this group's rows, matching the
+        // step's own promoted card order — it's a gate for later CA-conditional steps, not an
+        // afterthought.
+        {
+          label: 'Service Streams',
+          value: watchedValues.serviceStreams?.length
+            ? watchedValues.serviceStreams.map((s) => SERVICE_STREAM_LABELS[s as ServiceStream] ?? s).join(', ')
+            : 'None',
+        },
         {
           label: 'Funding Source',
           value: watchedValues.fundingSource
@@ -2033,12 +2042,6 @@ export default function ParticipantCreatePage() {
         ...(isVisible('fundingOrganisation') ? [{ label: 'Funding Organisation', value: watchedValues.fundingOrganisation || '—' }] : []),
         { label: 'Disability Support for Older Australians (DSOA)', value: watchedValues.isDsoa ? 'Yes' : 'No' },
         { label: 'Repeat Client', value: watchedValues.isRepeatClient ? 'Yes' : 'No' },
-        {
-          label: 'Service Streams',
-          value: watchedValues.serviceStreams?.length
-            ? watchedValues.serviceStreams.map((s) => SERVICE_STREAM_LABELS[s as ServiceStream] ?? s).join(', ')
-            : 'None',
-        },
         // PF-2 (SPEC-02): rendered as the same amber banner via renderReviewRow's sentinel-label
         // check below — omitted entirely (not just hidden) when the condition is satisfied.
         ...(planTypeComplianceWarningValue
@@ -2406,13 +2409,13 @@ export default function ParticipantCreatePage() {
               <FormField label="Email" error={errors.email?.message}>
                 <input id="email" type="email" {...register('email')} placeholder="e.g. name@example.com" />
               </FormField>
-            </Card>
 
-            <Card title="Staff Preferences" className="space-y-4">
               {/* UX-01: participant/staff-scale picker — was a Dropdown `searchable`, now
                   SearchableSelect per components/README.md "Picking a picker". Scoped to this one
                   field's control only — see feat/intake08-drafts, a different lane touching other
-                  parts of this same wizard file. */}
+                  parts of this same wizard file. PF-9: merged into Personal Information — a
+                  single field doesn't need its own card chrome (presentation-only reorder, no
+                  step/schema change). */}
               <FormField label="Preferred Staff Member">
                 <Controller
                   control={control}
@@ -2535,6 +2538,52 @@ export default function ParticipantCreatePage() {
 
         {!isReviewStep && wizard.stepIndex === 1 && (
           <div className="grid md:grid-cols-2 gap-6">
+            {/* PF-9 (SPEC-02): Service Streams promoted ahead of NDIS & Funding — it gates
+                CA-conditional blocks on Support/Medical/Behaviour, so it belongs at the top of
+                the step rather than after the funding fields (presentation-only reorder; still
+                the same step/STEP_NDIS_FIELDS/STEP_TO_PATCH_GROUPS membership). */}
+            <Card title="Service Streams" className="space-y-4">
+              <fieldset className="m-0 p-0 border-0">
+                <legend className="sr-only">Service Streams</legend>
+                <Controller
+                  control={control}
+                  name="serviceStreams"
+                  render={({ field }) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                      {SERVICE_STREAMS.map((stream) => {
+                        const selected = field.value ?? []
+                        const checked = selected.includes(stream)
+                        // INTAKE-03: CommunityAccessDailyLiving's own checkbox is intercepted by
+                        // handleCommunityAccessStreamChange (the stream-removal confirm dialog,
+                        // see its doc above) instead of field.onChange directly — every other
+                        // stream keeps the plain toggle. The id is also this checkbox's
+                        // CONDITIONAL_FIELDS focusFallback anchor.
+                        const isCommunityAccess = stream === 'CommunityAccessDailyLiving'
+                        return (
+                          <label key={stream} className="flex items-center gap-3 py-1 min-h-[44px]">
+                            <input
+                              type="checkbox"
+                              id={isCommunityAccess ? 'serviceStreams-CommunityAccessDailyLiving' : undefined}
+                              checked={checked}
+                              onChange={isCommunityAccess ? handleCommunityAccessStreamChange : (e) => {
+                                field.onChange(
+                                  e.target.checked
+                                    ? [...selected, stream]
+                                    : selected.filter((v) => v !== stream)
+                                )
+                              }}
+                              className="w-4 h-4 rounded border-[var(--color-border)]"
+                            />
+                            <span className="text-sm text-[var(--color-foreground)]">{SERVICE_STREAM_LABELS[stream]}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                />
+              </fieldset>
+            </Card>
+
             <Card title="NDIS & Funding" className="space-y-4">
               <FormField label="Funding Source" required error={errors.fundingSource?.message}>
                 <select id="fundingSource" {...fundingSourceRegistration} onChange={handleFundingSourceChange}>
@@ -2610,48 +2659,6 @@ export default function ParticipantCreatePage() {
               <FormField label="Disability Support for Older Australians (DSOA)" layout="checkbox">
                 <input id="isDsoa" type="checkbox" {...register('isDsoa')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
-            </Card>
-
-            <Card title="Service Streams" className="space-y-4">
-              <fieldset className="m-0 p-0 border-0">
-                <legend className="sr-only">Service Streams</legend>
-                <Controller
-                  control={control}
-                  name="serviceStreams"
-                  render={({ field }) => (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-                      {SERVICE_STREAMS.map((stream) => {
-                        const selected = field.value ?? []
-                        const checked = selected.includes(stream)
-                        // INTAKE-03: CommunityAccessDailyLiving's own checkbox is intercepted by
-                        // handleCommunityAccessStreamChange (the stream-removal confirm dialog,
-                        // see its doc above) instead of field.onChange directly — every other
-                        // stream keeps the plain toggle. The id is also this checkbox's
-                        // CONDITIONAL_FIELDS focusFallback anchor.
-                        const isCommunityAccess = stream === 'CommunityAccessDailyLiving'
-                        return (
-                          <label key={stream} className="flex items-center gap-3 py-1 min-h-[44px]">
-                            <input
-                              type="checkbox"
-                              id={isCommunityAccess ? 'serviceStreams-CommunityAccessDailyLiving' : undefined}
-                              checked={checked}
-                              onChange={isCommunityAccess ? handleCommunityAccessStreamChange : (e) => {
-                                field.onChange(
-                                  e.target.checked
-                                    ? [...selected, stream]
-                                    : selected.filter((v) => v !== stream)
-                                )
-                              }}
-                              className="w-4 h-4 rounded border-[var(--color-border)]"
-                            />
-                            <span className="text-sm text-[var(--color-foreground)]">{SERVICE_STREAM_LABELS[stream]}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                />
-              </fieldset>
             </Card>
           </div>
         )}
