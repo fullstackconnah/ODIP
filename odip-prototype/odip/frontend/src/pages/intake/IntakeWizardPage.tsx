@@ -14,13 +14,31 @@
  * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
  * "Save as draft" still lands on the detail page), navigates to the Profile wizard
  * (`/participants/{id}/profile`, PF-10.4) — see the `onSubmit` handler below.
+ *
+ * PF-10.5 EDIT MODE — resuming an existing draft whose IntakeCompletedAt is still null (the
+ * detail page's "Resume intake" banner, routed to `/participants/{id}/intake`): this same
+ * component, keyed off an optional `:id` route param. Loads the existing row via `useParticipant`,
+ * hydrates every Intake-owned field via `reset()` (mirrors ProfileWizardPage.tsx's own hydration
+ * effect), and both "Save as draft"/"Complete Intake" go through `PUT /api/participants/{id}`
+ * (`useUpdateParticipant`) instead of `POST`, with `isDraft` always resubmitted `true` — Intake
+ * alone never finalises a participant, only a subsequent Profile completion (PF-10.4) does.
+ * `CompleteIntake: true` on the edit-mode "Complete Intake" call stamps IntakeCompletedAt via the
+ * same server-side handling Update now has (SPEC-05 PF-10.5, see ParticipantsController.Update).
+ * Contacts/Risks are edit-mode-omitted from the PUT payload entirely, matching
+ * ParticipantCreatePage.tsx's own established edit-mode convention (those two rows-collections are
+ * create-mode-only on this DTO; Update never reads them) — existing rows are shown read-only
+ * (fetched via their own nested-CRUD endpoints) rather than re-editable here, so nothing already
+ * recorded is lost or silently resubmitted.
  */
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { useCreateParticipant, usePersons } from '@/api/hooks'
+import {
+  useCreateParticipant, useUpdateParticipant, useParticipant, usePersons,
+  useParticipantContactRoles, useParticipantRiskEntries,
+} from '@/api/hooks'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
@@ -30,10 +48,10 @@ import {
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
-import { formatServiceStreams } from '@/api/types/participants'
+import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
-import { focusField, triStateToBool, extractErrorMessage } from './intakeFormat'
+import { focusField, triStateToBool, boolToTriState, extractErrorMessage } from './intakeFormat'
 import { ParticipantDetailsStep } from './steps/ParticipantDetailsStep'
 import { NdisFundingStep } from './steps/NdisFundingStep'
 import { ContactsStep } from './steps/ContactsStep'
@@ -56,11 +74,22 @@ function yesNoUnknown(value: string | undefined): string {
 }
 
 export default function IntakeWizardPage() {
+  const { id } = useParams<{ id: string }>()
+  const isEditMode = !!id
   const navigate = useNavigate()
   const createParticipant = useCreateParticipant()
+  const updateParticipant = useUpdateParticipant()
+  const saveMutation = isEditMode ? updateParticipant : createParticipant
+  const { data: participant, isLoading: participantLoading } = useParticipant(id)
+  // PF-10.5 edit mode: Contacts/Risks stay create-mode-only on the wizard's own field arrays (see
+  // this file's header doc) — existing rows are surfaced read-only from their own nested-CRUD
+  // endpoints instead, same data source ParticipantContactRolesSection/RiskEntriesSection already
+  // use on the detail page.
+  const { data: existingContactRoles = [] } = useParticipantContactRoles(isEditMode ? id : undefined)
+  const { data: existingRiskEntries = [] } = useParticipantRiskEntries(isEditMode ? id : undefined)
   const { data: people = [] } = usePersons()
 
-  const { register, handleSubmit, control, getValues, setValue, watch, setError, clearErrors, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, control, getValues, setValue, watch, setError, clearErrors, reset, formState: { errors } } = useForm<ParticipantFormData>({
     resolver: intakeParticipantResolver,
     defaultValues: {
       livingArrangement: '',
@@ -99,8 +128,60 @@ export default function IntakeWizardPage() {
     if (focusRequest) focusField(focusRequest.field)
   }, [focusRequest])
   useEffect(() => {
-    focusField('firstName')
-  }, [])
+    if (!isEditMode) focusField('firstName')
+  }, [isEditMode])
+
+  // PF-10.5 EDIT MODE — hydrate every Intake-owned field from the existing row so resuming a draft
+  // shows what's already captured rather than a blank form. Round-trip conventions (tri-state,
+  // date-slice, array defaults) mirror ProfileWizardPage.tsx's own hydration effect exactly.
+  // Contacts/Risks are deliberately excluded — see this file's header doc.
+  useEffect(() => {
+    if (!isEditMode || !participant) return
+    reset({
+      firstName: participant.firstName ?? '', lastName: participant.lastName ?? '',
+      preferredName: participant.preferredName ?? '',
+      dateOfBirth: participant.dateOfBirth ? participant.dateOfBirth.split('T')[0] : '',
+      phone: participant.phone ?? '', email: participant.email ?? '',
+      addressStreet: participant.addressStreet ?? '', addressSuburb: participant.addressSuburb ?? '',
+      addressState: participant.addressState ?? '', addressPostcode: participant.addressPostcode ?? '',
+      livingArrangement: participant.livingArrangement ?? '',
+      mainSupportPersonName: participant.mainSupportPersonName ?? '',
+      mainSupportPersonRelationship: participant.mainSupportPersonRelationship ?? '',
+      othersLivingInAccommodation: participant.othersLivingInAccommodation ?? '',
+      residentialInfo: participant.residentialInfo ?? '',
+      livesWithOthers: participant.livesWithOthers ?? false, whoLivesWith: participant.whoLivesWith ?? '',
+      silProviderName: participant.silProviderName ?? '', silProviderContactPhone: participant.silProviderContactPhone ?? '',
+      accommodationType: participant.accommodationType ?? '', onSiteSupportHours: participant.onSiteSupportHours ?? '',
+      livingArrangementNotes: participant.livingArrangementNotes ?? '',
+      ndisNumber: participant.ndisNumber ?? '',
+      planStartDate: participant.planStartDate ? participant.planStartDate.split('T')[0] : '',
+      planEndDate: participant.planEndDate ? participant.planEndDate.split('T')[0] : '',
+      planType: participant.planType ?? 'SelfManaged', fundingSource: participant.fundingSource ?? 'Ndis',
+      fundingOrganisation: participant.fundingOrganisation ?? '', region: participant.region ?? '',
+      isRepeatClient: participant.isRepeatClient ?? false,
+      serviceStreams: parseServiceStreams(participant.serviceStreams),
+      isCald: boolToTriState(participant.isCald), isLgbtqi: boolToTriState(participant.isLgbtqi),
+      isFamilyCommunity: boolToTriState(participant.isFamilyCommunity),
+      isAboriginalOrTorresStraitIslander: boolToTriState(participant.isAboriginalOrTorresStraitIslander),
+      receivedRightsAndResponsibilitiesInfo: boolToTriState(participant.receivedRightsAndResponsibilitiesInfo),
+      receivedPrivacyAndConfidentialityInfo: boolToTriState(participant.receivedPrivacyAndConfidentialityInfo),
+      receivedFeedbackInfo: boolToTriState(participant.receivedFeedbackInfo),
+      receivedBeingSafeInfo: boolToTriState(participant.receivedBeingSafeInfo),
+      receivedAdvocacyInfo: boolToTriState(participant.receivedAdvocacyInfo),
+      mobilityAidWheelchair: participant.mobilityAidWheelchair ?? false, mobilityAidWalker: participant.mobilityAidWalker ?? false,
+      isHighSupport: participant.isHighSupport ?? false, isIntensiveSupport: participant.isIntensiveSupport ?? false,
+      overnightSupport: participant.overnightSupport ?? 'None', overnightRatio: participant.overnightRatio ?? 'OneToOne',
+      requiresHiLoBed: participant.requiresHiLoBed ?? false, requiresHoist: participant.requiresHoist ?? false,
+      requiresShowerChair: participant.requiresShowerChair ?? false, requiresCommode: participant.requiresCommode ?? false,
+      requiresStandingMachine: participant.requiresStandingMachine ?? false, supportRatio: participant.supportRatio ?? 'SharedSupport',
+      medicalSummary: participant.medicalSummary ?? '', hidpaNotes: participant.hidpaNotes ?? '',
+      behavioursOfConcernCurrent: boolToTriState(participant.behavioursOfConcernCurrent),
+      behavioursOfConcernFiveYearHistory: boolToTriState(participant.behavioursOfConcernFiveYearHistory),
+      expressiveSkills: participant.expressiveSkills ?? '',
+      behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
+      riskEntries: [], contactRoles: [],
+    } as unknown as Parameters<typeof reset>[0])
+  }, [isEditMode, participant, reset])
 
   const WIZARD_STEPS: WizardStepDef<ParticipantFormData>[] = useMemo(() => [
     { key: 'participantDetails', label: 'Participant Details', fields: STEP_PARTICIPANT_DETAILS_FIELDS },
@@ -186,12 +267,26 @@ export default function IntakeWizardPage() {
     return payload
   }
 
+  // PF-10.5 edit mode: Contacts/Risks are create-mode-only on this DTO (Update never reads them —
+  // see this file's header doc) — stripped from every edit-mode payload so an edit-mode save can
+  // never silently clear/resubmit rows already managed via their own nested-CRUD endpoints.
+  function stripCreateOnlyCollections(payload: Record<string, unknown>) {
+    delete payload.riskEntries
+    delete payload.contactRoles
+    return payload
+  }
+
   const onSubmit = async (data: ParticipantFormData) => {
     // SPEC-05 (PF-10.5): IsDraft stays true across the entire Intake-done/Profile-pending span —
     // only the Profile wizard (PF-10.4) ever flips it false. completeIntake=true stamps
     // IntakeCompletedAt server-side; it is a distinct flag from IsDraft, not its replacement.
     const payload = buildIntakePayload(data, true, true)
     try {
+      if (isEditMode && id) {
+        const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
+        if (res.success) navigate(`/participants/${id}/profile`)
+        return
+      }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         // PF-10.4: the Profile wizard now exists — hand off there directly instead of the detail
@@ -213,6 +308,14 @@ export default function IntakeWizardPage() {
     // completeIntake=false: a mid-intake "Save as draft" must not stamp IntakeCompletedAt.
     const payload = buildIntakePayload(data, true, false)
     try {
+      if (isEditMode && id) {
+        const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
+        if (res.success) {
+          flushSync(() => {})
+          navigate(`/participants/${id}`)
+        }
+        return
+      }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         flushSync(() => {})
@@ -230,7 +333,7 @@ export default function IntakeWizardPage() {
       key: 'save-draft',
       label: savingDraft ? 'Saving draft...' : 'Save as draft',
       onClick: handleSaveDraft,
-      disabled: savingDraft || createParticipant.isPending,
+      disabled: savingDraft || saveMutation.isPending,
     },
   ]
 
@@ -257,7 +360,9 @@ export default function IntakeWizardPage() {
           { label: 'Plan-type compliance', value: planTypeComplianceWarningValue ?? '' },
         )
       } else if (step.key === 'contacts') {
-        rows.push({ label: 'Contacts added', value: String((values.contactRoles ?? []).length) })
+        // PF-10.5 edit mode: contactRoles is never hydrated into the form (create-mode-only field
+        // array — see this file's header doc), so the count comes from the existing-rows fetch.
+        rows.push({ label: 'Contacts added', value: String((isEditMode ? existingContactRoles.length : (values.contactRoles ?? []).length)) })
       } else if (step.key === 'culturalConsiderations') {
         rows.push(
           { label: 'CALD', value: yesNoUnknown(values.isCald) },
@@ -281,25 +386,32 @@ export default function IntakeWizardPage() {
       } else if (step.key === 'risks') {
         rows.push(
           { label: 'Behaviour Risk Summary', value: values.behaviourRiskSummary || '—' },
-          { label: 'Risk Entries', value: String((values.riskEntries ?? []).length) },
+          { label: 'Risk Entries', value: String((isEditMode ? existingRiskEntries.length : (values.riskEntries ?? []).length)) },
         )
       }
       return { stepKey: step.key, rows }
     })
   }
 
+  // PF-10.5 edit mode: wait for the existing row before rendering the form, same guard
+  // ProfileWizardPage.tsx uses — resetting a still-loading `undefined` participant would flash the
+  // blank create-mode defaults, then jump once the fetch resolves.
+  if (isEditMode && (participantLoading || !participant)) {
+    return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Link to="/participants" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+        <Link to={isEditMode ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-xl md:text-2xl font-bold">Intake</h1>
+        <h1 className="text-xl md:text-2xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
       </div>
 
-      {createParticipant.isError && (
+      {saveMutation.isError && (
         <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
-          Failed to create participant. Please check your input and try again.
+          Failed to save this participant's intake details. Please check your input and try again.
         </div>
       )}
       {draftError && (
@@ -329,11 +441,27 @@ export default function IntakeWizardPage() {
         )}
 
         {!isReviewStep && currentStep.key === 'contacts' && (
-          <ContactsStep
-            control={control} register={register} errors={errors} setValue={setValue} watch={watch}
-            people={people} contactRoleFieldArray={contactRoleFieldArray}
-            planTypeComplianceWarningValue={planTypeComplianceWarningValue}
-          />
+          <>
+            {/* PF-10.5 edit mode: contactRoles is a create-mode-only field array (see this file's
+                header doc) — existing rows are already managed via the detail page's Contacts tab,
+                surfaced here read-only so resuming doesn't look like they've vanished. */}
+            {isEditMode && existingContactRoles.length > 0 && (
+              <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)] text-sm">
+                <p className="font-medium mb-1">{existingContactRoles.length} contact{existingContactRoles.length === 1 ? '' : 's'} already recorded</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {existingContactRoles.map((role) => (
+                    <li key={role.id}>{role.personFullName || 'Unnamed contact'} — {role.roleType}</li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-[var(--color-muted-foreground)]">Manage existing contacts from the participant's detail page. Add any NEW contacts below.</p>
+              </div>
+            )}
+            <ContactsStep
+              control={control} register={register} errors={errors} setValue={setValue} watch={watch}
+              people={people} contactRoleFieldArray={contactRoleFieldArray}
+              planTypeComplianceWarningValue={planTypeComplianceWarningValue}
+            />
+          </>
         )}
 
         {!isReviewStep && currentStep.key === 'culturalConsiderations' && (
@@ -353,7 +481,23 @@ export default function IntakeWizardPage() {
         )}
 
         {!isReviewStep && currentStep.key === 'risks' && (
-          <RisksHazardsStep control={control} register={register} errors={errors} riskEntryFieldArray={riskEntryFieldArray} />
+          <>
+            {/* PF-10.5 edit mode: riskEntries is a create-mode-only field array (see this file's
+                header doc) — existing rows are already managed via the detail page's Risks
+                section, surfaced here read-only so resuming doesn't look like they've vanished. */}
+            {isEditMode && existingRiskEntries.length > 0 && (
+              <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)] text-sm">
+                <p className="font-medium mb-1">{existingRiskEntries.length} risk {existingRiskEntries.length === 1 ? 'entry' : 'entries'} already recorded</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {existingRiskEntries.map((entry) => (
+                    <li key={entry.id}>{entry.description}</li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-[var(--color-muted-foreground)]">Manage existing risk entries from the participant's detail page. Add any NEW risks below.</p>
+              </div>
+            )}
+            <RisksHazardsStep control={control} register={register} errors={errors} riskEntryFieldArray={riskEntryFieldArray} />
+          </>
         )}
 
         {isReviewStep && (
@@ -370,9 +514,9 @@ export default function IntakeWizardPage() {
           onNext={wizard.handleNext}
           isReviewStep={isReviewStep}
           secondaryActions={secondaryActions}
-          cancelTo="/participants"
-          submitLabel={createParticipant.isPending ? 'Creating...' : 'Complete Intake'}
-          isSubmitting={createParticipant.isPending || wizard.isAdvancing}
+          cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
+          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete Intake'}
+          isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />
       </form>
     </div>

@@ -250,12 +250,16 @@ public record CreateParticipantDto
     /// </summary>
     public bool IsDraft { get; init; }
     /// <summary>
-    /// SPEC-05 (PF-10.3) — set true only by the new Intake wizard's final-step create call, to
-    /// stamp <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/> server-side.
-    /// Deliberately distinct from <see cref="IsDraft"/>: a mid-intake "save as draft" POST still
-    /// creates the row (IsDraft=true) without this flag, so it must NOT also stamp
-    /// IntakeCompletedAt. Ignored by <see cref="UpdateParticipantDto"/>'s call site — only Create
-    /// stamps this field, per SPEC-05's progression model.
+    /// SPEC-05 (PF-10.3/PF-10.5) — set true by the Intake wizard's final-step submission to stamp
+    /// <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/> server-side. Deliberately
+    /// distinct from <see cref="IsDraft"/>: a mid-intake "save as draft" call still creates/updates
+    /// the row (IsDraft=true) without this flag, so it must NOT also stamp IntakeCompletedAt.
+    /// Read on BOTH call sites as of PF-10.5: Create (a brand-new Intake) and Update (resuming an
+    /// existing Intake draft whose IntakeCompletedAt is still null — see
+    /// ParticipantsController.Update's handling, which never overwrites an already-set value and
+    /// never touches IsDraft). PF-10.3's original note said Update ignored this flag entirely;
+    /// PF-10.5 revises that once the resume-Intake flow needed a way to finish stamping an
+    /// existing draft row rather than creating a second Participant.
     /// </summary>
     public bool CompleteIntake { get; init; }
     [StringLength(100)]

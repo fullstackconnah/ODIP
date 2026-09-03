@@ -192,6 +192,103 @@ public class ParticipantsControllerTests
         Assert.Null(createdBody.Data!.IntakeCompletedAt);
     }
 
+    /// <summary>
+    /// SPEC-05 PF-10.5: resuming an existing Intake draft (created via a mid-intake "save as
+    /// draft" POST, so IntakeCompletedAt is still null) finishes Intake through the Update
+    /// endpoint rather than a second Create — CompleteIntake=true stamps IntakeCompletedAt exactly
+    /// like Create's own handling, while IsDraft is left completely untouched (still true — Intake
+    /// alone never finalises a participant, only Profile completion does).
+    /// </summary>
+    [Fact]
+    public async Task Update_CompleteIntakeTrueOnNullIntakeCompletedAt_StampsItWithoutTouchingIsDraft()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = true, IntakeCompletedAt = null };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var before = DateTime.UtcNow;
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true, CompleteIntake = true,
+        };
+
+        var updateResult = await controller.Update(participant.Id, dto, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        var after = DateTime.UtcNow;
+
+        Assert.True(body.Data!.IsDraft);
+        Assert.NotNull(body.Data.IntakeCompletedAt);
+        Assert.InRange(body.Data.IntakeCompletedAt!.Value, before, after);
+
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.NotNull(getBody.Data!.IntakeCompletedAt);
+        Assert.True(getBody.Data.IsDraft);
+    }
+
+    /// <summary>
+    /// IntakeCompletedAt is set once and never cleared/overwritten — a later Update call with
+    /// CompleteIntake=true again must not move the already-recorded timestamp.
+    /// </summary>
+    [Fact]
+    public async Task Update_CompleteIntakeTrueWhenAlreadySet_DoesNotOverwriteExistingTimestamp()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var existingStamp = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = true, IntakeCompletedAt = existingStamp };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true, CompleteIntake = true,
+        };
+
+        var updateResult = await controller.Update(participant.Id, dto, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+
+        Assert.Equal(existingStamp, body.Data!.IntakeCompletedAt);
+    }
+
+    /// <summary>
+    /// SPEC-05 PF-10.5 acceptance: "Profile completion flips IsDraft server-side; an incomplete
+    /// profile does not." The Update endpoint's existing required-field validation (ValidateNames,
+    /// run unconditionally before any field assignment) is the single server-side gate a
+    /// IsDraft=false submission must pass — a payload missing a required field is rejected before
+    /// IsDraft (or anything else) is ever persisted, so the client's IsDraft=false request alone
+    /// can never flip the flag.
+    /// </summary>
+    [Fact]
+    public async Task Update_IsDraftFalseWithMissingRequiredName_RejectsAndLeavesIsDraftTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "", LastName = "", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await controller.Update(participant.Id, dto, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(updateResult.Result);
+
+        var getResult = await controller.GetById(participant.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.True(body.Data!.IsDraft);
+    }
+
     [Fact]
     public async Task Create_GenderAndPlanDates_RoundTripThroughGetById()
     {

@@ -60,18 +60,23 @@ export default function ParticipantDetailPage() {
           <div className="mt-2">
             <ServiceStreamBadges value={p.serviceStreams} />
           </div>
+          {/* SPEC-05 PF-10.5 — three-way resume-banner state, derived from IntakeCompletedAt/IsDraft:
+              no IntakeCompletedAt -> "Resume intake" (fresh Intake start, pre-filled from this row);
+              IntakeCompletedAt set + IsDraft -> "Continue profile"; IsDraft false -> no banner at all. */}
           {p.isDraft && (
             <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
-                This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised.
+                {p.intakeCompletedAt
+                  ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
+                  : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
               </span>
               {canWrite && (
                 <Link
-                  to={`/participants/${id}/edit`}
+                  to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}
                   className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
                 >
-                  <Pencil className="w-4 h-4" /> Resume intake
+                  <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
                 </Link>
               )}
             </div>

@@ -82,6 +82,7 @@ const router = createBrowserRouter(
         <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
+        <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />

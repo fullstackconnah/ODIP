@@ -1016,7 +1016,21 @@ public class ParticipantsController : ControllerBase
         // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
         // draft (another "Save as draft" click, from any wizard step), false is a full save,
         // including the final Review-step submission that's meant to clear a draft off for good.
+        // SPEC-05 PF-10.5: this is also "profile complete"'s single server-side flip point — every
+        // one of the field validators above (ValidateNames et al.) already ran, so an incomplete
+        // payload never reaches here with IsDraft=false; the client requests the transition, the
+        // server only ever honours it after its own validation passes, in this one place.
         p.IsDraft = dto.IsDraft;
+        // SPEC-05 PF-10.5: resuming an existing Intake draft (IntakeCompletedAt still null) routes
+        // back through this same Update endpoint rather than a second Create — the resumed Intake
+        // wizard's own final-step call sets CompleteIntake=true to stamp IntakeCompletedAt here,
+        // exactly like Create's own CompleteIntake handling. Revises CompleteIntake's original
+        // "ignored by Update" doc note (PF-10.3): that was written before this resume path existed.
+        // Never overwrites an already-set value (set once, never cleared — see
+        // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
+        // does not finalise the participant; only a subsequent Profile completion does that.
+        if (dto.CompleteIntake && p.IntakeCompletedAt == null)
+            p.IntakeCompletedAt = DateTime.UtcNow;
         p.UpdatedAt = DateTime.UtcNow;
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
@@ -1040,7 +1054,7 @@ public class ParticipantsController : ControllerBase
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
         var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = updatePlanTypeComplianceWarning }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = updatePlanTypeComplianceWarning }));
     }
 
     /// <summary>
