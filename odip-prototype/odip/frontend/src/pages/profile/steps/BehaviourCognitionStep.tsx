@@ -20,11 +20,17 @@ const TRI_OPTIONS = [
   { value: '', label: 'Not recorded' },
 ]
 
-export function BehaviourCognitionStep({ control, register, participant }: {
+const EMPTY: ReadonlySet<string> = new Set()
+
+export function BehaviourCognitionStep({ control, register, participant, hiddenFields }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   participant: ParticipantDetailDto
+  /** Field ids to omit entirely — e.g. the caregiver wizard's CAREGIVER_INTERNAL_FIELDS. Defaults
+   * to empty, so every existing Profile-wizard caller is unaffected. */
+  hiddenFields?: ReadonlySet<string>
 }) {
+  const hidden = hiddenFields ?? EMPTY
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card title="Behaviour Summary (from Intake)" className="space-y-3">
@@ -66,12 +72,14 @@ export function BehaviourCognitionStep({ control, register, participant }: {
         </Card>
 
         <Card title="Behaviour Risk" className="space-y-4">
-          <FormField label="Behaviour Risk Rating">
-            <select id="behaviourRiskRating" {...register('behaviourRiskRating')}>
-              <option value="">Not specified</option>
-              {RISK_RATING_LEVELS.map((r) => <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>)}
-            </select>
-          </FormField>
+          {!hidden.has('behaviourRiskRating') && (
+            <FormField label="Behaviour Risk Rating">
+              <select id="behaviourRiskRating" {...register('behaviourRiskRating')}>
+                <option value="">Not specified</option>
+                {RISK_RATING_LEVELS.map((r) => <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>)}
+              </select>
+            </FormField>
+          )}
           <FormField label="RIDS Logged">
             <Controller control={control} name="ridsLogged" render={({ field }) => (
               <select id="ridsLogged" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
