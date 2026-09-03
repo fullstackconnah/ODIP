@@ -1422,16 +1422,16 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 
 ## Task 9: cg01 gates, push, PR
 
-- [ ] **Step 1: Full gates**
+- [x] **Step 1: Full gates**
 
 Run: `dotnet build && dotnet test`
 Expected: 0 errors; `Failed: 0`; Passed ≥ 1020 + your new tests.
 
-- [ ] **Step 2: Verify committed state**
+- [x] **Step 2: Verify committed state**
 
 Run: `git diff HEAD --stat` → empty. `git status --short` shows nothing except possibly `.claude/settings.local.json` (never stage that).
 
-- [ ] **Step 3: Push and PR**
+- [x] **Step 3: Push and PR**
 
 ```bash
 git push -u origin feat/cg01-submission-backend
