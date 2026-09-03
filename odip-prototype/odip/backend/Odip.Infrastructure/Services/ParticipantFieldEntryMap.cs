@@ -206,6 +206,9 @@ public static class ParticipantFieldEntryMap
         E("bocDeEscalationStrategies", ParticipantFieldEntryPhase.Profile),
         E("bocWhatNotToDo", ParticipantFieldEntryPhase.Profile),
         E("checklistItems", ParticipantFieldEntryPhase.Profile),
+        // PF-10.2: the itemised risk-rating matrix grid plus its overall-rating scalar.
+        E("communityAccessRiskItems", ParticipantFieldEntryPhase.Profile),
+        E("overallCommunityAccessRiskRating", ParticipantFieldEntryPhase.Profile),
         // hidpaNotes lives in the Medical step, ungated (see documentMapping.ts's own note) — not
         // part of the Community Access section, listed here only to keep this map's ordering
         // aligned with documentMapping.ts's declaration order.

@@ -35,6 +35,19 @@ public enum ContactRoleType
     Advocate = 11,
     Interpreter = 12,
     Solicitor = 13,
+
+    /// <summary>
+    /// PF-10.2 (SPEC-05 <c>docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md</c>) —
+    /// added additively (no renumbering of the existing 14 values). Profile V2026's contact block
+    /// explicitly separates "Financial Administrator" from Guardian/Plan Nominee/Plan
+    /// Manager/Solicitor, but this codebase's original <see cref="Solicitor"/> member had been
+    /// mislabelled on the frontend as "Solicitor / Financial Administrator", bundling two distinct
+    /// real-world roles under one enum member. This is additive-only: no existing
+    /// <see cref="Solicitor"/> row is reclassified automatically — an operator retypes a row they
+    /// know is actually a Financial Administrator via the existing Contacts tab edit form,
+    /// post-deploy.
+    /// </summary>
+    FinancialAdministrator = 14,
 }
 
 /// <summary>See <see cref="ContactRoleType.PlanNominee"/>'s doc — captures which of the two NDIA
@@ -240,6 +253,9 @@ public static class ContactRoleFieldRules
         [ContactRoleType.Advocate] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
         [ContactRoleType.Interpreter] = new() { nameof(ParticipantContactRole.PreferredLanguage), nameof(ParticipantContactRole.OrganisationName) },
         [ContactRoleType.Solicitor] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
+        // PF-10.2: same field shape as Solicitor — both are professional/authority contacts that
+        // record an organisation, a scope-of-authority note, and a supporting document reference.
+        [ContactRoleType.FinancialAdministrator] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
     };
 
     /// <summary>

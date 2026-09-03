@@ -35,6 +35,7 @@ public class ParticipantDocumentComposerTests
             HidpaNotes = "Shared visibility per hidpaSupportCategories",
             // Community Access — only relevant when the stream flag is set.
             SignsHappyAndSettled = "Smiling and humming",
+            OverallCommunityAccessRiskRating = RiskRatingLevel.Medium,
         };
 
         participant.ContactRoles.Add(new ParticipantContactRole
@@ -70,6 +71,17 @@ public class ParticipantDocumentComposerTests
         participant.ChecklistItems.Add(new ParticipantChecklistItem
         {
             Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = ChecklistItemType.FallsRisk, Value = null,
+        });
+
+        participant.CommunityAccessRiskItems.Add(new ParticipantCommunityAccessRiskItem
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = CommunityAccessRiskItemType.GeneralRoadAwareness,
+            Rating = RiskRatingLevel.High, StrategyNotes = "Two staff required for all road crossings.",
+        });
+        // Unrated — must be excluded from the risk table (Rating.HasValue filter).
+        participant.CommunityAccessRiskItems.Add(new ParticipantCommunityAccessRiskItem
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = CommunityAccessRiskItemType.WaterSafety, Rating = null,
         });
 
         return participant;
@@ -199,6 +211,46 @@ public class ParticipantDocumentComposerTests
         var table = caSection.Tables.Single(t => t.Heading == "Checklist Items");
         Assert.Single(table.Rows);
         Assert.Contains(table.Rows, row => row[0] == "Uses Wheelchair");
+    }
+
+    /// <summary>PF-10.2 Acceptance: the Participant Profile PDF for a CommunityAccessDailyLiving
+    /// participant with rated items renders the new table; a non-CA participant's PDF does not.</summary>
+    [Fact]
+    public void CommunityAccessRiskTable_AbsentWhenStreamNotSet_PresentWhenSet()
+    {
+        var withoutStream = BuildParticipant(ServiceStreams.None);
+        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id));
+        Assert.DoesNotContain(withoutModel.Sections, s => s.Heading == "Community Access");
+
+        var withStream = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
+        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id));
+        var caSection = withModel.Sections.Single(s => s.Heading == "Community Access");
+        var table = caSection.Tables.Single(t => t.Heading == "Community Access Risk Assessment");
+        Assert.Single(table.Rows);
+        Assert.Contains(table.Rows, row => row[0] == "General Road Awareness" && row[1] == "Road Traffic" && row[2] == "High" && row[3] == "Two staff required for all road crossings.");
+        // The overall rating renders as its own scalar field, alongside the table.
+        Assert.Contains(caSection.Fields, f => f.Label == "Overall Community Access Risk Rating" && f.Value == "Medium");
+    }
+
+    [Fact]
+    public void CommunityAccessRiskTable_NeverAppearsOnIntakeForm_EvenWithStreamSet()
+    {
+        var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+
+        Assert.DoesNotContain(model.Sections, s => s.Heading == "Community Access");
+    }
+
+    [Fact]
+    public void CommunityAccessRiskTable_OnlyIncludesRatedRows()
+    {
+        var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+
+        var caSection = model.Sections.Single(s => s.Heading == "Community Access");
+        var table = caSection.Tables.Single(t => t.Heading == "Community Access Risk Assessment");
+        Assert.Single(table.Rows);
+        Assert.DoesNotContain(table.Rows, row => row[0] == "Water Safety");
     }
 
     [Fact]

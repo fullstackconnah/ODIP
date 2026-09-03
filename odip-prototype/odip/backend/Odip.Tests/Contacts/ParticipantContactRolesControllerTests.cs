@@ -477,4 +477,59 @@ public class ParticipantContactRolesControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ── PF-10.2: FinancialAdministrator round-trips through contact-role create/read ───────────
+
+    [Fact]
+    public async Task Create_FinancialAdministrator_RoundTripsWithItsFieldSet()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+
+        var dto = new CreateParticipantContactRoleDto
+        {
+            NewPersonFirstName = "David", NewPersonLastName = "Osei", RoleType = ContactRoleType.FinancialAdministrator,
+            OrganisationName = "Bayside Legal", ScopeNotes = "Financial administration order", AuthorisationDocumentReference = "QCAT Order 2023/4471",
+        };
+        var createResult = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var createdBody = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+        Assert.Equal(ContactRoleType.FinancialAdministrator, createdBody.Data!.RoleType);
+        Assert.Equal("Bayside Legal", createdBody.Data.OrganisationName);
+        Assert.Equal("Financial administration order", createdBody.Data.ScopeNotes);
+        Assert.Equal("QCAT Order 2023/4471", createdBody.Data.AuthorisationDocumentReference);
+
+        var readResult = await controller.GetForParticipant(participant.Id, CancellationToken.None);
+        var readBody = Assert.IsType<ApiResponse<List<ParticipantContactRoleDto>>>(Assert.IsType<OkObjectResult>(readResult.Result).Value);
+        var read = Assert.Single(readBody.Data!, r => r.RoleType == ContactRoleType.FinancialAdministrator);
+        Assert.Equal("Bayside Legal", read.OrganisationName);
+        Assert.Equal("Financial administration order", read.ScopeNotes);
+        Assert.Equal("QCAT Order 2023/4471", read.AuthorisationDocumentReference);
+    }
+
+    /// <summary>Same field-clearing contract as every other role type — see
+    /// ContactRoleFieldRules.ClearIrrelevantFields' doc. A row later updated to a role with no
+    /// overlapping field set (NextOfKin) has FinancialAdministrator's fields nulled out.</summary>
+    [Fact]
+    public async Task Update_FinancialAdministratorToNextOfKin_ClearsFinancialAdministratorFields()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+
+        var created = await controller.Create(participant.Id, new CreateParticipantContactRoleDto
+        {
+            NewPersonFirstName = "David", NewPersonLastName = "Osei", RoleType = ContactRoleType.FinancialAdministrator,
+            OrganisationName = "Bayside Legal", ScopeNotes = "Financial administration order",
+        }, CancellationToken.None);
+        var createdId = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updateResult = await controller.Update(createdId, new UpdateParticipantContactRoleDto { RoleType = ContactRoleType.NextOfKin, Status = ContactRoleStatus.Active }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.Equal(ContactRoleType.NextOfKin, body.Data!.RoleType);
+        Assert.Null(body.Data.OrganisationName);
+        Assert.Null(body.Data.ScopeNotes);
+    }
 }

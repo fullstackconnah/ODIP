@@ -3,6 +3,8 @@ import {
   ADL_TYPES, PERSONAL_ADL_TYPES, COMMUNITY_DOMESTIC_ADL_TYPES, adlCategoryOf,
   CHECKLIST_ITEM_TYPES, COMMUNITY_MOBILITY_RISK_ITEM_TYPES, COMMUNITY_BEHAVIOUR_OF_CONCERN_ITEM_TYPES,
   CHECKLIST_ITEM_TYPE_LABELS, getChecklistItemGroup,
+  COMMUNITY_ACCESS_RISK_ITEM_TYPES, ROAD_TRAFFIC_RISK_ITEM_TYPES, BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES,
+  HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES, COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS, getCommunityAccessRiskItemCategory,
 } from './enums'
 import { ADL_TYPE_LABELS } from './adl-assessments'
 
@@ -82,6 +84,59 @@ describe('Checklist item type category partition (COMMUNITY_MOBILITY_RISK_ITEM_T
     for (const type of CHECKLIST_ITEM_TYPES) {
       const expected = (COMMUNITY_MOBILITY_RISK_ITEM_TYPES as readonly string[]).includes(type) ? 'CommunityMobilityRisk' : 'CommunityBehaviourOfConcern'
       expect(getChecklistItemGroup(type)).toBe(expected)
+    }
+  })
+})
+
+/**
+ * PF-10.2, review-round polish — frontend counterpart to the backend's
+ * CommunityAccessRiskItemTypeGroupsTests: ROAD_TRAFFIC_RISK_ITEM_TYPES,
+ * BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES, and HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES must
+ * together cover every CommunityAccessRiskItemType member exactly once (no omission, no overlap).
+ * All three subsets are derived from COMMUNITY_ACCESS_RISK_ITEM_TYPES via slice(), so
+ * coverage/no-overlap are structurally guaranteed here, but a future 23rd
+ * CommunityAccessRiskItemType member landing in COMMUNITY_ACCESS_RISK_ITEM_TYPES without a
+ * matching COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS entry (the label map every consumer actually
+ * renders from) would still slip through unnoticed without this cross-check — mirrors the
+ * ADL/checklist blocks above exactly.
+ */
+describe('Community Access risk item type category partition (ROAD_TRAFFIC / BEHAVIOURS_OF_CONCERN / HEALTH_AND_PERSONAL_SAFETY)', () => {
+  it('together cover every CommunityAccessRiskItemType member from COMMUNITY_ACCESS_RISK_ITEM_TYPES exactly once, with no omission', () => {
+    const union = [...ROAD_TRAFFIC_RISK_ITEM_TYPES, ...BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES, ...HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES].sort()
+    expect(union).toEqual([...COMMUNITY_ACCESS_RISK_ITEM_TYPES].sort())
+  })
+
+  it('together cover every CommunityAccessRiskItemType member from COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS\' keys exactly once', () => {
+    const union = [...ROAD_TRAFFIC_RISK_ITEM_TYPES, ...BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES, ...HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES].sort()
+    expect(union).toEqual(Object.keys(COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS).sort())
+  })
+
+  it('do not overlap', () => {
+    const roadTraffic = new Set(ROAD_TRAFFIC_RISK_ITEM_TYPES)
+    const boc = new Set(BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES)
+    expect(BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES.filter((t) => roadTraffic.has(t))).toEqual([])
+    expect(HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES.filter((t) => roadTraffic.has(t) || boc.has(t))).toEqual([])
+  })
+
+  it('have no internal duplicates', () => {
+    expect(new Set(ROAD_TRAFFIC_RISK_ITEM_TYPES).size).toBe(ROAD_TRAFFIC_RISK_ITEM_TYPES.length)
+    expect(new Set(BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES).size).toBe(BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES.length)
+    expect(new Set(HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES).size).toBe(HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES.length)
+  })
+
+  it('is exactly 22 items total (5 Road & Traffic Safety + 8 Behaviours of Concern + 9 Health & Personal Safety)', () => {
+    expect(COMMUNITY_ACCESS_RISK_ITEM_TYPES.length).toBe(22)
+    expect(ROAD_TRAFFIC_RISK_ITEM_TYPES.length).toBe(5)
+    expect(BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES.length).toBe(8)
+    expect(HEALTH_AND_PERSONAL_SAFETY_RISK_ITEM_TYPES.length).toBe(9)
+  })
+
+  it('getCommunityAccessRiskItemCategory agrees with group membership for every CommunityAccessRiskItemType member', () => {
+    for (const type of COMMUNITY_ACCESS_RISK_ITEM_TYPES) {
+      const expected = (ROAD_TRAFFIC_RISK_ITEM_TYPES as readonly string[]).includes(type)
+        ? 'RoadTraffic'
+        : (BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES as readonly string[]).includes(type) ? 'BehavioursOfConcern' : 'HealthAndPersonalSafety'
+      expect(getCommunityAccessRiskItemCategory(type)).toBe(expected)
     }
   })
 })

@@ -146,7 +146,10 @@ export const CONTACT_ROLE_TYPE_LABELS: Record<ContactRoleType, string> = {
   ProviderContact: 'Support Worker / Provider Contact',
   Advocate: 'Advocate',
   Interpreter: 'Interpreter / Language Support',
-  Solicitor: 'Solicitor / Financial Administrator',
+  // PF-10.2 (SPEC-05): reverted from the mislabelled 'Solicitor / Financial Administrator' —
+  // FinancialAdministrator is now its own distinct role type below.
+  Solicitor: 'Solicitor',
+  FinancialAdministrator: 'Financial Administrator',
 }
 
 export const NOMINEE_SCOPE_LABELS: Record<NomineeScope, string> = {
@@ -313,6 +316,8 @@ export const CONTACT_ROLE_FIELD_MAP: Record<ContactRoleType, ContactRoleFieldKey
   Advocate: ['organisationName', 'scopeNotes', 'authorisationDocumentReference'],
   Interpreter: ['preferredLanguage', 'organisationName'],
   Solicitor: ['organisationName', 'scopeNotes', 'authorisationDocumentReference'],
+  // PF-10.2: same field shape as Solicitor — both are professional/authority contacts.
+  FinancialAdministrator: ['organisationName', 'scopeNotes', 'authorisationDocumentReference'],
 }
 
 export const GUARDIAN_ORDER_SCOPE_DOMAINS = ['Health', 'Accommodation', 'Lifestyle', 'Legal', 'Financial', 'Plenary'] as const

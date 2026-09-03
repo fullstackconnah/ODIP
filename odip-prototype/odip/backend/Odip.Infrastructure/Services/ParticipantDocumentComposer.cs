@@ -207,6 +207,7 @@ public static class ParticipantDocumentComposer
             "consents" => BuildConsentsTable(heading, participant),
             "adlAssessments" => BuildAdlAssessmentsTable(heading, participant, includeCommunityAccess),
             "checklistItems" => BuildChecklistItemsTable(heading, participant),
+            "communityAccessRiskItems" => BuildCommunityAccessRiskTable(heading, participant),
             "riskEntries" => BuildRiskEntriesTable(heading, riskEntries),
             _ => throw new InvalidOperationException($"No table builder registered for field id '{fieldId}'."),
         };
@@ -326,6 +327,35 @@ public static class ParticipantDocumentComposer
                 Humanize(row!.ItemType.ToString()),
                 Humanize(row.Value!.Value.ToString()),
                 OrPlaceholder(row.Notes),
+            })
+            .ToList();
+        return new ParticipantDocumentTable(heading, columns, rows);
+    }
+
+    /// <summary>
+    /// PF-10.2 — Community Access Risk Assessment matrix, fixed row order via
+    /// CommunityAccessRiskItemTypeGroups (Road &amp; Traffic Safety, then Behaviours of Concern,
+    /// then Health &amp; Personal Safety), filtered to rows where Rating.HasValue ("rated-only",
+    /// same "answered-only" convention as BuildChecklistItemsTable). Columns: Item, Category,
+    /// Rating, Strategy. The 23rd, non-itemised overall rating renders separately as a scalar field
+    /// (see ParticipantDocumentFieldMap's "overallCommunityAccessRiskRating" entry), not a row here.
+    /// </summary>
+    private static ParticipantDocumentTable BuildCommunityAccessRiskTable(string heading, Participant participant)
+    {
+        var columns = new[] { "Item", "Category", "Rating", "Strategy" };
+        var byType = participant.CommunityAccessRiskItems.ToDictionary(c => c.ItemType);
+        var orderedTypes = CommunityAccessRiskItemTypeGroups.RoadTraffic
+            .Concat(CommunityAccessRiskItemTypeGroups.BehavioursOfConcern)
+            .Concat(CommunityAccessRiskItemTypeGroups.HealthAndPersonalSafety);
+        var rows = orderedTypes
+            .Select(type => byType.TryGetValue(type, out var row) ? row : null)
+            .Where(row => row is { Rating: not null })
+            .Select(row => (IReadOnlyList<string>) new[]
+            {
+                Humanize(row!.ItemType.ToString()),
+                Humanize(CommunityAccessRiskItemTypeGroups.CategoryOf(row.ItemType).ToString()),
+                Humanize(row.Rating!.Value.ToString()),
+                OrPlaceholder(row.StrategyNotes),
             })
             .ToList();
         return new ParticipantDocumentTable(heading, columns, rows);

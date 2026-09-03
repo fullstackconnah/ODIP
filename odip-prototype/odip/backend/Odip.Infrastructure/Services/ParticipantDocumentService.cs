@@ -115,6 +115,7 @@ public class ParticipantDocumentService
             .Include(x => x.HealthConditions)
             .Include(x => x.AdlAssessments)
             .Include(x => x.ChecklistItems)
+            .Include(x => x.CommunityAccessRiskItems)
             // PF-10.6 — Client Overview's Restrictive Practice grid needs this collection loaded;
             // harmless additional include for the Intake/Profile composers, which don't reference it.
             .Include(x => x.RestrictivePractices)

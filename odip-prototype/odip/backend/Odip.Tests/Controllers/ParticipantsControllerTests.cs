@@ -2750,4 +2750,122 @@ public class ParticipantsControllerTests
         var afterBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getAfter.Result).Value);
         Assert.Null(afterBody.Data!.PlanTypeComplianceWarning);
     }
+
+    // ── PF-10.2: Community Access Risk Assessment matrix rows upserted transactionally with the participant ───
+
+    [Fact]
+    public async Task Create_WithCommunityAccessRiskItems_CreatesThemTransactionallyWithParticipant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            CommunityAccessRiskItems = new()
+            {
+                new CreateParticipantCommunityAccessRiskItemDto { ItemType = Domain.Enums.CommunityAccessRiskItemType.GeneralRoadAwareness, Rating = Domain.Enums.RiskRatingLevel.High, StrategyNotes = "Two staff required for all road crossings." },
+                new CreateParticipantCommunityAccessRiskItemDto { ItemType = Domain.Enums.CommunityAccessRiskItemType.WaterSafety, Rating = Domain.Enums.RiskRatingLevel.Low },
+            },
+            OverallCommunityAccessRiskRating = Domain.Enums.RiskRatingLevel.Medium,
+        };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        var saved = await db.ParticipantCommunityAccessRiskItems.Where(c => c.ParticipantId == createdBody.Data!.Id).ToListAsync();
+        Assert.Equal(2, saved.Count);
+        Assert.Contains(saved, c => c.ItemType == Domain.Enums.CommunityAccessRiskItemType.GeneralRoadAwareness && c.Rating == Domain.Enums.RiskRatingLevel.High && c.StrategyNotes == "Two staff required for all road crossings.");
+        Assert.Contains(saved, c => c.ItemType == Domain.Enums.CommunityAccessRiskItemType.WaterSafety && c.Rating == Domain.Enums.RiskRatingLevel.Low);
+
+        var savedParticipant = await db.Participants.SingleAsync(p => p.Id == createdBody.Data!.Id);
+        Assert.Equal(Domain.Enums.RiskRatingLevel.Medium, savedParticipant.OverallCommunityAccessRiskRating);
+    }
+
+    [Fact]
+    public async Task GetById_NoCommunityAccessRiskItemRows_StillReturnsAllTwentyTwoAsSynthesizedPlaceholders()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var result = await controller.GetById(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(22, body.Data!.CommunityAccessRiskItems.Count);
+        Assert.All(body.Data.CommunityAccessRiskItems, c => Assert.Null(c.Id));
+        Assert.Equal(Enum.GetValues<Domain.Enums.CommunityAccessRiskItemType>().ToHashSet(), body.Data.CommunityAccessRiskItems.Select(c => c.ItemType).ToHashSet());
+        Assert.Null(body.Data.OverallCommunityAccessRiskRating);
+    }
+
+    [Fact]
+    public async Task Update_WithCommunityAccessRiskItems_UpsertsSameRows_DoesNotDuplicate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var updateDto = new UpdateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true,
+            CommunityAccessRiskItems = new() { new CreateParticipantCommunityAccessRiskItemDto { ItemType = Domain.Enums.CommunityAccessRiskItemType.SeizureInCommunity, Rating = Domain.Enums.RiskRatingLevel.Low } },
+            OverallCommunityAccessRiskRating = Domain.Enums.RiskRatingLevel.Low,
+        };
+
+        await controller.Update(participant.Id, updateDto, CancellationToken.None);
+        await controller.Update(participant.Id, updateDto with
+        {
+            CommunityAccessRiskItems = new() { new CreateParticipantCommunityAccessRiskItemDto { ItemType = Domain.Enums.CommunityAccessRiskItemType.SeizureInCommunity, Rating = Domain.Enums.RiskRatingLevel.Critical, StrategyNotes = "Reassessed after a seizure." } },
+            OverallCommunityAccessRiskRating = Domain.Enums.RiskRatingLevel.Critical,
+        }, CancellationToken.None);
+
+        var saved = await db.ParticipantCommunityAccessRiskItems.Where(c => c.ParticipantId == participant.Id).ToListAsync();
+        Assert.Single(saved);
+        Assert.Equal(Domain.Enums.RiskRatingLevel.Critical, saved[0].Rating);
+        Assert.Equal("Reassessed after a seizure.", saved[0].StrategyNotes);
+
+        var savedParticipant = await db.Participants.SingleAsync(p => p.Id == participant.Id);
+        Assert.Equal(Domain.Enums.RiskRatingLevel.Critical, savedParticipant.OverallCommunityAccessRiskRating);
+    }
+
+    /// <summary>Full 22-row payload round-trips through Create -> GetById exactly (PF-10.2
+    /// Acceptance): every item type, every rating, every strategy note lands unchanged, and the
+    /// 23rd, non-itemised overall rating round-trips as its own scalar, strongly typed against
+    /// RiskRatingLevel (so an out-of-range value cannot deserialize at all — validated by the
+    /// compiler/enum, not a runtime check).</summary>
+    [Fact]
+    public async Task Create_WithFullTwentyTwoItemPayloadAndOverallRating_RoundTripsThroughGetByIdExactly()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var allTypes = Enum.GetValues<Domain.Enums.CommunityAccessRiskItemType>();
+        var items = allTypes.Select((t, i) => new CreateParticipantCommunityAccessRiskItemDto
+        {
+            ItemType = t,
+            Rating = (Domain.Enums.RiskRatingLevel)(i % 4),
+            StrategyNotes = $"Strategy for {t}",
+        }).ToList();
+
+        var dto = MinimalCreateDto() with { CommunityAccessRiskItems = items, OverallCommunityAccessRiskRating = Domain.Enums.RiskRatingLevel.High };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+
+        var getResult = await controller.GetById(createdBody.Data!.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+
+        Assert.Equal(22, body.Data!.CommunityAccessRiskItems.Count);
+        foreach (var expected in items)
+        {
+            var actual = body.Data.CommunityAccessRiskItems.Single(c => c.ItemType == expected.ItemType);
+            Assert.Equal(expected.Rating, actual.Rating);
+            Assert.Equal(expected.StrategyNotes, actual.StrategyNotes);
+        }
+        Assert.Equal(Domain.Enums.RiskRatingLevel.High, body.Data.OverallCommunityAccessRiskRating);
+    }
 }

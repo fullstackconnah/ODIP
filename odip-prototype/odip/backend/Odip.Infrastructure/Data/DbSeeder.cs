@@ -552,7 +552,10 @@ public static class DbSeeder
             // Amelia Garcia (participants[9]) — Pharmacy (person-record standing in for the org,
             // per Person.cs's type doc — pharmacy contacts don't quite have an individual name).
             new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, FirstName = "Riverside", LastName = "Pharmacy", Phone = "03 9555 1009", Organisation = "Riverside Pharmacy" },
-            // William Martin (participants[8]) — Solicitor.
+            // William Martin (participants[8]) — Financial Administrator (PF-10.2: this demo
+            // person is a solicitor by profession, but the ROLE recorded for the participant is
+            // "who administers their finances", not "what is their job title" — see the
+            // ScopeNotes/AuthorisationDocumentReference on the contact-role row below).
             new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, FirstName = "David", LastName = "Osei", Phone = "07 3555 1010", Email = "d.osei@baysidelegal.com.au", Organisation = "Bayside Legal" },
             // Isabella Clarke (participants[10]) — Advocate.
             new() { Id = Guid.Parse("e3000000-0000-0000-0000-000000000011"), TenantId = demoTenantId, FirstName = "Tanya", LastName = "Brooks", Mobile = "0412 345 011", Email = "tanya.brooks@communityvoices.org.au", Organisation = "Community Voices Advocacy" },
@@ -574,7 +577,14 @@ public static class DbSeeder
             new() { Id = Guid.Parse("e4000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, ParticipantId = participants[1].Id, PersonId = people[6].Id, RoleType = ContactRoleType.ProviderContact, RoleTitle = "Support Worker", OrganisationName = "Sunrise Community Services", RegisteredProviderFlag = true },
             new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000a"), TenantId = demoTenantId, ParticipantId = participants[7].Id, PersonId = people[7].Id, RoleType = ContactRoleType.Specialist, Discipline = "Psychiatry", OrganisationName = "Mindcare Psychiatry", FrequencyOfContact = "Monthly" },
             new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000b"), TenantId = demoTenantId, ParticipantId = participants[9].Id, PersonId = people[8].Id, RoleType = ContactRoleType.Pharmacy, OrganisationName = "Riverside Pharmacy", WebsterPackFlag = true },
-            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000c"), TenantId = demoTenantId, ParticipantId = participants[8].Id, PersonId = people[9].Id, RoleType = ContactRoleType.Solicitor, OrganisationName = "Bayside Legal", ScopeNotes = "Financial administration order", AuthorisationDocumentReference = "QCAT Order 2023/4471" },
+            // PF-10.2: reclassified from ContactRoleType.Solicitor — this row's ScopeNotes
+            // ("Financial administration order") and AuthorisationDocumentReference (a QCAT
+            // order) describe a court-appointed Financial Administrator, exactly the mislabelled
+            // case this branch's new enum member exists to distinguish. This seed fixture is
+            // updated directly (not left as a stale "Solicitor" example) since it is demo data,
+            // not a real deployed row — see this branch's report for why real rows are NOT
+            // auto-reclassified.
+            new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000c"), TenantId = demoTenantId, ParticipantId = participants[8].Id, PersonId = people[9].Id, RoleType = ContactRoleType.FinancialAdministrator, OrganisationName = "Bayside Legal", ScopeNotes = "Financial administration order", AuthorisationDocumentReference = "QCAT Order 2023/4471" },
             new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000d"), TenantId = demoTenantId, ParticipantId = participants[10].Id, PersonId = people[10].Id, RoleType = ContactRoleType.Advocate, OrganisationName = "Community Voices Advocacy", ScopeNotes = "Formal" },
             new() { Id = Guid.Parse("e4000000-0000-0000-0000-00000000000e"), TenantId = demoTenantId, ParticipantId = participants[11].Id, PersonId = people[11].Id, RoleType = ContactRoleType.Interpreter, PreferredLanguage = "Vietnamese", OrganisationName = "TIS National" },
         };
