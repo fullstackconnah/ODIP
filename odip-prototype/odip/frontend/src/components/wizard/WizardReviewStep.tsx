@@ -24,7 +24,7 @@ export type WizardReviewStepProps<V> = {
 }
 
 /**
- * CORE-01 — extracted verbatim (markup/classes unchanged) from `ParticipantCreatePage.tsx`'s
+ * CORE-01 — extracted verbatim (markup/classes unchanged) from `the retired single-step wizard`'s
  * pre-shell inline Review step: one Card per group, an "Edit" button jumping back to that
  * group's owning step, and a row renderer (default or caller-supplied).
  */

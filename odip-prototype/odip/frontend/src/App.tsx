@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react'
-import { Route, Navigate, Outlet, RouterProvider, createBrowserRouter, createRoutesFromElements } from 'react-router-dom'
+import { Route, Navigate, Outlet, RouterProvider, createBrowserRouter, createRoutesFromElements, useParams } from 'react-router-dom'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePermissions, type PageKey } from './lib/permissions'
@@ -13,9 +13,7 @@ const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
 const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
 const ParticipantsPage = React.lazy(() => import('./pages/ParticipantsPage'))
-const ParticipantCreatePage = React.lazy(() => import('./pages/ParticipantCreatePage'))
-// PF-10.3 (SPEC-05): the new Intake wizard takes over the create route. ParticipantCreatePage
-// itself is untouched and still handles the edit route until PF-10.4/PF-10.7 land.
+// PF-10.3 (SPEC-05): the new Intake wizard takes over the create route.
 const IntakeWizardPage = React.lazy(() => import('./pages/intake/IntakeWizardPage'))
 // PF-10.4 (SPEC-05): the new Profile wizard, second half of the intake/profile split. Edits an
 // existing participant (created by Intake) at /participants/:id/profile.
@@ -55,6 +53,15 @@ const queryClient = new QueryClient({
   },
 })
 
+// PF-10.7 (SPEC-05): the old single 11-step wizard that used to serve this route is retired.
+// Its replacement is the Profile wizard (PF-10.4): every field it once let you re-edit is either
+// a Profile-wizard field or a Details/Support-Profile-tab section-edit (PD-6/PD-7) field now.
+// Bookmarked/linked `/participants/:id/edit` URLs redirect there rather than 404ing.
+function ParticipantEditRedirect() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/participants/${id}/profile`} replace />
+}
+
 function PrivateRoute({ children, page, requiresWrite }: { children: React.ReactNode; page?: PageKey; requiresWrite?: boolean }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
@@ -84,7 +91,7 @@ const router = createBrowserRouter(
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
-        <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantCreatePage /></PrivateRoute>} />
+        <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
         <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />

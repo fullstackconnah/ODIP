@@ -30,7 +30,7 @@ function Tag({ label }: { label: string }) {
   )
 }
 
-// Same tri-state idiom as the wizard's YES_NO_UNANSWERED_OPTIONS (ParticipantCreatePage.tsx) —
+// Same tri-state idiom as the wizard's YES_NO_UNANSWERED_OPTIONS (the retired single-step wizard) —
 // duplicated locally per this codebase's own per-file-helper convention (see extractErrorMessage
 // above and every other participant-detail/*.tsx section).
 const YES_NO_UNANSWERED_OPTIONS = [

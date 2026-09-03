@@ -34,7 +34,7 @@ import type { UseFormSetValue, UseFormUnregister } from 'react-hook-form'
  *                 row reflows the rest, same as it always has for the gender self-description
  *                 field this engine migrates).
  *
- * Usage (see ParticipantCreatePage.tsx for the live example — Gender and FUND-02 funding source):
+ * Usage (see the retired single-step wizard for the live example — Gender and FUND-02 funding source):
  *
  *   const CONDITIONAL_FIELDS: ConditionalFieldDef<ParticipantFormData>[] = [
  *     { fields: ['genderSelfDescription'], visibleWhen: v => v.gender === 'Other', focusFallback: 'gender' },

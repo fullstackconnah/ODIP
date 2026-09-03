@@ -1,7 +1,7 @@
 /**
  * PF-10.3 — Intake wizard, "Risks & Hazards" step. `behaviourRiskSummary`/`notes`/`riskEntries`
  * are all `entryPhase: 'intake'` — this step is a full, unmodified port of
- * ParticipantCreatePage.tsx's create-mode Risks & Hazards content (INTAKE-09's create-mode-only
+ * the retired single-step wizard's create-mode Risks & Hazards content (INTAKE-09's create-mode-only
  * repeatable risk-entry register formalised as belonging to Intake).
  */
 import type { Control, FieldErrors, UseFormRegister, UseFieldArrayReturn } from 'react-hook-form'

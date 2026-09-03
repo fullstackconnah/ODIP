@@ -2,7 +2,7 @@
  * PF-10.3 — Intake wizard, "Contacts" step. `contactRoles` is the one Contacts-step field
  * (`entryPhase: 'intake'`, `sources: ['shared']`) — captured once, here, per PF-10.1's
  * "any common fields should be removed for the time being" allocation. Reused verbatim (JSX,
- * validation, payload shape) from `ParticipantCreatePage.tsx`'s create-mode Contacts step — this
+ * validation, payload shape) from `the retired single-step wizard`'s create-mode Contacts step — this
  * wizard is create-only, so the edit-mode branch (nested-CRUD read-only summary) isn't ported.
  */
 import type { Control, FieldErrors, UseFormRegister, UseFieldArrayReturn, UseFormSetValue, UseFormWatch } from 'react-hook-form'

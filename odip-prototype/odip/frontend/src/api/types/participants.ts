@@ -48,7 +48,7 @@ export type MobilitySupportOption = typeof MOBILITY_SUPPORT_OPTIONS[number]
  * Unlike MOBILITY_SUPPORT_OPTIONS (a closed picklist), diagnoses fields are open text — this list
  * drives the curated dropdown/checkbox UI only; DIAGNOSIS_OTHER_SENTINEL is the "Other — specify"
  * escape hatch offered alongside it (never itself a stored value — see the primary-diagnosis
- * select handling in ParticipantCreatePage.tsx).
+ * select handling in the retired single-step wizard).
  */
 export const DIAGNOSIS_OPTIONS = [
   'Intellectual Disability',
@@ -414,7 +414,7 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
   // stream, research spec §3). CA-gated in the wizard (not on the wire — the backend accepts
   // these unconditionally; the wizard's conditional-visibility engine is what hides/unregisters
-  // them when the stream isn't selected — see ParticipantCreatePage.tsx's CONDITIONAL_FIELDS).
+  // them when the stream isn't selected — see the retired single-step wizard's CONDITIONAL_FIELDS).
   signsHappyAndSettled: string | null
   whatHelpsMeCalmDown: string | null
   bocTriggers: string | null
@@ -518,7 +518,7 @@ export interface CreateParticipantDto {
   mobilityAidWheelchair: boolean
   mobilityAidWalker: boolean
   mobilitySupportOptions: string[]
-  /** DIAG-01. Free text — selected from DIAGNOSIS_OPTIONS or typed via the "Other — specify" escape hatch (collapsed to this one field before submit; see ParticipantCreatePage.tsx). */
+  /** DIAG-01. Free text — selected from DIAGNOSIS_OPTIONS or typed via the "Other — specify" escape hatch (collapsed to this one field before submit; see the retired single-step wizard). */
   primaryDiagnosis?: string | null
   otherDiagnoses: string[]
   /** DIAG-02. Wire format: comma-separated HidpaSupportCategory flag names, or "None" — see formatHidpaCategories. */

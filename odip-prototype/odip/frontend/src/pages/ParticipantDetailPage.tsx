@@ -140,7 +140,10 @@ export default function ParticipantDetailPage() {
             )}
           </div>
           {canWrite && (
-            <Link to={`/participants/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
+            // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
+            // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
+            // now-redirecting /edit route.
+            <Link to={`/participants/${id}/profile`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
               <Pencil className="w-4 h-4" /> Edit
             </Link>
           )}
@@ -163,8 +166,8 @@ export default function ParticipantDetailPage() {
         onChange={(key) => setTab(key as typeof tab)}
       />
 
-      {/* PDETAIL-01 — the Details tab's card order mirrors the intake wizard's step-family order
-          (ParticipantCreatePage.tsx's WIZARD_STEPS) end to end: Identity, Address & Living
+      {/* PDETAIL-01 — the Details tab's card order mirrors the original single-wizard's step-family
+          order (retired by PF-10.7; now split across the Intake/Profile wizards) end to end: Identity, Address & Living
           Arrangements, NDIS & Funding, Key Identifiers, [Contacts has its own sibling tab,
           matching CONTACT-01/02/03's own wizard step], Cultural & Consent, [Support Needs &
           Mobility moved to the Support Profile tab under PD-6], Medical, Behaviour &

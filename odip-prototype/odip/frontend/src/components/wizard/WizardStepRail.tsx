@@ -10,7 +10,7 @@ export type WizardStepRailProps<V> = {
 
 /**
  * CORE-01 — extracted verbatim (markup/classes/aria-current/keyboard behaviour unchanged) from
- * `ParticipantCreatePage.tsx`'s pre-shell inline step-pill nav rail. Generic over `V` purely so a
+ * `the retired single-step wizard`'s pre-shell inline step-pill nav rail. Generic over `V` purely so a
  * consumer can pass its own `WizardStepDef<ParticipantFormData>[]`/etc. directly — the component
  * never reads step field values, only `key`/`label`.
  */

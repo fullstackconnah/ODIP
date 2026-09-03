@@ -7,7 +7,7 @@
  *
  * Per-type Living Arrangement fields are shown/hidden by a plain `livingArrangement === '...'`
  * check here rather than the full `src/lib/conditionalFields.ts` INTAKE-07 engine
- * `ParticipantCreatePage.tsx` uses — a deliberate scope simplification for this smaller field set
+ * `the retired single-step wizard` uses — a deliberate scope simplification for this smaller field set
  * (see this branch's report); the underlying zod refine (`livingArrangementRefine`) still enforces
  * the same required-ness regardless of what's visually hidden.
  */

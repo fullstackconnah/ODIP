@@ -17,7 +17,7 @@ export type WizardNavFooterProps = {
 }
 
 /**
- * CORE-01 — extracted verbatim (markup/classes unchanged) from `ParticipantCreatePage.tsx`'s
+ * CORE-01 — extracted verbatim (markup/classes unchanged) from `the retired single-step wizard`'s
  * pre-shell inline nav footer (Back / secondary actions / Next / Cancel+Submit).
  */
 export function WizardNavFooter({

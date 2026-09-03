@@ -18,7 +18,7 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseParticipant, mockUs
 }))
 
 // Only the API layer is mocked — FormField/Dropdown/Card are the real components, exercising the
-// actual wizard step-gating/navigation/review wiring, same approach as ParticipantCreatePage.test.tsx.
+// actual wizard step-gating/navigation/review wiring, same approach as the retired create-wizard's test suite.
 vi.mock('@/api/hooks', () => ({
   useCreateParticipant: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
   // PF-10.5 edit mode (resuming an existing Intake draft) — see the describe block below.

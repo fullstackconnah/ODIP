@@ -15,7 +15,7 @@ import type { ParticipantFormData } from '@/lib/participantSchema'
 import { PlanTypeComplianceBanner } from '../intakeHelpers'
 
 /**
- * NOTE — scope simplification vs. ParticipantCreatePage.tsx: that wizard guards a fundingSource
+ * NOTE — scope simplification vs. the retired single-step wizard: that wizard guards a fundingSource
  * flip away from "Other" (while typed Funding-Organisation text would be discarded) behind a
  * ConfirmDialog. This smaller intake step skips that guard and lets the switch apply directly —
  * flagged as a deliberate simplification in this branch's report, not an oversight.

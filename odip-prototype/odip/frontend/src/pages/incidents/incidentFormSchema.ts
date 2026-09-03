@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Resolver, FieldErrors } from 'react-hook-form'
 
 /**
- * IN-1/IN-3/IN-4/IN-6 — the incident wizard's form schema. Mirrors ParticipantCreatePage's
+ * IN-1/IN-3/IN-4/IN-6 — the incident wizard's form schema. Mirrors the retired single-step wizard's
  * pattern exactly: one plain (unrefined) base object schema used both for full-object `.pick()`
  * per wizard step, and — via `.superRefine()` chained on top of it — the single combined schema
  * behind the final-submit resolver (defense in depth, same as every other step's Next-button
@@ -188,7 +188,7 @@ export const incidentSchema = incidentBaseSchema
   .superRefine(detailsRefine)
 
 // Sets a react-hook-form-shaped error at an arbitrary zod issue path (e.g. ['injuries', 0,
-// 'description']) — mirrors ParticipantCreatePage's setPathError, needed here for the same
+// 'description']) — mirrors the retired single-step wizard's setPathError, needed here for the same
 // reason: a useFieldArray-backed field (injuries) needs its row-level errors nested, not flattened.
 function setPathError(errors: Record<string, unknown>, path: PropertyKey[], message: string, code: string) {
   let node: Record<PropertyKey, unknown> = errors
@@ -204,7 +204,7 @@ function setPathError(errors: Record<string, unknown>, path: PropertyKey[], mess
 // @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in favour
 // of .issues), so it throws past react-hook-form instead of populating formState.errors on
 // validation failure. Resolve directly against zod's safeParse/.issues API instead of routing
-// through that resolver (same workaround as ParticipantCreatePage's participantResolver and this
+// through that resolver (same workaround as the retired single-step wizard's participantResolver and this
 // page's own pre-wizard incidentResolver — carried forward unchanged, per IN-1's Implementation
 // note: do not attempt to reintroduce zodResolver as part of this rewrite).
 export const incidentResolver: Resolver<IncidentFormData> = (values) => {

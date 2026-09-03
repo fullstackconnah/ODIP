@@ -12,10 +12,11 @@
  * (`documentMapping.driftGuard.test.ts`) asserts this file's schema shape and the wizard's step
  * groupings partition that exact set with no Profile-only field ever slipping in.
  *
- * `ParticipantCreatePage.tsx` (the pre-existing 11-step monolith) is NOT modified by this file —
- * per PF-10.3's brief it stays untouched until PF-10.7 retires it. The field definitions below are
- * copied from its `baseParticipantSchema` (verbatim, for the 61 fields `entryPhase: 'intake'`
- * covers), not re-derived from scratch, so validation behaviour for shared fields matches exactly.
+ * The old single 11-step wizard (retired by PF-10.7) was NOT modified when this file was first
+ * written — per PF-10.3's brief it stayed untouched until PF-10.7 retired and deleted it. The
+ * field definitions below were copied from its `baseParticipantSchema` (verbatim, for the 61
+ * fields `entryPhase: 'intake'` covers), not re-derived from scratch, so validation behaviour for
+ * shared fields matches exactly.
  * A future PF-10.4 branch building the Profile wizard's own schema is expected to add its own,
  * separate `profileParticipantSchema` here (or a sibling file) once that work starts — not done by
  * this branch, which only needs Intake.
@@ -28,7 +29,7 @@ import type { PlanType } from '@/api/types/enums'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Base schema — every entryPhase:'intake' field, per DOCUMENT_MAPPING/fieldsForEntry('intake').
-// Field defs copied verbatim from ParticipantCreatePage.tsx's baseParticipantSchema.
+// Field defs copied verbatim from the retired single-step wizard's baseParticipantSchema.
 // ─────────────────────────────────────────────────────────────────────────────
 export const baseParticipantSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -109,7 +110,7 @@ export const baseParticipantSchema = z.object({
   // ─────────────────────────────────────────────────────────────────────────────
   // PF-10.4 (SPEC-05) — Profile wizard fields. Every entryPhase:'profile' field, per
   // fieldsForEntry('profile') (85 fields). Field defs copied verbatim (behaviour-preserving) from
-  // ParticipantCreatePage.tsx's baseParticipantSchema, same convention PF-10.3 used above for the
+  // the retired single-step wizard's baseParticipantSchema, same convention PF-10.3 used above for the
   // 61 intake fields. Kept in this SAME flat object (not a second schema) per this file's own
   // header doc — a single ParticipantFormData type covers both wizards' payload shapes.
   // ─────────────────────────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ export function pickShape<T extends readonly (keyof ParticipantFormData)[]>(fiel
 }
 
 // ── Cross-field refines — audited against PF-10.1's Intake/Profile field table, not ported
-// wholesale from ParticipantCreatePage.tsx. Every refine below targets ONLY intake-entry fields:
+// wholesale from the retired single-step wizard. Every refine below targets ONLY intake-entry fields:
 //   - fundingSourceRefine (fundingSource/fundingOrganisation/planType) — all Intake.
 //   - livingArrangementRefine (livingArrangement/mainSupportPersonName/livesWithOthers/
 //     whoLivesWith/silProviderName) — all Intake. SPEC-05's PF-10.3 Implementation §1 text lists
@@ -353,7 +354,7 @@ export const intakeParticipantSchema = baseParticipantSchema
   .superRefine(contactRolesRefine)
 
 // Sets a react-hook-form-shaped error at an arbitrary zod issue path — copied verbatim from
-// ParticipantCreatePage.tsx (see that file for the fuller doc comment on why this exists instead
+// the retired single-step wizard (see that file for the fuller doc comment on why this exists instead
 // of a flat `errors[field] = {...}`).
 export function setPathError(errors: Record<string, unknown>, path: PropertyKey[], message: string, code: string) {
   let node: Record<PropertyKey, unknown> = errors
@@ -370,7 +371,7 @@ export function setPathError(errors: Record<string, unknown>, path: PropertyKey[
  * @hookform/resolvers 3.x's zodResolver reads ZodError.errors (a getter zod v4 removed in favour
  * of .issues), so it throws past react-hook-form instead of populating formState.errors on
  * validation failure. Resolve directly against zod's safeParse/.issues API instead — same
- * hand-rolled-resolver workaround as ParticipantCreatePage.tsx's `participantResolver`.
+ * hand-rolled-resolver workaround as the retired single-step wizard's `participantResolver`.
  */
 export const intakeParticipantResolver: Resolver<ParticipantFormData> = (values) => {
   const result = intakeParticipantSchema.safeParse(values)
@@ -424,7 +425,7 @@ export const STEP_BEHAVIOUR_FIELDS = [
 
 export const STEP_RISKS_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const satisfies readonly (keyof ParticipantFormData)[]
 
-/** Per-step Next-validation schemas, keyed by step key — mirrors ParticipantCreatePage.tsx's
+/** Per-step Next-validation schemas, keyed by step key — mirrors the retired single-step wizard's
  * STEP_SCHEMAS_BY_KEY pattern, scoped to intake fields only. */
 export const INTAKE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
   participantDetails: baseParticipantSchema.pick(pickShape(STEP_PARTICIPANT_DETAILS_FIELDS))
@@ -443,7 +444,7 @@ export const INTAKE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
 // convention PF-10.3 established above for Intake — no second schema file.
 // ═════════════════════════════════════════════════════════════════════════════
 
-// weightHeightRefine/diagnosisOtherRefine — copied verbatim from ParticipantCreatePage.tsx (both
+// weightHeightRefine/diagnosisOtherRefine — copied verbatim from the retired single-step wizard (both
 // target only entryPhase:'profile' fields: weightKg/heightCm are Key Identifiers; primaryDiagnosis/
 // primaryDiagnosisOther are Medical Detail).
 type WeightHeightFields = { weightKg?: number; heightCm?: number }
@@ -467,7 +468,7 @@ export function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx
 // PF-10.1's contract, applied to Profile: the wizard's field set IS fieldsForEntry('profile') —
 // no hand-authored duplicate list. `primaryDiagnosisOther` is a UI-only helper field (the "Other —
 // specify" typed value collapsed into `primaryDiagnosis` before submit, same convention as
-// ParticipantCreatePage.tsx) — it has no DOCUMENT_MAPPING entry of its own (neither does its
+// the retired single-step wizard) — it has no DOCUMENT_MAPPING entry of its own (neither does its
 // Intake-side counterpart), so it is deliberately excluded from PROFILE_FIELD_NAMES but still
 // picked into profileParticipantSchema and included in the Medical Detail step's own field list.
 // ─────────────────────────────────────────────────────────────────────────────
