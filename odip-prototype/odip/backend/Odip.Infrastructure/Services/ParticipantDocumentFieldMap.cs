@@ -56,6 +56,12 @@ public sealed record ParticipantDocumentFieldMapEntry(
 ///    documents analysed") — DOC-01's brief explicitly requires a risk-entries child-entity table
 ///    in the composed output, so it is modelled as an ODIP-operational structured register on the
 ///    Profile PDF, not as a source-form-backed field.
+///
+/// PF-10.1 (SPEC-05 <c>docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md</c>) adds a
+/// THIRD, independent file — <see cref="ParticipantFieldEntryMap"/> — mirroring
+/// <c>documentMapping.ts</c>'s new `entryPhase` tag (which wizard captures a field). This class is
+/// unaffected: it stays scoped to `sources`/PDF rendering, not `entryPhase`/wizard capture — do
+/// not conflate the two purposes when reading either file.
 /// </summary>
 public static class ParticipantDocumentFieldMap
 {
