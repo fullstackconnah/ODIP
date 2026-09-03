@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -120,7 +122,15 @@ public class CaregiverSubmissionsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<CaregiverSubmissionDetailDto>>> Get(Guid id, CancellationToken ct)
     {
-        var s = await _db.CaregiverProfileSubmissions.Include(x => x.Participant).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await _db.CaregiverProfileSubmissions
+            .Include(x => x.Participant).ThenInclude(p => p.PreferredUser)
+            .Include(x => x.Participant).ThenInclude(p => p.RestrictivePractices)
+            .Include(x => x.Participant).ThenInclude(p => p.Consents)
+            .Include(x => x.Participant).ThenInclude(p => p.HealthConditions)
+            .Include(x => x.Participant).ThenInclude(p => p.AdlAssessments)
+            .Include(x => x.Participant).ThenInclude(p => p.ChecklistItems)
+            .Include(x => x.Participant).ThenInclude(p => p.CommunityAccessRiskItems)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<CaregiverSubmissionDetailDto>.Fail("Submission not found"));
 
         var dto = new CaregiverSubmissionDetailDto
@@ -130,7 +140,7 @@ public class CaregiverSubmissionsController : ControllerBase
             Status = s.Status, CaregiverName = s.CaregiverName, CaregiverRelationship = s.CaregiverRelationship,
             CreatedAt = s.CreatedAt, ExpiresAt = s.ExpiresAt, SubmittedAt = s.SubmittedAt,
             ReviewedAt = s.ReviewedAt, RejectionNote = s.RejectionNote,
-            Current = BuildProjection(s.Participant),
+            Current = await BuildProjectionAsync(s.Participant, ct),
             Payload = s.Payload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json),
         };
         return Ok(ApiResponse<CaregiverSubmissionDetailDto>.Ok(dto));
@@ -147,7 +157,7 @@ public class CaregiverSubmissionsController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("This submission has no content."));
 
         var payload = JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json) ?? new PatchParticipantDto();
-        payload = Sanitise(payload, s.Participant);   // cg02 Task 12 implements; identity for now
+        payload = CaregiverFieldPolicy.Sanitise(payload, s.Participant);
 
         var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, ct);
         if (error != null) return BadRequest(ApiResponse<object>.Fail(error));
@@ -179,7 +189,6 @@ public class CaregiverSubmissionsController : ControllerBase
         return NoContent();
     }
 
-    // cg02 (Tasks 11–12) replaces both of these with CaregiverFieldPolicy.
-    private static System.Text.Json.Nodes.JsonObject BuildProjection(Participant p) => new();
-    private static PatchParticipantDto Sanitise(PatchParticipantDto dto, Participant p) => dto;
+    private async Task<JsonObject> BuildProjectionAsync(Participant p, CancellationToken ct) =>
+        CaregiverFieldPolicy.BuildProjection(await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct));
 }

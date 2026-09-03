@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -53,6 +55,13 @@ public class CaregiverController : ControllerBase
 
         var p = await _db.Participants
             .IgnoreQueryFilters()
+            .Include(x => x.PreferredUser)
+            .Include(x => x.RestrictivePractices)
+            .Include(x => x.Consents)
+            .Include(x => x.HealthConditions)
+            .Include(x => x.AdlAssessments)
+            .Include(x => x.ChecklistItems)
+            .Include(x => x.CommunityAccessRiskItems)
             .FirstOrDefaultAsync(x => x.Id == sub.ParticipantId && x.TenantId == sub.TenantId, ct);
         if (p == null) return null;
         return (sub, p);
@@ -72,7 +81,7 @@ public class CaregiverController : ControllerBase
             CaregiverRelationship = sub.CaregiverRelationship,
             ExpiresAt = sub.ExpiresAt,
             RejectionNote = sub.RejectionNote,
-            Current = BuildProjection(p),
+            Current = await BuildProjectionAsync(p, ct),
             Editable = EditableFields(),
             Draft = sub.Payload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(sub.Payload, Json),
         };
@@ -113,7 +122,8 @@ public class CaregiverController : ControllerBase
         return NoContent();
     }
 
-    // cg02 (Task 11) replaces these two with CaregiverFieldPolicy.
-    private static System.Text.Json.Nodes.JsonObject BuildProjection(Participant p) => new();
-    private static IReadOnlyList<string> EditableFields() => Array.Empty<string>();
+    private async Task<JsonObject> BuildProjectionAsync(Participant p, CancellationToken ct) =>
+        CaregiverFieldPolicy.BuildProjection(await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct));
+
+    private static IReadOnlyList<string> EditableFields() => CaregiverFieldPolicy.EditableFieldIds();
 }
