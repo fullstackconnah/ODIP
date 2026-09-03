@@ -480,3 +480,37 @@ describe('ParticipantDetailPage — PD-1 header warning pill', () => {
     expect(screen.getByRole('link', { name: /resume intake/i })).toBeInTheDocument()
   })
 })
+
+// SPEC-05 PF-10.5 — the three-way resume-banner state, derived from IntakeCompletedAt/IsDraft.
+describe('ParticipantDetailPage — PF-10.5 three-way resume banner', () => {
+  it('no IntakeCompletedAt: shows "Resume intake" routed to the Intake wizard at /participants/:id/intake', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, intakeCompletedAt: null }), isLoading: false })
+    renderAt('participant-1')
+
+    const link = screen.getByRole('link', { name: /resume intake/i })
+    expect(link).toHaveAttribute('href', '/participants/participant-1/intake')
+    expect(screen.getByRole('status')).toHaveTextContent(/intake hasn't been completed yet/i)
+  })
+
+  it('IntakeCompletedAt set, IsDraft still true: shows "Continue profile" routed to the Profile wizard at /participants/:id/profile', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, intakeCompletedAt: '2026-08-01T00:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+
+    const link = screen.getByRole('link', { name: /continue profile/i })
+    expect(link).toHaveAttribute('href', '/participants/participant-1/profile')
+    expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/profile isn't finished yet/i)
+  })
+
+  it('IsDraft false: no banner at all, regardless of IntakeCompletedAt', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false, intakeCompletedAt: '2026-08-01T00:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /continue profile/i })).not.toBeInTheDocument()
+  })
+})

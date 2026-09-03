@@ -139,6 +139,20 @@ describe('ProfileWizardPage — drift guard against the PF-10.1 field-allocation
   })
 })
 
+// SPEC-05 PF-10.5 — "Re-opening the Profile wizard on a partially-completed participant hydrates
+// the saved values." (rather than starting the step blank each time it's reopened).
+describe('ProfileWizardPage — PF-10.5 resume hydration', () => {
+  it('hydrates a previously-saved Key Identifiers value into its field, while a genuinely unfilled sibling field on the same step stays blank (partial completion, not all-or-nothing)', async () => {
+    const participant = makeParticipant({ medicareNumber: '1234567890', weightKg: 72, heightCm: null })
+    renderProfilePage(participant)
+    await expectStep(/key identifiers/i)
+
+    expect(screen.getByLabelText(/medicare number/i)).toHaveValue('1234567890')
+    expect(screen.getByLabelText(/weight/i)).toHaveValue(72)
+    expect(screen.getByLabelText(/height/i)).toHaveValue(null)
+  })
+})
+
 describe('ProfileWizardPage — conditional sections (generic isVisible list, not special-cased)', () => {
   it('omits the Community Access step entirely when serviceStreams does not include CommunityAccessDailyLiving', async () => {
     renderProfilePage(makeParticipant({ serviceStreams: 'InHomeSupport' }))

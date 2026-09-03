@@ -9,14 +9,23 @@ import {
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
 
-const { mockCreateMutateAsync } = vi.hoisted(() => ({
+const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseParticipant, mockUseContactRoles, mockUseRiskEntries } = vi.hoisted(() => ({
   mockCreateMutateAsync: vi.fn(),
+  mockUpdateMutateAsync: vi.fn(),
+  mockUseParticipant: vi.fn(),
+  mockUseContactRoles: vi.fn(),
+  mockUseRiskEntries: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField/Dropdown/Card are the real components, exercising the
 // actual wizard step-gating/navigation/review wiring, same approach as ParticipantCreatePage.test.tsx.
 vi.mock('@/api/hooks', () => ({
   useCreateParticipant: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
+  // PF-10.5 edit mode (resuming an existing Intake draft) — see the describe block below.
+  useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
+  useParticipant: mockUseParticipant,
+  useParticipantContactRoles: mockUseContactRoles,
+  useParticipantRiskEntries: mockUseRiskEntries,
   usePersons: () => ({
     data: [
       { id: 'person-1', firstName: 'Karen', lastName: 'Johnson', fullName: 'Karen Johnson', organisation: null, activeRoleCount: 0 },
@@ -39,9 +48,31 @@ function renderIntakePage() {
   return render(<RouterProvider router={router} />)
 }
 
+// PF-10.5 — resuming an existing draft at /participants/:id/intake.
+function renderIntakePageEditMode(participant: Record<string, unknown>) {
+  mockUseParticipant.mockReturnValue({ data: participant, isLoading: false })
+  const router = createMemoryRouter(
+    [
+      { path: '/participants/:id/intake', element: <IntakeWizardPage /> },
+      { path: '/participants/:id', element: <div>Participant detail</div> },
+      { path: '/participants/:id/profile', element: <div>Profile wizard</div> },
+    ],
+    { initialEntries: [`/participants/${participant.id}/intake`] },
+  )
+  return render(<RouterProvider router={router} />)
+}
+
 beforeEach(() => {
   mockCreateMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-participant-1' } })
+  mockUpdateMutateAsync.mockReset()
+  mockUpdateMutateAsync.mockResolvedValue({ success: true })
+  mockUseParticipant.mockReset()
+  mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false })
+  mockUseContactRoles.mockReset()
+  mockUseContactRoles.mockReturnValue({ data: [] })
+  mockUseRiskEntries.mockReset()
+  mockUseRiskEntries.mockReturnValue({ data: [] })
 })
 
 function stepNav() {
@@ -314,5 +345,91 @@ describe('IntakeWizardPage — drift guard against the PF-10.1 field-allocation 
     await user.click(document.getElementById('fundingSource') as HTMLElement)
     await user.click(screen.getByRole('option', { name: 'Other' }))
     expect(document.getElementById('fundingOrganisation')).not.toBeNull()
+  })
+})
+
+// SPEC-05 PF-10.5 — resuming an existing draft (IntakeCompletedAt still null) at
+// /participants/:id/intake, routed there by the detail page's three-way resume banner.
+describe('IntakeWizardPage — PF-10.5 edit mode (resuming an existing Intake draft)', () => {
+  function makeDraftParticipant(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'draft-1', firstName: 'Jamie', lastName: 'Rivers', isDraft: true, intakeCompletedAt: null,
+      ndisNumber: 'NDIS-777', planType: 'SelfManaged', fundingSource: 'Ndis', isRepeatClient: false,
+      serviceStreams: '', mobilityAidWheelchair: false, mobilityAidWalker: false, isHighSupport: false,
+      isIntensiveSupport: false, overnightSupport: 'None', overnightRatio: 'OneToOne',
+      requiresHiLoBed: false, requiresHoist: false, requiresShowerChair: false, requiresCommode: false,
+      requiresStandingMachine: false, supportRatio: 'SharedSupport',
+      ...overrides,
+    }
+  }
+
+  async function walkToReviewEditMode(user: ReturnType<typeof userEvent.setup>) {
+    await expectStep(/participant details/i)
+    // Every required field (firstName/lastName) is already hydrated — no typing needed.
+    for (let i = 0; i < 8; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+    }
+    await expectStep(/review/i)
+  }
+
+  it('hydrates Intake-owned fields from the existing draft row instead of starting blank', () => {
+    renderIntakePageEditMode(makeDraftParticipant())
+    expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
+    expect(screen.getByLabelText(/last name/i)).toHaveValue('Rivers')
+  })
+
+  it('shows a heading of "Resume Intake" rather than "Intake" when editing an existing draft', () => {
+    renderIntakePageEditMode(makeDraftParticipant())
+    expect(screen.getByRole('heading', { name: /resume intake/i })).toBeInTheDocument()
+  })
+
+  it('completing a resumed Intake PUTs isDraft=true and completeIntake=true (never a second POST), strips riskEntries/contactRoles, and hands off to the Profile wizard', async () => {
+    const user = userEvent.setup()
+    renderIntakePageEditMode(makeDraftParticipant())
+    await walkToReviewEditMode(user)
+
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const { id, data } = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(id).toBe('draft-1')
+    expect(data.isDraft).toBe(true)
+    expect(data.completeIntake).toBe(true)
+    expect(data).not.toHaveProperty('riskEntries')
+    expect(data).not.toHaveProperty('contactRoles')
+
+    expect(await screen.findByText(/profile wizard/i)).toBeInTheDocument()
+  })
+
+  it('"Save as draft" on a resumed Intake PUTs isDraft=true and completeIntake=false, and routes to the detail page', async () => {
+    const user = userEvent.setup()
+    renderIntakePageEditMode(makeDraftParticipant())
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const { id, data } = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(id).toBe('draft-1')
+    expect(data.isDraft).toBe(true)
+    expect(data.completeIntake).toBe(false)
+
+    expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
+  })
+
+  it('surfaces already-recorded contacts/risk entries read-only rather than re-editable rows', async () => {
+    const user = userEvent.setup()
+    mockUseContactRoles.mockReturnValue({ data: [{ id: 'role-1', personFullName: 'Karen Johnson', roleType: 'NextOfKin' }] })
+    mockUseRiskEntries.mockReturnValue({ data: [{ id: 'risk-1', description: 'Uneven pathway at entry' }] })
+    renderIntakePageEditMode(makeDraftParticipant())
+
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> NDIS & Funding
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Contacts
+    expect(screen.getByText(/Karen Johnson/i)).toBeInTheDocument()
+    expect(screen.getByText(/already recorded/i)).toBeInTheDocument()
+
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Risks
+    expect(screen.getByText(/Uneven pathway at entry/i)).toBeInTheDocument()
   })
 })
