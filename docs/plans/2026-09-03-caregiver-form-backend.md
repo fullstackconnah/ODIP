@@ -1455,7 +1455,7 @@ Do **not** merge — the orchestrator merges after independent verification.
   - `public static JsonObject BuildProjection(ParticipantDetailDto detail)` — serialises the detail DTO with web options, removes every `InternalFields` key, returns the rest.
   - `public static IReadOnlyList<string> EditableFieldIds()` — allocation-contract field ids with `Phase == Profile` whose mapped DTO property is not internal.
 
-- [ ] **Step 1: Failing drift-guard tests**
+- [x] **Step 1: Failing drift-guard tests**
 
 ```csharp
 using System.Text.Json;
@@ -1522,9 +1522,9 @@ public class CaregiverFieldPolicyTests
 }
 ```
 
-- [ ] **Step 2: Run to confirm failure** — build error.
+- [x] **Step 2: Run to confirm failure** — build error.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 First, open `Odip.Application/DTOs/*` and find `ParticipantDetailDto`. Write down the **actual property names** for the fields the spec excludes. Then:
 
@@ -1600,12 +1600,12 @@ public static class CaregiverFieldPolicy
 
 If `ParticipantDocumentFieldMap.Entries` lacks a `ParticipantPropertyName` for some Profile field ids (the `IsTable` rows), treat them as internal only if the table's DTO property name is in `InternalFields`; otherwise editable. Make `IsInternalFieldId` handle a null property name by returning `false`, as above.
 
-- [ ] **Step 4: Iterate until the drift guards pass**
+- [x] **Step 4: Iterate until the drift guards pass**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverFieldPolicyTests"`
 The first failure will list DTO names that don't exist — fix `InternalFields` to real names. The `EveryProfileFieldIsEitherEditableOrInternal` test will pass once every Profile field is accounted for. Do **not** weaken either test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Odip.Infrastructure/Services/CaregiverFieldPolicy.cs Odip.Tests/Caregiver/CaregiverFieldPolicyTests.cs
@@ -1627,7 +1627,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Consumes: `CaregiverFieldPolicy.BuildProjection`, `EditableFieldIds`, and whatever `ParticipantsController` uses to build a `ParticipantDetailDto` from a `Participant` (find `ToDetailDto` or the equivalent; if it is a private method on `ParticipantsController`, move it to `internal static` on a small `ParticipantDetailMapper` in `Odip.Infrastructure/Services/` — behaviour-preserving, all existing tests must pass).
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```csharp
 [Fact]
@@ -1644,7 +1644,7 @@ public async Task Get_ProjectionOmitsInternalFields_AndListsEditable()
 }
 ```
 
-- [ ] **Step 2: Implement** — in both controllers replace the stubs:
+- [x] **Step 2: Implement** — in both controllers replace the stubs:
 
 ```csharp
     private static JsonObject BuildProjection(Participant p) =>
@@ -1654,7 +1654,7 @@ public async Task Get_ProjectionOmitsInternalFields_AndListsEditable()
 
 `ToDetailDto` may need related collections loaded (`Include`s). Match whatever `ParticipantsController.GetById` includes; add those `Include`s to `ResolveLiveAsync`'s participant query and to the admin `Get`.
 
-- [ ] **Step 3: Tests + commit**
+- [x] **Step 3: Tests + commit**
 
 Run: `dotnet test` → `Failed: 0`.
 
@@ -1680,7 +1680,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 
 **The trap this closes.** PATCH is all-or-nothing at the group level. Nulling an internal *scalar* inside an otherwise-caregiver-editable group would **clear** it. So: internal *groups* are set to `null` (absent = untouched); internal *scalars inside editable groups* are **overwritten with the participant's current value**, so accept can never change them.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```csharp
 // CaregiverFieldPolicyTests
@@ -1742,9 +1742,9 @@ public async Task Accept_CraftedPayloadCannotChangeInternalField()
 
 Adjust member and enum names to the real ones in `ParticipantPatchDTOs.cs` / `Participant.cs`; the intent of each assertion must not change.
 
-- [ ] **Step 2: Run to confirm failure.**
+- [x] **Step 2: Run to confirm failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
     /// <summary>
@@ -1773,7 +1773,7 @@ Adjust member and enum names to the real ones in `ParticipantPatchDTOs.cs` / `Pa
 
 Replace the identity stub in `CaregiverSubmissionsController.Accept` with `CaregiverFieldPolicy.Sanitise(payload, s.Participant)`.
 
-- [ ] **Step 4: Tests, full suite, commit, PR**
+- [x] **Step 4: Tests, full suite, commit, PR**
 
 Run: `dotnet test` → `Failed: 0`.
 
