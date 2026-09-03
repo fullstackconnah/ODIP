@@ -31,165 +31,13 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
-    /// §4.4 same-tenant validation for the preferred-staff (now preferred-user) picker: null is
-    /// always fine, otherwise the id must resolve to an active User — same-tenant scoping comes
-    /// for free from _db.Users' ambient OdipDbContext query filter.
+    /// §4.4 same-tenant validation for the preferred-staff (now preferred-user) picker. Thin
+    /// wrapper: moved to <see cref="ParticipantPatchApplier.IsValidPreferredUserRefAsync"/> so the
+    /// extracted Patch applier can call the exact same logic in-process — Odip.Infrastructure has
+    /// no project reference back to Odip.Api, so the shared copy had to move there.
     /// </summary>
     private Task<bool> IsValidPreferredUserRefAsync(Guid? userId, CancellationToken ct) =>
-        userId.HasValue
-            ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
-            : Task.FromResult(true);
-
-    /// <summary>
-    /// INTAKE sub-wave B — upserts every consent row submitted with a create/update payload,
-    /// keyed by <see cref="Domain.Enums.ConsentType"/> rather than blindly inserting (unlike
-    /// RiskEntries' insert-only Create loop): the wizard's Cultural &amp; Consent step remains
-    /// editable in edit mode too (see CreateParticipantDto.Consents' doc), so a second/third save
-    /// of the same participant must update the SAME seven rows, not create duplicates. For a
-    /// brand-new participant (no existing rows) this degenerates to a plain insert loop, same
-    /// effective behaviour as Create previously had. Shares the exact same answer-application
-    /// semantics (RecordedAt only re-stamped when Granted actually changes) as
-    /// ParticipantConsentsController.Upsert via <see cref="ParticipantConsentsController.ApplyAnswer"/>,
-    /// so a wizard save and a detail-page edit never disagree about what "recorded" means. Called
-    /// before SaveChangesAsync so every row lands in the same transaction as the participant
-    /// insert/update.
-    /// </summary>
-    private async Task UpsertConsentsAsync(Guid participantId, List<CreateParticipantConsentDto> consents, CancellationToken ct)
-    {
-        // Load-bearing guard, not just an optimisation: an Update caller that never mentions
-        // Consents (e.g. ParticipantsPage's isActive-only toggle, or any older client built
-        // before this field existed) round-trips CreateParticipantDto/UpdateParticipantDto with
-        // Consents defaulted to an empty list — without this early return, an empty submission
-        // would be indistinguishable from "delete every consent answer" and this loop would have
-        // nothing to iterate anyway, but the intent must read as "leave existing rows alone",
-        // which is exactly what returning before touching the database achieves. `consents is
-        // null` additionally covers a raw `"consents": null` JSON payload — System.Text.Json
-        // overwrites the DTO's `= new()` initializer with an explicit null when the property IS
-        // present (even if null) in the request body, so the empty-list default alone doesn't
-        // guarantee non-null at runtime despite the non-nullable parameter type.
-        if (consents is null || consents.Count == 0) return;
-        var existing = await _db.ParticipantConsents.Where(c => c.ParticipantId == participantId).ToListAsync(ct);
-        var byType = existing.ToDictionary(c => c.ConsentType);
-        foreach (var dto in consents)
-        {
-            if (!byType.TryGetValue(dto.ConsentType, out var row))
-            {
-                row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, ConsentType = dto.ConsentType };
-                _db.ParticipantConsents.Add(row);
-                byType[dto.ConsentType] = row;
-            }
-            ParticipantConsentsController.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
-        }
-    }
-
-    /// <summary>
-    /// INTAKE sub-wave C1 — upserts every health-condition row submitted with a create/update
-    /// payload, keyed by <see cref="Domain.Enums.HealthConditionType"/>. Copies
-    /// <see cref="UpsertConsentsAsync"/>'s documented pattern exactly, including the load-bearing
-    /// empty/null guard below (same reasoning: an Update caller that never mentions
-    /// HealthConditions round-trips an empty list, which must mean "leave existing rows alone", not
-    /// "clear every condition answer"). Called before SaveChangesAsync so every row lands in the
-    /// same transaction as the participant insert/update.
-    /// </summary>
-    private async Task UpsertHealthConditionsAsync(Guid participantId, List<CreateParticipantHealthConditionDto> conditions, CancellationToken ct)
-    {
-        if (conditions is null || conditions.Count == 0) return;
-        var existing = await _db.ParticipantHealthConditions.Where(c => c.ParticipantId == participantId).ToListAsync(ct);
-        var byType = existing.ToDictionary(c => c.ConditionType);
-        foreach (var dto in conditions)
-        {
-            if (!byType.TryGetValue(dto.ConditionType, out var row))
-            {
-                row = new ParticipantHealthCondition { Id = Guid.NewGuid(), ParticipantId = participantId, ConditionType = dto.ConditionType };
-                _db.ParticipantHealthConditions.Add(row);
-                byType[dto.ConditionType] = row;
-            }
-            ParticipantHealthConditionsController.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
-        }
-    }
-
-    /// <summary>
-    /// INTAKE sub-wave C2 — upserts every ADL-assessment row submitted with a create/update
-    /// payload, keyed by <see cref="Domain.Enums.AdlType"/>. Copies UpsertHealthConditionsAsync's
-    /// documented pattern exactly, including the load-bearing empty/null guard below (same
-    /// reasoning: an Update caller that never mentions AdlAssessments round-trips an empty list,
-    /// which must mean "leave existing rows alone", not "clear every ADL answer"). Called before
-    /// SaveChangesAsync so every row lands in the same transaction as the participant insert/update.
-    /// Sparse on creation (see the guard inside the loop below): the wizard always submits the
-    /// full fixed twenty-row array with every hidden/unanswered row already null (see
-    /// <see cref="CreateParticipantAdlAssessmentDto"/>'s doc), so a blank incoming row must not
-    /// become a permanent database row just because it was present in the payload.
-    /// </summary>
-    private async Task UpsertAdlAssessmentsAsync(Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
-    {
-        if (assessments is null || assessments.Count == 0) return;
-        var existing = await _db.ParticipantAdlAssessments.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
-        var byType = existing.ToDictionary(a => a.AdlType);
-        foreach (var dto in assessments)
-        {
-            if (!byType.TryGetValue(dto.AdlType, out var row))
-            {
-                // Load-bearing skip, not just an optimisation: the client (both the wizard's
-                // create/draft submissions and any Update caller) always sends the full
-                // fixed-length AdlAssessments array — every AdlType, every time — with
-                // hidden/never-assessed rows carrying Level/Notes/HowToHelpNotes all null (see
-                // CreateParticipantAdlAssessmentDto's doc). Without this skip, EVERY participant
-                // would get all twenty ParticipantAdlAssessment rows persisted permanently on
-                // first save, even for streams that never show the ADL grid at all. Only skip when
-                // there both is no existing row for this type AND the incoming dto carries no
-                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
-                // to ApplyAnswer below and keeps the row, same clear-to-null-keeps-the-row
-                // convention as UpsertConsentsAsync.
-                if (dto.Level is null && string.IsNullOrWhiteSpace(dto.Notes) && string.IsNullOrWhiteSpace(dto.HowToHelpNotes)) continue;
-                row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = dto.AdlType };
-                _db.ParticipantAdlAssessments.Add(row);
-                byType[dto.AdlType] = row;
-            }
-            ParticipantAdlAssessmentsController.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
-        }
-    }
-
-    /// <summary>
-    /// INTAKE-03/04, CommunityAccessDailyLiving stream — upserts every checklist-item row
-    /// submitted with a create/update payload, keyed by <see cref="Domain.Enums.ChecklistItemType"/>.
-    /// Copies UpsertAdlAssessmentsAsync's documented pattern exactly, including the load-bearing
-    /// empty/null guard below (same reasoning: an Update caller that never mentions ChecklistItems
-    /// round-trips an empty list, which must mean "leave existing rows alone", not "clear every
-    /// checklist answer"). Called before SaveChangesAsync so every row lands in the same
-    /// transaction as the participant insert/update. Sparse on creation (see the guard inside the
-    /// loop below): the wizard always submits the full fixed twenty-one-row array with every
-    /// hidden/unanswered row already null (see <see cref="CreateParticipantChecklistItemDto"/>'s
-    /// doc), so a blank incoming row must not become a permanent database row just because it was
-    /// present in the payload.
-    /// </summary>
-    private async Task UpsertChecklistItemsAsync(Guid participantId, List<CreateParticipantChecklistItemDto> items, CancellationToken ct)
-    {
-        if (items is null || items.Count == 0) return;
-        var existing = await _db.ParticipantChecklistItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
-        var byType = existing.ToDictionary(a => a.ItemType);
-        foreach (var dto in items)
-        {
-            if (!byType.TryGetValue(dto.ItemType, out var row))
-            {
-                // Load-bearing skip, not just an optimisation: the client (both the wizard's
-                // create/draft submissions and any Update caller) always sends the full
-                // fixed-length ChecklistItems array — every ChecklistItemType, every time — with
-                // hidden/never-assessed rows carrying Value/Notes both null (see
-                // CreateParticipantChecklistItemDto's doc). Without this skip, EVERY participant
-                // would get all twenty-one ParticipantChecklistItem rows persisted permanently on
-                // first save, even for participants with no CommunityAccessDailyLiving stream at
-                // all. Only skip when there both is no existing row for this type AND the incoming
-                // dto carries no answer whatsoever; a dto that clears an EXISTING row to null
-                // still falls through to ApplyAnswer below and keeps the row, same
-                // clear-to-null-keeps-the-row convention as UpsertConsentsAsync.
-                if (dto.Value is null && string.IsNullOrWhiteSpace(dto.Notes)) continue;
-                row = new ParticipantChecklistItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
-                _db.ParticipantChecklistItems.Add(row);
-                byType[dto.ItemType] = row;
-            }
-            ParticipantChecklistItemsController.ApplyAnswer(row, dto.Value, dto.Notes);
-        }
-    }
+        ParticipantPatchApplier.IsValidPreferredUserRefAsync(_db, userId, ct);
 
     /// <summary>
     /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
@@ -226,137 +74,11 @@ public class ParticipantsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>
-    /// rather than the [Required] attribute (see that property's doc for why) — a draft only needs
-    /// enough to be findable in the list (at least one of the two names), while a full
-    /// create/update (IsDraft false, including a final wizard submission) requires both, exactly
-    /// as [Required] used to. Called first, ahead of every other validator below, in both
-    /// Create and Update.
-    /// </summary>
-    private static string? ValidateNames(CreateParticipantDto dto)
-    {
-        var firstBlank = string.IsNullOrWhiteSpace(dto.FirstName);
-        var lastBlank = string.IsNullOrWhiteSpace(dto.LastName);
-        if (dto.IsDraft)
-            return firstBlank && lastBlank ? "Provide at least a first or last name to save a draft." : null;
-        if (firstBlank) return "First name is required.";
-        if (lastBlank) return "Last name is required.";
-        return null;
-    }
-
-    /// <summary>INTAKE-05: Gender "Other" requires the self-description free-text field, both ends.</summary>
-    private static string? ValidateGender(CreateParticipantDto dto) =>
-        dto.Gender == Gender.Other && string.IsNullOrWhiteSpace(dto.GenderSelfDescription)
-            ? "Please provide a gender self-description."
-            : null;
-
-    /// <summary>
-    /// FUND-02: FundingSource "Other" requires the (reused) FundingOrganisation free-text field,
-    /// both ends — mirrors ValidateGender's shape exactly. Ndis ignores whatever
-    /// FundingOrganisation carries (the frontend's INTAKE-07 engine excludes it from the payload
-    /// entirely in that case; this validator does not error on a stray/legacy value either way).
-    /// </summary>
-    private static string? ValidateFundingSource(CreateParticipantDto dto) =>
-        dto.FundingSource == ParticipantFundingSource.Other && string.IsNullOrWhiteSpace(dto.FundingOrganisation)
-            ? "Please specify the funding organisation."
-            : null;
-
-    /// <summary>
-    /// LIVING-01/02/03/04: each arrangement type requires its one key identifying field, both
-    /// ends — same shape as ValidateGender/ValidateFundingSource. Independent's WhoLivesWith is
-    /// only required when LivesWithOthers is true (a second level of conditionality nested inside
-    /// the arrangement-type gate).
-    /// </summary>
-    private static string? ValidateLivingArrangement(CreateParticipantDto dto)
-    {
-        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.Family && string.IsNullOrWhiteSpace(dto.MainSupportPersonName))
-            return "Please provide the main support person's name.";
-        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.Independent && dto.LivesWithOthers == true && string.IsNullOrWhiteSpace(dto.WhoLivesWith))
-            return "Please specify who the participant lives with.";
-        if (dto.LivingArrangement == Domain.Enums.LivingArrangement.SupportedAccommodation && string.IsNullOrWhiteSpace(dto.SilProviderName))
-            return "Please provide the SIL provider name.";
-        return null;
-    }
-
-    /// <summary>INTAKE-06: AU postcode is exactly 4 digits when supplied (optional field, so blank is fine).</summary>
-    private static string? ValidateAddressPostcode(CreateParticipantDto dto) =>
-        !string.IsNullOrWhiteSpace(dto.AddressPostcode) && !System.Text.RegularExpressions.Regex.IsMatch(dto.AddressPostcode, @"^\d{4}$")
-            ? "Postcode must be exactly 4 digits."
-            : null;
-
-    /// <summary>
-    /// INTAKE sub-wave A (research spec §5 "Participant Details"): the participant's OWN phone
-    /// number — a foundational gap the spec flagged (Participant previously had no phone field of
-    /// any kind, only Contact/Person rows did). AU-tolerant, deliberately non-strict: allows an
-    /// optional leading "+", digits, spaces, hyphens, and parentheses, with 6-20 total characters
-    /// — wide enough to accept "0400 000 000", "+61 400 000 000", "(07) 3123 4567", or "07 3123
-    /// 4567" without hard-coding a specific AU number-length/area-code rule. Per INTAKE-08
-    /// doctrine, this format check runs on whatever IS provided — including on a draft save — but
-    /// absence (null/blank) never blocks a save either way.
-    /// </summary>
-    private static string? ValidatePhone(CreateParticipantDto dto) =>
-        !string.IsNullOrWhiteSpace(dto.Phone) && !System.Text.RegularExpressions.Regex.IsMatch(dto.Phone, @"^\+?[\d\s\-()]{6,20}$")
-            ? "Please provide a valid phone number."
-            : null;
-
-    /// <summary>
-    /// INTAKE sub-wave A (research spec §5): the participant's OWN email — same foundational gap
-    /// as <see cref="ValidatePhone"/>. A simple, deliberately non-strict shape check (something@
-    /// something.something, no whitespace) rather than a full RFC 5322 validator — same
-    /// "provided-value format check, absence never blocks" doctrine as ValidatePhone.
-    /// </summary>
-    private static string? ValidateEmail(CreateParticipantDto dto) =>
-        !string.IsNullOrWhiteSpace(dto.Email) && !System.Text.RegularExpressions.Regex.IsMatch(dto.Email, @"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-            ? "Please provide a valid email address."
-            : null;
-
-    /// <summary>
-    /// INTAKE sub-wave A polish round: WeightKg is stored as numeric(5,2) (see OdipDbContext's
-    /// HasPrecision(5, 2)), so anything outside 0 &lt; value &lt;= 999.99 either can't fit or is
-    /// nonsensical for a participant's weight — reject it cleanly here rather than letting an
-    /// out-of-range value fall through to an unhandled Npgsql numeric-overflow exception at
-    /// SaveChangesAsync. Same "provided-value format check, absence never blocks" doctrine as
-    /// ValidatePhone/ValidateEmail.
-    /// </summary>
-    private static string? ValidateWeight(CreateParticipantDto dto) =>
-        dto.WeightKg.HasValue && (dto.WeightKg.Value <= 0 || dto.WeightKg.Value > 999.99m)
-            ? "Weight must be greater than 0 and no more than 999.99 kg."
-            : null;
-
-    /// <summary>Same shape/reasoning as <see cref="ValidateWeight"/>, for HeightCm.</summary>
-    private static string? ValidateHeight(CreateParticipantDto dto) =>
-        dto.HeightCm.HasValue && (dto.HeightCm.Value <= 0 || dto.HeightCm.Value > 999.99m)
-            ? "Height must be greater than 0 and no more than 999.99 cm."
-            : null;
-
-    /// <summary>
-    /// DIAG-01: unlike ValidateGender/ValidateFundingSource/ValidateLivingArrangement (which
-    /// enforce a required companion field), diagnoses are open text with a curated picklist as UI
-    /// guidance only (see Diagnoses.cs's type doc) — so the only server-side rule is "not blank,
-    /// not absurdly long" per entry, applied to both PrimaryDiagnosis and every OtherDiagnoses row.
-    /// Called from both Create and Update (same dual-wiring as the four validators above it) —
-    /// a PUT must reject a blank/over-long entry exactly like a POST does. Validation runs
-    /// against the raw (untrimmed) value; Create/Update then trim PrimaryDiagnosis/each
-    /// OtherDiagnoses entry before assigning it to the entity, so a caller sending " Epilepsy"
-    /// (leading/trailing whitespace) still persists as the exact "Epilepsy" string the frontend's
-    /// epilepsy-derivation rule matches on — see the .Trim() calls at the PrimaryDiagnosis/
-    /// OtherDiagnoses assignments in both methods below. The <see cref="Odip.Domain.Enums.HidpaSupportCategory"/>
-    /// doc comment and conditionalFields.ts's module doc both note the flip side of this: the
-    /// derivation engine only ever defaults a HIDPA category ON, never forces it back OFF — so
-    /// removing an Epilepsy diagnosis entirely (not just switching it away and back) still never
-    /// silently clears an already-set EpilepsyManagement flag, deliberately.
-    /// </summary>
-    private static string? ValidateDiagnoses(CreateParticipantDto dto)
-    {
-        if (dto.PrimaryDiagnosis != null && dto.PrimaryDiagnosis.Trim().Length == 0)
-            return "Primary diagnosis cannot be blank.";
-        if (dto.OtherDiagnoses.Any(d => string.IsNullOrWhiteSpace(d)))
-            return "Other diagnoses cannot contain a blank entry.";
-        if (dto.OtherDiagnoses.Any(d => d.Length > 200))
-            return "Each diagnosis must be 200 characters or fewer.";
-        return null;
-    }
+    // ValidateNames/ValidateGender/ValidateFundingSource/ValidateLivingArrangement/
+    // ValidateAddressPostcode/ValidatePhone/ValidateEmail/ValidateWeight/ValidateHeight/
+    // ValidateDiagnoses moved to Odip.Infrastructure.Services.ParticipantPatchApplier (see that
+    // class's type doc for why) so the extracted Patch applier and this controller's Create/Update
+    // share one copy. Call sites below now read ParticipantPatchApplier.ValidateXyz(...).
 
     /// <summary>
     /// INTAKE-08 fix round 2 (Finding 1): true iff <paramref name="role"/> identifies a person
@@ -431,38 +153,9 @@ public class ParticipantsController : ControllerBase
             activeRoles.Select(r => (r.RoleType, r.RegisteredProviderFlag, r.Status)));
     }
 
-    /// <summary>
-    /// LIVING-02/03/04 server-side clearing: defence in depth, mirroring FundingOrganisation's
-    /// pattern in Create/Update above — a field belonging to a non-selected arrangement type (or,
-    /// for WhoLivesWith, belonging to a LivesWithOthers=false Independent participant) is stored
-    /// as null regardless of what a stale client payload sent, rather than trusting the
-    /// frontend's INTAKE-07 payload exclusion alone.
-    /// </summary>
-    private static void ApplyLivingArrangementFields(Participant p, CreateParticipantDto dto)
-    {
-        var arrangement = dto.LivingArrangement;
-        p.LivingArrangement = arrangement;
-
-        var isFamily = arrangement == Domain.Enums.LivingArrangement.Family;
-        p.MainSupportPersonName = isFamily ? dto.MainSupportPersonName : null;
-        p.MainSupportPersonRelationship = isFamily ? dto.MainSupportPersonRelationship : null;
-        p.OthersLivingInAccommodation = isFamily ? dto.OthersLivingInAccommodation : null;
-        p.ResidentialInfo = isFamily ? dto.ResidentialInfo : null;
-
-        var isIndependent = arrangement == Domain.Enums.LivingArrangement.Independent;
-        p.LivesWithOthers = isIndependent ? dto.LivesWithOthers : null;
-        p.WhoLivesWith = isIndependent && dto.LivesWithOthers == true ? dto.WhoLivesWith : null;
-
-        var isSupported = arrangement == Domain.Enums.LivingArrangement.SupportedAccommodation;
-        p.SilProviderName = isSupported ? dto.SilProviderName : null;
-        p.SilProviderContactPhone = isSupported ? dto.SilProviderContactPhone : null;
-        p.AccommodationType = isSupported ? dto.AccommodationType : null;
-        p.OnSiteSupportHours = isSupported ? dto.OnSiteSupportHours : null;
-
-        // Shared across all three arrangement types (LIVING-01) — cleared only when no
-        // arrangement is selected at all.
-        p.LivingArrangementNotes = arrangement != null ? dto.LivingArrangementNotes : null;
-    }
+    // ApplyLivingArrangementFields moved to
+    // Odip.Infrastructure.Services.ParticipantPatchApplier (see that class's type doc) — call
+    // sites below now read ParticipantPatchApplier.ApplyLivingArrangementFields(...).
 
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
@@ -634,7 +327,7 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Create([FromBody] CreateParticipantDto dto, CancellationToken ct)
     {
-        var namesError = ValidateNames(dto);
+        var namesError = ParticipantPatchApplier.ValidateNames(dto);
         if (namesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
 
@@ -643,39 +336,39 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
                 $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
 
-        var genderError = ValidateGender(dto);
+        var genderError = ParticipantPatchApplier.ValidateGender(dto);
         if (genderError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
 
-        var fundingError = ValidateFundingSource(dto);
+        var fundingError = ParticipantPatchApplier.ValidateFundingSource(dto);
         if (fundingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
 
-        var livingError = ValidateLivingArrangement(dto);
+        var livingError = ParticipantPatchApplier.ValidateLivingArrangement(dto);
         if (livingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
 
-        var postcodeError = ValidateAddressPostcode(dto);
+        var postcodeError = ParticipantPatchApplier.ValidateAddressPostcode(dto);
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
-        var phoneError = ValidatePhone(dto);
+        var phoneError = ParticipantPatchApplier.ValidatePhone(dto);
         if (phoneError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
 
-        var emailError = ValidateEmail(dto);
+        var emailError = ParticipantPatchApplier.ValidateEmail(dto);
         if (emailError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
 
-        var weightError = ValidateWeight(dto);
+        var weightError = ParticipantPatchApplier.ValidateWeight(dto);
         if (weightError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
 
-        var heightError = ValidateHeight(dto);
+        var heightError = ParticipantPatchApplier.ValidateHeight(dto);
         if (heightError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
 
-        var diagnosesError = ValidateDiagnoses(dto);
+        var diagnosesError = ParticipantPatchApplier.ValidateDiagnoses(dto);
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
@@ -772,7 +465,7 @@ public class ParticipantsController : ControllerBase
             SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight,
             OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating,
         };
-        ApplyLivingArrangementFields(participant, dto);
+        ParticipantPatchApplier.ApplyLivingArrangementFields(participant, dto);
         _db.Participants.Add(participant);
         // INTAKE-09: risk-entry rows submitted alongside a new participant are created in the
         // same SaveChangesAsync call as the participant insert below — transactional with it.
@@ -835,16 +528,16 @@ public class ParticipantsController : ControllerBase
         await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
         // INTAKE sub-wave B — consent rows submitted alongside a new/drafted participant, in the
         // same SaveChangesAsync call as the participant insert below.
-        await UpsertConsentsAsync(participant.Id, dto.Consents, ct);
+        await ParticipantPatchApplier.UpsertConsentsAsync(_db, participant.Id, dto.Consents, ct);
         // INTAKE sub-wave C1 — health-condition grid rows submitted alongside a new/drafted
         // participant, in the same SaveChangesAsync call as the participant insert below.
-        await UpsertHealthConditionsAsync(participant.Id, dto.HealthConditions, ct);
+        await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, participant.Id, dto.HealthConditions, ct);
         // INTAKE sub-wave C2 — ADL-assessment grid rows submitted alongside a new/drafted
         // participant, in the same SaveChangesAsync call as the participant insert below.
-        await UpsertAdlAssessmentsAsync(participant.Id, dto.AdlAssessments, ct);
+        await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, participant.Id, dto.AdlAssessments, ct);
         // INTAKE-03/04 — Community Access checklist-item grid rows submitted alongside a
         // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
-        await UpsertChecklistItemsAsync(participant.Id, dto.ChecklistItems, ct);
+        await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, participant.Id, dto.ChecklistItems, ct);
         // PF-10.2 — Community Access Risk Assessment matrix rows submitted alongside a
         // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
         await UpsertCommunityAccessRiskItemsAsync(participant.Id, dto.CommunityAccessRiskItems, ct);
@@ -869,7 +562,7 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Update(Guid id, [FromBody] UpdateParticipantDto dto, CancellationToken ct)
     {
-        var namesError = ValidateNames(dto);
+        var namesError = ParticipantPatchApplier.ValidateNames(dto);
         if (namesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
 
@@ -878,39 +571,39 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
                 $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
 
-        var genderError = ValidateGender(dto);
+        var genderError = ParticipantPatchApplier.ValidateGender(dto);
         if (genderError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
 
-        var fundingError = ValidateFundingSource(dto);
+        var fundingError = ParticipantPatchApplier.ValidateFundingSource(dto);
         if (fundingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
 
-        var livingError = ValidateLivingArrangement(dto);
+        var livingError = ParticipantPatchApplier.ValidateLivingArrangement(dto);
         if (livingError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
 
-        var postcodeError = ValidateAddressPostcode(dto);
+        var postcodeError = ParticipantPatchApplier.ValidateAddressPostcode(dto);
         if (postcodeError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
 
-        var phoneError = ValidatePhone(dto);
+        var phoneError = ParticipantPatchApplier.ValidatePhone(dto);
         if (phoneError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
 
-        var emailError = ValidateEmail(dto);
+        var emailError = ParticipantPatchApplier.ValidateEmail(dto);
         if (emailError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
 
-        var weightError = ValidateWeight(dto);
+        var weightError = ParticipantPatchApplier.ValidateWeight(dto);
         if (weightError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
 
-        var heightError = ValidateHeight(dto);
+        var heightError = ParticipantPatchApplier.ValidateHeight(dto);
         if (heightError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
 
-        var diagnosesError = ValidateDiagnoses(dto);
+        var diagnosesError = ParticipantPatchApplier.ValidateDiagnoses(dto);
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
@@ -953,7 +646,7 @@ public class ParticipantsController : ControllerBase
         // server-side clearing as Create, so flipping Other -> Ndis actually clears stale text
         // rather than leaving it dormant on the row.
         p.FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null;
-        ApplyLivingArrangementFields(p, dto);
+        ParticipantPatchApplier.ApplyLivingArrangementFields(p, dto);
         p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.IsRepeatClient = dto.IsRepeatClient;
@@ -1039,13 +732,13 @@ public class ParticipantsController : ControllerBase
         await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
         // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
         // ContactRoles, this is read on Update too (not create-mode-only).
-        await UpsertConsentsAsync(p.Id, dto.Consents, ct);
+        await ParticipantPatchApplier.UpsertConsentsAsync(_db, p.Id, dto.Consents, ct);
         // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
-        await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
+        await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, p.Id, dto.HealthConditions, ct);
         // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions above.
-        await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
+        await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, p.Id, dto.AdlAssessments, ct);
         // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
-        await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
+        await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, p.Id, dto.ChecklistItems, ct);
         // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
         await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
@@ -1078,260 +771,12 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
-        // ── Validate — only for present groups, each checked purely from its own incoming values
-        // (no merge with the existing entity needed: every validator below is already confirmed
-        // self-contained within one group — see SPEC-00's field-by-field walk). Minimal transient
-        // CreateParticipantDto instances let the existing validator methods be reused verbatim
-        // without touching Create/Update's own call sites. Groups with no existing server-side
-        // validator (ServiceProfile, CulturalBackground, BehaviourCommunication,
-        // CommunityAccessBehaviour, MealsAndDiet, AboutMe, SupportsLookLike, RisksHazardsSummary)
-        // have nothing to check here, matching today's full submit exactly.
-        if (dto.PersonalDetails is { } pdValidate)
-        {
-            var transient = new CreateParticipantDto
-            {
-                FirstName = pdValidate.FirstName, LastName = pdValidate.LastName,
-                Gender = pdValidate.Gender, GenderSelfDescription = pdValidate.GenderSelfDescription,
-                Phone = pdValidate.Phone, Email = pdValidate.Email,
-            };
-            var namesError = ValidateNames(transient);
-            if (namesError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
-            var genderError = ValidateGender(transient);
-            if (genderError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
-            var phoneError = ValidatePhone(transient);
-            if (phoneError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
-            var emailError = ValidateEmail(transient);
-            if (emailError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
-        }
+        // Extracted, behaviour-preserving, into ParticipantPatchApplier.ApplyAsync so the
+        // caregiver accept flow (CaregiverSubmissionsController) can apply a sanitised
+        // PatchParticipantDto in-process without going through HTTP. See that class's doc.
+        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, ct);
+        if (error != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(error));
 
-        if (dto.PreferredStaff is { } psdValidate && !await IsValidPreferredUserRefAsync(psdValidate.PreferredStaffId, ct))
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
-
-        if (dto.Address is { } adValidate)
-        {
-            var postcodeError = ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = adValidate.AddressPostcode });
-            if (postcodeError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
-        }
-
-        if (dto.LivingArrangement is { } ladValidate)
-        {
-            var transient = new CreateParticipantDto
-            {
-                LivingArrangement = ladValidate.LivingArrangement, MainSupportPersonName = ladValidate.MainSupportPersonName,
-                LivesWithOthers = ladValidate.LivesWithOthers, WhoLivesWith = ladValidate.WhoLivesWith,
-                SilProviderName = ladValidate.SilProviderName,
-            };
-            var livingError = ValidateLivingArrangement(transient);
-            if (livingError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
-        }
-
-        if (dto.NdisPlan is { } npValidate)
-        {
-            var fundingError = ValidateFundingSource(new CreateParticipantDto { FundingSource = npValidate.FundingSource, FundingOrganisation = npValidate.FundingOrganisation });
-            if (fundingError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
-        }
-
-        if (dto.KeyIdentifiers is { } kiValidate)
-        {
-            var weightError = ValidateWeight(new CreateParticipantDto { WeightKg = kiValidate.WeightKg });
-            if (weightError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
-            var heightError = ValidateHeight(new CreateParticipantDto { HeightCm = kiValidate.HeightCm });
-            if (heightError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
-        }
-
-        if (dto.SupportNeedsMobility is { } snmValidate)
-        {
-            // Same inline check Create/Update run — the only server-side rule this group has
-            // today. equipmentRefine (the frontend's "notes without a ticked item" cross-field
-            // rule) has no backend twin anywhere in this codebase and Create/Update don't enforce
-            // it either, so Patch doesn't invent one here — see this PR's report.
-            var invalidOptions = snmValidate.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
-            if (invalidOptions.Count > 0)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
-                    $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
-        }
-
-        if (dto.Medical is { } medValidate)
-        {
-            var diagnosesError = ValidateDiagnoses(new CreateParticipantDto { PrimaryDiagnosis = medValidate.PrimaryDiagnosis, OtherDiagnoses = medValidate.OtherDiagnoses });
-            if (diagnosesError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
-        }
-
-        // ── Apply — plain property assignment, scoped to present group(s) only. Literally the
-        // same statements Update already has above, just gated on group presence.
-        if (dto.PersonalDetails is { } pd)
-        {
-            p.FirstName = pd.FirstName; p.LastName = pd.LastName; p.PreferredName = pd.PreferredName;
-            p.MiddleName = pd.MiddleName; p.DateOfBirth = pd.DateOfBirth; p.Gender = pd.Gender;
-            p.GenderSelfDescription = pd.GenderSelfDescription; p.PlaceOfBirth = pd.PlaceOfBirth;
-            p.Country = pd.Country; p.Phone = pd.Phone; p.Email = pd.Email;
-        }
-
-        // Task 6d, gated on group presence instead of always running (§5 of PreferredStaff's
-        // controller-behaviour doc): only diff/sync when this call actually touches PreferredStaff.
-        Guid? previousPreferredStaffId = null;
-        var preferredStaffChanged = false;
-        if (dto.PreferredStaff is { } psd)
-        {
-            previousPreferredStaffId = p.PreferredUserId;
-            preferredStaffChanged = previousPreferredStaffId != psd.PreferredStaffId;
-            p.PreferredUserId = psd.PreferredStaffId;
-        }
-
-        if (dto.Address is { } ad)
-        {
-            p.AddressStreet = ad.AddressStreet; p.AddressSuburb = ad.AddressSuburb;
-            p.AddressState = ad.AddressState; p.AddressPostcode = ad.AddressPostcode;
-        }
-
-        if (dto.LivingArrangement is { } lad)
-        {
-            // Reuses ApplyLivingArrangementFields verbatim — same arrangement-type clearing rules
-            // Create/Update already apply.
-            var transient = new CreateParticipantDto
-            {
-                LivingArrangement = lad.LivingArrangement, MainSupportPersonName = lad.MainSupportPersonName,
-                MainSupportPersonRelationship = lad.MainSupportPersonRelationship, OthersLivingInAccommodation = lad.OthersLivingInAccommodation,
-                ResidentialInfo = lad.ResidentialInfo, LivesWithOthers = lad.LivesWithOthers, WhoLivesWith = lad.WhoLivesWith,
-                SilProviderName = lad.SilProviderName, SilProviderContactPhone = lad.SilProviderContactPhone,
-                AccommodationType = lad.AccommodationType, OnSiteSupportHours = lad.OnSiteSupportHours,
-                LivingArrangementNotes = lad.LivingArrangementNotes,
-            };
-            ApplyLivingArrangementFields(p, transient);
-        }
-
-        if (dto.NdisPlan is { } np)
-        {
-            p.NdisNumber = np.NdisNumber; p.PlanStartDate = np.PlanStartDate; p.PlanEndDate = np.PlanEndDate;
-            p.PlanType = np.PlanType; p.FundingSource = np.FundingSource;
-            // Ndis ignores whatever the client sent for the reused "Other — specify" field — same
-            // server-side clearing as Create/Update.
-            p.FundingOrganisation = np.FundingSource == ParticipantFundingSource.Other ? np.FundingOrganisation : null;
-            p.IsDsoa = np.IsDsoa; p.IsRepeatClient = np.IsRepeatClient;
-        }
-
-        if (dto.ServiceProfile is { } sp)
-        {
-            p.Region = sp.Region; p.ServiceStreams = sp.ServiceStreams;
-        }
-
-        if (dto.KeyIdentifiers is { } ki)
-        {
-            p.PensionCardNumber = ki.PensionCardNumber; p.PensionCardExpiry = ki.PensionCardExpiry;
-            p.MedicareNumber = ki.MedicareNumber; p.MedicareExpiry = ki.MedicareExpiry;
-            p.CompanionCardNumber = ki.CompanionCardNumber; p.CompanionCardExpiry = ki.CompanionCardExpiry;
-            p.PrivateHealthFund = ki.PrivateHealthFund; p.PrivateHealthMembershipNumber = ki.PrivateHealthMembershipNumber;
-            p.TaxiCardNumber = ki.TaxiCardNumber; p.HairColour = ki.HairColour; p.EyeColour = ki.EyeColour;
-            p.WeightKg = ki.WeightKg; p.HeightCm = ki.HeightCm;
-        }
-
-        if (dto.CulturalBackground is { } cb)
-        {
-            p.IsCald = cb.IsCald; p.IsLgbtqi = cb.IsLgbtqi; p.IsFamilyCommunity = cb.IsFamilyCommunity;
-            p.IsAboriginalOrTorresStraitIslander = cb.IsAboriginalOrTorresStraitIslander;
-            p.ReceivedRightsAndResponsibilitiesInfo = cb.ReceivedRightsAndResponsibilitiesInfo;
-            p.ReceivedPrivacyAndConfidentialityInfo = cb.ReceivedPrivacyAndConfidentialityInfo;
-            p.ReceivedFeedbackInfo = cb.ReceivedFeedbackInfo; p.ReceivedBeingSafeInfo = cb.ReceivedBeingSafeInfo;
-            p.ReceivedAdvocacyInfo = cb.ReceivedAdvocacyInfo;
-            p.PersonalInterests = cb.PersonalInterests; p.ChoiceControlNotes = cb.ChoiceControlNotes;
-        }
-
-        if (dto.SupportNeedsMobility is { } snm)
-        {
-            p.IsHighSupport = snm.IsHighSupport; p.IsIntensiveSupport = snm.IsIntensiveSupport;
-            p.SupportRatio = snm.SupportRatio; p.MobilityAidWheelchair = snm.MobilityAidWheelchair;
-            p.MobilityAidWalker = snm.MobilityAidWalker; p.MobilitySupportOptions = snm.MobilitySupportOptions;
-            p.OvernightSupport = snm.OvernightSupport; p.OvernightRatio = snm.OvernightRatio;
-            p.RequiresHiLoBed = snm.RequiresHiLoBed; p.RequiresHoist = snm.RequiresHoist;
-            p.RequiresShowerChair = snm.RequiresShowerChair; p.RequiresCommode = snm.RequiresCommode;
-            p.RequiresStandingMachine = snm.RequiresStandingMachine; p.MobilityNotes = snm.MobilityNotes;
-            p.EquipmentRequirements = snm.EquipmentRequirements; p.TransportRequirements = snm.TransportRequirements;
-            p.AmbulantStatus = snm.AmbulantStatus; p.FallsRiskRating = snm.FallsRiskRating;
-            p.UnevenGroundFlag = snm.UnevenGroundFlag; p.LevelOfPersonalCare = snm.LevelOfPersonalCare;
-            p.Orthotics = snm.Orthotics; p.ContinenceSupportDetail = snm.ContinenceSupportDetail;
-            p.BowelCareDetail = snm.BowelCareDetail; p.MenstruationSupport = snm.MenstruationSupport;
-            p.SkinIntegrity = snm.SkinIntegrity;
-        }
-
-        if (dto.Medical is { } med)
-        {
-            p.PrimaryDiagnosis = med.PrimaryDiagnosis?.Trim();
-            p.OtherDiagnoses = med.OtherDiagnoses.Select(d => d.Trim()).ToList();
-            p.HidpaSupportCategories = med.HidpaSupportCategories; p.HidpaNotes = med.HidpaNotes;
-            p.MedicalSummary = med.MedicalSummary; p.AllergiesDetail = med.AllergiesDetail;
-            p.IsAnaphylaxisRisk = med.IsAnaphylaxisRisk; p.AllergyManagementNotes = med.AllergyManagementNotes;
-        }
-
-        if (dto.BehaviourCommunication is { } bc)
-        {
-            p.Memory = bc.Memory; p.MemoryAids = bc.MemoryAids; p.ImpairedUnderstanding = bc.ImpairedUnderstanding;
-            p.ImpairedJudgementReasoning = bc.ImpairedJudgementReasoning; p.BehavioursOfConcernCurrent = bc.BehavioursOfConcernCurrent;
-            p.BehavioursOfConcernFiveYearHistory = bc.BehavioursOfConcernFiveYearHistory; p.BehaviourRiskRating = bc.BehaviourRiskRating;
-            p.RidsLogged = bc.RidsLogged; p.BspPlanProvided = bc.BspPlanProvided; p.BocChartProvided = bc.BocChartProvided;
-            p.ExpressiveSkills = bc.ExpressiveSkills; p.ReceptiveSkills = bc.ReceptiveSkills;
-            p.ReadingAbility = bc.ReadingAbility; p.CommunicationAids = bc.CommunicationAids;
-        }
-
-        if (dto.CommunityAccessBehaviour is { } cab)
-        {
-            p.SignsHappyAndSettled = cab.SignsHappyAndSettled; p.WhatHelpsMeCalmDown = cab.WhatHelpsMeCalmDown;
-            p.BocTriggers = cab.BocTriggers; p.BocEarlyWarningSigns = cab.BocEarlyWarningSigns;
-            p.BocDeEscalationStrategies = cab.BocDeEscalationStrategies; p.BocWhatNotToDo = cab.BocWhatNotToDo;
-            // PF-10.4 (SPEC-05): see PatchCommunityAccessBehaviourDto's doc for why this scalar
-            // rides alongside the CA narrative fields rather than opening a new group.
-            p.OverallCommunityAccessRiskRating = cab.OverallCommunityAccessRiskRating;
-        }
-
-        if (dto.MealsAndDiet is { } mad)
-        {
-            p.MealAssistanceDetail = mad.MealAssistanceDetail; p.ChokingRiskMealDetail = mad.ChokingRiskMealDetail;
-            p.ModifiedDietDetail = mad.ModifiedDietDetail; p.PegRegimeMealDetail = mad.PegRegimeMealDetail;
-            p.SpecialUtensilsDetail = mad.SpecialUtensilsDetail; p.SpecialDietaryNeedsDetail = mad.SpecialDietaryNeedsDetail;
-            p.FavouriteBreakfast = mad.FavouriteBreakfast; p.FavouriteLunch = mad.FavouriteLunch; p.FavouriteDinner = mad.FavouriteDinner;
-            p.MedicationTricks = mad.MedicationTricks; p.FoodsAlwaysEaten = mad.FoodsAlwaysEaten;
-        }
-
-        if (dto.AboutMe is { } am)
-        {
-            p.Goals = am.Goals; p.SupportAreas = am.SupportAreas; p.StrengthsFears = am.StrengthsFears;
-            p.ThingsToKnow = am.ThingsToKnow; p.WhoIsImportant = am.WhoIsImportant; p.LikesDislikes = am.LikesDislikes;
-        }
-
-        if (dto.SupportsLookLike is { } sll)
-        {
-            p.SupportsLookLikeMorning = sll.SupportsLookLikeMorning; p.SupportsLookLikeDay = sll.SupportsLookLikeDay;
-            p.SupportsLookLikeAfternoonEvening = sll.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = sll.SupportsLookLikeOvernight;
-        }
-
-        if (dto.RisksHazardsSummary is { } rhs)
-        {
-            p.BehaviourRiskSummary = rhs.BehaviourRiskSummary; p.Notes = rhs.Notes;
-        }
-
-        p.UpdatedAt = DateTime.UtcNow;
-
-        // Task 6d: only sync the compatibility matrix when PreferredStaff was actually touched AND
-        // actually changed — see PatchPreferredStaffDto's doc for why this group is isolated.
-        if (preferredStaffChanged)
-            await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaff!.PreferredStaffId, ct);
-
-        // ── Collections — upserted via the existing helpers verbatim, only when present. See
-        // PatchParticipantDto's per-member doc for the upsert-by-key/leave-alone-on-omission
-        // contract these share with Create/Update.
-        if (dto.Consents != null) await UpsertConsentsAsync(p.Id, dto.Consents, ct);
-        if (dto.HealthConditions != null) await UpsertHealthConditionsAsync(p.Id, dto.HealthConditions, ct);
-        if (dto.AdlAssessments != null) await UpsertAdlAssessmentsAsync(p.Id, dto.AdlAssessments, ct);
-        if (dto.ChecklistItems != null) await UpsertChecklistItemsAsync(p.Id, dto.ChecklistItems, ct);
-
-        // PD-5, item 5c: any of the 4 partial-save groups above (medical, behaviourCommunication,
-        // risksHazardsSummary, supportNeedsMobility) can touch a safety-critical field — closes
-        // the "core02 partial-save endpoint" holes in SPEC-03's Trigger coverage table. Gated on
-        // group presence so an unrelated group's PATCH (e.g. just PersonalDetails) doesn't run a
-        // needless sync pass.
-        if (dto.Medical != null || dto.BehaviourCommunication != null || dto.RisksHazardsSummary != null || dto.SupportNeedsMobility != null)
-            await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
-
-        await _db.SaveChangesAsync(ct);
         // PF-2: Patch's DTO never carries contactRoles either — computed from live ContactRoles,
         // using p.PlanType as it stands after any ndisPlan group patch applied above.
         var patchPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);

@@ -73,16 +73,16 @@
 **Interfaces:**
 - Produces: `public static Task<string?> ParticipantPatchApplier.ApplyAsync(OdipDbContext db, SafetyNoteSyncService safetyNoteSync, Participant p, PatchParticipantDto dto, CancellationToken ct)` — returns a validation error message, or `null` after a successful `SaveChangesAsync`.
 
-- [ ] **Step 1: Confirm the regression net is green before touching anything**
+- [x] **Step 1: Confirm the regression net is green before touching anything**
 
 Run: `dotnet test --filter "FullyQualifiedName~ParticipantsControllerPatchTests"`
 Expected: `Passed! - Failed: 0, Passed: 24`
 
-- [ ] **Step 2: Read the whole `Patch` action**
+- [x] **Step 2: Read the whole `Patch` action**
 
 Open `Odip.Api/Controllers/ParticipantsController.cs` and read from the `[HttpPatch("{id:guid}")]` attribute to the end of the method. Note every private helper it calls (`ValidateNames`, `ValidateGender`, `ValidatePhone`, `ValidateEmail`, `UpsertConsentsAsync`, `UpsertHealthConditionsAsync`, `UpsertAdlAssessmentsAsync`, `UpsertChecklistItemsAsync`, and any `_safetyNoteSync` / `_compatLink` calls). Write the list down — you must move or expose every one of them.
 
-- [ ] **Step 3: Create the applier with the body moved verbatim**
+- [x] **Step 3: Create the applier with the body moved verbatim**
 
 Create `Odip.Infrastructure/Services/ParticipantPatchApplier.cs`. Move everything in `Patch` **after** the `if (p == null) return NotFound(...)` line into it. Where the original did `return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(msg))`, the applier does `return msg;`. Where the original reached the end successfully, the applier returns `null`.
 
@@ -125,7 +125,7 @@ public static class ParticipantPatchApplier
 }
 ```
 
-- [ ] **Step 4: Make `Patch` delegate**
+- [x] **Step 4: Make `Patch` delegate**
 
 Replace the moved body in `ParticipantsController.Patch` with:
 
@@ -139,17 +139,17 @@ Replace the moved body in `ParticipantsController.Patch` with:
 
 If `Create`/`Update` also call the `Upsert*Async` helpers you moved, change those call sites to `ParticipantPatchApplier.UpsertConsentsAsync(_db, ...)` etc. by making those helpers `internal static` rather than `private static`. Do not duplicate them.
 
-- [ ] **Step 5: Build and run the regression net**
+- [x] **Step 5: Build and run the regression net**
 
 Run: `dotnet build && dotnet test --filter "FullyQualifiedName~ParticipantsControllerPatchTests|FullyQualifiedName~ParticipantsControllerTests|FullyQualifiedName~ParticipantsControllerCommunityAccessTests"`
 Expected: 0 errors; `Failed: 0`. If any Patch test fails, the extraction changed behaviour — fix the applier, never the test.
 
-- [ ] **Step 6: Full suite**
+- [x] **Step 6: Full suite**
 
 Run: `dotnet test`
 Expected: `Passed: 1020, Failed: 0`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Odip.Infrastructure/Services/ParticipantPatchApplier.cs Odip.Api/Controllers/ParticipantsController.cs
@@ -175,7 +175,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `CaregiverProfileSubmission` entity; `db.CaregiverProfileSubmissions` DbSet; enum with **int values Draft=0, Submitted=1, Accepted=2, Rejected=3, Revoked=4** (the partial-index filter depends on these).
 
-- [ ] **Step 1: Enum**
+- [x] **Step 1: Enum**
 
 ```csharp
 namespace Odip.Domain.Enums;
@@ -195,7 +195,7 @@ public enum CaregiverSubmissionStatus
 }
 ```
 
-- [ ] **Step 2: Entity**
+- [x] **Step 2: Entity**
 
 Check `Odip.Domain/Interfaces/ITenantEntity.cs` for its exact members (expect `Guid TenantId { get; set; }`). Then:
 
@@ -243,7 +243,7 @@ public class CaregiverProfileSubmission : ITenantEntity
 }
 ```
 
-- [ ] **Step 3: DbContext**
+- [x] **Step 3: DbContext**
 
 In `OdipDbContext.cs`, next to the `IncidentWitnesses` DbSet (~line 70):
 
@@ -289,12 +289,12 @@ In `OnModelCreating`, after the `IncidentWitness` block (~line 617):
 
 Add the tenant global query filter the same way every other `ITenantEntity` gets one — find the existing pattern (search `HasQueryFilter` in `OdipDbContext.cs`) and add `CaregiverProfileSubmission` to it identically.
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `dotnet build`
 Expected: 0 errors.
 
-- [ ] **Step 5: Generate the migration**
+- [x] **Step 5: Generate the migration**
 
 ```bash
 POSTGRES_CONNECTION_STRING="Host=localhost;Database=odip_design;Username=x;Password=x" \
@@ -304,14 +304,14 @@ dotnet ef migrations add AddCaregiverProfileSubmissions --project Odip.Infrastru
 
 If `Program.cs`'s Firebase guard blocks design-time startup, add an `IDesignTimeDbContextFactory<OdipDbContext>` in `Odip.Infrastructure/Data/OdipDbContextFactory.cs` that builds the context from `POSTGRES_CONNECTION_STRING` alone and a null-tenant `ICurrentTenant` stub — that is a legitimate, common EF pattern and is worth keeping.
 
-- [ ] **Step 6: Inspect the generated migration**
+- [x] **Step 6: Inspect the generated migration**
 
 Open the new `Odip.Infrastructure/Migrations/<ts>_AddCaregiverProfileSubmissions.cs`. Confirm `Up()` contains `CreateTable("CaregiverProfileSubmissions", ...)`, the `jsonb` column, and a `CreateIndex(... unique: true, filter: "\"Status\" IN (0, 1)")`. Confirm **no other migration file changed** except `OdipDbContextModelSnapshot.cs`:
 
 Run: `git status --short Odip.Infrastructure/Migrations/`
 Expected: two new files (`.cs` + `.Designer.cs`) and one modified (`OdipDbContextModelSnapshot.cs`). Nothing else.
 
-- [ ] **Step 7: Render and eyeball the SQL**
+- [x] **Step 7: Render and eyeball the SQL**
 
 ```bash
 POSTGRES_CONNECTION_STRING="Host=localhost;Database=x;Username=x;Password=x" JWT_SECRET="design-time-only-secret-that-is-at-least-32-chars-long" \
@@ -319,7 +319,7 @@ dotnet ef migrations script <previous-migration-id> AddCaregiverProfileSubmissio
 ```
 (`<previous-migration-id>` is the newest existing migration's full name, e.g. `20260903100734_BackfillParticipantIntakeCompletedAt`.) Confirm the `CREATE UNIQUE INDEX ... WHERE "Status" IN (0, 1)` line is present.
 
-- [ ] **Step 8: Test + commit**
+- [x] **Step 8: Test + commit**
 
 Run: `dotnet build && dotnet test`
 Expected: 0 errors, `Failed: 0`.
@@ -346,7 +346,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `public static class CaregiverTokenService { static string GenerateRawToken(); static string Hash(string rawToken); }` — raw token is 43-char base64url; hash is 64-char lowercase hex.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```csharp
 using Odip.Infrastructure.Services;
@@ -392,12 +392,12 @@ public class CaregiverTokenServiceTests
 }
 ```
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverTokenServiceTests"`
 Expected: build error — `CaregiverTokenService` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Security.Cryptography;
@@ -425,12 +425,12 @@ public static class CaregiverTokenService
 }
 ```
 
-- [ ] **Step 4: Run to confirm pass**
+- [x] **Step 4: Run to confirm pass**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverTokenServiceTests"`
 Expected: `Passed: 4`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Odip.Infrastructure/Services/CaregiverTokenService.cs Odip.Tests/Caregiver/CaregiverTokenServiceTests.cs
@@ -452,11 +452,11 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `HttpContext.Items["AuditActor"]` (a `string`) is used as `ChangedByName` when there is no authenticated user. Public constant `AuditInterceptor.ActorItemKey = "AuditActor"`.
 
-- [ ] **Step 1: Allowlist**
+- [x] **Step 1: Allowlist**
 
 In `AuditedEntities.cs`, add `typeof(CaregiverProfileSubmission)` to the `Types` `HashSet<Type>` alongside `typeof(ParticipantNote)`.
 
-- [ ] **Step 2: Failing test for the override**
+- [x] **Step 2: Failing test for the override**
 
 Read `AuditInterceptor.BuildAuditEntries` first to see how it produces `AuditLog` rows, then write a test that saves a `CaregiverProfileSubmission` through a context with the interceptor attached and an `IHttpContextAccessor` whose `HttpContext.User` is unauthenticated and whose `Items["AuditActor"] = "caregiver:Jane Smith"`:
 
@@ -495,12 +495,12 @@ public async Task SavingAsAnonymousWithAuditActorItem_AttributesRowToActor()
 
 Adjust the `AuditLog` property names (`ChangedById`, `ChangedByName`) to whatever the entity actually calls them — read `Odip.Domain/Entities/AuditLog.cs`.
 
-- [ ] **Step 3: Run to confirm failure**
+- [x] **Step 3: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~AuditInterceptorTests"`
 Expected: FAIL — `ActorItemKey` undefined, or `ChangedByName` null.
 
-- [ ] **Step 4: Implement the override**
+- [x] **Step 4: Implement the override**
 
 In `AuditInterceptor.cs`:
 
@@ -523,12 +523,12 @@ and in the attribution block, after the `if (user?.Identity?.IsAuthenticated == 
         }
 ```
 
-- [ ] **Step 5: Run to confirm pass, then full suite**
+- [x] **Step 5: Run to confirm pass, then full suite**
 
 Run: `dotnet test --filter "FullyQualifiedName~AuditInterceptorTests"` → `Passed`.
 Run: `dotnet test` → `Failed: 0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Odip.Infrastructure/Audit/ Odip.Tests/Audit/
@@ -546,7 +546,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Modify: `Odip.Api/Program.cs` (the `AddRateLimiter` block, ~lines 207–269)
 - Read: `Odip.Api/Middleware/ReadOnlyMiddleware.cs`
 
-- [ ] **Step 1: Add the policy**
+- [x] **Step 1: Add the policy**
 
 Inside the existing `builder.Services.AddRateLimiter(options => { ... })` block, after the `"api"` policy and before the closing `});`:
 
@@ -564,7 +564,7 @@ Inside the existing `builder.Services.AddRateLimiter(options => { ... })` block,
             }));
 ```
 
-- [ ] **Step 2: Read ReadOnlyMiddleware**
+- [x] **Step 2: Read ReadOnlyMiddleware**
 
 Open `Odip.Api/Middleware/ReadOnlyMiddleware.cs`. Find the role check. If it is `context.User.IsInRole("ReadOnly")` — an anonymous principal returns `false`, so anonymous PUT/POST pass through and **no change is needed**; record that finding in the commit message. If instead it blocks any write from a principal that is *not authenticated*, add, before the role check:
 
@@ -576,7 +576,7 @@ Open `Odip.Api/Middleware/ReadOnlyMiddleware.cs`. Find the role check. If it is 
         }
 ```
 
-- [ ] **Step 3: Build + commit**
+- [x] **Step 3: Build + commit**
 
 Run: `dotnet build` → 0 errors.
 
@@ -600,7 +600,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces every DTO the two controllers and the frontend use. Field names are the wire contract for the frontend plan.
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -694,7 +694,7 @@ public record RejectCaregiverSubmissionDto
 }
 ```
 
-- [ ] **Step 2: Build + commit**
+- [x] **Step 2: Build + commit**
 
 Run: `dotnet build` → 0 errors.
 
@@ -718,7 +718,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Consumes: `CaregiverTokenService.Hash`, `AuditInterceptor.ActorItemKey`, the DTOs from Task 6.
 - Produces: `GET/PUT draft/POST submit` under `api/v1/public/caregiver/{token}`. For cg01 the `Current` projection is a **placeholder empty object** with `Editable` empty — Task 11 replaces it. Everything else is final.
 
-- [ ] **Step 1: Failing tests — the 404 matrix and the name gate**
+- [x] **Step 1: Failing tests — the 404 matrix and the name gate**
 
 ```csharp
 using Microsoft.AspNetCore.Http;
@@ -926,12 +926,12 @@ public class CaregiverControllerTests
 
 If `PatchAboutMeDto.PersonalInterests` is not the real member name, use any string member of any `Patch*Dto` group — the test only needs the payload to serialise with a recognisable value.
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverControllerTests"`
 Expected: build error — `CaregiverController` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Text.Json;
@@ -1057,12 +1057,12 @@ public class CaregiverController : ControllerBase
 
 Register `IHttpContextAccessor` if not already: search `Program.cs` for `AddHttpContextAccessor` — it is already present because `CurrentTenant` and `AuditInterceptor` depend on it.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverControllerTests"`
 Expected: all pass. If `HttpContext.Items` is null in the actor test, ensure `MakeController` sets `ControllerContext.HttpContext` (it does above).
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 Run: `dotnet test` → `Failed: 0`.
 
@@ -1090,7 +1090,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 - Consumes: `ParticipantPatchApplier.ApplyAsync` (Task 1), `CaregiverTokenService`, DTOs (Task 6), `IConfiguration["Caregiver:LinkExpiryDays"]` (default 14).
 - Produces the six admin endpoints in the spec §3. For cg01, `Accept` applies the payload **unsanitised** — Task 12 adds the sanitiser call. `Get` returns `Current = new JsonObject()` — Task 11 fills it.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 Mirror `IncidentsControllerTests`' tenant-scoped helper. Key tests:
 
@@ -1213,11 +1213,11 @@ public void IsRoleGated_AdminCoordinatorSuperAdmin()
 
 Write `CreateTenantDb`, `SeedParticipant`, `SeedSubmission(db, tenantId, participantId, status, PatchParticipantDto? payload = null)` and `MakeController(db, tenantId, userId)` helpers inline. `MakeController` must set a `ClaimsPrincipal` with a `sub`/`NameIdentifier` claim equal to `userId` on `ControllerContext.HttpContext.User` — read how `PortalControllerTests.MakeController` fakes the current user and copy that.
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverSubmissionsControllerTests"` → build error.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Security.Claims;
@@ -1402,7 +1402,7 @@ public class CaregiverSubmissionsController : ControllerBase
 
 `ParticipantPatchApplier.ApplyAsync` saves changes itself (it moved the `SaveChangesAsync`), so the subsequent status update is a second save — that is fine and keeps the applier's contract identical to the original action.
 
-- [ ] **Step 4: Run tests, full suite, commit**
+- [x] **Step 4: Run tests, full suite, commit**
 
 Run: `dotnet test --filter "FullyQualifiedName~CaregiverSubmissionsControllerTests"` → all pass.
 Run: `dotnet test` → `Failed: 0`.
@@ -1422,16 +1422,16 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 
 ## Task 9: cg01 gates, push, PR
 
-- [ ] **Step 1: Full gates**
+- [x] **Step 1: Full gates**
 
 Run: `dotnet build && dotnet test`
 Expected: 0 errors; `Failed: 0`; Passed ≥ 1020 + your new tests.
 
-- [ ] **Step 2: Verify committed state**
+- [x] **Step 2: Verify committed state**
 
 Run: `git diff HEAD --stat` → empty. `git status --short` shows nothing except possibly `.claude/settings.local.json` (never stage that).
 
-- [ ] **Step 3: Push and PR**
+- [x] **Step 3: Push and PR**
 
 ```bash
 git push -u origin feat/cg01-submission-backend

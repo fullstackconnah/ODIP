@@ -45,6 +45,13 @@ public static class AuditedEntities
         // who wrote or changed a note, and when, should be recoverable like any other
         // participant-facing record.
         typeof(ParticipantNote),
+
+        // Caregiver profile form: a family member's staged edits and the admin
+        // create/revoke/accept/reject lifecycle around them are exactly the kind of
+        // participant-facing change history an audit needs to answer. Submit runs
+        // anonymously (no authenticated principal) — see AuditInterceptor's ActorItemKey
+        // override for how that row still gets attributed to the caregiver by name.
+        typeof(CaregiverProfileSubmission),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()
