@@ -33,6 +33,8 @@ public record ParticipantListDto
     public bool HasActiveMedications { get; init; }
     /// <summary>INTAKE-08. See <see cref="Odip.Domain.Entities.Participant.IsDraft"/>.</summary>
     public bool IsDraft { get; init; }
+    /// <summary>SPEC-05 PF-10.5. See <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/>.</summary>
+    public DateTime? IntakeCompletedAt { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto
@@ -247,6 +249,15 @@ public record CreateParticipantDto
     /// clear a participant's existing draft flag back off.
     /// </summary>
     public bool IsDraft { get; init; }
+    /// <summary>
+    /// SPEC-05 (PF-10.3) — set true only by the new Intake wizard's final-step create call, to
+    /// stamp <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/> server-side.
+    /// Deliberately distinct from <see cref="IsDraft"/>: a mid-intake "save as draft" POST still
+    /// creates the row (IsDraft=true) without this flag, so it must NOT also stamp
+    /// IntakeCompletedAt. Ignored by <see cref="UpdateParticipantDto"/>'s call site — only Create
+    /// stamps this field, per SPEC-05's progression model.
+    /// </summary>
+    public bool CompleteIntake { get; init; }
     [StringLength(100)]
     public string? PreferredName { get; init; }
     /// <summary>INTAKE sub-wave A, PID-004.</summary>

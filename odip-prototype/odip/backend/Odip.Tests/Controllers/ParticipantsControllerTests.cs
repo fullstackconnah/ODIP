@@ -147,6 +147,51 @@ public class ParticipantsControllerTests
         Assert.False(body.Data.ServiceStreams.HasFlag(Domain.Enums.ServiceStreams.BSP));
     }
 
+    /// <summary>
+    /// SPEC-05 PF-10.3: the Intake wizard's final-step create call sets CompleteIntake=true,
+    /// which must stamp <see cref="Participant.IntakeCompletedAt"/> server-side (never
+    /// client-suppliable) while leaving IsDraft exactly as sent.
+    /// </summary>
+    [Fact]
+    public async Task Create_CompleteIntakeTrue_StampsIntakeCompletedAt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var before = DateTime.UtcNow;
+        var dto = MinimalCreateDto() with { IsDraft = true, CompleteIntake = true };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        var after = DateTime.UtcNow;
+
+        Assert.True(createdBody.Data!.IsDraft);
+        Assert.NotNull(createdBody.Data.IntakeCompletedAt);
+        Assert.InRange(createdBody.Data.IntakeCompletedAt!.Value, before, after);
+
+        var getResult = await controller.GetById(createdBody.Data.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.NotNull(body.Data!.IntakeCompletedAt);
+    }
+
+    /// <summary>
+    /// A mid-intake "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must NOT
+    /// stamp IntakeCompletedAt — only the wizard's own final-step call does.
+    /// </summary>
+    [Fact]
+    public async Task Create_DraftWithoutCompleteIntake_LeavesIntakeCompletedAtNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with { IsDraft = true };
+        var createResult = await controller.Create(dto, CancellationToken.None);
+        var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
+        var createdBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+
+        Assert.Null(createdBody.Data!.IntakeCompletedAt);
+    }
+
     [Fact]
     public async Task Create_GenderAndPlanDates_RoundTripThroughGetById()
     {

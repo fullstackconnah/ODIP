@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903043832_AddParticipantIntakeCompletedAt")]
+    partial class AddParticipantIntakeCompletedAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1186,48 +1189,6 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("IncidentReports");
                 });
 
-            modelBuilder.Entity("Odip.Domain.Entities.IncidentWitness", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("IncidentReportId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("StatementText")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("WitnessName")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateTime?>("WitnessRequestedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime?>("WitnessRespondedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("WitnessStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("WitnessUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IncidentReportId");
-
-                    b.HasIndex("WitnessUserId");
-
-                    b.ToTable("IncidentWitnesses");
-                });
-
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1633,9 +1594,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("OthersLivingInAccommodation")
                         .HasColumnType("text");
 
-                    b.Property<int?>("OverallCommunityAccessRiskRating")
-                        .HasColumnType("integer");
-
                     b.Property<int>("OvernightRatio")
                         .HasColumnType("integer");
 
@@ -2021,46 +1979,6 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ParticipantChecklistItems");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Entities.ParticipantCommunityAccessRiskItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("ItemType")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ParticipantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("Rating")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StrategyNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ParticipantId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("ParticipantId", "ItemType")
-                        .IsUnique();
-
-                    b.ToTable("ParticipantCommunityAccessRiskItems");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantConsent", b =>
@@ -4213,24 +4131,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripInstance");
                 });
 
-            modelBuilder.Entity("Odip.Domain.Entities.IncidentWitness", b =>
-                {
-                    b.HasOne("Odip.Domain.Entities.IncidentReport", "IncidentReport")
-                        .WithMany("Witnesses")
-                        .HasForeignKey("IncidentReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Entities.User", "WitnessUser")
-                        .WithMany()
-                        .HasForeignKey("WitnessUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("IncidentReport");
-
-                    b.Navigation("WitnessUser");
-                });
-
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -4346,25 +4246,6 @@ namespace Odip.Infrastructure.Migrations
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
                         .WithMany("ChecklistItems")
-                        .HasForeignKey("ParticipantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Participant");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Entities.ParticipantCommunityAccessRiskItem", b =>
-                {
-                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
-                        .WithMany("CommunityAccessRiskItems")
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -4899,8 +4780,6 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.IncidentReport", b =>
                 {
                     b.Navigation("Injuries");
-
-                    b.Navigation("Witnesses");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Participant", b =>
@@ -4910,8 +4789,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Bookings");
 
                     b.Navigation("ChecklistItems");
-
-                    b.Navigation("CommunityAccessRiskItems");
 
                     b.Navigation("Consents");
 

@@ -248,6 +248,13 @@ export interface ParticipantListDto {
   hasActiveMedications: boolean
   /** INTAKE-08. See CreateParticipantDto.isDraft's doc. */
   isDraft: boolean
+  /**
+   * SPEC-05 PF-10.5. Null until the Intake wizard's final step succeeds; set once, never cleared.
+   * Optional (rather than required) so the many pre-existing ParticipantListDto/ParticipantDetailDto
+   * test fixtures across the participant-detail section tests don't all need updating for a field
+   * none of them assert on.
+   */
+  intakeCompletedAt?: string | null
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
@@ -436,6 +443,12 @@ export interface CreateParticipantDto {
    * wizard's Review step, which clears an existing draft's flag back off.
    */
   isDraft?: boolean
+  /**
+   * SPEC-05 (PF-10.3) — set true only by the Intake wizard's own final-step create call, to
+   * stamp the participant's IntakeCompletedAt server-side. A mid-intake "save as draft" POST
+   * (isDraft=true) must NOT also set this.
+   */
+  completeIntake?: boolean
   preferredName?: string
   /** INTAKE sub-wave A, PID-004. */
   middleName?: string
