@@ -28,8 +28,10 @@ function renderIntakePage() {
   const router = createMemoryRouter(
     [
       { path: '/participants/new', element: <IntakeWizardPage /> },
+      // Both "Complete Intake" and "Save as draft" currently land here — PF-10.4 doesn't exist
+      // yet, so there is no /participants/:id/profile route to register (see the onSubmit TODO
+      // in IntakeWizardPage.tsx).
       { path: '/participants/:id', element: <div>Participant detail</div> },
-      { path: '/participants/:id/profile', element: <div>Profile wizard placeholder</div> },
       { path: '/participants', element: <div>Participants list</div> },
     ],
     { initialEntries: ['/participants/new'] },
@@ -122,7 +124,7 @@ describe('IntakeWizardPage — completion and draft-save', () => {
     await expectStep(/review/i)
   }
 
-  it('completing intake POSTs isDraft=true and completeIntake=true, then routes to the profile hand-off', async () => {
+  it('completing intake POSTs isDraft=true and completeIntake=true, then routes to the detail page (PF-10.4 hand-off pending)', async () => {
     const user = userEvent.setup()
     renderIntakePage()
     await walkToReview(user)
@@ -136,7 +138,9 @@ describe('IntakeWizardPage — completion and draft-save', () => {
     expect(payload.firstName).toBe('Jamie')
     expect(payload.lastName).toBe('Rivers')
 
-    expect(await screen.findByText(/profile wizard placeholder/i)).toBeInTheDocument()
+    // TODO(PF-10.4): once the Profile wizard exists at /participants/:id/profile, this should
+    // route there instead — see IntakeWizardPage.tsx's onSubmit TODO.
+    expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
   })
 
   it('"Save as draft" POSTs isDraft=true and completeIntake=false from any step, and routes to the detail page', async () => {

@@ -5,14 +5,16 @@
  *
  * Field set: every `entryPhase: 'intake'` entry in `src/lib/documentMapping.ts`
  * (`fieldsForEntry('intake')`), re-grouped into 8 steps under `src/lib/participantSchema.ts`'s
- * `STEP_*_FIELDS` constants — see `documentMapping.driftGuard.test.ts` for the guard that this
- * wizard renders every one of those fields and no Profile-only field.
+ * `STEP_*_FIELDS` constants — see `IntakeWizardPage.test.tsx`'s "drift guard" describe block for
+ * the guard that this wizard renders every one of those fields and no Profile-only field.
  *
  * Progression model (SPEC-05 §PF-10.5, fixed): a normal `POST /api/participants` creates the
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
- * mid-intake abandon doesn't falsely mark intake complete. On success, hands off to the Profile
- * wizard's intended route (`/participants/{id}/profile`, PF-10.4 — not built by this branch).
+ * mid-intake abandon doesn't falsely mark intake complete. On success, navigates to the
+ * participant detail page — see the `onSubmit` TODO below: this should become the Profile
+ * wizard's route (`/participants/{id}/profile`) once PF-10.4 builds it, but that route doesn't
+ * exist yet, so routing there today would be a dead link.
  */
 import { useNavigate, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
@@ -32,7 +34,7 @@ import {
 import { formatServiceStreams } from '@/api/types/participants'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
-import { focusField, triStateToBool, extractErrorMessage } from './intakeHelpers'
+import { focusField, triStateToBool, extractErrorMessage } from './intakeFormat'
 import { ParticipantDetailsStep } from './steps/ParticipantDetailsStep'
 import { NdisFundingStep } from './steps/NdisFundingStep'
 import { ContactsStep } from './steps/ContactsStep'
@@ -193,8 +195,11 @@ export default function IntakeWizardPage() {
     try {
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
-        // Hands off to the Profile wizard's intended route (PF-10.4 — not built by this branch).
-        navigate(`/participants/${res.data.id}/profile`)
+        // TODO(PF-10.4): re-point to /participants/:id/profile once the Profile wizard exists.
+        // Until then, the detail page (which exists today) shows the draft banner with a
+        // "Resume intake" link into the old /edit wizard for any remaining fields — PF-10.5 owns
+        // the proper three-way resume banner described in SPEC-05.
+        navigate(`/participants/${res.data.id}`)
       }
     } catch {
       // error handled by mutation state

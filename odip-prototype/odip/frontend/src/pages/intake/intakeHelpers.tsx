@@ -1,38 +1,19 @@
 /**
- * PF-10.3 — small UI/data helpers shared across the Intake wizard's step components. Copied
- * verbatim (behaviour-preserving) from `ParticipantCreatePage.tsx`'s equivalent module-local
- * helpers, since that file is not modified by this branch (PF-10.7 retires it later) and none of
- * these were exported from it.
+ * PF-10.3 — small UI helpers (components only) shared across the Intake wizard's step
+ * components. Copied verbatim (behaviour-preserving) from `ParticipantCreatePage.tsx`'s
+ * equivalent module-local helpers, since that file is not modified by this branch (PF-10.7
+ * retires it later) and none of these were exported from it.
+ *
+ * Non-component helpers (boolToTriState/triStateToBool/focusField/extractErrorMessage) live in
+ * the sibling `intakeFormat.ts` instead — `react-refresh/only-export-components` requires a
+ * `.tsx` file to export nothing but components.
  */
 import { Controller } from 'react-hook-form'
 import type { Control, FieldPath } from 'react-hook-form'
-import type { AxiosError } from 'axios'
 import { AlertTriangle } from 'lucide-react'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField } from '@/components/FormField'
 import type { ParticipantFormData } from '@/lib/participantSchema'
-
-/** boolean|null (the wire shape) -> the wizard's tri-state string shape, for reset()'s round-trip. */
-export function boolToTriState(value: boolean | null | undefined): 'true' | 'false' | '' {
-  return value === true ? 'true' : value === false ? 'false' : ''
-}
-
-/** The tri-state string shape -> boolean|null (the wire shape), for buildIntakePayload. */
-export function triStateToBool(value: string | undefined): boolean | null {
-  return value === 'true' ? true : value === 'false' ? false : null
-}
-
-export function focusField(fieldName: string) {
-  const el = document.getElementById(fieldName)
-  if (el instanceof HTMLElement) el.focus()
-}
-
-/** Surfaces the server's ApiResponse error message for the Save-as-draft banner, same shape as
- * ParticipantCreatePage.tsx's extractErrorMessage. */
-export function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 const YES_NO_UNANSWERED_OPTIONS = [
   { key: 'true', label: 'Yes' },
