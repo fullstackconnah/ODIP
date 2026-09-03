@@ -884,7 +884,7 @@ Report to the orchestrator: gate tails (build / test count vs main / lint = 77),
 **Interfaces:**
 - Produces: `computeCaregiverDiff(current: Record<string, unknown>, payload: PatchParticipantDto | null): DiffRow[]` where `DiffRow = { field: string; label: string; group: string; current: string; proposed: string }`, containing **only** changed fields; labels via `getFieldMapping(field)?.label ?? field`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -915,7 +915,7 @@ describe('computeCaregiverDiff', () => {
 })
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 ```ts
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -959,7 +959,7 @@ function stripKey(o: Record<string, unknown>, k: string) { const { [k]: _omit, .
 
 Confirm the four collection key property names (`consentType`, `conditionType`, `adlType`, `itemType`) against `src/api/types/participants.ts`; fix any that differ.
 
-- [ ] **Step 3: Tests → pass. Commit.**
+- [x] **Step 3: Tests → pass. Commit.**
 
 ```bash
 git add src/lib/caregiverDiff.ts src/lib/caregiverDiff.test.ts
@@ -980,7 +980,7 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Consumes: `useGenerateCaregiverLink`, `useRevokeCaregiverLink`, `canWriteParticipantDetails`. The participant DTO needs to expose the active submission status — check whether `ParticipantDetailDto` already carries it; if not, use `useCaregiverSubmissions('Draft')` + `'Submitted'` filtered by `participantId` (two small queries) rather than widening the participant DTO.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```tsx
 it('shows Generate link for canWriteParticipantDetails and hides it otherwise', () => {})
@@ -991,7 +991,7 @@ it('shows a status chip and Revoke when a link is active', () => {})
 it('Revoke calls the mutation and the chip returns to None', async () => {})
 ```
 
-- [ ] **Step 2: Implement** — a `CaregiverLinkControl` component in the same file (or `src/pages/participant-detail/CaregiverLinkControl.tsx`), following the DOC-01 button shape:
+- [x] **Step 2: Implement** — a `CaregiverLinkControl` component in the same file (or `src/pages/participant-detail/CaregiverLinkControl.tsx`), following the DOC-01 button shape:
 
 ```tsx
 function CaregiverLinkControl({ participantId }: { participantId: string }) {
@@ -1039,7 +1039,7 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
 
 Use whichever icon `lucide-react` provides (`Link2` or `Link`). If `StatusBadge` does not accept `'None'`, render a plain span for that case.
 
-- [ ] **Step 3: Tests → pass; existing `ParticipantDetailPage.test.tsx` assertions unchanged. Commit.**
+- [x] **Step 3: Tests → pass; existing `ParticipantDetailPage.test.tsx` assertions unchanged. Commit.**
 
 ---
 
@@ -1049,9 +1049,9 @@ Use whichever icon `lucide-react` provides (`Link2` or `Link`). If `StatusBadge`
 - Create: `src/pages/caregiver-admin/CaregiverSubmissionsPage.tsx`
 - Test: `src/pages/caregiver-admin/CaregiverSubmissionsPage.test.tsx`
 
-- [ ] **Step 1: Failing tests** — renders rows from `useCaregiverSubmissions`; default filter is Submitted; the `Dropdown` pill filter switches status; Review action navigates to `/caregiver-submissions/:id`.
+- [x] **Step 1: Failing tests** — renders rows from `useCaregiverSubmissions`; default filter is Submitted; the `Dropdown` pill filter switches status; Review action navigates to `/caregiver-submissions/:id`.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 ```tsx
 import { useState } from 'react'
@@ -1088,7 +1088,7 @@ export default function CaregiverSubmissionsPage() {
 }
 ```
 
-- [ ] **Step 3: Tests → pass. Commit.**
+- [x] **Step 3: Tests → pass. Commit.**
 
 ---
 
@@ -1098,9 +1098,9 @@ export default function CaregiverSubmissionsPage() {
 - Create: `src/pages/caregiver-admin/CaregiverSubmissionReviewPage.tsx`
 - Test: `src/pages/caregiver-admin/CaregiverSubmissionReviewPage.test.tsx`
 
-- [ ] **Step 1: Failing tests** — renders caregiver name/relationship/submitted-at; lists **only** changed rows from `computeCaregiverDiff`, grouped by `group`; "No changes" state when the diff is empty; Accept confirms then calls `useAcceptCaregiverSubmission` and navigates back to the list; Reject requires a note (button disabled until non-empty) then calls `useRejectCaregiverSubmission`; Accept/Reject hidden when status ≠ Submitted; gated on `canWriteParticipantDetails`.
+- [x] **Step 1: Failing tests** — renders caregiver name/relationship/submitted-at; lists **only** changed rows from `computeCaregiverDiff`, grouped by `group`; "No changes" state when the diff is empty; Accept confirms then calls `useAcceptCaregiverSubmission` and navigates back to the list; Reject requires a note (button disabled until non-empty) then calls `useRejectCaregiverSubmission`; Accept/Reject hidden when status ≠ Submitted; gated on `canWriteParticipantDetails`.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 ```tsx
 import { useMemo, useState } from 'react'
@@ -1187,7 +1187,7 @@ export default function CaregiverSubmissionReviewPage() {
 
 Match `ConfirmDialog`'s real prop names from `src/components/ConfirmDialog.tsx`. The diff table is small, static and not a data list — plain markup is acceptable here (it is not a `DataTable` use case); if the reviewer prefers, switch to `DataTable` with `verticalDividers`.
 
-- [ ] **Step 3: Tests → pass. Commit.**
+- [x] **Step 3: Tests → pass. Commit.**
 
 ---
 
@@ -1197,7 +1197,7 @@ Match `ConfirmDialog`'s real prop names from `src/components/ConfirmDialog.tsx`.
 - Modify: `src/App.tsx` (inside the shell, near `/participants/:id/profile`)
 - Modify: the sidebar nav list (find it: `grep -rn "'/participants'" src/components/layout/`)
 
-- [ ] **Step 1: Routes**
+- [x] **Step 1: Routes**
 
 ```tsx
 const CaregiverSubmissionsPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionsPage'))
@@ -1207,9 +1207,9 @@ const CaregiverSubmissionReviewPage = React.lazy(() => import('./pages/caregiver
 <Route path="/caregiver-submissions/:id" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionReviewPage /></PrivateRoute>} />
 ```
 
-- [ ] **Step 2: Nav** — add an entry matching the existing Participants item's shape (label `Caregiver forms`, path `/caregiver-submissions`, an icon such as `ClipboardCheck`), gated identically to Participants.
+- [x] **Step 2: Nav** — add an entry matching the existing Participants item's shape (label `Caregiver forms`, path `/caregiver-submissions`, an icon such as `ClipboardCheck`), gated identically to Participants.
 
-- [ ] **Step 3: Full gates, commit, push, PR**
+- [x] **Step 3: Full gates, commit, push, PR**
 
 ```bash
 npm run build && npm test && npm run lint    # lint: exactly 77

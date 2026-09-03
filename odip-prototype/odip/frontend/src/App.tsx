@@ -21,6 +21,9 @@ const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizard
 // cg03: the public, session-free caregiver profile form — see its route placement below.
 const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
+// cg04: admin review surfaces for caregiver-submitted forms — see route placement below.
+const CaregiverSubmissionsPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionsPage'))
+const CaregiverSubmissionReviewPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionReviewPage'))
 const AccommodationPage = React.lazy(() => import('./pages/AccommodationPage'))
 const AccommodationDetailPage = React.lazy(() => import('./pages/AccommodationDetailPage'))
 const AccommodationCreatePage = React.lazy(() => import('./pages/AccommodationCreatePage'))
@@ -97,6 +100,10 @@ const router = createBrowserRouter(
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />
+        {/* cg04 (design §5) — admin review surfaces for caregiver-submitted forms, gated the
+            same as the rest of the Participants area. */}
+        <Route path="/caregiver-submissions" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionsPage /></PrivateRoute>} />
+        <Route path="/caregiver-submissions/:id" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionReviewPage /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
         <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />

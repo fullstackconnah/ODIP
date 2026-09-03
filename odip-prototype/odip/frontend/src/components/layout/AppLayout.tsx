@@ -2,7 +2,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
   ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
-  CalendarClock, Pill, CalendarCheck2
+  CalendarClock, Pill, CalendarCheck2, ClipboardCheck
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -47,6 +47,9 @@ const navItems: NavEntry[] = [
     children: [
       { to: '/participants', icon: Users, label: 'All Participants', msIcon: 'group', page: 'participants' },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
+      // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
+      // decides visibility for both (the route itself further requires write access — see App.tsx).
+      { to: '/caregiver-submissions', icon: ClipboardCheck, label: 'Caregiver forms', msIcon: 'checklist_rtl', page: 'participants' },
     ],
   },
   { to: '/staff', icon: UserCog, label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },

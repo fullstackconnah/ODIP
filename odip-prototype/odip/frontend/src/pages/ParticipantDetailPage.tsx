@@ -1,14 +1,18 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf } from '@/api/hooks'
+import {
+  useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
+  useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
+} from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2 } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2 } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
+import { formatDateAu } from '@/lib/utils'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
   ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab,
@@ -139,6 +143,10 @@ export default function ParticipantDetailPage() {
               </p>
             )}
           </div>
+          {/* cg04 Task 9 (design §5) — the caregiver-link header control. Gated on
+              canWriteParticipantDetails (a write action), unlike the ungated Documents
+              downloads above — see B15 in the discovery fact sheet. */}
+          <CaregiverLinkControl participantId={id!} />
           {canWrite && (
             // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
             // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
@@ -269,6 +277,75 @@ export default function ParticipantDetailPage() {
 
       {tab === 'history' && isAdmin && p && (
         <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />
+      )}
+    </div>
+  )
+}
+
+/**
+ * cg04 Task 9 (design §5) — status chip + Generate/Regenerate/Revoke for this participant's
+ * caregiver form link. Gated on canWriteParticipantDetails, per B14 in the discovery fact
+ * sheet (never canWrite — this is a write action on a sensitive, unauthenticated-facing link,
+ * not a general edit permission). `ParticipantDetailDto` does not carry the active submission
+ * status itself, so the "active link" state is derived from two small Draft/Submitted queries
+ * filtered by participantId (per the plan) rather than widening the participant DTO.
+ *
+ * The freshly generated URL is held in local component state only — it is shown once, with a
+ * Copy button, and is never persisted anywhere the UI could recover it after navigating away
+ * (not in the query cache, not on the participant DTO): re-mounting this control loses it for
+ * good, exactly like the raw token itself is never re-derivable from the backend after issue.
+ */
+function CaregiverLinkControl({ participantId }: { participantId: string }) {
+  const { canWriteParticipantDetails } = usePermissions()
+  const generate = useGenerateCaregiverLink()
+  const revoke = useRevokeCaregiverLink()
+  const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
+  const drafts = useCaregiverSubmissions('Draft')
+  const submitted = useCaregiverSubmissions('Submitted')
+
+  if (!canWriteParticipantDetails) return null
+
+  const active = [...(submitted.data ?? []), ...(drafts.data ?? [])].find((s) => s.participantId === participantId)
+
+  return (
+    <div data-testid="caregiver-link-control" className="flex flex-col items-start gap-1">
+      <div className="flex items-center gap-2">
+        <StatusBadge status={active?.status ?? 'None'} />
+        <button
+          type="button"
+          onClick={async () => {
+            const res = await generate.mutateAsync({ participantId })
+            const token = res.data!.token
+            setIssued({ url: `${window.location.origin}/caregiver/${token}`, expiresAt: res.data!.expiresAt })
+          }}
+          disabled={generate.isPending}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
+        >
+          {generate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+          {active ? 'Regenerate caregiver link' : 'Generate caregiver link'}
+        </button>
+        {active && (
+          <button
+            type="button"
+            onClick={() => revoke.mutate({ participantId })}
+            disabled={revoke.isPending}
+            className="px-3 py-2 rounded-lg text-sm text-[var(--color-destructive)] hover:bg-[var(--color-accent)]"
+          >
+            Revoke
+          </button>
+        )}
+      </div>
+      {issued && (
+        <div role="status" className="text-xs p-2 rounded bg-[var(--color-accent)] break-all">
+          <span>Copy this link now — it won't be shown again. Expires {formatDateAu(issued.expiresAt)}.</span>
+          <code className="block mt-1">{issued.url}</code>
+          <button type="button" className="mt-1 underline" onClick={() => navigator.clipboard.writeText(issued.url)}>
+            Copy
+          </button>
+        </div>
+      )}
+      {(generate.isError || revoke.isError) && (
+        <p role="alert" className="text-xs text-[var(--color-destructive)]">Something went wrong. Try again.</p>
       )}
     </div>
   )
