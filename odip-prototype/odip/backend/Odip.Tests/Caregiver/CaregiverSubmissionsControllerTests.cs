@@ -191,6 +191,27 @@ public class CaregiverSubmissionsControllerTests
     }
 
     [Fact]
+    public async Task Accept_CraftedPayloadCannotChangeInternalField()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.BehaviourRiskRating = RiskRatingLevel.Low;
+        p.PreferredUserId = null;
+        await db.SaveChangesAsync();
+        var crafted = new PatchParticipantDto
+        {
+            BehaviourCommunication = new PatchBehaviourCommunicationDto { BehaviourRiskRating = RiskRatingLevel.Critical },
+            PreferredStaff = new PatchPreferredStaffDto { PreferredStaffId = Guid.NewGuid() },
+        };
+        var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, crafted);
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).Accept(s.Id, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        var reloaded = await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id);
+        Assert.Equal(RiskRatingLevel.Low, reloaded.BehaviourRiskRating);
+        Assert.Null(reloaded.PreferredUserId);
+    }
+
+    [Fact]
     public void IsRoleGated_AdminCoordinatorSuperAdmin()
     {
         var attr = typeof(CaregiverSubmissionsController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)
