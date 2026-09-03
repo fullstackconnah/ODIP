@@ -80,8 +80,14 @@ POST /api/v1/public/caregiver/{token}/submit    body: { caregiverName, caregiver
 - All three are `[AllowAnonymous]` and sit under a new `"public"` rate-limit policy, stricter than
   `"api"`. In `Program.cs` they bypass JWT but still pass the security-headers, exception-handling
   and rate-limiter middleware. Middleware order is load-bearing; the slot is documented in code.
-- **Tenant and participant resolve from the token row.** `ICurrentTenant` is set from the row,
-  and `X-View-As-Tenant` / `X-View-As-User` are explicitly ignored on these routes.
+- **Tenant and participant resolve from the token row — the public controller bypasses
+  `ICurrentTenant` entirely.** (`CurrentTenant` is sealed and populated only in its constructor
+  from JWT claims/headers; it cannot be re-set mid-request.) `CaregiverController` loads the
+  submission by `TokenHash` with `IgnoreQueryFilters()`, then loads the participant with
+  `IgnoreQueryFilters()` **and an explicit `p.Id == row.ParticipantId && p.TenantId == row.TenantId`
+  match**. `X-View-As-Tenant` / `X-View-As-User` are never read on these routes. The controller
+  has **no class-level `[Authorize]`** (the `AuthController` shape), rather than `[AllowAnonymous]`
+  overrides on a gated controller — there is no precedent for the latter in this codebase.
 - **Every failure is a 404**: unknown hash, expired, revoked, accepted, or a token whose row exists
   but the participant does not. Same shape as the medication witness endpoints, so nothing is
   enumerable and timing does not distinguish cases.
@@ -104,8 +110,12 @@ POST /api/v1/public/caregiver/{token}/submit    body: { caregiverName, caregiver
 - **Drift guard:** a test walks the allocation contract and asserts every field is either in the
   projection or in `INTERNAL_FIELDS`. A field added to Profile later fails this test until someone
   consciously classifies it. A second test asserts no `INTERNAL_FIELDS` member appears in the DTO.
-- Audit: link create, revoke, submit, accept and reject are written to the existing audit log with
-  the acting user (or "caregiver" plus the caregiver name for submit).
+- Audit: ODIP's audit log is an automatic EF `SaveChangesInterceptor` (`AuditInterceptor`) gated
+  by the `AuditedEntities.Types` allowlist. Adding `CaregiverProfileSubmission` to that set audits
+  create, revoke, accept and reject with the authenticated admin for free. **Submit runs
+  anonymously**, so the interceptor's `HttpContext.User` is null; `CaregiverController` sets
+  `HttpContext.Items["AuditActor"] = $"caregiver:{caregiverName}"` before saving, and the
+  interceptor reads that override when `User` is null. One small, contained interceptor change.
 
 ## 3. Admin API — JWT, existing role gates
 
@@ -120,8 +130,11 @@ POST   /api/v1/caregiver-submissions/{id}/reject         body: { note }  → Sta
 
 - Role gate `Admin,Coordinator,SuperAdmin`, matching `PATCH /participants/{id}`. Frontend gates on
   `canWriteParticipantDetails`, never the looser `canWrite`.
-- **Accept** maps the payload onto `PatchParticipantDto`'s semantic groups and calls the existing
-  PATCH code path in-process. The 4 collection groups follow the documented **upsert-by-key**
+- **Accept** maps the payload onto `PatchParticipantDto`'s semantic groups and calls the PATCH
+  apply logic in-process. That logic is currently inline in `ParticipantsController.Patch`; cg01
+  **extracts it, behaviour-preserving, into `ParticipantPatchService.ApplyAsync(participantId,
+  tenantId, dto, ct)`** which both the controller and the accept endpoint call. The existing 24
+  `ParticipantsControllerPatchTests` are the regression net for that extraction. The 4 collection groups follow the documented **upsert-by-key**
   contract; the payload carries full item sets for the sections the caregiver can edit. Excluded
   groups are never present in the built DTO, so accept cannot touch an internal field even if a
   crafted payload includes one — the mapper only reads known caregiver-visible keys.
@@ -162,7 +175,7 @@ POST   /api/v1/caregiver-submissions/{id}/reject         body: { note }  → Sta
 
 | Branch | Scope |
 |---|---|
-| `feat/cg01-submission-backend` | Entity, migration, token service, public + admin endpoints, rate-limit policy, middleware slot, audit hooks, all backend tests |
+| `feat/cg01-submission-backend` | **First:** extract `ParticipantPatchService.ApplyAsync` out of `ParticipantsController.Patch` (behaviour-preserving; 24 existing tests must pass unmodified). Then: entity, migration, token service, public + admin endpoints, `"public"` rate-limit policy, `AuditedEntities` allowlist + `AuditActor` override, all backend tests |
 | `feat/cg02-caregiver-projection` | `CaregiverParticipantDto`, `INTERNAL_FIELDS` on both sides, projection builder, accept-mapper onto `PatchParticipantDto`, drift-guard tests |
 | `feat/cg03-caregiver-wizard` | Public route, plain Axios instance, `usePublicCaregiver`, the wizard, all four page states, frontend tests |
 | `feat/cg04-admin-review` | Header control, submissions list, review page with diff, accept/reject, frontend tests |
