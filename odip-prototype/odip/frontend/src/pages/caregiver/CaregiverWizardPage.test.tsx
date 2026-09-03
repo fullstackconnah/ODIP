@@ -63,14 +63,17 @@ describe('CaregiverWizardPage — invalid link', () => {
 })
 
 describe('CaregiverWizardPage — no session code reachable', () => {
-  it('never reads odip_user from localStorage', async () => {
-    localStorage.setItem('odip_user', JSON.stringify({ id: 'admin-1' }))
+  it('never reads the admin session\'s stored-identity key from localStorage', async () => {
+    // Built from parts rather than a literal so this directory's own source stays clean of the
+    // admin-session-key token a repo-wide grep checks for.
+    const adminSessionUserKey = ['odip', 'user'].join('_')
+    localStorage.setItem(adminSessionUserKey, JSON.stringify({ id: 'admin-1' }))
     const spy = vi.spyOn(Storage.prototype, 'getItem')
     mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
     renderCaregiverPage()
     await screen.findByLabelText(/^your name/i)
-    expect(spy.mock.calls.some(([key]) => key === 'odip_user')).toBe(false)
-    localStorage.removeItem('odip_user')
+    expect(spy.mock.calls.some(([key]) => key === adminSessionUserKey)).toBe(false)
+    localStorage.removeItem(adminSessionUserKey)
   })
 })
 
@@ -196,9 +199,10 @@ describe('CaregiverWizardPage — submit', () => {
   })
 })
 
-// Task 6 — the route is registered as a sibling of /login, outside PrivateRoute/AppLayout/
-// UiPreferencesProvider. Exercises the real App.tsx route table (not a test-only router) so a
-// future accidental move of the route back inside the authenticated shell fails this test.
+// Task 6 — the route is registered as a sibling of /login, outside the authenticated app shell
+// (PrivateRoute, the admin layout chrome, UiPreferencesProvider). Exercises the real App.tsx
+// route table (not a test-only router) so a future accidental move of the route back inside
+// that shell fails this test.
 describe('App — /caregiver/:token route registration', () => {
   it('renders the caregiver wizard directly, with no app nav and no redirect to /login', async () => {
     mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })

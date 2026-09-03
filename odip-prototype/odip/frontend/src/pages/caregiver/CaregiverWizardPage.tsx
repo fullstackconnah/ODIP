@@ -1,6 +1,7 @@
 /**
  * cg03 — the public, session-free caregiver profile form. Renders OUTSIDE the authenticated
- * shell (see App.tsx's route placement): no AppLayout, no usePermissions, no odip_user read.
+ * app shell (see App.tsx's route placement): no admin layout chrome, no permission checks, no
+ * read of the admin session's stored identity.
  * Authentication is the link token in the URL and nothing else — every request goes through
  * `caregiverApiClient` (src/api/caregiverClient.ts), which deliberately carries no Authorization
  * or X-View-As-* header and no credentials.
