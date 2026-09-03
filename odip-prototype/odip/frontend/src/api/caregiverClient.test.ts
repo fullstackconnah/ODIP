@@ -24,7 +24,7 @@ describe('caregiverApiClient', () => {
   it('has no interceptors registered', () => {
     // @ts-expect-error — handlers is internal but stable in axios 1.x
     expect(caregiverApiClient.interceptors.request.handlers.filter(Boolean)).toHaveLength(0)
-    // @ts-expect-error
+    // @ts-expect-error — handlers is internal but stable in axios 1.x
     expect(caregiverApiClient.interceptors.response.handlers.filter(Boolean)).toHaveLength(0)
   })
 })
