@@ -466,6 +466,7 @@ public class ParticipantsController : ControllerBase
                 ServiceStreams = p.ServiceStreams,
                 HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
                 IsDraft = p.IsDraft,
+                IntakeCompletedAt = p.IntakeCompletedAt,
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -537,6 +538,7 @@ public class ParticipantsController : ControllerBase
                 ? p.PreferredUser.FirstName + " " + p.PreferredUser.LastName
                 : null,
             IsDraft = p.IsDraft,
+            IntakeCompletedAt = p.IntakeCompletedAt,
             // INTAKE sub-wave B — Cultural & Consent step.
             IsCald = p.IsCald, IsLgbtqi = p.IsLgbtqi, IsFamilyCommunity = p.IsFamilyCommunity,
             IsAboriginalOrTorresStraitIslander = p.IsAboriginalOrTorresStraitIslander,
@@ -682,6 +684,10 @@ public class ParticipantsController : ControllerBase
             AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
             AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
             IsDraft = dto.IsDraft,
+            // SPEC-05 (PF-10.3) — stamped server-side, never client-supplied, only when the
+            // Intake wizard's own final-step create call sets CompleteIntake; a mid-intake
+            // "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must not stamp it.
+            IntakeCompletedAt = dto.CompleteIntake ? DateTime.UtcNow : null,
             // INTAKE sub-wave B — Cultural & Consent step.
             IsCald = dto.IsCald, IsLgbtqi = dto.IsLgbtqi, IsFamilyCommunity = dto.IsFamilyCommunity,
             IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander,
@@ -812,7 +818,7 @@ public class ParticipantsController : ControllerBase
         // reading.
         var createPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(participant.Id, participant.PlanType, ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
-            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt, PlanTypeComplianceWarning = createPlanTypeComplianceWarning }));
+            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, IntakeCompletedAt = participant.IntakeCompletedAt, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt, PlanTypeComplianceWarning = createPlanTypeComplianceWarning }));
     }
 
     /// <summary>Update an existing participant.</summary>

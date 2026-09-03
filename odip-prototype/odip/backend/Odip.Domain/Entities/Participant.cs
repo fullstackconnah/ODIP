@@ -244,6 +244,18 @@ public class Participant : ITenantEntity
     /// </summary>
     public bool IsDraft { get; set; }
 
+    /// <summary>
+    /// SPEC-05 (docs/specs/odip-updates-2026-09/SPEC-05-intake-profile-split.md), PF-10.5's
+    /// lifecycle design. Null until the new Intake wizard's (PF-10.3) final step succeeds; set
+    /// once, server-side (never client-supplied), and never cleared afterwards. Distinct from
+    /// <see cref="IsDraft"/>: a participant can have IntakeCompletedAt set and still be IsDraft
+    /// true (intake finished, Profile wizard — PF-10.4 — not yet completed) — PF-10.5 owns the
+    /// full three-way resume-banner state derived from the pair of these two flags. Existing
+    /// participants created via the old single wizard are backfilled by PF-10.7, not this field's
+    /// introduction.
+    /// </summary>
+    public DateTime? IntakeCompletedAt { get; set; }
+
     // ── Key Identifiers (INTAKE sub-wave A, Master Data Dictionary CARD-*, PHY-*) ──────────
     // Wizard step "Key Identifiers", placed after "NDIS & Funding" — see
     // ParticipantCreatePage.tsx's WIZARD_STEPS. All optional; the Participant Profile source

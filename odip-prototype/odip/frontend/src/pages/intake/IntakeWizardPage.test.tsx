@@ -1,0 +1,314 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import IntakeWizardPage from './IntakeWizardPage'
+import { fieldsForEntry } from '@/lib/documentMapping'
+import {
+  STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
+  STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
+} from '@/lib/participantSchema'
+
+const { mockCreateMutateAsync } = vi.hoisted(() => ({
+  mockCreateMutateAsync: vi.fn(),
+}))
+
+// Only the API layer is mocked — FormField/Dropdown/Card are the real components, exercising the
+// actual wizard step-gating/navigation/review wiring, same approach as ParticipantCreatePage.test.tsx.
+vi.mock('@/api/hooks', () => ({
+  useCreateParticipant: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
+  usePersons: () => ({
+    data: [
+      { id: 'person-1', firstName: 'Karen', lastName: 'Johnson', fullName: 'Karen Johnson', organisation: null, activeRoleCount: 0 },
+    ],
+  }),
+}))
+
+function renderIntakePage() {
+  const router = createMemoryRouter(
+    [
+      { path: '/participants/new', element: <IntakeWizardPage /> },
+      { path: '/participants/:id', element: <div>Participant detail</div> },
+      { path: '/participants/:id/profile', element: <div>Profile wizard placeholder</div> },
+      { path: '/participants', element: <div>Participants list</div> },
+    ],
+    { initialEntries: ['/participants/new'] },
+  )
+  return render(<RouterProvider router={router} />)
+}
+
+beforeEach(() => {
+  mockCreateMutateAsync.mockReset()
+  mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-participant-1' } })
+})
+
+function stepNav() {
+  return screen.getByRole('navigation', { name: /intake wizard steps/i })
+}
+
+async function expectStep(label: string | RegExp) {
+  await within(stepNav()).findByRole('button', { name: label, current: 'step' })
+}
+
+async function fillNameAndAdvance(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+  await user.type(screen.getByLabelText(/last name/i), 'Rivers')
+  await user.click(screen.getByRole('button', { name: /^next$/i }))
+  await expectStep(/ndis & funding/i)
+}
+
+describe('IntakeWizardPage — step gating and navigation', () => {
+  it('renders the Participant Details step first, with no profile-only Identity fields', () => {
+    renderIntakePage()
+    expect(screen.getByLabelText(/first name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/last name/i)).toBeInTheDocument()
+    // Profile-only Identity fields (PF-10.1) must never appear.
+    expect(screen.queryByLabelText(/middle name/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^gender$/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/place of birth/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/preferred staff/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks Next on Participant Details until First/Last Name are filled, then advances', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    expect(await screen.findByText(/first name is required/i)).toBeInTheDocument()
+    await expectStep(/participant details/i)
+
+    await fillNameAndAdvance(user)
+  })
+
+  it('walks every step to Review without further input (all other intake fields are optional)', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await fillNameAndAdvance(user)
+
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/contacts/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/cultural considerations/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/support needs/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/medical summary/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/behaviour summary/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/risks & hazards/i)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/review/i)
+
+    // Review lists every step's group card.
+    expect(screen.getByRole('heading', { name: /participant details/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /ndis & funding/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /contacts/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /cultural considerations/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /support needs/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /medical summary/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /behaviour summary/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /risks & hazards/i })).toBeInTheDocument()
+  })
+})
+
+describe('IntakeWizardPage — completion and draft-save', () => {
+  async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
+    await fillNameAndAdvance(user)
+    // From NDIS & Funding, 7 more Next clicks reach Review: contacts, cultural, support, medical,
+    // behaviour, risks, then the shell's own review pseudo-step.
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+    }
+    await expectStep(/review/i)
+  }
+
+  it('completing intake POSTs isDraft=true and completeIntake=true, then routes to the profile hand-off', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await walkToReview(user)
+
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.completeIntake).toBe(true)
+    expect(payload.firstName).toBe('Jamie')
+    expect(payload.lastName).toBe('Rivers')
+
+    expect(await screen.findByText(/profile wizard placeholder/i)).toBeInTheDocument()
+  })
+
+  it('"Save as draft" POSTs isDraft=true and completeIntake=false from any step, and routes to the detail page', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload.isDraft).toBe(true)
+    expect(payload.completeIntake).toBe(false)
+
+    expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
+  })
+})
+
+describe('IntakeWizardPage — drift guard against the PF-10.1 field-allocation contract', () => {
+  it('every fieldsForEntry("intake") field is covered by exactly one wizard step, with no overlap and no Profile-only field included', () => {
+    const stepGroups = [
+      STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
+      STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
+    ]
+    const unioned = stepGroups.flat()
+    const intakeFields = fieldsForEntry('intake').map((e) => e.field)
+
+    // No duplicates across steps.
+    expect(new Set(unioned).size).toBe(unioned.length)
+    // Exact set equality with the contract — no missing field, no extra (Profile-only) field.
+    expect(new Set(unioned)).toEqual(new Set(intakeFields))
+
+    const profileFields = new Set(fieldsForEntry('profile').map((e) => e.field))
+    for (const field of unioned) {
+      expect(profileFields.has(field)).toBe(false)
+    }
+  })
+
+  // Fields never rendered on the wizard's default path — gated by a Living Arrangement selection
+  // (Family/Independent/SupportedAccommodation, default '') or by fundingSource === 'Other'
+  // (default 'Ndis') — exercised individually in the two tests below instead.
+  const LIVING_ARRANGEMENT_GATED_FIELDS = new Set([
+    'mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo',
+    'livesWithOthers', 'whoLivesWith', 'silProviderName', 'silProviderContactPhone', 'accommodationType',
+    'onSiteSupportHours', 'livingArrangementNotes',
+  ])
+  const FUNDING_OTHER_GATED_FIELDS = new Set(['fundingOrganisation'])
+  // overnightRatio only renders once Overnight Support isn't "None" (the default) — exercised in
+  // its own small test below, same shape as the fundingOrganisation gate.
+  const OVERNIGHT_GATED_FIELDS = new Set(['overnightRatio'])
+  // Fields captured via a repeatable/grid/multi-checkbox control (no single element keyed by the
+  // bare field name itself) — verified instead by their step's presence in the walk-through test
+  // above, or (serviceStreams) by its individual checkboxes' own accessible names.
+  const COLLECTION_FIELDS = new Set(['contactRoles', 'riskEntries', 'serviceStreams'])
+  // Tri-state Yes/No/Not-recorded fields render via a Controller-driven ToggleGroup
+  // (role="radiogroup", no id attribute — see ToggleGroup.tsx) rather than a plain registered
+  // input, so they're verified by their radiogroup's accessible name (the visible FormField
+  // label every one of them renders) instead of an element id.
+  const RADIOGROUP_FIELD_LABELS: Record<string, RegExp> = {
+    isCald: /Culturally and Linguistically Diverse/i,
+    isLgbtqi: /LGBTIQA\+/i,
+    isFamilyCommunity: /Family \/ Community/i,
+    isAboriginalOrTorresStraitIslander: /Aboriginal and\/or Torres Strait Islander/i,
+    receivedRightsAndResponsibilitiesInfo: /Rights and Responsibilities/i,
+    receivedPrivacyAndConfidentialityInfo: /Privacy and Confidentiality/i,
+    receivedFeedbackInfo: /Feedback Information and Form/i,
+    receivedBeingSafeInfo: /Being Safe Information/i,
+    receivedAdvocacyInfo: /Advocacy Information/i,
+    behavioursOfConcernCurrent: /Behaviours of Concern \(Current\)/i,
+    behavioursOfConcernFiveYearHistory: /Behaviours of Concern \(5-Year History\)/i,
+  }
+
+  it('renders a DOM element (or accessible radiogroup) for every always-visible scalar Intake field on the default path, and none for any Profile-only field', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+
+    const profileFields = fieldsForEntry('profile').map((e) => e.field)
+    const alwaysVisibleIntakeFields = fieldsForEntry('intake').map((e) => e.field).filter((f) =>
+      !COLLECTION_FIELDS.has(f) && !LIVING_ARRANGEMENT_GATED_FIELDS.has(f)
+      && !FUNDING_OTHER_GATED_FIELDS.has(f) && !OVERNIGHT_GATED_FIELDS.has(f)
+      && !(f in RADIOGROUP_FIELD_LABELS)
+    )
+
+    const seenIds = new Set<string>()
+    const seenRadiogroupNames: string[] = []
+    const stepCount = 8
+    for (let i = 0; i < stepCount; i++) {
+      document.querySelectorAll('[id]').forEach((el) => seenIds.add(el.id))
+      screen.queryAllByRole('radiogroup').forEach((el) => {
+        const name = el.getAttribute('aria-label')
+        if (name) seenRadiogroupNames.push(name)
+      })
+      if (i === 0) {
+        await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+        await user.type(screen.getByLabelText(/last name/i), 'Rivers')
+      }
+      if (i < stepCount - 1) {
+        await user.click(screen.getByRole('button', { name: /^next$/i }))
+      }
+    }
+    document.querySelectorAll('[id]').forEach((el) => seenIds.add(el.id))
+    screen.queryAllByRole('radiogroup').forEach((el) => {
+      const name = el.getAttribute('aria-label')
+      if (name) seenRadiogroupNames.push(name)
+    })
+
+    const missing = alwaysVisibleIntakeFields.filter((f) => !seenIds.has(f))
+    expect(missing).toEqual([])
+    for (const field of profileFields) {
+      expect(seenIds.has(field)).toBe(false)
+    }
+    for (const [field, labelPattern] of Object.entries(RADIOGROUP_FIELD_LABELS)) {
+      const matched = seenRadiogroupNames.some((name) => labelPattern.test(name))
+      expect({ field, matched }).toEqual({ field, matched: true })
+    }
+  })
+
+  it('renders overnightRatio once Overnight Support is switched away from None', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+    await user.type(screen.getByLabelText(/last name/i), 'Rivers')
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> NDIS & Funding
+
+    expect(document.getElementById('overnightRatio')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Contacts
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Cultural Considerations
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> Support Needs
+    await expectStep(/support needs/i)
+    await user.click(document.getElementById('overnightSupport') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Active Night' }))
+    expect(document.getElementById('overnightRatio')).not.toBeNull()
+  })
+
+  it('renders every Living-Arrangement-gated field once its arrangement type is selected', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+
+    // Both addressState and livingArrangement default to visible text "Not specified" — select
+    // by the Dropdown's own trigger element id (set directly on the button) rather than by name.
+    await user.click(document.getElementById('livingArrangement') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Family' }))
+    expect(document.getElementById('mainSupportPersonName')).not.toBeNull()
+    expect(document.getElementById('mainSupportPersonRelationship')).not.toBeNull()
+    expect(document.getElementById('othersLivingInAccommodation')).not.toBeNull()
+    expect(document.getElementById('residentialInfo')).not.toBeNull()
+    expect(document.getElementById('livingArrangementNotes')).not.toBeNull()
+
+    await user.click(document.getElementById('livingArrangement') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Independent' }))
+    expect(document.getElementById('livesWithOthers')).not.toBeNull()
+    await user.click(document.getElementById('livesWithOthers') as HTMLElement)
+    expect(document.getElementById('whoLivesWith')).not.toBeNull()
+
+    await user.click(document.getElementById('livingArrangement') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Supported Accommodation' }))
+    expect(document.getElementById('silProviderName')).not.toBeNull()
+    expect(document.getElementById('silProviderContactPhone')).not.toBeNull()
+    expect(document.getElementById('accommodationType')).not.toBeNull()
+    expect(document.getElementById('onSiteSupportHours')).not.toBeNull()
+  })
+
+  it('renders fundingOrganisation once Funding Source is switched to Other', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+    await user.type(screen.getByLabelText(/last name/i), 'Rivers')
+    await user.click(screen.getByRole('button', { name: /^next$/i })) // -> NDIS & Funding
+
+    expect(document.getElementById('fundingOrganisation')).toBeNull()
+    await user.click(document.getElementById('fundingSource') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Other' }))
+    expect(document.getElementById('fundingOrganisation')).not.toBeNull()
+  })
+})
