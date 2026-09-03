@@ -4,6 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
 import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import {
+  buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
+  buildShiftNoteIncidentTitleSkeleton, buildShiftNoteIncidentDescriptionSkeleton, buildShiftNoteIncidentDateTime,
+  suggestedIncidentTypeForShiftNote,
+} from '@/lib/incidentPrefill'
+import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 
 const {
   mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
@@ -466,6 +472,158 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
     expect(screen.queryByText(/failed to (create|update) incident report/i)).not.toBeInTheDocument()
+  })
+})
+
+// IN-8 audit: confirms both producers' fields land correctly across the wizard using the SAME
+// builder functions the producers' own consuming reset() calls in IncidentCreatePage rely on
+// (incidentPrefill.ts) — a drift in a skeleton builder fails these tests without needing to keep
+// a hand-typed expected string in lockstep. Also proves the Review step (reached only via Next
+// through every step in between, including the new Witnesses step) lists every prefilled field,
+// and that submitting an untouched prefilled wizard produces a request payload with no field
+// left in an invalid shape (in particular: witnesses/injuries as empty arrays, never the old
+// witnessNames/witnessStatements shape either producer never supplied in the first place).
+describe('IncidentCreatePage — IN-8 producer field trace through to Review', () => {
+  const marPrefill: MarIncidentPrefillState = {
+    source: 'mar-administration',
+    outcome: 'Refused',
+    participantId: 'participant-1',
+    participantName: 'Sophie Brown',
+    medicationName: 'Metformin',
+    strength: '500mg',
+    doseDescription: '1 tablet',
+    scheduledAt: '2026-08-05T22:30:00Z',
+    administeredAt: null,
+    administeredAtTimeZone: 'Australia/Brisbane',
+    recordedByName: 'Alex Rivera',
+    recordedByUserId: 'staff-1',
+    reason: 'Participant declined',
+    notes: null,
+    tripInstanceId: 'trip-1',
+  }
+
+  const shiftNotePrefill: ShiftNoteIncidentPrefillState = {
+    source: 'shift-note',
+    shiftNoteId: 'note-42',
+    categories: ['Falls'],
+    participantId: 'participant-1',
+    participantName: 'Sophie Brown',
+    noteBody: 'Slipped in the kitchen.',
+    serviceDate: '2026-08-20',
+    startTime: '08:00:00',
+    endTime: '16:00:00',
+    endsNextDay: false,
+    reportedByUserId: 'staff-1',
+  }
+
+  /** Reads a Review-step row's value by its `<dt>` label text — the row layout is a fixed
+   * `<dt>{label}</dt><dd>{value}</dd>` sibling pair (WizardReviewStep's defaultRenderRow). */
+  function reviewValueFor(label: string) {
+    return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
+  }
+
+  it('MAR prefill: every producer-supplied field lands on Basics or Incident Details and appears on Review; an untouched submit is a valid payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
+
+    // Basics-owned fields (IN-8 design: title/incidentType/severity/participant/reporter/serviceType/trip)
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
+      .toBe(buildIncidentTitleSkeleton(marPrefill))
+    expect(screen.getByLabelText('Involved Participant')).toHaveValue(marPrefill.participantName)
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
+    expect(screen.getByLabelText('Incident Type *')).toHaveTextContent(INCIDENT_TYPE_LABELS.MedicationError)
+    expect(screen.getByLabelText(/^Severity/)).toHaveTextContent(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
+    expect(screen.getByLabelText(/Service Type/i)).toHaveTextContent('Trip')
+    expect(screen.getByLabelText(/^Trip/)).toHaveValue('Gold Coast Beach Break')
+
+    await clickNext(user) // Basics -> Incident Details
+
+    // Incident Details-owned fields (description/incidentDateTime) — reached one Next later but
+    // already populated atomically by the same reset() call that populated Basics (IN-8: no
+    // staged/partial prefill).
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
+      .toBe(buildIncidentDescriptionSkeleton(marPrefill))
+    expect(screen.getByLabelText(/Date & Time/i)).toHaveValue(buildIncidentDateTime(marPrefill))
+
+    await clickNext(user) // Incident Details -> Witnesses (never prefilled by either producer — optional, passes immediately)
+    await clickNext(user) // Witnesses -> Review
+
+    expect(reviewValueFor('Title')).toBe(buildIncidentTitleSkeleton(marPrefill))
+    expect(reviewValueFor('Description')).toBe(buildIncidentDescriptionSkeleton(marPrefill))
+    expect(reviewValueFor('Date & Time')).toBe(buildIncidentDateTime(marPrefill))
+    expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
+    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS.MedicationError)
+    expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
+    expect(reviewValueFor('Trip')).toBe('Gold Coast Beach Break')
+    expect(reviewValueFor('Witnesses')).toBe('None recorded')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      title: buildIncidentTitleSkeleton(marPrefill),
+      description: buildIncidentDescriptionSkeleton(marPrefill),
+      incidentDateTime: buildIncidentDateTime(marPrefill),
+      incidentType: 'MedicationError',
+      severity: suggestedIncidentSeverity(marPrefill.outcome),
+      involvedParticipantId: 'participant-1',
+      reportedByStaffId: 'staff-1',
+      serviceType: 'Trip',
+      tripInstanceId: 'trip-1',
+      witnesses: [],
+      injuries: [],
+    })
+  })
+
+  it('Shift-note prefill: every producer-supplied field lands on Basics or Incident Details and appears on Review; an untouched submit (plus the required injury row) is a valid payload', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    const expectedType = suggestedIncidentTypeForShiftNote(shiftNotePrefill)
+
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value)
+      .toBe(buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill))
+    expect(screen.getByLabelText('Involved Participant')).toHaveValue(shiftNotePrefill.participantName)
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
+    expect(screen.getByLabelText('Incident Type *')).toHaveTextContent(INCIDENT_TYPE_LABELS[expectedType])
+    expect(screen.getByLabelText(/^Severity/)).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
+
+    await clickNext(user) // Basics -> Incident Details
+
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
+      .toBe(buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill))
+    expect(screen.getByLabelText(/Date & Time/i)).toHaveValue(buildShiftNoteIncidentDateTime(shiftNotePrefill))
+
+    // 'Falls' -> 'Injury': Incident Details' own Next gate (IN-5) requires at least one injury
+    // row before advancing — this producer's prefill alone doesn't satisfy that, by design.
+    await addMinimalInjury(user)
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
+
+    expect(reviewValueFor('Title')).toBe(buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill))
+    expect(reviewValueFor('Description')).toBe(buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill))
+    expect(reviewValueFor('Date & Time')).toBe(buildShiftNoteIncidentDateTime(shiftNotePrefill))
+    expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
+    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS[expectedType])
+    expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS.Medium)
+    expect(reviewValueFor('Witnesses')).toBe('None recorded')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      title: buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill),
+      description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
+      incidentDateTime: buildShiftNoteIncidentDateTime(shiftNotePrefill),
+      incidentType: expectedType,
+      severity: 'Medium',
+      involvedParticipantId: 'participant-1',
+      reportedByStaffId: 'staff-1',
+      witnesses: [],
+    })
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/notes/note-42/acknowledge-flags')
   })
 })
 
