@@ -104,6 +104,37 @@ public class AuditInterceptorTests
     }
 
     [Fact]
+    public async Task SavingAsAnonymousWithAuditActorItem_AttributesRowToActor()
+    {
+        var http = new DefaultHttpContext();
+        http.Items[AuditInterceptor.ActorItemKey] = "caregiver:Jane Smith";
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(http);
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object))
+            .Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+
+        db.CaregiverProfileSubmissions.Add(new CaregiverProfileSubmission
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = Guid.NewGuid(),
+            TokenHash = new string('a', 64), CreatedByUserId = Guid.NewGuid(),
+            ExpiresAt = DateTime.UtcNow.AddDays(14),
+        });
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(db.AuditLogs.ToList());
+        Assert.Null(row.ChangedById);
+        Assert.Equal("caregiver:Jane Smith", row.ChangedByName);
+    }
+
+    [Fact]
     public async Task SaveChanges_UnauditedEntity_WritesNoAuditLog()
     {
         using var db = CreateDb(userId: Guid.NewGuid());

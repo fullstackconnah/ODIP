@@ -10,6 +10,13 @@ namespace Odip.Infrastructure.Audit;
 
 public sealed class AuditInterceptor : SaveChangesInterceptor
 {
+    /// <summary>
+    /// HttpContext.Items key an anonymous request handler may set to attribute audit rows when
+    /// there is no authenticated principal — used by the public caregiver form ("caregiver:{name}").
+    /// Ignored whenever a real user is authenticated.
+    /// </summary>
+    public const string ActorItemKey = "AuditActor";
+
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
@@ -46,6 +53,11 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
 
             changedByName = user.FindFirst("fullName")?.Value
                 ?? user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+        }
+        else if (_httpContextAccessor.HttpContext?.Items.TryGetValue(ActorItemKey, out var actor) == true
+                 && actor is string actorName && !string.IsNullOrWhiteSpace(actorName))
+        {
+            changedByName = actorName;
         }
 
         var entries = new List<AuditLog>();

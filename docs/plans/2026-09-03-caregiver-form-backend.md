@@ -452,11 +452,11 @@ Claude-Session: https://claude.ai/code/session_01Xh5mYhd3BUrih1drycbmcV"
 **Interfaces:**
 - Produces: `HttpContext.Items["AuditActor"]` (a `string`) is used as `ChangedByName` when there is no authenticated user. Public constant `AuditInterceptor.ActorItemKey = "AuditActor"`.
 
-- [ ] **Step 1: Allowlist**
+- [x] **Step 1: Allowlist**
 
 In `AuditedEntities.cs`, add `typeof(CaregiverProfileSubmission)` to the `Types` `HashSet<Type>` alongside `typeof(ParticipantNote)`.
 
-- [ ] **Step 2: Failing test for the override**
+- [x] **Step 2: Failing test for the override**
 
 Read `AuditInterceptor.BuildAuditEntries` first to see how it produces `AuditLog` rows, then write a test that saves a `CaregiverProfileSubmission` through a context with the interceptor attached and an `IHttpContextAccessor` whose `HttpContext.User` is unauthenticated and whose `Items["AuditActor"] = "caregiver:Jane Smith"`:
 
@@ -495,12 +495,12 @@ public async Task SavingAsAnonymousWithAuditActorItem_AttributesRowToActor()
 
 Adjust the `AuditLog` property names (`ChangedById`, `ChangedByName`) to whatever the entity actually calls them — read `Odip.Domain/Entities/AuditLog.cs`.
 
-- [ ] **Step 3: Run to confirm failure**
+- [x] **Step 3: Run to confirm failure**
 
 Run: `dotnet test --filter "FullyQualifiedName~AuditInterceptorTests"`
 Expected: FAIL — `ActorItemKey` undefined, or `ChangedByName` null.
 
-- [ ] **Step 4: Implement the override**
+- [x] **Step 4: Implement the override**
 
 In `AuditInterceptor.cs`:
 
@@ -523,12 +523,12 @@ and in the attribution block, after the `if (user?.Identity?.IsAuthenticated == 
         }
 ```
 
-- [ ] **Step 5: Run to confirm pass, then full suite**
+- [x] **Step 5: Run to confirm pass, then full suite**
 
 Run: `dotnet test --filter "FullyQualifiedName~AuditInterceptorTests"` → `Passed`.
 Run: `dotnet test` → `Failed: 0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Odip.Infrastructure/Audit/ Odip.Tests/Audit/
