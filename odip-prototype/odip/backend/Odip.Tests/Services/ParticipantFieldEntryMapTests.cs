@@ -46,11 +46,19 @@ public class ParticipantFieldEntryMapTests
         Assert.Equal(85, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Profile));
     }
 
-    [Fact]
+    // SkippableFact, not Fact: the API image's Docker build context is backend/ only
+    // (deploy/compose.yaml), so the frontend/ tree this test reads from disk is never present
+    // in CI. This is a local-only cross-tree consistency check — it skips (not fails) when the
+    // frontend tree can't be found, and still runs + asserts normally wherever both trees are
+    // checked out (i.e. locally). Do not change this back to [Fact] or add a static Skip="..."
+    // (which would skip it locally too, defeating the point).
+    [SkippableFact]
     public void AgreesWithFrontendDocumentMappingTs()
     {
         var tsPath = ResolveDocumentMappingTsPath();
-        var tsSource = File.ReadAllText(tsPath);
+        Skip.If(tsPath is null, "frontend/src/lib/documentMapping.ts not reachable — this cross-tree consistency check only runs where both trees are checked out (locally); the API Docker build context is backend/ only.");
+
+        var tsSource = File.ReadAllText(tsPath!);
 
         // documentMapping.ts always writes `entryPhase: '<phase>',` immediately before
         // `field: '<name>'` within the same object literal (either same line or the line above) —
@@ -88,7 +96,7 @@ public class ParticipantFieldEntryMapTests
         Assert.True(mismatched.Count == 0, $"entryPhase mismatch between backend and frontend: {string.Join("; ", mismatched)}");
     }
 
-    private static string ResolveDocumentMappingTsPath()
+    private static string? ResolveDocumentMappingTsPath()
     {
         var dir = AppContext.BaseDirectory;
         for (var i = 0; i < 10; i++)
@@ -99,6 +107,6 @@ public class ParticipantFieldEntryMapTests
             dir = Path.GetFullPath(Path.Combine(dir, ".."));
         }
 
-        throw new FileNotFoundException("Could not locate frontend/src/lib/documentMapping.ts via any known path.");
+        return null;
     }
 }
