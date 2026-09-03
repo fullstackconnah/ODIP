@@ -4,14 +4,17 @@ import { computeCaregiverDiff } from './caregiverDiff'
 describe('computeCaregiverDiff', () => {
   it('returns only changed scalar fields, with labels', () => {
     const rows = computeCaregiverDiff(
-      { firstName: 'Sophie', personalInterests: 'Reading', phone: '0400' },
-      { aboutMe: { personalInterests: 'Gardening' }, personalDetails: { firstName: 'Sophie', phone: '0400' } },
+      { firstName: 'Sophie', lastName: 'Brown', likesDislikes: 'Reading', phone: '0400' },
+      { aboutMe: { likesDislikes: 'Gardening' }, personalDetails: { firstName: 'Sophie', lastName: 'Brown', phone: '0400' } },
     )
-    expect(rows).toEqual([{ field: 'personalInterests', label: expect.any(String), group: 'aboutMe', current: 'Reading', proposed: 'Gardening' }])
+    expect(rows).toEqual([{ field: 'likesDislikes', label: expect.any(String), group: 'aboutMe', current: 'Reading', proposed: 'Gardening' }])
   })
 
   it('treats null/undefined/empty-string as equal', () => {
-    expect(computeCaregiverDiff({ phone: null }, { personalDetails: { phone: '' } })).toEqual([])
+    expect(computeCaregiverDiff(
+      { phone: null, firstName: 'Sophie', lastName: 'Brown' },
+      { personalDetails: { firstName: 'Sophie', lastName: 'Brown', phone: '' } },
+    )).toEqual([])
   })
 
   it('diffs collections by item type', () => {
@@ -29,8 +32,8 @@ describe('computeCaregiverDiff', () => {
 
   it('does not report a collection item unchanged when it matches the current row', () => {
     const rows = computeCaregiverDiff(
-      { healthConditions: [{ conditionType: 'Asthma', notes: 'stable' }] },
-      { healthConditions: [{ conditionType: 'Asthma', notes: 'stable' }] },
+      { healthConditions: [{ conditionType: 'Asthma', has: true, notes: 'stable' }] },
+      { healthConditions: [{ conditionType: 'Asthma', has: true, notes: 'stable' }] },
     )
     expect(rows).toEqual([])
   })
@@ -38,14 +41,14 @@ describe('computeCaregiverDiff', () => {
   it('uses the real collection key properties (adlType, itemType)', () => {
     const adlRows = computeCaregiverDiff(
       { adlAssessments: [{ adlType: 'Bathing', level: 'Independent' }] },
-      { adlAssessments: [{ adlType: 'Bathing', level: 'Assisted' }] },
+      { adlAssessments: [{ adlType: 'Bathing', level: 'Assistance' }] },
     )
     expect(adlRows[0].field).toBe('adlAssessments.Bathing')
 
     const checklistRows = computeCaregiverDiff(
-      { checklistItems: [{ itemType: 'Swimming', applicable: false }] },
-      { checklistItems: [{ itemType: 'Swimming', applicable: true }] },
+      { checklistItems: [{ itemType: 'FallsRisk', value: 'No' }] },
+      { checklistItems: [{ itemType: 'FallsRisk', value: 'Yes' }] },
     )
-    expect(checklistRows[0].field).toBe('checklistItems.Swimming')
+    expect(checklistRows[0].field).toBe('checklistItems.FallsRisk')
   })
 })

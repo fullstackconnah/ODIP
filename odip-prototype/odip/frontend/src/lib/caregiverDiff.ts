@@ -31,8 +31,7 @@ function label(field: string): string {
 }
 
 function stripKey(o: Record<string, unknown>, k: string): Record<string, unknown> {
-  const { [k]: _omit, ...rest } = o
-  return rest
+  return Object.fromEntries(Object.entries(o).filter(([key]) => key !== k))
 }
 
 export function computeCaregiverDiff(current: Record<string, unknown>, payload: PatchParticipantDto | null): DiffRow[] {

@@ -31,7 +31,7 @@ const {
   // above so its own tests never run the real axios mutationFn body.
   mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
   mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
-  mockUseCaregiverSubmissions: vi.fn(() => ({ data: [] })),
+  mockUseCaregiverSubmissions: vi.fn<(status?: string) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -586,7 +586,7 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
 
   it('shows a status chip and Revoke when a link is active', () => {
     setUserRole('Admin')
-    mockUseCaregiverSubmissions.mockImplementation((status: string) => ({
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
       data: status === 'Submitted' ? [activeSubmission()] : [],
     }))
     setup()
@@ -602,7 +602,7 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     const user = userEvent.setup()
     const revokeMutate = vi.fn()
     mockUseRevokeCaregiverLink.mockReturnValue({ mutate: revokeMutate, isPending: false, isError: false })
-    mockUseCaregiverSubmissions.mockImplementation((status: string) => ({
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
       data: status === 'Submitted' ? [activeSubmission()] : [],
     }))
     setup()

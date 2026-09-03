@@ -35,8 +35,8 @@ function makeSubmission(overrides: Partial<CaregiverSubmissionDetailDto> = {}): 
     caregiverName: 'Jane Doe', caregiverRelationship: 'Mother', createdAt: '2026-08-01T00:00:00Z',
     expiresAt: '2026-09-17T00:00:00Z', submittedAt: '2026-08-02T00:00:00Z', reviewedAt: null,
     rejectionNote: null,
-    current: { firstName: 'Sophie', personalInterests: 'Reading' },
-    payload: { aboutMe: { personalInterests: 'Gardening' } },
+    current: { firstName: 'Sophie', likesDislikes: 'Reading' },
+    payload: { aboutMe: { likesDislikes: 'Gardening' } },
     ...overrides,
   }
 }
@@ -86,7 +86,7 @@ describe('CaregiverSubmissionReviewPage', () => {
 
   it('shows a "no changes" message when the diff is empty', () => {
     mockUseCaregiverSubmission.mockReturnValue({
-      data: makeSubmission({ current: { firstName: 'Sophie' }, payload: { personalDetails: { firstName: 'Sophie' } } }),
+      data: makeSubmission({ current: { firstName: 'Sophie', lastName: 'Brown' }, payload: { personalDetails: { firstName: 'Sophie', lastName: 'Brown' } } }),
       isLoading: false,
     })
     renderPage()
