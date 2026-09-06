@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const SRC_DIR = join(__dirname, '..')
-const FORBIDDEN_PATTERN = /ring-\[var\(--color-(?:ring|primary)\)\]\/\d+/
+const FORBIDDEN_PATTERN =
+  /ring-\[var\(--color-(?:ring|primary)\)\]\/\d+|focus(?:-visible)?:ring-(?:ring|primary)\/\d+/
 
 function collectSourceFiles(dir: string): string[] {
   const files: string[] = []
