@@ -106,4 +106,35 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     expect(screen.getByText('Overdue one')).toBeInTheDocument()
     expect(screen.queryByText('On-time one')).not.toBeInTheDocument()
   })
+
+  it('final review I3(a): the QSC overdue view ignores the status filter, matching what the banner counted', () => {
+    // useIncidents is a single mock, so if the page were still passing statusFilter/severityFilter
+    // through to the query it would receive this pre-filtered (empty) list instead of the full one.
+    mockUseIncidents.mockReturnValue({
+      data: [
+        baseIncident({ id: 'inc-1', title: 'Overdue one', status: 'Resolved', isOverdue24h: true }),
+      ],
+      isLoading: false,
+    })
+    mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ id: 'inc-1', status: 'Resolved', isOverdue24h: true })] })
+    renderPage('/incidents?qsc=overdue')
+
+    // Even though no status filter UI selection was made, the query params passed to useIncidents
+    // must not carry a stale status/severity filter while in the QSC overdue view.
+    const paramsArg = mockUseIncidents.mock.calls.at(-1)?.[0]
+    expect(paramsArg).not.toHaveProperty('status')
+    expect(paramsArg).not.toHaveProperty('severity')
+    expect(screen.getByText('Overdue one')).toBeInTheDocument()
+  })
+
+  it('final review I3(b): shows a QSC-specific empty state, not the generic "no incidents" copy, when nothing is overdue', () => {
+    mockUseIncidents.mockReturnValue({ data: [], isLoading: false })
+    mockUseOverdueQscIncidents.mockReturnValue({ data: [] })
+    renderPage('/incidents?qsc=overdue')
+
+    expect(screen.getByText('No overdue QSC reports')).toBeInTheDocument()
+    expect(screen.queryByText('No incidents reported')).not.toBeInTheDocument()
+    expect(screen.queryByText(/report one to get started/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /show all incidents/i })).toHaveAttribute('href', '/incidents')
+  })
 })

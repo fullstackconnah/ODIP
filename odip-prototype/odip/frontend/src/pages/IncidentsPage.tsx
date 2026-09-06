@@ -40,8 +40,15 @@ export default function IncidentsPage() {
   const { canWrite, canCreateIncidents } = usePermissions()
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const qscOverdueOnly = searchParams.get('qsc') === 'overdue'
+  const clearQscParam = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('qsc')
+      return next
+    })
+  }
   const updateIncident = useUpdateIncident()
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [] } = useOverdueQscIncidents()
@@ -58,7 +65,7 @@ export default function IncidentsPage() {
   })
 
   const queryParams = { ...params }
-  if (!showArchived) {
+  if (!showArchived && !qscOverdueOnly) {
     if (statusFilter) queryParams.status = statusFilter
     if (severityFilter) queryParams.severity = severityFilter
   }
@@ -154,12 +161,18 @@ export default function IncidentsPage() {
       )}
 
       {!isLoading && visibleIncidents.length === 0 ? (
-        !showArchived && (statusFilter || severityFilter) ? (
+        qscOverdueOnly ? (
+          <EmptyState
+            icon={ShieldAlert}
+            title="No overdue QSC reports"
+            description="No incidents are currently past the 24-hour QSC deadline."
+          />
+        ) : !showArchived && (statusFilter || severityFilter) ? (
           <EmptyState
             icon={ShieldAlert}
             title="No incidents match your filters"
             description="Try a different status or severity filter, or clear them to see all incident reports."
-            action={{ label: 'Clear filters', onClick: () => { setStatusFilter(''); setSeverityFilter('') } }}
+            action={{ label: 'Clear filters', onClick: () => { setStatusFilter(''); setSeverityFilter(''); clearQscParam() } }}
           />
         ) : (
           <EmptyState
