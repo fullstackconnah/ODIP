@@ -5,7 +5,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
@@ -40,6 +40,8 @@ export default function IncidentsPage() {
   const { canWrite, canCreateIncidents } = usePermissions()
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
+  const [searchParams] = useSearchParams()
+  const qscOverdueOnly = searchParams.get('qsc') === 'overdue'
   const updateIncident = useUpdateIncident()
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [] } = useOverdueQscIncidents()
@@ -62,6 +64,7 @@ export default function IncidentsPage() {
   }
 
   const { data: incidents = [], isLoading } = useIncidents(queryParams)
+  const visibleIncidents = qscOverdueOnly ? incidents.filter((i) => i.isOverdue24h) : incidents
 
   const incidentColumns: Column<any>[] = [
     { key: 'title', header: 'Title', sortable: true, className: 'font-medium' },
@@ -91,7 +94,7 @@ export default function IncidentsPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Incident Reports"
-        subtitle={`${incidents.length} incident${incidents.length !== 1 ? 's' : ''}`}
+        subtitle={`${visibleIncidents.length} incident${visibleIncidents.length !== 1 ? 's' : ''}`}
         action={!showArchived && canCreateIncidents && (
           <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Plus className="w-4 h-4" /> Report Incident
@@ -128,16 +131,29 @@ export default function IncidentsPage() {
 
       {/* QSC Overdue Alert Banner */}
       {!showArchived && overdueQsc.length > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+        <div
+          role="alert"
+          className="flex items-center gap-3 p-4 rounded-xl bg-error-container border border-destructive/40 text-on-error-container"
+        >
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
           <div>
             <p className="font-semibold text-sm">{overdueQsc.length} incident{overdueQsc.length !== 1 ? 's' : ''} require QSC reporting — 24-hour deadline exceeded</p>
             <p className="text-xs mt-0.5 opacity-80">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</p>
+            <Link to="/incidents?qsc=overdue" className="inline-block mt-1 text-sm font-medium underline underline-offset-2">
+              View overdue incidents
+            </Link>
           </div>
         </div>
       )}
 
-      {!isLoading && incidents.length === 0 ? (
+      {qscOverdueOnly && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Showing only incidents past the 24-hour QSC deadline.{' '}
+          <Link to="/incidents" className="font-medium underline underline-offset-2">Show all incidents</Link>
+        </p>
+      )}
+
+      {!isLoading && visibleIncidents.length === 0 ? (
         !showArchived && (statusFilter || severityFilter) ? (
           <EmptyState
             icon={ShieldAlert}
@@ -155,7 +171,7 @@ export default function IncidentsPage() {
         )
       ) : (
         <DataTable
-          data={incidents}
+          data={visibleIncidents}
           columns={incidentColumns}
           keyField="id"
           sortable
