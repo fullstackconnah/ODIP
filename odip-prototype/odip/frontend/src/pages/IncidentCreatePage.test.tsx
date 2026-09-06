@@ -862,6 +862,37 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
   })
 })
 
+// I1 (final review): useParticipants() is server-capped at 50 and the mocked lookup here only
+// ever carries 'participant-1' (Sophie Brown) — this fixture's involvedParticipantId deliberately
+// doesn't match it, standing in for a participant that sorted past the cap. The Review step must
+// still show the correct name because IncidentDetailDto.involvedParticipantName already carries it.
+describe('IncidentCreatePage — I1 Review prefers the server-resolved participant name over the capped lookup', () => {
+  const existingIncidentWithUncachedParticipant = {
+    id: 'incident-2', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
+    restrictivePracticeType: null, restrictivePracticeId: null, restrictivePracticeDescription: null,
+    restrictivePracticeReviewDate: null, unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: null,
+    severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+    involvedParticipantName: 'Jordan Blake', qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+    participantBookingId: null, involvedParticipantId: 'participant-99', involvedStaffId: null, involvedStaffName: null,
+    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+    witnessNames: null, witnessStatements: null, injuries: [], witnesses: [], qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+  }
+
+  it('shows the DTO\'s involvedParticipantName on Review when the participant is not in the (capped) lookup list', async () => {
+    mockUseIncident.mockReturnValue({ data: existingIncidentWithUncachedParticipant })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-2/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Review$/i }))
+
+    expect(reviewValueFor('Involved Participant')).toBe('Jordan Blake')
+  })
+})
+
 // UX-01: the four staff/participant pickers migrated from native <select>/register() to
 // SearchableSelect — one keyboard-only smoke test per picker (open, arrow to an option, Enter).
 describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () => {

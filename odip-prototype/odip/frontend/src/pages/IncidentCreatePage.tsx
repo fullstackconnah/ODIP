@@ -449,8 +449,19 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   const staffName = (staffId: string | null | undefined) => staff.find((s) => s.id === staffId)?.fullName ?? '—'
   const tripName = (tripId: string | null | undefined) => trips.find((t) => t.id === tripId)?.tripName ?? '—'
-  const participantName = (participantId: string | null | undefined) => participants.find((p) => p.id === participantId)?.fullName ?? '—'
-  const practiceLabel = (practiceId: string | null | undefined) => allRestrictivePractices.find((p) => p.id === practiceId)?.description ?? '—'
+  // I1 (final review): the client-side lookup lists are server-capped (participants at 50), so a
+  // participant/practice past the cap silently resolves to '—' even though the loaded incident
+  // already carries the resolved name/description. Prefer that DTO value whenever we're editing an
+  // existing incident and the currently-selected id still matches what's on the record; fall back
+  // to the (usually sufficient) lookup otherwise.
+  const participantName = (participantId: string | null | undefined) =>
+    (isEdit && existingIncident && existingIncident.involvedParticipantId === participantId
+      ? existingIncident.involvedParticipantName
+      : participants.find((p) => p.id === participantId)?.fullName) ?? '—'
+  const practiceLabel = (practiceId: string | null | undefined) =>
+    (isEdit && existingIncident && existingIncident.restrictivePracticeId === practiceId
+      ? existingIncident.restrictivePracticeDescription
+      : allRestrictivePractices.find((p) => p.id === practiceId)?.description) ?? '—'
 
   const reviewGroups: ReviewGroup[] = [
     {
