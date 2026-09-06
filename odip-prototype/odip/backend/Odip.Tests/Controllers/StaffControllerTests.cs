@@ -4,6 +4,7 @@ using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -103,5 +104,33 @@ public class StaffControllerTests
         var reloaded = await db.Users.SingleAsync(s => s.Id == staffId);
         Assert.Equal("WWCC9876543", reloaded.WorkerScreeningNumber);
         Assert.Equal(new DateOnly(2028, 1, 15), reloaded.WorkerScreeningExpiryDate);
+    }
+
+    [Fact]
+    public async Task GetAll_FlagsHasExpiredQualifications_WhenOnlyWorkerScreeningHasExpired()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Username = "screened.worker",
+            Email = "screened.worker@example.com",
+            FirstName = "Screened",
+            LastName = "Worker",
+            IsActive = true,
+            WorkerScreeningNumber = "WWCC-EXPIRED",
+            WorkerScreeningExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var controller = new StaffController(db);
+
+        var result = await controller.GetAll(null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<StaffListDto>>>(ok.Value);
+        var staff = Assert.Single(body.Data!, s => s.LastName == "Worker");
+        Assert.True(staff.HasExpiredQualifications);
     }
 }
