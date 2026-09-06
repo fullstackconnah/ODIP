@@ -258,7 +258,7 @@ function ProviderSettingsTab() {
 
   if (settings && !init) { setForm(settings); setInit(true) }
 
-  const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+  const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
@@ -484,7 +484,7 @@ function SupportCatalogueTab() {
                 )}
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setPreviewStep('upload')} className="px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
@@ -516,7 +516,7 @@ function PublicHolidaysTab() {
   const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
 
-  const inputClass = 'px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+  const inputClass = 'px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   function handleAdd() {
     createHoliday.mutate(newForm, {
@@ -650,7 +650,7 @@ function PublicHolidaysTab() {
               value={syncFromYear ?? ''}
               onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear())}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
             />
             <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
             <input
@@ -658,7 +658,7 @@ function PublicHolidaysTab() {
               value={syncToYear ?? ''}
               onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear() + 1)}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
             />
           </div>
         )}

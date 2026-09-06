@@ -331,7 +331,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div>
                 <label className="block text-sm font-medium mb-1">Booking Notes</label>
                 <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -369,12 +369,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
                           <input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
                           <input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                       </div>
                     </>
@@ -708,7 +708,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div>
                 <label className="block text-sm font-medium mb-1">Booking Notes</label>
                 <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -751,12 +751,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
                           <input type="date" value={editForm.insuranceCoverageStart} onChange={e => setEditForm({ ...editForm, insuranceCoverageStart: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
                           <input type="date" value={editForm.insuranceCoverageEnd} onChange={e => setEditForm({ ...editForm, insuranceCoverageEnd: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                       </div>
                     </>

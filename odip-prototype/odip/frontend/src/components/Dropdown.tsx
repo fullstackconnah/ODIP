@@ -301,7 +301,7 @@ export function Dropdown({
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
             placeholder="Search..."
-            className="w-full px-3 py-1.5 text-sm bg-[var(--color-input)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25"
+            className="w-full px-3 py-1.5 text-sm bg-[var(--color-input)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             onClick={e => e.stopPropagation()}
           />
         </div>
@@ -369,7 +369,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className={`text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
+          className={`text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
         >
           {selectedLabel ?? label ?? '—'}
         </button>
@@ -399,7 +399,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]/25 hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}

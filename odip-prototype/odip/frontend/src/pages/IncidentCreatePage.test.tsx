@@ -142,6 +142,12 @@ async function addMinimalInjury(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Add injury' }))
 }
 
+/** Reads a Review-step row's value by its `<dt>` label text — the row layout is a fixed
+ * `<dt>{label}</dt><dd>{value}</dd>` sibling pair (WizardReviewStep's defaultRenderRow). */
+function reviewValueFor(label: string) {
+  return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
+}
+
 beforeEach(() => {
   mockUseIncident.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
@@ -516,12 +522,6 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     reportedByUserId: 'staff-1',
   }
 
-  /** Reads a Review-step row's value by its `<dt>` label text — the row layout is a fixed
-   * `<dt>{label}</dt><dd>{value}</dd>` sibling pair (WizardReviewStep's defaultRenderRow). */
-  function reviewValueFor(label: string) {
-    return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
-  }
-
   it('MAR prefill: every producer-supplied field lands on Basics or Incident Details and appears on Review; an untouched submit is a valid payload', async () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
@@ -552,7 +552,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(reviewValueFor('Description')).toBe(buildIncidentDescriptionSkeleton(marPrefill))
     expect(reviewValueFor('Date & Time')).toBe(buildIncidentDateTime(marPrefill))
     expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
-    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
     expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS.MedicationError)
     expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
     expect(reviewValueFor('Trip')).toBe('Gold Coast Beach Break')
@@ -605,7 +605,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(reviewValueFor('Description')).toBe(buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill))
     expect(reviewValueFor('Date & Time')).toBe(buildShiftNoteIncidentDateTime(shiftNotePrefill))
     expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
-    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
     expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS[expectedType])
     expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS.Medium)
     expect(reviewValueFor('Witnesses')).toBe('None recorded')
@@ -791,6 +791,23 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     })
     expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
   })
+
+  it('resolves the linked practice to its description on Review, not the placeholder "(linked)"', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await clickNext(user) // Restrictive Practice -> Incident Details
+    await fillDetailsMinimallyAndNext(user)
+
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
+    expect(reviewValueFor('Linked Practice')).toBe('Seclusion room during acute crisis.')
+  })
 })
 
 // INC-04: the determination is frozen at creation — editing an existing incident must never
@@ -842,6 +859,37 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
 
     expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+  })
+})
+
+// I1 (final review): useParticipants() is server-capped at 50 and the mocked lookup here only
+// ever carries 'participant-1' (Sophie Brown) — this fixture's involvedParticipantId deliberately
+// doesn't match it, standing in for a participant that sorted past the cap. The Review step must
+// still show the correct name because IncidentDetailDto.involvedParticipantName already carries it.
+describe('IncidentCreatePage — I1 Review prefers the server-resolved participant name over the capped lookup', () => {
+  const existingIncidentWithUncachedParticipant = {
+    id: 'incident-2', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
+    restrictivePracticeType: null, restrictivePracticeId: null, restrictivePracticeDescription: null,
+    restrictivePracticeReviewDate: null, unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: null,
+    severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+    involvedParticipantName: 'Jordan Blake', qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
+    participantBookingId: null, involvedParticipantId: 'participant-99', involvedStaffId: null, involvedStaffName: null,
+    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+    witnessNames: null, witnessStatements: null, injuries: [], witnesses: [], qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+  }
+
+  it('shows the DTO\'s involvedParticipantName on Review when the participant is not in the (capped) lookup list', async () => {
+    mockUseIncident.mockReturnValue({ data: existingIncidentWithUncachedParticipant })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-2/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Review$/i }))
+
+    expect(reviewValueFor('Involved Participant')).toBe('Jordan Blake')
   })
 })
 

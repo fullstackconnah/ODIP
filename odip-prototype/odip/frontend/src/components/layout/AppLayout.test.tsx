@@ -53,3 +53,22 @@ describe('AppLayout nav active state', () => {
     expect(screen.getByRole('link', { name: /All Trips$/ })).toHaveAttribute('aria-current', 'page')
   })
 })
+
+describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('renders a skip-to-content link as the first focusable element, pointing at #main', () => {
+    renderAt('/trips')
+    const skipLink = screen.getByRole('link', { name: /skip to content/i })
+    expect(skipLink).toHaveAttribute('href', '#main')
+    expect(document.getElementById('main')?.tagName).toBe('MAIN')
+  })
+
+  it('gives the sidebar nav and the mobile bottom nav distinct aria-labels', () => {
+    renderAt('/trips')
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Mobile' })).toBeInTheDocument()
+  })
+})

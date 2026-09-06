@@ -9,7 +9,7 @@ import { DataTable } from '@/components/DataTable'
 import { formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 
-const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
 
 function planTypeLabel(planType: string) {

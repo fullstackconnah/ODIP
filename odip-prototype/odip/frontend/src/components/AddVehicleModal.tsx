@@ -153,7 +153,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 placeholder="Search by name or rego..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
             </div>
 
@@ -202,7 +202,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 value={vehicleName}
                 onChange={e => setVehicleName(e.target.value)}
                 placeholder="e.g. Toyota HiAce"
-                className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
             </div>
 
@@ -214,7 +214,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   value={registration}
                   onChange={e => setRegistration(e.target.value)}
                   placeholder="ABC-123"
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
               <div>
@@ -238,7 +238,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   min={0}
                   value={totalSeats}
                   onChange={e => setTotalSeats(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
               <div>
@@ -248,7 +248,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   min={0}
                   value={wheelchairPositions}
                   onChange={e => setWheelchairPositions(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
             </div>

@@ -307,6 +307,7 @@ public class StaffController : ControllerBase
                     || (s.IsDriverEligible && s.DriverLicenceExpiryDate != null && s.DriverLicenceExpiryDate < today)
                     || (s.IsManualHandlingCompetent && s.ManualHandlingExpiryDate != null && s.ManualHandlingExpiryDate < today)
                     || (s.IsMedicationCompetent && s.MedicationCompetencyExpiryDate != null && s.MedicationCompetencyExpiryDate < today)
+                    || (s.WorkerScreeningExpiryDate != null && s.WorkerScreeningExpiryDate < today)
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<StaffListDto>>.Ok(items));
     }

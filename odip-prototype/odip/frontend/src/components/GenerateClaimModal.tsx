@@ -71,7 +71,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
     )
   }
 
-  const inputClass = "w-full px-3 py-2 rounded-xl border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 bg-[var(--color-surface)]"
+  const inputClass = "w-full px-3 py-2 rounded-xl border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] bg-[var(--color-surface)]"
   const labelClass = "block text-sm text-[var(--color-muted-foreground)] mb-1"
 
   return (

@@ -222,7 +222,7 @@ export function DataTable<T>({
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <table className="w-full text-sm">
+      <table className="w-full text-sm mobile-card-table">
         <thead className="bg-[var(--color-accent)]">
           <tr className={dividerClass}>
             {selectable && (
@@ -263,7 +263,6 @@ export function DataTable<T>({
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
                   tabIndex={isSortable ? 0 : undefined}
-                  role={isSortable ? 'button' : undefined}
                 >
                   <span className="inline-flex items-center gap-1 flex-wrap">
                     {col.header}
@@ -326,7 +325,6 @@ export function DataTable<T>({
                   onClick={isClickable ? () => onRowClick(row) : undefined}
                   onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
                   tabIndex={isClickable ? 0 : undefined}
-                  role={isClickable ? 'button' : undefined}
                 >
                   {selectable && (
                     <td
@@ -355,14 +353,14 @@ export function DataTable<T>({
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
+                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
 
                     return (
-                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
+                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                         {renderCell(row, col, rowIndex)}
                       </td>
                     )

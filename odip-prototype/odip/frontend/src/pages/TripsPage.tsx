@@ -25,7 +25,7 @@ const TRIP_STATUS_ITEMS = [
   { value: 'Archived', label: 'Archived' },
 ]
 
-const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all'
+const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
 function buildEditForm(t: TripDetailDto) {
@@ -190,7 +190,7 @@ export default function TripsPage() {
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'completed' ? 'Search completed trips...' : 'Search trips...'}
             aria-label={tab === 'completed' ? 'Search completed trips' : 'Search trips'}
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all" />
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
         </div>
         {statusOptions.length > 0 && (
           <div className="flex items-center gap-1.5">

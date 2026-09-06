@@ -56,7 +56,7 @@ export default function TenantsTab({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name or domain..."
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 transition-all"
+            className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
         </div>
 

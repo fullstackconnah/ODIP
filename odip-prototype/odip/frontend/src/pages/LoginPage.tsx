@@ -123,7 +123,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+                className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                 placeholder="Enter your email"
                 required
                 autoFocus
@@ -138,7 +138,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 pr-12 transition-all"
+                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] pr-12 transition-all"
                   placeholder="Enter your password"
                   required
                 />
@@ -192,7 +192,7 @@ export default function LoginPage() {
                     id="dev-login-user"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   >
                     {devUsers.data.map(u => (
                       <option key={u.username} value={u.username}>
@@ -209,7 +209,7 @@ export default function LoginPage() {
                     type="text"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)]/30 transition-all"
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                     placeholder="admin"
                   />
                   {devUsers.isError ? (
