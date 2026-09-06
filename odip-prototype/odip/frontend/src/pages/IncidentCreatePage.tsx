@@ -1,7 +1,7 @@
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch } from 'react-hook-form'
-import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff } from '@/api/hooks'
+import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
 import { ArrowLeft, Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
@@ -177,6 +177,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const mutation = isEdit ? updateIncident : createIncident
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
+  const { data: participants = [] } = useParticipants()
   const { id: currentUserId } = usePermissions()
 
   // INC-03: router-state prefill dropped in by RecordAdministrationModal after a
@@ -208,6 +209,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const familyNotified = useWatch({ control, name: 'familyNotified' })
   const supportCoordinatorNotified = useWatch({ control, name: 'supportCoordinatorNotified' })
   const involvedParticipantId = useWatch({ control, name: 'involvedParticipantId' })
+  // I-3: fetch every practice (active + inactive) for the currently-selected participant so the
+  // Review step can resolve a linked practice regardless of whether it's since gone inactive —
+  // RestrictivePracticeStep fetches its own copy for the picker, scoped to its own concerns.
+  const { data: allRestrictivePractices = [] } = useRestrictivePractices(involvedParticipantId || undefined, true)
   const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
@@ -444,12 +449,14 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   const staffName = (staffId: string | null | undefined) => staff.find((s) => s.id === staffId)?.fullName ?? '—'
   const tripName = (tripId: string | null | undefined) => trips.find((t) => t.id === tripId)?.tripName ?? '—'
+  const participantName = (participantId: string | null | undefined) => participants.find((p) => p.id === participantId)?.fullName ?? '—'
+  const practiceLabel = (practiceId: string | null | undefined) => allRestrictivePractices.find((p) => p.id === practiceId)?.description ?? '—'
 
   const reviewGroups: ReviewGroup[] = [
     {
       stepKey: 'basics',
       rows: [
-        { label: 'Involved Participant', value: involvedParticipantId ? '(selected)' : 'None' },
+        { label: 'Involved Participant', value: involvedParticipantId ? participantName(involvedParticipantId) : 'None' },
         { label: 'Title', value: getValues('title') || '—' },
         { label: 'Reported By', value: staffName(reportedByStaffId) },
         { label: 'Involved Staff Member', value: involvedStaffId ? staffName(involvedStaffId) : 'None' },
@@ -463,7 +470,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       stepKey: 'restrictivePractice',
       rows: [
         { label: 'Restrictive Practice Type', value: restrictivePracticeType ? (RESTRICTIVE_PRACTICE_TYPE_LABELS[restrictivePracticeType as keyof typeof RESTRICTIVE_PRACTICE_TYPE_LABELS] ?? restrictivePracticeType) : '—' },
-        { label: 'Linked Practice', value: restrictivePracticeId ? '(linked)' : 'Not linked' },
+        { label: 'Linked Practice', value: restrictivePracticeId ? practiceLabel(restrictivePracticeId) : 'Not linked' },
         { label: 'Unapproved Practice Details', value: unapprovedRestrictivePracticeDetails || '—' },
       ],
     }] : []),

@@ -142,6 +142,12 @@ async function addMinimalInjury(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Add injury' }))
 }
 
+/** Reads a Review-step row's value by its `<dt>` label text — the row layout is a fixed
+ * `<dt>{label}</dt><dd>{value}</dd>` sibling pair (WizardReviewStep's defaultRenderRow). */
+function reviewValueFor(label: string) {
+  return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
+}
+
 beforeEach(() => {
   mockUseIncident.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
@@ -516,12 +522,6 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     reportedByUserId: 'staff-1',
   }
 
-  /** Reads a Review-step row's value by its `<dt>` label text — the row layout is a fixed
-   * `<dt>{label}</dt><dd>{value}</dd>` sibling pair (WizardReviewStep's defaultRenderRow). */
-  function reviewValueFor(label: string) {
-    return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
-  }
-
   it('MAR prefill: every producer-supplied field lands on Basics or Incident Details and appears on Review; an untouched submit is a valid payload', async () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
@@ -552,7 +552,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(reviewValueFor('Description')).toBe(buildIncidentDescriptionSkeleton(marPrefill))
     expect(reviewValueFor('Date & Time')).toBe(buildIncidentDateTime(marPrefill))
     expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
-    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
     expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS.MedicationError)
     expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
     expect(reviewValueFor('Trip')).toBe('Gold Coast Beach Break')
@@ -605,7 +605,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(reviewValueFor('Description')).toBe(buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill))
     expect(reviewValueFor('Date & Time')).toBe(buildShiftNoteIncidentDateTime(shiftNotePrefill))
     expect(reviewValueFor('Reported By')).toBe('Alex Rivera')
-    expect(reviewValueFor('Involved Participant')).toBe('(selected)')
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
     expect(reviewValueFor('Incident Type')).toBe(INCIDENT_TYPE_LABELS[expectedType])
     expect(reviewValueFor('Severity')).toBe(INCIDENT_SEVERITY_LABELS.Medium)
     expect(reviewValueFor('Witnesses')).toBe('None recorded')
@@ -790,6 +790,23 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
       restrictivePracticeId: 'rp-1',
     })
     expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
+  })
+
+  it('resolves the linked practice to its description on Review, not the placeholder "(linked)"', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await clickNext(user) // Restrictive Practice -> Incident Details
+    await fillDetailsMinimallyAndNext(user)
+
+    expect(reviewValueFor('Involved Participant')).toBe('Sophie Brown')
+    expect(reviewValueFor('Linked Practice')).toBe('Seclusion room during acute crisis.')
   })
 })
 
