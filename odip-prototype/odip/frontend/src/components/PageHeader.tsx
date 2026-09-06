@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export type PageHeaderProps = {
   title: string
@@ -8,6 +9,7 @@ export type PageHeaderProps = {
 }
 
 export function PageHeader({ title, subtitle, action, children }: PageHeaderProps) {
+  useDocumentTitle(title)
   return (
     <>
       <div className="flex items-center justify-between">

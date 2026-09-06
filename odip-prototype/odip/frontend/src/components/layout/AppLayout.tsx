@@ -133,6 +133,12 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-[#fbf9f5]">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-[var(--color-primary)] focus:text-[var(--color-primary-foreground)] focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-2"
+      >
+        Skip to content
+      </a>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -154,7 +160,7 @@ export default function AppLayout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-0.5 overflow-y-auto">
+        <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto">
           {navItems.map(item => {
             if ('children' in item) {
               const visibleChildren = item.children.filter(child => permissions.canAccessPage(child.page))
@@ -333,13 +339,13 @@ export default function AppLayout() {
           only thing ever setting padding-bottom, so it can't be clobbered by a later
           breakpoint's shorthand again.
         */}
-        <main className="flex-1 px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8 pb-24 lg:pb-8">
+        <main id="main" className="flex-1 px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8 pb-24 lg:pb-8">
           <Outlet />
         </main>
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#fbf9f5]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
+      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#fbf9f5]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
         <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
           <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
           <span className="text-[10px] font-medium">Dashboard</span>
