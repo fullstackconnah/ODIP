@@ -263,7 +263,6 @@ export function DataTable<T>({
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
                   tabIndex={isSortable ? 0 : undefined}
-                  role={isSortable ? 'button' : undefined}
                 >
                   <span className="inline-flex items-center gap-1 flex-wrap">
                     {col.header}
@@ -326,7 +325,6 @@ export function DataTable<T>({
                   onClick={isClickable ? () => onRowClick(row) : undefined}
                   onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
                   tabIndex={isClickable ? 0 : undefined}
-                  role={isClickable ? 'button' : undefined}
                 >
                   {selectable && (
                     <td

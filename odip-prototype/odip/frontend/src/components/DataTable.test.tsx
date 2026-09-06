@@ -43,7 +43,7 @@ describe('DataTable — sortable columns', () => {
     const user = userEvent.setup()
     render(<DataTable data={rows} columns={columns} keyField="id" sortable />)
 
-    const nameHeader = screen.getByRole('button', { name: /name/i })
+    const nameHeader = screen.getByRole('columnheader', { name: /name/i })
     expect(nameHeader).toHaveAttribute('aria-sort', 'none')
 
     await user.click(nameHeader)
@@ -60,7 +60,7 @@ describe('DataTable — sortable columns', () => {
     const user = userEvent.setup()
     render(<DataTable data={rows} columns={columns} keyField="id" sortable />)
 
-    await user.click(screen.getByRole('button', { name: /name/i }))
+    await user.click(screen.getByRole('columnheader', { name: /name/i }))
 
     const cells = screen.getAllByRole('cell')
     // Ascending by name: Alex before Bianca.
@@ -373,5 +373,37 @@ describe('DataTable — vertical dividers driven by the GEN-2 UI preference', ()
     render(<DataTable data={rows} columns={columns} keyField="id" />)
 
     expectAllRowsToMatchDivider(false)
+  })
+})
+
+describe('DataTable — native table semantics (C-3)', () => {
+  it('never puts role="button" on a sortable header — aria-sort stays on the native columnheader role', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" sortable />)
+
+    const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    expect(nameHeader).not.toHaveAttribute('role')
+    expect(nameHeader).toHaveAttribute('aria-sort')
+  })
+
+  it('never puts role="button" on a clickable row — rows keep their native row role and cells stay navigable', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" onRowClick={vi.fn()} />)
+
+    for (const row of screen.getAllByRole('row')) {
+      expect(row).not.toHaveAttribute('role')
+    }
+    // Cells are still individually exposed, not flattened into one string per row.
+    expect(screen.getAllByRole('cell').length).toBeGreaterThan(0)
+  })
+
+  it('keeps a clickable row keyboard-operable (tabIndex + Enter) even without role="button"', async () => {
+    const user = userEvent.setup()
+    const onRowClick = vi.fn()
+    render(<DataTable data={rows} columns={columns} keyField="id" onRowClick={onRowClick} />)
+
+    const firstDataRow = screen.getAllByRole('row')[1]
+    expect(firstDataRow).toHaveAttribute('tabIndex', '0')
+    firstDataRow.focus()
+    await user.keyboard('{Enter}')
+    expect(onRowClick).toHaveBeenCalledWith(rows[0])
   })
 })
