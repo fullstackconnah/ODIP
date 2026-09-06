@@ -104,7 +104,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
               onChange={e => setShiftNotes(e.target.value)}
               rows={2}
               placeholder="E.g. arrive evening before, depart early last day..."
-              className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-none"
+              className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
           </div>
           <div className="flex gap-3 pt-1">

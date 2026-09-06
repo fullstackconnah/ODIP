@@ -76,7 +76,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
               onChange={e => setComments(e.target.value)}
               rows={2}
               placeholder="E.g. pickup from depot, needs fuel..."
-              className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 resize-none"
+              className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
           </div>
           <div className="flex gap-3 pt-1">

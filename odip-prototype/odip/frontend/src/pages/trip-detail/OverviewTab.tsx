@@ -140,7 +140,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
               <p className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Staff Roster</p>
               <div className="space-y-2">
                 {staff.slice(0, 3).map((s: StaffAssignmentDto, i: number) => (
-                  <div key={s.id} className={`bg-[var(--color-surface-container-low)] p-4 rounded-xl flex items-center justify-between ${i === 0 ? 'ring-2 ring-[var(--color-primary)]/20' : ''}`}>
+                  <div key={s.id} className={`bg-[var(--color-surface-container-low)] p-4 rounded-xl flex items-center justify-between ${i === 0 ? 'ring-2 ring-[var(--color-ring)]' : ''}`}>
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)] font-bold text-xs">
                         {(s.staffName || 'S').split(' ').map((n: string) => n[0]).join('').slice(0, 2)}

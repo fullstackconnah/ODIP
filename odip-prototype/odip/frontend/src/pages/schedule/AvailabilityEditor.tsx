@@ -105,8 +105,8 @@ export default function AvailabilityEditor({ staffId, staffName, availability }:
     }, { onSuccess: () => setAdding(null) })
   }
 
-  const dateInputClass = 'px-2 py-1 rounded-lg bg-[var(--color-surface-container-low)] border-none outline-none text-xs focus:ring-2 focus:ring-[var(--color-primary)]/30'
-  const notesInputClass = 'flex-1 px-2 py-1 rounded-lg bg-[var(--color-surface-container-low)] border-none outline-none text-xs focus:ring-2 focus:ring-[var(--color-primary)]/30'
+  const dateInputClass = 'px-2 py-1 rounded-lg bg-[var(--color-surface-container-low)] border-none outline-none text-xs focus:ring-2 focus:ring-[var(--color-ring)]'
+  const notesInputClass = 'flex-1 px-2 py-1 rounded-lg bg-[var(--color-surface-container-low)] border-none outline-none text-xs focus:ring-2 focus:ring-[var(--color-ring)]'
 
   return (
     <div className="pl-8 py-3">
