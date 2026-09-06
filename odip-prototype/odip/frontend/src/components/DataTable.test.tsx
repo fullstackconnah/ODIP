@@ -407,3 +407,27 @@ describe('DataTable — native table semantics (C-3)', () => {
     expect(onRowClick).toHaveBeenCalledWith(rows[0])
   })
 })
+
+describe('DataTable — mobile card view (I-1)', () => {
+  it('applies the mobile-card-table class so the existing CSS-only card transform activates under 768px', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    expect(screen.getByRole('table')).toHaveClass('mobile-card-table')
+  })
+
+  it('emits a data-label attribute on each cell equal to its column header text, for the CSS pseudo-header', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    expect(screen.getByText('Bianca').closest('td')).toHaveAttribute('data-label', 'Name')
+    expect(screen.getByText('30').closest('td')).toHaveAttribute('data-label', 'Age')
+  })
+
+  it('emits an empty data-label (never the literal "undefined") for a column with a non-string ReactNode header', () => {
+    const columnsWithNodeHeader: Column<Row>[] = [
+      { key: 'name', header: <span>Name</span> },
+    ]
+    render(<DataTable data={rows} columns={columnsWithNodeHeader} keyField="id" />)
+
+    expect(screen.getByText('Bianca').closest('td')).toHaveAttribute('data-label', '')
+  })
+})

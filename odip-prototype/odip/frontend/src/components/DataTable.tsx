@@ -222,7 +222,7 @@ export function DataTable<T>({
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <table className="w-full text-sm">
+      <table className="w-full text-sm mobile-card-table">
         <thead className="bg-[var(--color-accent)]">
           <tr className={dividerClass}>
             {selectable && (
@@ -353,14 +353,14 @@ export function DataTable<T>({
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
+                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
 
                     return (
-                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`}>
+                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                         {renderCell(row, col, rowIndex)}
                       </td>
                     )
