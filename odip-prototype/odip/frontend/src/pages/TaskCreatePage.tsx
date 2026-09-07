@@ -3,8 +3,7 @@ import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCreateTask, useUpdateTask, useTrips, useStaff } from '@/api/hooks'
-import { apiClient } from '@/api/client'
+import { useCreateTask, useUpdateTask, useTask, useTrips, useStaff } from '@/api/hooks'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
@@ -67,8 +66,7 @@ export default function TaskCreatePage() {
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
 
-  // For edit mode, we load the task from the tasks list since there's no single-task endpoint
-  // We'll pass task data via navigation state instead
+  const { data: existingTask, isError: isTaskError } = useTask(isEdit ? id : undefined)
 
   const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -79,35 +77,22 @@ export default function TaskCreatePage() {
     },
   })
 
-  // For edit mode: load task data from tasks list
+  // For edit mode: load task data from the dedicated single-task endpoint (PP-10/PP-11).
   useEffect(() => {
-    if (isEdit) {
-      // Fetch tasks and find the one we need
-      const fetchTask = async () => {
-        try {
-          const res = await apiClient.get(`/tasks?status=`)
-          const tasks = res.data?.data ?? []
-          const task = tasks.find((t: any) => t.id === id)
-          if (task) {
-            reset({
-              tripInstanceId: task.tripInstanceId ?? '',
-              taskType: task.taskType ?? 'Other',
-              title: task.title ?? '',
-              ownerId: task.ownerId ?? '',
-              priority: task.priority ?? 'Medium',
-              dueDate: task.dueDate ?? '',
-              status: task.status ?? 'NotStarted',
-              completedDate: task.completedDate ?? '',
-              notes: task.notes ?? '',
-            })
-          }
-        } catch (err) {
-          console.error('Failed to load task:', err)
-        }
-      }
-      fetchTask()
+    if (existingTask) {
+      reset({
+        tripInstanceId: existingTask.tripInstanceId ?? '',
+        taskType: existingTask.taskType ?? 'Other',
+        title: existingTask.title ?? '',
+        ownerId: existingTask.ownerId ?? '',
+        priority: existingTask.priority ?? 'Medium',
+        dueDate: existingTask.dueDate ?? '',
+        status: existingTask.status ?? 'NotStarted',
+        completedDate: existingTask.completedDate ?? '',
+        notes: existingTask.notes ?? '',
+      })
     }
-  }, [id, isEdit, reset])
+  }, [existingTask, reset])
 
   const onSubmit = async (data: TaskFormData) => {
     const payload: any = { ...data }
@@ -134,6 +119,24 @@ export default function TaskCreatePage() {
   }
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
+  // PP-10/PP-11: a failed/not-found single-task fetch must surface visibly, not silently fall
+  // back to rendering the create-mode form with blank defaults.
+  if (isEdit && isTaskError) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Link to="/tasks" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-xl md:text-2xl font-bold">Edit Task</h1>
+        </div>
+        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          Couldn't find this task. It may have been deleted, or something went wrong loading it.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

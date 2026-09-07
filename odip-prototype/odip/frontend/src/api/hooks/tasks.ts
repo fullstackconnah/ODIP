@@ -9,6 +9,15 @@ export function useTasks(params?: Record<string, string>) {
   })
 }
 
+/** PP-10/PP-11: single-task fetch for the edit page — mirrors useIncident's shape/pattern. */
+export function useTask(id: string | undefined) {
+  return useQuery({
+    queryKey: ['task', id],
+    queryFn: () => apiGet<TaskDto>(`/tasks/${id}`),
+    enabled: !!id,
+  })
+}
+
 export function useTripTasks(tripId: string | undefined) {
   return useQuery({
     queryKey: ['trip-tasks', tripId],

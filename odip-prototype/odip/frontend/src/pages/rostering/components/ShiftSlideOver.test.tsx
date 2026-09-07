@@ -162,6 +162,64 @@ describe('ShiftSlideOver override gate', () => {
   })
 })
 
+describe('ShiftSlideOver status (PP-8)', () => {
+  it('echoes the shift\'s current status back unchanged on save, without the user touching it', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ status: 'Published', findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.status).toBe('Published')
+  })
+
+  it('lets the coordinator move a shift from Draft to Published via the Status control', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ status: 'Draft', findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name: 'Published' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.status).toBe('Published')
+  })
+
+  it('does not render a Status control in create mode', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
+  })
+})
+
 describe('ShiftSlideOver routines & specifics', () => {
   // makeShift's default serviceDate (2026-08-17) is a Monday, 09:00–17:00.
   it('renders a routine whose window overlaps the shift', () => {

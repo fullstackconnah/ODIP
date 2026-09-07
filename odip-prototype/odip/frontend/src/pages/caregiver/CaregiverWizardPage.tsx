@@ -35,6 +35,7 @@ import {
 } from '@/lib/participantSchema'
 import { buildProfileStepPatch } from '@/lib/participantPatchGroups'
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
+import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { KeyIdentifiersStep } from '../profile/steps/KeyIdentifiersStep'
@@ -256,6 +257,6 @@ function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<Caregiver
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.slice(0, 4).map((f) => ({ label: String(f), value: String((values as Record<string, unknown>)[f as string] ?? '—') })),
+      : step.fields.slice(0, 4).map((f) => ({ label: fieldLabel(String(f)), value: normValue((values as Record<string, unknown>)[f as string]) || '—' })),
   }))
 }

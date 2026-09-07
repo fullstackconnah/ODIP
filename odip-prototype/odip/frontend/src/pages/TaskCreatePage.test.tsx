@@ -3,10 +3,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import TaskCreatePage from './TaskCreatePage'
+import type { TaskDto } from '@/api/types'
 
-const { mockCreateMutateAsync, mockUpdateMutateAsync } = vi.hoisted(() => ({
+const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseTask } = vi.hoisted(() => ({
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
+  mockUseTask: vi.fn((): { data: TaskDto | undefined; isError: boolean } => ({ data: undefined, isError: false })),
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
@@ -15,6 +17,7 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useCreateTask: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
   useUpdateTask: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
+  useTask: mockUseTask,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }] }),
   useStaff: () => ({ data: [
     { id: 'staff-1', fullName: 'Alex Rivera' },
@@ -36,9 +39,22 @@ function renderCreatePage() {
   return render(<RouterProvider router={router} />)
 }
 
+function renderEditPage(id = 'task-1') {
+  const router = createMemoryRouter(
+    [
+      { path: '/tasks/:id/edit', element: <TaskCreatePage /> },
+      { path: '/tasks', element: <div>Tasks list</div> },
+    ],
+    { initialEntries: [`/tasks/${id}/edit`] },
+  )
+  return render(<RouterProvider router={router} />)
+}
+
 beforeEach(() => {
   mockCreateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockReset()
+  mockUseTask.mockReset()
+  mockUseTask.mockReturnValue({ data: undefined, isError: false })
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-task-1' } })
 })
 
@@ -81,5 +97,31 @@ describe('TaskCreatePage — UX-01 Owner picker (SearchableSelect)', () => {
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
 
     expect(owner).toHaveValue('Alex Rivera')
+  })
+})
+
+describe('TaskCreatePage — edit mode single-task fetch (PP-10/PP-11)', () => {
+  it('loads the form from useTask(id) instead of the whole task list', () => {
+    mockUseTask.mockReturnValue({
+      data: {
+        id: 'task-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+        participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+        taskType: 'Other', title: 'Confirm accommodation booking', ownerId: null, ownerName: null,
+        priority: 'Medium', dueDate: null, status: 'NotStarted', completedDate: null, notes: null,
+      },
+      isError: false,
+    })
+    renderEditPage()
+
+    expect(mockUseTask).toHaveBeenCalledWith('task-1')
+    expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeInTheDocument()
+  })
+
+  it('shows a visible not-found message instead of silently falling back to create-mode defaults', () => {
+    mockUseTask.mockReturnValue({ data: undefined, isError: true })
+    renderEditPage()
+
+    expect(screen.getByText(/couldn't find this task/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
   })
 })

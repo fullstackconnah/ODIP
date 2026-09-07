@@ -130,6 +130,13 @@ export interface CreateShiftDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  /**
+   * PP-8: the backend's UpdateShiftDto.Status defaults to Draft when the field is absent from
+   * the request body — without this, every edit silently reset a Published/Completed shift back
+   * to Draft. Create ignores this (the backend hardcodes Status = Draft on create), so its value
+   * here is inert but kept required so callers can't accidentally omit it on Update.
+   */
+  status: ShiftStatus
   shiftPatternId?: string | null
   notes?: string | null
   overrideReason: string | null

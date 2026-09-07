@@ -20,13 +20,13 @@ const COLLECTION_KEYS: Record<string, string> = {
   checklistItems: 'itemType',
 }
 
-function norm(v: unknown): string {
+export function norm(v: unknown): string {
   if (v === null || v === undefined || v === '') return ''
   if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
 }
 
-function label(field: string): string {
+export function label(field: string): string {
   return getFieldMapping(field)?.label ?? field
 }
 

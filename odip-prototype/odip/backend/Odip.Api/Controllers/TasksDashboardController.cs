@@ -57,6 +57,31 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse<List<TaskDto>>.Ok(items));
     }
 
+    /// <summary>
+    /// PP-10/PP-11: dedicated single-task fetch for the edit page — previously the frontend
+    /// fetched the whole `GetAll` list and `.find`'d the id client-side, which silently fell back
+    /// to create-mode defaults on any error/not-found. Same shape and tenant scoping (via the
+    /// ambient OdipDbContext query filter) as GetAll.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<TaskDto>>> GetById(Guid id, CancellationToken ct)
+    {
+        var t = await _db.BookingTasks.Include(x => x.TripInstance).Include(x => x.Owner)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+
+        return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
+        {
+            Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
+            ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
+            VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
+            TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
+            OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+            Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
+            CompletedDate = t.CompletedDate, Notes = t.Notes
+        }));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TaskDto>>> Create([FromBody] CreateTaskDto dto, CancellationToken ct)

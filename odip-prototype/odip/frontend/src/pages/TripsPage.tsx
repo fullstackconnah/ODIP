@@ -261,11 +261,11 @@ export default function TripsPage() {
               <div className="flex items-center justify-between pt-3 mt-1">
                 <div className="flex items-center gap-1">
                   {canWrite && (
-                    <div className="max-w-0 overflow-hidden group-hover:max-w-[2rem] transition-all duration-200">
+                    <div className="max-w-0 overflow-hidden group-hover:max-w-[2rem] focus-within:max-w-[2rem] transition-all duration-200">
                       <button
                         onClick={e => handleOpenEdit(t.id, e)}
                         title="Edit trip"
-                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-[var(--color-surface-container-low)] transition-opacity"
+                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 hover:bg-[var(--color-surface-container-low)] transition-opacity"
                       >
                         <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                       </button>

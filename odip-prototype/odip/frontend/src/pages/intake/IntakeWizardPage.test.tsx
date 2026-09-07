@@ -144,6 +144,34 @@ describe('IntakeWizardPage — step gating and navigation', () => {
   })
 })
 
+describe('IntakeWizardPage — unsaved-changes guard (PP-5)', () => {
+  it('warns before navigating away with unsaved changes, and proceeds once confirmed', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+    await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+
+    const backLink = screen.getAllByRole('link').find((el) => el.getAttribute('href') === '/participants')
+    expect(backLink).toBeTruthy()
+    await user.click(backLink!)
+
+    expect(await screen.findByText(/leave without saving/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /leave page/i }))
+
+    await screen.findByText('Participants list')
+  })
+
+  it('does not warn when navigating away with no changes made', async () => {
+    const user = userEvent.setup()
+    renderIntakePage()
+
+    const backLink = screen.getAllByRole('link').find((el) => el.getAttribute('href') === '/participants')
+    await user.click(backLink!)
+
+    expect(screen.queryByText(/leave without saving/i)).not.toBeInTheDocument()
+    await screen.findByText('Participants list')
+  })
+})
+
 describe('IntakeWizardPage — completion and draft-save', () => {
   async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
     await fillNameAndAdvance(user)

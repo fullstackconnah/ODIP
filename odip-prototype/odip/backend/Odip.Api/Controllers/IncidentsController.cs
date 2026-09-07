@@ -579,7 +579,11 @@ public class IncidentsController : ControllerBase
     {
         var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<bool>.Fail("Incident not found"));
-        i.IsActive = false;
+        // PP-2: status-only lifecycle, matching TasksDashboardController's archive pattern —
+        // IsActive is left untouched so GetAll's default `isActive == true` filter doesn't hide
+        // archived incidents, and the Archived tab (status=Closed) plus Restore (status=Draft)
+        // both operate purely on Status.
+        i.Status = IncidentStatus.Closed;
         i.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
