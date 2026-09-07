@@ -40,10 +40,13 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
   const endCol = clampedDayIndex(leave.endDate, days) + 2
 
   if (leave.kind === 'RecurringRule' && leave.startTime && leave.endTime) {
-    const leftPct = timeOfDayPercent(leave.startTime)
+    const rawLeft = timeOfDayPercent(leave.startTime)
     // Floors the visible width so a very short window (e.g. 30 minutes, ~2% of a day) still
-    // renders as a clickable/legible sliver instead of collapsing to near-nothing.
-    const widthPct = Math.max(timeOfDayPercent(leave.endTime) - leftPct, 4)
+    // renders as a clickable/legible sliver instead of collapsing to near-nothing, then clamps
+    // both width and left so a window ending near midnight (e.g. 23:58–23:59:59) never pushes
+    // left + width past 100% and overflows the day cell.
+    const widthPct = Math.min(100, Math.max(timeOfDayPercent(leave.endTime) - rawLeft, 4))
+    const leftPct = Math.min(rawLeft, 100 - widthPct)
     const windowLabel = `${leave.startTime.slice(0, 5)}–${leave.endTime.slice(0, 5)}`
     const title = leave.notes ?? `Unavailable ${windowLabel}`
 

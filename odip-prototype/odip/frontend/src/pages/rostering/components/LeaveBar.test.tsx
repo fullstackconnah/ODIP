@@ -62,4 +62,17 @@ describe('LeaveBar kind handling', () => {
     // 2026-09-09 is DAYS[2] → 1-based grid column 3, spanning to column 4 (one day wide).
     expect(screen.getByText('13:00–17:00').closest('[style*="grid-column"]')).toHaveStyle({ gridColumn: '3 / 4' })
   })
+
+  it('clamps a recurring-rule window ending near midnight so the block never overflows its day cell', () => {
+    const leave = makeLeaveBar({
+      kind: 'RecurringRule', startDate: '2026-09-10', endDate: '2026-09-10', startTime: '23:58:00', endTime: '23:59:59',
+    })
+    render(<LeaveBar leave={leave} days={DAYS} />)
+    const block = screen.getByText('23:58–23:59')
+    expect(block.parentElement).toHaveStyle({ left: '96%', width: '4%' })
+    const style = block.parentElement?.getAttribute('style') ?? ''
+    const left = parseFloat(/left:\s*([\d.]+)%/.exec(style)?.[1] ?? '0')
+    const width = parseFloat(/width:\s*([\d.]+)%/.exec(style)?.[1] ?? '0')
+    expect(left + width).toBeLessThanOrEqual(100)
+  })
 })
