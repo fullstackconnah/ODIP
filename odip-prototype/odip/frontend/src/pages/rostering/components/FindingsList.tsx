@@ -33,6 +33,11 @@ export function FindingsList({ findings, className }: FindingsListProps) {
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
             )}
             <span>{finding.message}</span>
+            {!blocking && finding.requiresReason && (
+              <span className="ml-auto shrink-0 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-on-warning-container)]">
+                Reason required
+              </span>
+            )}
           </li>
         )
       })}

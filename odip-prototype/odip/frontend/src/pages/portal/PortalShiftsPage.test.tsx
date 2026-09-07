@@ -110,4 +110,10 @@ describe('PortalShiftsPage', () => {
     expect(screen.getByText('Beach Getaway')).toBeInTheDocument()
     expect(screen.getByText(/driver/i)).toBeInTheDocument()
   })
+
+  it('links to the leave portal page', () => {
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
+    renderPage()
+    expect(screen.getByRole('link', { name: /my leave/i })).toHaveAttribute('href', '/portal/leave')
+  })
 })

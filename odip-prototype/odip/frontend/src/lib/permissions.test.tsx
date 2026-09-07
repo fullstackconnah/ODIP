@@ -16,6 +16,16 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
   )
 }
 
+function CapabilityProbe() {
+  const { canRequestLeave, canApproveLeave } = usePermissions()
+  return (
+    <ul>
+      <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
+      <li data-testid="can-approve-leave">{String(canApproveLeave)}</li>
+    </ul>
+  )
+}
+
 function setUserRole(role: UserRole) {
   localStorage.setItem('odip_user', JSON.stringify({ role }))
 }
@@ -48,5 +58,65 @@ describe('usePermissions.canAccessPage', () => {
   it('allows rostering when there is no logged-in user at all', () => {
     render(<PermissionsProbe pages={['rostering']} />)
     expect(screen.getByTestId('page-rostering')).toHaveTextContent('true')
+  })
+})
+
+describe('usePermissions leave capabilities', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('canRequestLeave is true for every role except ReadOnly', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'SupportWorker'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-request-leave')).toHaveTextContent('true')
+      unmount()
+    }
+  })
+
+  it('canRequestLeave is false for ReadOnly', () => {
+    setUserRole('ReadOnly')
+    render(<CapabilityProbe />)
+    expect(screen.getByTestId('can-request-leave')).toHaveTextContent('false')
+  })
+
+  it('canApproveLeave is true only for Admin, Coordinator and SuperAdmin', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-approve-leave')).toHaveTextContent('true')
+      unmount()
+    }
+    for (const role of ['SupportWorker', 'ReadOnly'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-approve-leave')).toHaveTextContent('false')
+      unmount()
+    }
+  })
+})
+
+describe('usePermissions.canAccessPage — leave pages', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('includes portal-leave in the SupportWorker allowlist', () => {
+    setUserRole('SupportWorker')
+    render(<PermissionsProbe pages={['portal-leave']} />)
+    expect(screen.getByTestId('page-portal-leave')).toHaveTextContent('true')
+  })
+
+  it('excludes leave-approvals from the SupportWorker allowlist', () => {
+    setUserRole('SupportWorker')
+    render(<PermissionsProbe pages={['leave-approvals']} />)
+    expect(screen.getByTestId('page-leave-approvals')).toHaveTextContent('false')
+  })
+
+  it('allows a non-SupportWorker role onto leave-approvals', () => {
+    setUserRole('Coordinator')
+    render(<PermissionsProbe pages={['leave-approvals']} />)
+    expect(screen.getByTestId('page-leave-approvals')).toHaveTextContent('true')
   })
 })

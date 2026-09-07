@@ -2,13 +2,13 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
   ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
-  CalendarClock, Pill, CalendarCheck2, ClipboardCheck
+  CalendarClock, Pill, CalendarCheck2, ClipboardCheck, CalendarOff
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { usePermissions, type PageKey } from '@/lib/permissions'
-import { usePendingWitnessRequests } from '@/api/hooks'
+import { usePendingWitnessRequests, usePendingLeaveCount } from '@/api/hooks'
 
 type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey }
 type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeaf[] }
@@ -37,6 +37,7 @@ const navItems: NavEntry[] = [
       { to: '/rostering', icon: CalendarClock, label: 'Board', msIcon: 'calendar_view_week', page: 'rostering' },
       { to: '/rostering/patterns', icon: CalendarClock, label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
       { to: '/rostering/compatibility', icon: CalendarClock, label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
+      { to: '/rostering/leave', icon: CalendarOff, label: 'Leave', msIcon: 'event_busy', page: 'leave-approvals' },
     ],
   },
   { to: '/billing', icon: Receipt, label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
@@ -87,6 +88,10 @@ export default function AppLayout() {
   // since usePendingWitnessRequests already resolves to an empty list for an unlinked account.
   const { data: pendingWitnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = pendingWitnessRequests?.length ?? 0
+  // LeaveController is Admin/Coordinator/SuperAdmin only server-side — gate the poll so a
+  // SupportWorker/ReadOnly session doesn't 403-and-retry against /leave every 60s for the
+  // life of the app shell.
+  const pendingLeaveCount = usePendingLeaveCount(permissions.canApproveLeave)
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>()
     navItems.forEach(item => {
@@ -198,22 +203,39 @@ export default function AppLayout() {
                     }`}
                   >
                     <div className="min-h-0 space-y-0.5">
-                      {visibleChildren.map(({ to, label, msIcon }) => (
-                        <NavLink key={to} to={to} end={isExactMatchOnly(to)}
-                          tabIndex={isOpen ? undefined : -1}
-                          className={({ isActive }) =>
-                            `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
-                              isActive
-                                ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-                                : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
-                            }`
-                          }
-                          onClick={() => setSidebarOpen(false)}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{msIcon}</span>
-                          {label}
-                        </NavLink>
-                      ))}
+                      {visibleChildren.map(({ to, label, msIcon }) => {
+                        const showLeaveBadge = to === '/rostering/leave' && pendingLeaveCount > 0
+                        return (
+                          <NavLink key={to} to={to} end={isExactMatchOnly(to)}
+                            tabIndex={isOpen ? undefined : -1}
+                            // The badge's digit box is aria-hidden (below) and this aria-label carries
+                            // the pending-count announcement instead — ordered "<count>, <label>" so the
+                            // link's accessible name still ends with the plain label, matching every
+                            // other nav leaf's name-ends-with-label convention (see e.g. AppLayout.test.tsx's
+                            // `/Board$/`/`/Patterns$/` assertions) instead of trailing off with the badge text.
+                            aria-label={showLeaveBadge ? `${pendingLeaveCount} leave request${pendingLeaveCount === 1 ? '' : 's'} pending, ${label}` : undefined}
+                            className={({ isActive }) =>
+                              `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
+                                isActive
+                                  ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+                                  : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
+                              }`
+                            }
+                            onClick={() => setSidebarOpen(false)}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{msIcon}</span>
+                            <span className="flex-1">{label}</span>
+                            {showLeaveBadge && (
+                              <span
+                                aria-hidden="true"
+                                className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
+                              >
+                                {pendingLeaveCount > 99 ? '99+' : pendingLeaveCount}
+                              </span>
+                            )}
+                          </NavLink>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>

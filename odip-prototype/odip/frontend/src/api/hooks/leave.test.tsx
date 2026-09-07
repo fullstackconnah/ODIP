@@ -1,0 +1,173 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+
+const { mockApiGet, mockApiGetWithDefault, mockApiPost } = vi.hoisted(() => ({
+  mockApiGet: vi.fn(async () => ({ leave: [], unavailability: [] })),
+  mockApiGetWithDefault: vi.fn(async (): Promise<unknown[]> => []),
+  mockApiPost: vi.fn(async () => ({})),
+}))
+
+vi.mock('../client', () => ({
+  apiGet: mockApiGet,
+  apiGetWithDefault: mockApiGetWithDefault,
+  apiPost: mockApiPost,
+}))
+
+import {
+  useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability,
+  useLeaveRequests, useRecurringUnavailabilities, usePendingLeaveCount,
+  useCreateLeaveOnBehalf, useApproveLeave, useDeclineLeave, useCancelLeave,
+  useCreateUnavailabilityOnBehalf, useApproveUnavailability, useDeclineUnavailability, useCancelUnavailability,
+} from './leave'
+
+function wrapper(qc: QueryClient) {
+  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+}
+
+beforeEach(() => {
+  mockApiGet.mockClear()
+  mockApiGetWithDefault.mockClear().mockResolvedValue([])
+  mockApiPost.mockClear().mockResolvedValue({})
+})
+
+describe('leave hooks — portal (self-service)', () => {
+  it('useMyLeave reads GET /portal/leave', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useMyLeave(), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiGet).toHaveBeenCalledWith('/portal/leave')
+  })
+
+  it('useCreateLeaveRequest posts to /portal/leave and invalidates portal-my-leave + leave-requests + roster-board', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateLeaveRequest(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18' })
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/leave', { leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('useCancelMyLeave posts to /portal/leave/{id}/cancel and invalidates portal-my-leave + leave-requests + roster-board', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCancelMyLeave(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('leave-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/leave/leave-1/cancel')
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('useCreateMyUnavailability posts to /portal/unavailability and invalidates portal-my-leave + recurring-unavailabilities', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateMyUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07' })
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/unavailability', { dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
+  })
+
+  it('useCancelMyUnavailability posts to /portal/unavailability/{id}/cancel and invalidates portal-my-leave + recurring-unavailabilities', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCancelMyUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('rule-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/unavailability/rule-1/cancel')
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
+  })
+})
+
+describe('leave hooks — coordinator', () => {
+  it('useLeaveRequests reads GET /leave with filters', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useLeaveRequests({ status: 'Pending' }), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave', [], { status: 'Pending' })
+  })
+
+  it('useRecurringUnavailabilities reads GET /leave/unavailability with filters', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useRecurringUnavailabilities({ userId: 'staff-1' }), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { userId: 'staff-1' })
+  })
+
+  it('usePendingLeaveCount derives a count from the same Pending list', async () => {
+    mockApiGetWithDefault.mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
+    const qc = new QueryClient()
+    const { result } = renderHook(() => usePendingLeaveCount(), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(result.current).toBe(2))
+    expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave', [], { status: 'Pending' })
+  })
+
+  it('useCreateLeaveOnBehalf posts to /leave and invalidates leave-requests + roster-board', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateLeaveOnBehalf(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18', userId: 'staff-1' })
+    expect(mockApiPost).toHaveBeenCalledWith('/leave', { leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18', userId: 'staff-1' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('useApproveLeave posts to /leave/{id}/approve and invalidates leave-requests + roster-board', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useApproveLeave(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('leave-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/approve')
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('useDeclineLeave posts the decision note to /leave/{id}/decline and invalidates leave-requests + roster-board', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useDeclineLeave(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ id: 'leave-1', data: { decisionNote: 'Not enough notice' } })
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/decline', { decisionNote: 'Not enough notice' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('useCancelLeave posts to /leave/{id}/cancel', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useCancelLeave(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('leave-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/cancel')
+  })
+
+  it('useCreateUnavailabilityOnBehalf posts to /leave/unavailability', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useCreateUnavailabilityOnBehalf(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07', userId: 'staff-1' })
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/unavailability', { dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07', userId: 'staff-1' })
+  })
+
+  it('useApproveUnavailability posts to /leave/unavailability/{id}/approve', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useApproveUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('rule-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/unavailability/rule-1/approve')
+  })
+
+  it('useDeclineUnavailability posts the decision note to /leave/unavailability/{id}/decline', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useDeclineUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ id: 'rule-1', data: { decisionNote: 'Roster gap' } })
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/unavailability/rule-1/decline', { decisionNote: 'Roster gap' })
+  })
+
+  it('useCancelUnavailability posts to /leave/unavailability/{id}/cancel', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useCancelUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync('rule-1')
+    expect(mockApiPost).toHaveBeenCalledWith('/leave/unavailability/rule-1/cancel')
+  })
+})

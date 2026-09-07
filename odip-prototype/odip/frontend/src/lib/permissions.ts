@@ -3,6 +3,7 @@ export type UserRole = 'SuperAdmin' | 'Admin' | 'Coordinator' | 'SupportWorker' 
 export type PageKey =
   | 'dashboard'
   | 'portal'
+  | 'portal-leave'
   | 'trips'
   | 'schedule'
   | 'participants'
@@ -16,12 +17,14 @@ export type PageKey =
   | 'claims'
   | 'billing'
   | 'rostering'
+  | 'leave-approvals'
   | 'settings'
   | 'medications';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
   'portal',
+  'portal-leave',
   'trips',
   'schedule',
   'participants',
@@ -204,5 +207,11 @@ export function usePermissions() {
      * Bank details fields are hidden from Coordinator.
      */
     showBankDetails: !isCoordinator,
+
+    /** Mirrors PortalController's leave endpoints — any non-ReadOnly authenticated user. */
+    canRequestLeave: !isReadOnly,
+
+    /** Mirrors LeaveController's [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]. */
+    canApproveLeave: isSuperAdmin || isAdmin || isCoordinator,
   };
 }

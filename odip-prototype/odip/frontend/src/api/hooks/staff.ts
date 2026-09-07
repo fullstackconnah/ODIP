@@ -9,7 +9,6 @@ import type {
   CreateStaffAssignmentDto,
   UpdateStaffAssignmentDto,
   StaffAvailabilityDto,
-  CreateStaffAvailabilityDto,
   UpdateStaffAvailabilityDto,
 } from '../types'
 
@@ -114,18 +113,6 @@ export function useDeleteStaffAssignment() {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
-    },
-  })
-}
-
-export function useCreateStaffAvailability() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (data: CreateStaffAvailabilityDto) =>
-      apiPostRaw<StaffAvailabilityDto>('/staff-availability', data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
-      qc.invalidateQueries({ queryKey: ['staff-availability'] })
     },
   })
 }

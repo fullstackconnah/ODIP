@@ -47,11 +47,13 @@ const ClaimBatchBuilderPage = React.lazy(() => import('@/pages/ClaimBatchBuilder
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
+const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
 const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
+const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,12 +134,14 @@ const router = createBrowserRouter(
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />
         <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
+        <Route path="/rostering/leave" element={<PrivateRoute page="leave-approvals"><LeaveApprovalsPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/portal" element={<PrivateRoute page="portal"><PortalShiftsPage /></PrivateRoute>} />
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />
+        <Route path="/portal/leave" element={<PrivateRoute page="portal-leave"><PortalLeavePage /></PrivateRoute>} />
       </Route>
     </Route>
   )
