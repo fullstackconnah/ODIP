@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -83,6 +84,46 @@ public class LeaveControllerTests
         return rule;
     }
 
+    /// <summary>
+    /// Every other test in this file runs with IsSuperAdmin = true, which bypasses OdipDbContext's
+    /// ambient tenant query filter entirely — none of them prove the filter is actually reached
+    /// on LeaveController's reads. This test scopes the db as a genuine non-SuperAdmin tenant A
+    /// caller and proves a Tenant B leave request is invisible to it (404 on ApproveLeave, not a
+    /// state-machine 409), the same fixture pattern SameTenantWritePathTests.cs uses elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task ApproveLeave_RequestBelongsToAnotherTenant_ReturnsNotFound()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantAId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, FirstName = "Ben", LastName = "Turner",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(user);
+        var leave = new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, UserId = user.Id, LeaveType = LeaveType.Annual,
+            StartDate = Today, EndDate = Today, Status = LeaveStatus.Pending,
+            RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.LeaveRequests.Add(leave);
+        db.SaveChanges();
+
+        var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
     [Fact]
     public void Controller_is_gated_to_SuperAdmin_Admin_Coordinator()
     {
@@ -135,8 +176,10 @@ public class LeaveControllerTests
             new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(2) },
             CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(ok.Value);
+        // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:184): POST /leave is 201.
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(created.Value);
         Assert.Equal(LeaveStatus.Approved, body.Data!.Status);
         Assert.Equal(callerId, body.Data.RequestedByUserId);
         Assert.Equal(callerId, body.Data.DecidedByUserId);
@@ -312,8 +355,10 @@ public class LeaveControllerTests
             new CreateRecurringUnavailabilityDto { UserId = user.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
             CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityDto>>(ok.Value);
+        // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:184): POST /leave/unavailability is 201.
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityDto>>(created.Value);
         Assert.Equal(LeaveStatus.Approved, body.Data!.Status);
     }
 

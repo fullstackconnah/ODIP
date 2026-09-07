@@ -478,6 +478,49 @@ public class SameTenantWritePathTests
         Assert.Equal(ownStaff.Id, reloaded.UserId); // unchanged
     }
 
+    // ── Leave: coordinator create (Task 7 fix round 1) ──────────────────
+    // LeaveController.CreateLeave / CreateUnavailability both validate the request DTO's UserId
+    // against _db.Users, which is tenant-filtered — a foreign-tenant id reads as "not found",
+    // same rule as every other write path above.
+
+    [Fact]
+    public async Task Leave_CreateLeave_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var controller = new LeaveController(db);
+
+        var dto = new CreateLeaveRequestDto
+        {
+            UserId = foreignStaff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 1),
+        };
+        var result = await controller.CreateLeave(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Leave_CreateUnavailability_StaffFromAnotherTenant_ReturnsBadRequest()
+    {
+        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
+        var controller = new LeaveController(db);
+
+        var dto = new CreateRecurringUnavailabilityDto
+        {
+            UserId = foreignStaff.Id, DayOfWeek = DayOfWeek.Monday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = new DateOnly(2026, 9, 1),
+        };
+        var result = await controller.CreateUnavailability(dto, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityDto>>(badRequest.Value);
+        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Tasks: task owner ────────────────────────────────────────────────
 
     [Fact]

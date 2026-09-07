@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
@@ -69,7 +70,8 @@ public class LeaveController : ControllerBase
         };
         _db.LeaveRequests.Add(leave);
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
+        // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:184): POST /leave is 201, not 200 — no GetById route exists, so no CreatedAtAction.
+        return StatusCode(StatusCodes.Status201Created, ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
 
     [HttpPost("{id:guid}/approve")]
@@ -167,7 +169,8 @@ public class LeaveController : ControllerBase
         };
         _db.RecurringUnavailabilities.Add(rule);
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<RecurringUnavailabilityDto>.Ok(await LoadUnavailabilityDtoAsync(rule.Id, ct)));
+        // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:184): POST /leave/unavailability is 201, not 200 — no GetById route exists, so no CreatedAtAction.
+        return StatusCode(StatusCodes.Status201Created, ApiResponse<RecurringUnavailabilityDto>.Ok(await LoadUnavailabilityDtoAsync(rule.Id, ct)));
     }
 
     [HttpPost("unavailability/{id:guid}/approve")]
