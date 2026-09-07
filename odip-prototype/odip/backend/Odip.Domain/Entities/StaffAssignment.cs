@@ -20,6 +20,10 @@ public class StaffAssignment
     public SleepoverType SleepoverType { get; set; } = SleepoverType.None;
     public string? ShiftNotes { get; set; }
     public bool HasConflict { get; set; }
+    /// <summary>Why the coordinator accepted a Warning finding when creating/updating this trip assignment. Wired by PR 3 (StaffAssignmentsController); the column and property land now so the migration stays single and additive.</summary>
+    public string? OverrideReason { get; set; }
+    /// <summary>Comma-separated RosterFinding.Code values the coordinator acknowledged. Wired by PR 3.</summary>
+    public string? AcknowledgedFindingCodes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -70,7 +70,7 @@ public class RosterConflictServiceTests
         IReadOnlyList<Shift>? staffShiftsInWeek = null,
         IReadOnlyList<Shift>? participantShiftsOnDate = null,
         IReadOnlyList<StaffAssignment>? tripAssignments = null,
-        IReadOnlyList<StaffAvailability>? availability = null,
+        IReadOnlyList<UnavailabilityWindow>? availability = null,
         CompatibilityLevel compatibility = CompatibilityLevel.Allowed,
         decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold) => new(
         Staff: staff,
@@ -78,7 +78,7 @@ public class RosterConflictServiceTests
         StaffShiftsInWeek: staffShiftsInWeek ?? Array.Empty<Shift>(),
         ParticipantShiftsOnDate: participantShiftsOnDate ?? Array.Empty<Shift>(),
         TripAssignments: tripAssignments ?? Array.Empty<StaffAssignment>(),
-        Availability: availability ?? Array.Empty<StaffAvailability>(),
+        Availability: availability ?? Array.Empty<UnavailabilityWindow>(),
         Compatibility: compatibility,
         WeeklyHoursThreshold: weeklyHoursThreshold);
 
@@ -181,13 +181,9 @@ public class RosterConflictServiceTests
             Id = Guid.NewGuid(), UserId = staff.Id, User = staff,
             AssignmentStart = ServiceDate.AddDays(-1), AssignmentEnd = ServiceDate.AddDays(1),
         };
-        var availability = new StaffAvailability
-        {
-            Id = Guid.NewGuid(), UserId = staff.Id, User = staff,
-            AvailabilityType = AvailabilityType.Unavailable,
-            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
-            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
-        };
+        var availability = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(8, 0)), ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+            UnavailabilityKind.Legacy);
 
         var findings = new RosterConflictService().Check(candidate, CompliantContext(
             staff, participant,
@@ -314,40 +310,14 @@ public class RosterConflictServiceTests
         var staff = CompliantStaff();
         var participant = CompliantParticipant();
         var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
-        var availability = new StaffAvailability
-        {
-            Id = Guid.NewGuid(),
-            UserId = staff.Id,
-            User = staff,
-            AvailabilityType = AvailabilityType.Unavailable,
-            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
-            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
-        };
+        var availability = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(8, 0)), ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+            UnavailabilityKind.Legacy);
 
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { availability }));
 
         Assert.True(HasCode(findings, RosterConflictService.StaffUnavailable));
-    }
-
-    [Fact]
-    public void Available_record_does_not_fire_staff_unavailable()
-    {
-        var staff = CompliantStaff();
-        var participant = CompliantParticipant();
-        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
-        var availability = new StaffAvailability
-        {
-            Id = Guid.NewGuid(),
-            UserId = staff.Id,
-            User = staff,
-            AvailabilityType = AvailabilityType.Available,
-            StartDateTime = ServiceDate.ToDateTime(new TimeOnly(8, 0)),
-            EndDateTime = ServiceDate.ToDateTime(new TimeOnly(12, 0)),
-        };
-
-        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { availability }));
-
-        Assert.False(HasCode(findings, RosterConflictService.StaffUnavailable));
+        Assert.False(findings.Single(f => f.Code == RosterConflictService.StaffUnavailable).RequiresReason);
     }
 
     // ── COMPATIBILITY_EXCLUDED ───────────────────────────────
@@ -593,5 +563,102 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
 
         Assert.Empty(findings);
+    }
+
+    // ── STAFF_ON_LEAVE / STAFF_RECURRING_UNAVAILABLE / STAFF_LEAVE_PENDING ──
+
+    [Fact]
+    public void Approved_leave_window_fires_staff_on_leave_and_requires_a_reason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(0, 0)), ServiceDate.AddDays(1).ToDateTime(new TimeOnly(0, 0)),
+            UnavailabilityKind.ApprovedLeave);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffOnLeave);
+        Assert.True(finding.RequiresReason);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.False(HasCode(findings, RosterConflictService.StaffUnavailable));
+    }
+
+    [Fact]
+    public void Pending_leave_window_fires_staff_leave_pending_and_does_not_require_a_reason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(0, 0)), ServiceDate.AddDays(1).ToDateTime(new TimeOnly(0, 0)),
+            UnavailabilityKind.PendingLeave);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffLeavePending);
+        Assert.False(finding.RequiresReason);
+    }
+
+    [Fact]
+    public void Approved_recurring_window_fires_staff_recurring_unavailable_and_requires_a_reason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(8, 0)), ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+            UnavailabilityKind.RecurringRule);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffRecurringUnavailable);
+        Assert.True(finding.RequiresReason);
+        Assert.Contains("Monday", finding.Message); // ServiceDate (2026-08-24) is a Monday
+    }
+
+    [Fact]
+    public void Non_overlapping_unavailability_window_fires_nothing()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(12, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(13, 0)), ServiceDate.ToDateTime(new TimeOnly(17, 0)),
+            UnavailabilityKind.ApprovedLeave);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        Assert.False(HasCode(findings, RosterConflictService.StaffOnLeave));
+    }
+
+    [Fact]
+    public void Legacy_window_still_fires_staff_unavailable_without_requiring_a_reason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(8, 0)), ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+            UnavailabilityKind.Legacy);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffUnavailable);
+        Assert.False(finding.RequiresReason);
+    }
+
+    [Fact]
+    public void Every_other_finding_still_defaults_RequiresReason_to_false()
+    {
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = null; // WSC_MISSING
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.All(findings, f => Assert.False(f.RequiresReason));
     }
 }
