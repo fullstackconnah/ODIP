@@ -52,6 +52,7 @@ import {
 import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { focusField, triStateToBool, boolToTriState, extractErrorMessage } from './intakeFormat'
 import { ParticipantDetailsStep } from './steps/ParticipantDetailsStep'
 import { NdisFundingStep } from './steps/NdisFundingStep'
@@ -90,7 +91,7 @@ export default function IntakeWizardPage() {
   const { data: existingRiskEntries = [] } = useParticipantRiskEntries(isEditMode ? id : undefined)
   const { data: people = [] } = usePersons()
 
-  const { register, handleSubmit, control, getValues, setValue, watch, setError, clearErrors, reset, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, control, getValues, setValue, watch, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
     resolver: intakeParticipantResolver,
     defaultValues: {
       livingArrangement: '',
@@ -285,7 +286,10 @@ export default function IntakeWizardPage() {
     try {
       if (isEditMode && id) {
         const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
-        if (res.success) navigate(`/participants/${id}/profile`)
+        if (res.success) {
+          flushSync(() => reset(data))
+          navigate(`/participants/${id}/profile`)
+        }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
@@ -293,6 +297,7 @@ export default function IntakeWizardPage() {
         // PF-10.4: the Profile wizard now exists — hand off there directly instead of the detail
         // page. PF-10.5 still owns the fuller three-way resume-banner logic described in SPEC-05
         // (e.g. resuming a not-yet-profile-completed participant from the detail page later).
+        flushSync(() => reset(data))
         navigate(`/participants/${res.data.id}/profile`)
       }
     } catch {
@@ -312,14 +317,14 @@ export default function IntakeWizardPage() {
       if (isEditMode && id) {
         const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
         if (res.success) {
-          flushSync(() => {})
+          flushSync(() => reset(data))
           navigate(`/participants/${id}`)
         }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
-        flushSync(() => {})
+        flushSync(() => reset(data))
         navigate(`/participants/${res.data.id}`)
       }
     } catch (err) {
@@ -394,6 +399,8 @@ export default function IntakeWizardPage() {
     })
   }
 
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   // PF-10.5 edit mode: wait for the existing row before rendering the form, same guard
   // ProfileWizardPage.tsx uses — resetting a still-loading `undefined` participant would flash the
   // blank create-mode defaults, then jump once the fetch resolves.
@@ -403,6 +410,7 @@ export default function IntakeWizardPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <Link to={isEditMode ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />

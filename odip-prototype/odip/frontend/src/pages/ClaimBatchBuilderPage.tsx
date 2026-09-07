@@ -192,7 +192,7 @@ export default function ClaimBatchBuilderPage() {
       {
         onSuccess: batch => {
           setConfirmOpen(false)
-          navigate(`/claim-batches/${batch.id}`)
+          navigate(`/billing/claim-batches/${batch.id}`)
         },
       }
     )

@@ -357,6 +357,7 @@ function SupportCatalogueTab() {
   const [version, setVersion] = useState('')
   const [uploading, setUploading] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const allItems = (groups as SupportActivityGroupDto[]).flatMap((g: SupportActivityGroupDto) => g.items ?? [])
@@ -375,6 +376,7 @@ function SupportCatalogueTab() {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
+    setImportError(null)
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -386,7 +388,7 @@ function SupportCatalogueTab() {
       setPreviewStep('preview')
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<{ message?: string }>
-      alert(axiosErr?.response?.data?.message || 'Upload failed')
+      setImportError(axiosErr?.response?.data?.message || 'Upload failed')
     } finally {
       setUploading(false)
     }
@@ -395,6 +397,7 @@ function SupportCatalogueTab() {
   async function handleConfirm() {
     if (!preview) return
     setConfirming(true)
+    setImportError(null)
     try {
       await apiClient.post('/support-catalogue/import/confirm', { catalogueVersion: version, rows: preview.rows })
       qc.invalidateQueries({ queryKey: ['support-catalogue'] })
@@ -403,7 +406,7 @@ function SupportCatalogueTab() {
       setImporting(false)
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<{ message?: string }>
-      alert(axiosErr?.response?.data?.message || 'Confirm failed')
+      setImportError(axiosErr?.response?.data?.message || 'Confirm failed')
     } finally {
       setConfirming(false)
     }
@@ -416,7 +419,7 @@ function SupportCatalogueTab() {
           <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
         </div>
-        <button onClick={() => { setImporting(true); setPreviewStep('upload') }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
+        <button onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
           Import Catalogue
         </button>
       </div>
@@ -457,8 +460,15 @@ function SupportCatalogueTab() {
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[var(--color-foreground)]">Import NDIS Support Catalogue</h3>
-              <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null) }} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">✕</button>
+              <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">✕</button>
             </div>
+
+            {importError && (
+              <div role="alert" className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+                <span className="mt-0.5">⚠</span>
+                <span>{importError}</span>
+              </div>
+            )}
 
             {previewStep === 'upload' && (
               <div className="space-y-4">

@@ -308,6 +308,8 @@ export default function SchedulePage() {
                                 role={ts.assignmentRole ?? undefined}
                                 clickable={isAvailable && canWrite}
                                 onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'staff', resource: s, trip }) : undefined}
+                                assignLabel={`Assign ${s.fullName} to ${trip.tripName}`}
+                                unassignLabel={`Unassign ${s.fullName} from ${trip.tripName}`}
                                 onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => setUnassigning({
                                   assignmentId: ts.assignmentId!,
                                   staffName: s.fullName,
@@ -395,6 +397,7 @@ export default function SchedulePage() {
                             status={ts.status}
                             clickable={isAvailable && canWrite}
                             onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}
+                            assignLabel={`Assign ${v.vehicleName} to ${trip.tripName}`}
                           />
                         </td>
                       )

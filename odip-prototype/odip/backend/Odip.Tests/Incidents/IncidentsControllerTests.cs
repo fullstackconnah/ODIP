@@ -943,4 +943,69 @@ public class IncidentsControllerTests
         Assert.Equal(WitnessStatus.Pending, added.WitnessStatus);
         Assert.NotNull(added.WitnessRequestedAt);
     }
+
+    // ── PP-2: status-only archive/restore lifecycle ─────────────────────────
+
+    /// <summary>
+    /// Delete must set Status = Closed and leave IsActive untouched (still true) — mirrors
+    /// TasksDashboardController's Delete, which sets Status = Cancelled without touching
+    /// IsActive. Setting IsActive = false instead was the PP-2 bug: GetAll defaults to
+    /// isActive == true, so the Archived tab (which filters status=Closed) would never see the
+    /// incident again.
+    /// </summary>
+    [Fact]
+    public async Task Delete_SetsStatusClosed_AndLeavesIsActiveTrue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var deleteResult = await controller.Delete(incident.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(deleteResult.Result);
+        var reloaded = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
+        Assert.Equal(IncidentStatus.Closed, reloaded.Status);
+        Assert.True(reloaded.IsActive);
+    }
+
+    /// <summary>
+    /// Restore (frontend sends status=Draft via Update) must be allowed straight from Closed —
+    /// Update has no status-transition guard that would block Closed → Draft.
+    /// </summary>
+    [Fact]
+    public async Task Update_AllowsClosedToDraftTransition()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        await controller.Delete(incident.Id, CancellationToken.None);
+
+        var restoreDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            Severity = IncidentSeverity.Medium,
+            Title = "Incident title",
+            Description = "What happened.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 10, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+        };
+
+        var updateResult = await controller.Update(incident.Id, restoreDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var reloaded = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
+        Assert.Equal(IncidentStatus.Draft, reloaded.Status);
+    }
 }

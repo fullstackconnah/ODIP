@@ -105,12 +105,12 @@ const router = createBrowserRouter(
         <Route path="/caregiver-submissions" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionsPage /></PrivateRoute>} />
         <Route path="/caregiver-submissions/:id" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionReviewPage /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
-        <Route path="/accommodation/new" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
+        <Route path="/accommodation/new" element={<PrivateRoute page="accommodation" requiresWrite><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />
-        <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation"><AccommodationCreatePage /></PrivateRoute>} />
+        <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation" requiresWrite><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/vehicles" element={<PrivateRoute page="vehicles"><VehiclesPage /></PrivateRoute>} />
-        <Route path="/vehicles/new" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
-        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles"><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles/new" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
         <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
         <Route path="/staff/new" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />
         <Route path="/staff/:id/edit" element={<PrivateRoute page="staff"><StaffCreatePage /></PrivateRoute>} />

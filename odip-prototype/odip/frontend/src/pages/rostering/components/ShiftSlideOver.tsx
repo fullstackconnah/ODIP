@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { X, Trash2, AlertTriangle } from 'lucide-react'
-import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType } from '@/api/types'
-import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
+import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus } from '@/api/types'
+import { SUPPORT_RATIOS, SLEEPOVER_TYPES, SHIFT_STATUSES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
 import type { DropdownItem } from '@/components/Dropdown'
@@ -81,6 +81,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
+  // PP-8: echoes the shift's current status back on edit so saving never silently resets it to
+  // Draft (the backend's UpdateShiftDto.Status defaults to Draft when the field is omitted).
+  // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
+  const [status, setStatus] = useState<ShiftStatus>(existing?.status ?? 'Draft')
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [overrideReason, setOverrideReason] = useState(existing?.overrideReason ?? '')
   const [findings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
@@ -173,6 +177,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       endsNextDay,
       ratio,
       nightType,
+      status,
       notes: notes.trim() || null,
       overrideReason: overrideReason.trim() || null,
       acknowledgedFindingCodes: warningFindings.map(f => f.code),
@@ -321,6 +326,18 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               />
             </FormField>
           </div>
+
+          {isEdit && (
+            <FormField label="Status">
+              <Dropdown
+                variant="form"
+                value={status}
+                onChange={v => setStatus(v as ShiftStatus)}
+                disabled={!canWrite}
+                items={SHIFT_STATUSES.map(s => ({ value: s, label: s }))}
+              />
+            </FormField>
+          )}
 
           <FormField label="Notes">
             <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />

@@ -199,6 +199,30 @@ describe('CaregiverWizardPage — submit', () => {
   })
 })
 
+describe('CaregiverWizardPage — Review step (PP-6)', () => {
+  it('humanises field labels and never renders [object Object] for an array-valued field', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({ draft: { mobility: { mobilitySupportOptions: ['Wheelchair', 'Walking frame'] } } as never }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+
+    // Fast-forward through every step to Review (aboutYou + 6 profile steps = 7 Next clicks).
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+
+    // Humanised label (from lib/documentMapping), not the raw camelCase field key.
+    expect(screen.getByText('Mobility Support Options')).toBeInTheDocument()
+    expect(screen.queryByText('mobilitySupportOptions')).not.toBeInTheDocument()
+    expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument()
+  })
+})
+
 // Task 6 — the route is registered as a sibling of /login, outside the authenticated app shell
 // (PrivateRoute, the admin layout chrome, UiPreferencesProvider). Exercises the real App.tsx
 // route table (not a test-only router) so a future accidental move of the route back inside
