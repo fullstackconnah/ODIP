@@ -42,6 +42,9 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
     await user.click(screen.getByRole('button', { name: /jamie support/i }))
+    // Selecting a user now opens a confirm dialog (PP-22) before switchTenant/selectUser
+    // actually fires.
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     const storedUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
     // The bug this rider fixes: only fullName/role were overridden, leaving `id` at the
@@ -67,6 +70,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
     await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     // Reopen (trigger now reads back "Jamie Support" from localStorage on this re-render — no
     // real page reload happened, reload() is stubbed) and switch to a different impersonated
@@ -75,6 +79,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     // with the "USR" badge, not the user's name, so it's unambiguous against the dropdown row.
     await user.click(screen.getByRole('button', { name: /^usr/i }))
     await user.click(screen.getByRole('button', { name: /^casey coordinator/i }))
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     const savedAdmin = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
     expect(savedAdmin.id).toBe('superadmin-1') // never overwritten with the impersonated user's id
@@ -87,6 +92,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
     await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
     expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('user-support-1')
 
     // Reopen the dropdown (selectUser closed it) to reach "Exit view".

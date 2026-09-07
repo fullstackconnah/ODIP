@@ -91,10 +91,14 @@ export default function AccommodationDetailPage() {
               {[property.address, property.suburb, property.state, property.postcode].filter(Boolean).join(', ') || '—'}
             </p>
           </div>
-          {property.website && /^https?:\/\//i.test(property.website) && (
+          {property.website && (
             <div className="text-sm">
               <p className="text-[var(--color-muted-foreground)]">Website</p>
-              <a href={property.website} target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--color-primary)] hover:underline">{property.website}</a>
+              {/^[a-z]+:\/\//i.test(property.website) ? (
+                <a href={property.website} target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--color-primary)] hover:underline">{property.website}</a>
+              ) : (
+                <p className="font-medium">{property.website}</p>
+              )}
             </div>
           )}
         </div>

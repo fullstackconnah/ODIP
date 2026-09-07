@@ -88,6 +88,11 @@ export default function AccommodationCreatePage() {
 
   const onSubmit = async (data: AccommodationFormData) => {
     const payload: any = { ...data }
+    // A website typed without a scheme (e.g. "example.com") would otherwise fail the detail
+    // page's URL check and silently disappear — prepend https:// so it renders as a link.
+    if (payload.website && !/^[a-z]+:\/\//i.test(payload.website)) {
+      payload.website = `https://${payload.website}`
+    }
     // Treat 0 as null for optional numeric fields (coerced from empty input)
     for (const numField of ['bedroomCount', 'bedCount', 'maxCapacity']) {
       if (payload[numField] === 0 || payload[numField] === undefined) payload[numField] = null

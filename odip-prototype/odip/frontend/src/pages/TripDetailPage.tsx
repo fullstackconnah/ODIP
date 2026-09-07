@@ -160,9 +160,30 @@ export default function TripDetailPage() {
 
       {/* Tabs */}
       <div className="-mx-4 md:mx-0 px-4 md:px-0">
-        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+        <div
+          role="tablist"
+          aria-label="Trip detail sections"
+          className="flex gap-1 overflow-x-auto pb-1 scrollbar-none"
+          onKeyDown={e => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+            e.preventDefault()
+            const currentIndex = tabs.findIndex(t => t.key === activeTab)
+            const delta = e.key === 'ArrowRight' ? 1 : -1
+            const nextIndex = (currentIndex + delta + tabs.length) % tabs.length
+            const nextTab = tabs[nextIndex]
+            setActiveTab(nextTab.key)
+            document.getElementById(`trip-tab-${nextTab.key}`)?.focus()
+          }}
+        >
           {tabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            <button
+              key={tab.key}
+              id={`trip-tab-${tab.key}`}
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              aria-controls={`trip-tabpanel-${tab.key}`}
+              tabIndex={activeTab === tab.key ? 0 : -1}
+              onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.key
                   ? 'bg-[var(--color-primary)] text-white shadow-md shadow-[var(--color-primary)]/20'
@@ -182,7 +203,12 @@ export default function TripDetailPage() {
       </div>
 
       {/* Tab content */}
-      <div className="animate-fade-in">
+      <div
+        className="animate-fade-in"
+        role="tabpanel"
+        id={`trip-tabpanel-${activeTab}`}
+        aria-labelledby={`trip-tab-${activeTab}`}
+      >
         {activeTab === 'overview' && id && (
           <OverviewTab tripId={id} trip={trip} bookings={bookings} accommodation={accommodation} staff={staff} vehicles={vehicles} onSwitchTab={tab => setActiveTab(tab as Tab)} />
         )}
@@ -204,7 +230,7 @@ export default function TripDetailPage() {
         )}
 
         {activeTab === 'tasks' && (
-          <TasksTab tasks={tasks} />
+          <TasksTab tripId={id} tasks={tasks} canWrite={canWrite} />
         )}
 
         {activeTab === 'activities' && (

@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantUsers } from '@/api/hooks'
 import type { TenantUserDto, ApiResponse } from '@/api/types'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function UserSwitcher() {
   const [open, setOpen] = useState(false)
+  const [pendingUser, setPendingUser] = useState<TenantUserDto | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
@@ -86,7 +88,7 @@ export default function UserSwitcher() {
             {users.map(user => (
               <button
                 key={user.id}
-                onClick={() => !user.isActive ? undefined : selectUser(user)}
+                onClick={() => !user.isActive ? undefined : setPendingUser(user)}
                 disabled={!user.isActive}
                 className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   user.id === viewingUserId
@@ -104,6 +106,15 @@ export default function UserSwitcher() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingUser !== null}
+        onCancel={() => setPendingUser(null)}
+        onConfirm={() => { if (pendingUser) selectUser(pendingUser) }}
+        title="Switch user?"
+        confirmLabel="Switch user"
+        message={`Switch to ${pendingUser?.fullName ?? 'this user'}? Unsaved changes on this page will be lost.`}
+      />
     </div>
   )
 }

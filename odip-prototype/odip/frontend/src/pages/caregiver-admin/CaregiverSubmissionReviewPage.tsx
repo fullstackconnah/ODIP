@@ -5,6 +5,7 @@ import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregive
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Modal } from '@/components/Modal'
 import { formatDateAu } from '@/lib/utils'
 
 /**
@@ -106,17 +107,13 @@ export default function CaregiverSubmissionReviewPage() {
         }}
       />
 
-      {showReject && (
-        <div role="dialog" aria-label="Reject submission" className="rounded-2xl border border-[var(--color-border)] p-4 space-y-3">
-          <label className="block text-sm font-medium" htmlFor="reject-note">What should the caregiver fix?</label>
-          <textarea
-            id="reject-note"
-            value={rejectNote}
-            onChange={(e) => setRejectNote(e.target.value)}
-            className="w-full p-2 rounded-lg border border-[var(--color-border)]"
-            rows={3}
-          />
-          <div className="flex gap-2 justify-end">
+      <Modal
+        open={showReject}
+        onClose={() => setShowReject(false)}
+        title="Reject submission"
+        size="sm"
+        footer={
+          <>
             <button type="button" onClick={() => setShowReject(false)} className="px-3 py-2 text-sm">
               Cancel
             </button>
@@ -132,9 +129,20 @@ export default function CaregiverSubmissionReviewPage() {
             >
               Reject and reopen link
             </button>
-          </div>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label className="block text-sm font-medium" htmlFor="reject-note">What should the caregiver fix?</label>
+          <textarea
+            id="reject-note"
+            value={rejectNote}
+            onChange={(e) => setRejectNote(e.target.value)}
+            className="w-full p-2 rounded-lg border border-[var(--color-border)]"
+            rows={3}
+          />
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

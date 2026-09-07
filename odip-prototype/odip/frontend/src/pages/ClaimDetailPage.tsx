@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
+import type { AxiosError } from 'axios'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { Download, Check, DollarSign, XCircle } from 'lucide-react'
@@ -6,6 +7,7 @@ import { useState } from 'react'
 import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 
@@ -40,6 +42,8 @@ export default function ClaimDetailPage() {
   const [notes, setNotes] = useState('')
   const [notesInit, setNotesInit] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [statusConfirmTarget, setStatusConfirmTarget] = useState<TripClaimStatus | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
   if (!notesInit && claim) {
     setNotes(claim.notes || '')
@@ -58,9 +62,29 @@ export default function ClaimDetailPage() {
     })
   }
 
-  function handleStatusChange(status: string) {
+  function handleStatusChange(status: TripClaimStatus) {
     if (!id) return
-    updateClaim.mutate({ claimId: id, data: { status: status as TripClaimStatus } })
+    setStatusError(null)
+    updateClaim.mutate({ claimId: id, data: { status } }, {
+      onSuccess: () => setStatusConfirmTarget(null),
+      onError: (err) => {
+        const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+        setStatusError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || "Couldn't update the claim status. Please try again.")
+      },
+    })
+  }
+
+  function statusConfirmCopy(status: TripClaimStatus | null) {
+    switch (status) {
+      case 'Submitted':
+        return { title: 'Mark as submitted?', message: 'Mark this claim as submitted to the NDIA?', confirmLabel: 'Mark as Submitted', variant: 'default' as const }
+      case 'Paid':
+        return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
+      case 'Rejected':
+        return { title: 'Mark as rejected?', message: 'Mark this claim as rejected? This cannot be undone.', confirmLabel: 'Mark as Rejected', variant: 'danger' as const }
+      default:
+        return null
+    }
   }
 
   function handleRevertToConfirmed(item: ClaimLineItemDto) {
@@ -99,7 +123,7 @@ export default function ClaimDetailPage() {
           </button>
           {claim.status === 'Draft' && (
             <button
-              onClick={() => handleStatusChange('Submitted')}
+              onClick={() => { setStatusError(null); setStatusConfirmTarget('Submitted') }}
               disabled={updateClaim.isPending}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
             >
@@ -110,7 +134,7 @@ export default function ClaimDetailPage() {
           {claim.status === 'Submitted' && (
             <>
               <button
-                onClick={() => handleStatusChange('Paid')}
+                onClick={() => { setStatusError(null); setStatusConfirmTarget('Paid') }}
                 disabled={updateClaim.isPending}
                 className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
               >
@@ -118,7 +142,7 @@ export default function ClaimDetailPage() {
                 Mark as Paid
               </button>
               <button
-                onClick={() => handleStatusChange('Rejected')}
+                onClick={() => { setStatusError(null); setStatusConfirmTarget('Rejected') }}
                 disabled={updateClaim.isPending}
                 className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-all disabled:opacity-50"
               >
@@ -299,6 +323,28 @@ export default function ClaimDetailPage() {
           onSuccess={() => setNoShowTarget(null)}
         />
       )}
+      {statusConfirmTarget && (() => {
+        const copy = statusConfirmCopy(statusConfirmTarget)!
+        return (
+          <ConfirmDialog
+            open
+            onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
+            onConfirm={() => handleStatusChange(statusConfirmTarget)}
+            title={copy.title}
+            confirmLabel={copy.confirmLabel}
+            variant={copy.variant}
+            loading={updateClaim.isPending}
+            message={
+              <>
+                <p>{copy.message}</p>
+                {statusError && (
+                  <p role="alert" className="text-[var(--color-destructive)]">{statusError}</p>
+                )}
+              </>
+            }
+          />
+        )
+      })()}
     </div>
   )
 }
