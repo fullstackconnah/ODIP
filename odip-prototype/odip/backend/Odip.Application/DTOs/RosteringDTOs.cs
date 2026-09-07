@@ -74,7 +74,12 @@ public record LeaveBarDto
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
     public UnavailabilityKind Kind { get; init; }
-    /// <summary>Legacy only — the source StaffAvailability row's AvailabilityType (Unavailable or Training).</summary>
+    /// <summary>
+    /// Compat fill — the current frontend labels the bar from availabilityType; PR 2 switches it to
+    /// <c>Kind</c>, after which this may become null for non-legacy kinds. Legacy: the source
+    /// StaffAvailability row's AvailabilityType (Unavailable or Training). ApprovedLeave/PendingLeave:
+    /// AvailabilityType.Leave. RecurringRule: AvailabilityType.Unavailable.
+    /// </summary>
     public AvailabilityType? AvailabilityType { get; init; }
     /// <summary>Legacy only — the source StaffAvailability row's free-text Notes.</summary>
     public string? Notes { get; init; }

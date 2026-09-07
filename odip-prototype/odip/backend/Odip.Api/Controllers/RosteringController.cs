@@ -254,7 +254,15 @@ public class RosteringController : ControllerBase
                         // [StartDate 00:00, EndDate+1 00:00)) — subtract a tick to land on the
                         // last instant the window actually covers, so the bar's last day is correct.
                         StartDate = DateOnly.FromDateTime(w.Start), EndDate = DateOnly.FromDateTime(w.End.AddTicks(-1)), Kind = w.Kind,
-                        AvailabilityType = w.Kind == UnavailabilityKind.Legacy ? w.LegacySourceType : null,
+                        // Compat fill — the current frontend labels the bar from availabilityType; PR 2 switches
+                        // it to `kind`, after which this may become null for non-legacy kinds.
+                        AvailabilityType = w.Kind switch
+                        {
+                            UnavailabilityKind.Legacy => w.LegacySourceType,
+                            UnavailabilityKind.ApprovedLeave or UnavailabilityKind.PendingLeave => AvailabilityType.Leave,
+                            UnavailabilityKind.RecurringRule => AvailabilityType.Unavailable,
+                            _ => null,
+                        },
                         Notes = w.Kind == UnavailabilityKind.Legacy ? w.LegacyNotes : null,
                         StartTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.Start) : null,
                         EndTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.End) : null,

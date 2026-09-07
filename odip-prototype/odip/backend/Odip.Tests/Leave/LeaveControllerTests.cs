@@ -367,8 +367,20 @@ public class LeaveControllerTests
     {
         using var db = CreateDb();
         var user = SeedUser(db);
-        var rule = SeedRule(db, user.Id); // Wednesday 09:00-12:00, effective from Today
-        var wednesday = Today.DayOfWeek == DayOfWeek.Wednesday ? Today : Today.AddDays(((int)DayOfWeek.Wednesday - (int)Today.DayOfWeek + 7) % 7);
+        // Clock-relative fixture (Important #3): LeaveController.FindRecurringOverlapsAsync clamps
+        // horizonStart to DateTime.UtcNow, not to this file's frozen `Today` constant, so the rule's
+        // EffectiveFrom and the shift's date must be pinned to the real UTC "today" the SUT actually
+        // reads — otherwise this test goes red once real "today" passes the frozen Wednesday.
+        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var wednesday = realToday.AddDays(((int)DayOfWeek.Wednesday - (int)realToday.DayOfWeek + 7) % 7);
+        var rule = new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = realToday,
+            Status = LeaveStatus.Pending, RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.RecurringUnavailabilities.Add(rule);
+        db.SaveChanges();
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
         db.Participants.Add(participant);
         db.Shifts.Add(new Shift

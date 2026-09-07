@@ -427,7 +427,10 @@ public class PortalController : ControllerBase
         var staffId = await ResolveCurrentStaffIdAsync(ct);
         if (staffId is null) return NotFound(ApiResponse<LeaveRequestDto>.Fail("Staff record not found."));
 
-        var validationError = dto.EndDate < dto.StartDate ? "End date must be on or after the start date." : null;
+        // Minor #6: shares LeaveController's internal static validators (same assembly) instead of
+        // duplicating the rules inline — keeps the message strings from drifting between the two
+        // controllers' otherwise-identical validation.
+        var validationError = LeaveController.ValidateLeaveDates(dto.StartDate, dto.EndDate);
         if (validationError != null) return BadRequest(ApiResponse<LeaveRequestDto>.Fail(validationError));
 
         var duplicate = await _db.LeaveRequests.AnyAsync(l =>
@@ -464,6 +467,7 @@ public class PortalController : ControllerBase
         leave.Status = LeaveStatus.Cancelled;
         leave.DecidedByUserId = staffId.Value;
         leave.DecidedAt = DateTime.UtcNow;
+        leave.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(ToLeaveDto(leave)));
     }
@@ -475,10 +479,9 @@ public class PortalController : ControllerBase
         var staffId = await ResolveCurrentStaffIdAsync(ct);
         if (staffId is null) return NotFound(ApiResponse<RecurringUnavailabilityDto>.Fail("Staff record not found."));
 
-        if (dto.StartTime >= dto.EndTime)
-            return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail("Start time must be before end time."));
-        if (dto.EffectiveTo.HasValue && dto.EffectiveTo.Value < dto.EffectiveFrom)
-            return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail("Effective-to must be on or after effective-from."));
+        // Minor #6: shares LeaveController's internal static validator instead of duplicating it.
+        var recurringValidationError = LeaveController.ValidateRecurringWindow(dto.StartTime, dto.EndTime, dto.EffectiveFrom, dto.EffectiveTo);
+        if (recurringValidationError != null) return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail(recurringValidationError));
 
         var duplicate = await _db.RecurringUnavailabilities.AnyAsync(r =>
             r.UserId == staffId.Value && r.DayOfWeek == dto.DayOfWeek && r.StartTime == dto.StartTime
@@ -515,6 +518,7 @@ public class PortalController : ControllerBase
         rule.Status = LeaveStatus.Cancelled;
         rule.DecidedByUserId = staffId.Value;
         rule.DecidedAt = DateTime.UtcNow;
+        rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<RecurringUnavailabilityDto>.Ok(ToUnavailabilityDto(rule)));
     }

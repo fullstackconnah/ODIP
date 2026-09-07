@@ -174,7 +174,7 @@ public sealed class RosterConflictService
                     break;
                 case UnavailabilityKind.RecurringRule:
                     findings.Add(new RosterFinding(StaffRecurringUnavailable, RosterFindingSeverity.Warning,
-                        $"{ctx.Staff.FullName} is recurringly unavailable {window.Start:dddd} {window.Start:HH:mm}-{window.End:HH:mm}.",
+                        $"{ctx.Staff.FullName} is recurringly unavailable {window.Start.ToString("dddd HH:mm", CultureInfo.InvariantCulture)}-{window.End.ToString("HH:mm", CultureInfo.InvariantCulture)}.",
                         RequiresReason: true));
                     break;
             }

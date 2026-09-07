@@ -147,6 +147,7 @@ public class StaffUnavailabilityQueryTests
     [Theory]
     [InlineData(AvailabilityType.Unavailable)]
     [InlineData(AvailabilityType.Training)]
+    [InlineData(AvailabilityType.Leave)] // Important #2 — Leave rows still created via the pre-PR-2 editor must still block rostering
     public async Task Legacy_unavailable_or_training_rows_produce_a_Legacy_window(AvailabilityType type)
     {
         using var db = CreateDb();
@@ -269,5 +270,54 @@ public class StaffUnavailabilityQueryTests
         Assert.Contains(windows, w => w.Kind == UnavailabilityKind.ApprovedLeave);
         Assert.Contains(windows, w => w.Kind == UnavailabilityKind.RecurringRule);
         Assert.Contains(windows, w => w.Kind == UnavailabilityKind.Legacy);
+    }
+
+    // Minor #12 — the query has no explicit TenantId predicate of its own; it relies entirely on
+    // the global query filter. Prove that reliance with a non-SuperAdmin caller (all other
+    // fixtures in this file are SuperAdmin, which short-circuits the filter before the tenant half
+    // is evaluated), reusing the CreateTenantScopedDb idiom from Odip.Tests/Portal/PortalLeaveTests.cs.
+    private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant) CreateTenantScopedDb(Guid tenantId)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.ViewAsUserId).Returns((Guid?)null);
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        return (new OdipDbContext(options, tenant.Object), tenant);
+    }
+
+    private static User SeedUserInTenant(OdipDbContext db, Guid tenantId)
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ben", LastName = "Turner",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(user);
+        db.SaveChanges();
+        return user;
+    }
+
+    [Fact]
+    public async Task NonSuperAdmin_caller_sees_no_windows_from_another_tenants_LeaveRequest()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+        var (db, tenant) = CreateTenantScopedDb(tenantAId);
+        var user = SeedUserInTenant(db, tenantAId);
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, UserId = user.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 10),
+            Status = LeaveStatus.Approved, RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var windows = await new StaffUnavailabilityQuery(db)
+            .GetWindowsAsync(new[] { user.Id }, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        Assert.Empty(windows);
     }
 }

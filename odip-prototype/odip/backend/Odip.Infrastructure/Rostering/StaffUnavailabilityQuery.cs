@@ -21,8 +21,9 @@ public interface IStaffUnavailabilityQuery
     /// [<paramref name="from"/>, <paramref name="to"/>] (inclusive both ends): Approved + Pending
     /// LeaveRequest rows (whole-day windows), Approved RecurringUnavailability rows (expanded via
     /// RecurringUnavailabilityExpander — a Pending rule yields nothing), and legacy
-    /// StaffAvailability Unavailable/Training rows (Leave-type rows no longer exist post the
-    /// AddStaffLeaveAndRecurringUnavailability migration's data step).
+    /// StaffAvailability Unavailable/Training/Leave rows (the migration's data step empties
+    /// existing Leave-type rows into LeaveRequest, but a new one can still be created via the
+    /// existing editor until PR 2 retires that option, so it is still matched here).
     /// </summary>
     Task<IReadOnlyList<UnavailabilityWindow>> GetWindowsAsync(
         IReadOnlyList<Guid> userIds, DateOnly from, DateOnly to, CancellationToken ct);
@@ -80,13 +81,16 @@ public sealed class StaffUnavailabilityQuery : IStaffUnavailabilityQuery
             }
         }
 
-        // ── Legacy StaffAvailability: Unavailable/Training rows only. Leave-type rows no longer
-        // exist after the migration's data step; Available/Preferred/Tentative never counted as
-        // unavailability (matches the retired RosterConflictService.UnavailableTypes set, minus
-        // Leave, which is now sourced from LeaveRequest above instead). ──
+        // ── Legacy StaffAvailability: Unavailable/Training/Leave rows. The migration's data step
+        // empties existing Leave-type rows into LeaveRequest, but the pre-PR-2 AvailabilityEditor
+        // can still create new Leave rows via the existing editor until PR 2 retires that option —
+        // keep matching Leave here too so such a row still blocks rostering instead of silently
+        // doing nothing (matches the retired RosterConflictService.UnavailableTypes set in full).
+        // Available/Preferred/Tentative never counted as unavailability. ──
         var legacy = await _db.StaffAvailabilities
             .Where(a => userIds.Contains(a.UserId)
-                        && (a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Training)
+                        && (a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Training
+                            || a.AvailabilityType == AvailabilityType.Leave)
                         && a.StartDateTime < rangeEndExclusive && a.EndDateTime > rangeStart)
             .ToListAsync(ct);
         foreach (var a in legacy)

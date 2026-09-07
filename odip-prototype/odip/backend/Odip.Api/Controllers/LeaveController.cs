@@ -85,6 +85,7 @@ public class LeaveController : ControllerBase
         leave.Status = LeaveStatus.Approved;
         leave.DecidedByUserId = ResolveCallerId();
         leave.DecidedAt = DateTime.UtcNow;
+        leave.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
         var overlaps = await FindLeaveOverlapsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct);
@@ -108,6 +109,7 @@ public class LeaveController : ControllerBase
         leave.Status = LeaveStatus.Declined;
         leave.DecidedByUserId = ResolveCallerId();
         leave.DecidedAt = DateTime.UtcNow;
+        leave.UpdatedAt = DateTime.UtcNow;
         leave.DecisionNote = dto.DecisionNote.Trim();
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
@@ -125,6 +127,7 @@ public class LeaveController : ControllerBase
         leave.Status = LeaveStatus.Cancelled;
         leave.DecidedByUserId = ResolveCallerId();
         leave.DecidedAt = DateTime.UtcNow;
+        leave.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
@@ -184,6 +187,7 @@ public class LeaveController : ControllerBase
         rule.Status = LeaveStatus.Approved;
         rule.DecidedByUserId = ResolveCallerId();
         rule.DecidedAt = DateTime.UtcNow;
+        rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
         var overlaps = await FindRecurringOverlapsAsync(rule, ct);
@@ -208,6 +212,7 @@ public class LeaveController : ControllerBase
         rule.Status = LeaveStatus.Declined;
         rule.DecidedByUserId = ResolveCallerId();
         rule.DecidedAt = DateTime.UtcNow;
+        rule.UpdatedAt = DateTime.UtcNow;
         rule.DecisionNote = dto.DecisionNote.Trim();
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<RecurringUnavailabilityDto>.Ok(await LoadUnavailabilityDtoAsync(rule.Id, ct)));
@@ -224,6 +229,7 @@ public class LeaveController : ControllerBase
         rule.Status = LeaveStatus.Cancelled;
         rule.DecidedByUserId = ResolveCallerId();
         rule.DecidedAt = DateTime.UtcNow;
+        rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<RecurringUnavailabilityDto>.Ok(await LoadUnavailabilityDtoAsync(rule.Id, ct)));
     }
@@ -306,7 +312,9 @@ public class LeaveController : ControllerBase
         var shifts = await _db.Shifts
             .Where(s => s.UserId == rule.UserId && s.Status == ShiftStatus.Published
                         && s.ServiceDate >= horizonStart && s.ServiceDate <= horizonEnd
-                        && s.StartTime < rule.EndTime && rule.StartTime < s.EndTime)
+                        // s.EndsNextDay: EndTime is a next-day time-of-day, so the plain comparison
+                        // below is meaningless for it — always include overnight shifts instead.
+                        && (s.EndsNextDay || (s.StartTime < rule.EndTime && rule.StartTime < s.EndTime)))
             .ToListAsync(ct);
         overlaps.AddRange(shifts.Where(s => occurrences.Contains(s.ServiceDate)).Select(s => new RosterFindingDto
         {

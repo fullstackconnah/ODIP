@@ -198,7 +198,7 @@ public class RosteringControllerTests
     }
 
     [Fact]
-    public async Task CreateShift_WarningFindingsWithOverrideReason_SavedWithReasonAndAcknowledgedCodes()
+    public async Task CreateShift_NonRequiredWarningWithOverrideReason_PersistsReasonAndCodes()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
@@ -883,6 +883,8 @@ public class RosteringControllerTests
         Assert.Equal(UnavailabilityKind.RecurringRule, recurringBar.Kind);
         Assert.Equal(new TimeOnly(9, 0), recurringBar.StartTime);
         Assert.Equal(new TimeOnly(12, 0), recurringBar.EndTime);
-        Assert.Null(recurringBar.AvailabilityType);
+        // Compat fill (Important #1): RecurringRule bars fill AvailabilityType.Unavailable so the
+        // current frontend keeps rendering a label; Kind remains the real discriminator.
+        Assert.Equal(AvailabilityType.Unavailable, recurringBar.AvailabilityType);
     }
 }
