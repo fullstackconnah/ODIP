@@ -9,6 +9,7 @@ import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -20,7 +21,7 @@ const accommodationSchema = z.object({
   state: z.string().optional(),
   postcode: z.string().optional(),
   contactPerson: z.string().optional(),
-  email: z.string().optional(),
+  email: z.union([z.string().email('Enter a valid email'), z.literal('')]).optional(),
   phone: z.string().optional(),
   mobile: z.string().optional(),
   website: z.string().optional(),
@@ -135,7 +136,7 @@ export default function AccommodationCreatePage() {
 
       {mutation.isError && (
         <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.
+          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.`)}
         </div>
       )}
 
@@ -182,7 +183,7 @@ export default function AccommodationCreatePage() {
           </FormField>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Email">
+            <FormField label="Email" error={errors.email?.message}>
               <input type="email" {...register('email')} placeholder="e.g. jane@example.com" />
             </FormField>
             <FormField label="Phone">

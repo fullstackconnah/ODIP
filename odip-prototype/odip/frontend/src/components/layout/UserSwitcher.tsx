@@ -23,6 +23,15 @@ export default function UserSwitcher() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
   const selectUser = (user: TenantUserDto) => {
     // Preserve original SuperAdmin user object before first impersonation
     if (!localStorage.getItem('odip_superadmin_user')) {
@@ -59,6 +68,8 @@ export default function UserSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="flex items-center gap-1.5 bg-[#fff7ed] border border-[#fed7aa] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#ffedd5] transition-colors"
       >
         <span className="text-[10px] bg-[#ea580c] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>

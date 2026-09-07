@@ -1,10 +1,12 @@
 import { useAccommodation, useDeleteAccommodation, useUpdateAccommodation } from '@/api/hooks'
 import type { AccommodationListDto } from '@/api/types'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, ArchiveRestore } from 'lucide-react'
+import { Plus, Home } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ActionButtons } from '@/components/ActionButtons'
+import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
@@ -19,9 +21,7 @@ export default function AccommodationPage() {
   const updateAccommodation = useUpdateAccommodation()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: AccommodationListDto } | null>(null)
 
-  const handleRestore = (e: React.MouseEvent, a: AccommodationListDto) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleRestore = (a: AccommodationListDto) => {
     setConfirmState({ type: 'restore', item: a })
   }
 
@@ -29,9 +29,7 @@ export default function AccommodationPage() {
     ? properties.filter((a: AccommodationListDto) => a.propertyName.toLowerCase().includes(search.toLowerCase()) || a.location?.toLowerCase().includes(search.toLowerCase()))
     : properties
 
-  const handleDelete = (e: React.MouseEvent, a: AccommodationListDto) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDelete = (a: AccommodationListDto) => {
     setConfirmState({ type: 'archive', item: a })
   }
 
@@ -61,41 +59,42 @@ export default function AccommodationPage() {
 
       {isLoading ? (
         <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Home}
+          title={properties.length === 0 ? 'No properties yet' : 'No results for your search'}
+          description={properties.length === 0 ? undefined : 'Try a different search term.'}
+          action={properties.length === 0 && !showArchived && canWrite ? { label: 'Add your first property', to: '/accommodation/new' } : undefined}
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((a: any) => (
-            <Link key={a.id} to={`/accommodation/${a.id}`} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 hover:border-[var(--color-primary)]/30 transition-colors block">
+            <div key={a.id} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 hover:border-[var(--color-primary)]/30 transition-colors">
               <div className="flex items-start justify-between mb-3">
-                <h3 className="font-semibold">{a.propertyName}</h3>
+                <Link to={`/accommodation/${a.id}`} className="font-semibold hover:underline">{a.propertyName}</Link>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={a.isActive ? 'Active' : 'Inactive'} />
-                  {showArchived ? (
-                    <button onClick={(e) => handleRestore(e, a)}
-                      className="p-1.5 rounded hover:bg-green-500/20 text-[var(--color-muted-foreground)] hover:text-green-400 transition-colors" title="Restore">
-                      <ArchiveRestore className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button onClick={(e) => handleDelete(e, a)}
-                      className="p-1.5 rounded hover:bg-red-500/20 text-[var(--color-muted-foreground)] hover:text-red-400 transition-colors" title="Archive">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <ActionButtons
+                    onDelete={() => handleDelete(a)}
+                    onRestore={() => handleRestore(a)}
+                    showArchived={showArchived}
+                  />
                 </div>
               </div>
-              <div className="space-y-2 text-sm text-[var(--color-muted-foreground)]">
+              <Link to={`/accommodation/${a.id}`} className="block space-y-2 text-sm text-[var(--color-muted-foreground)]">
                 <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {a.location || '—'} {a.region ? `· ${a.region}` : ''}</p>
                 <div className="flex flex-wrap gap-2">
-                  {a.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">accessible</span> Accessible</span>}
-                  {a.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Fully Modified</span>}
-                  {a.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Semi Modified</span>}
+                  {a.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">accessible</span> Accessible</span>}
+                  {a.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Fully Modified</span>}
+                  {a.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Semi Modified</span>}
                 </div>
                 <div className="flex gap-4 pt-2 border-t border-[var(--color-border)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">bed</span> {a.bedCount || '—'} beds</span>
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">meeting_room</span> {a.bedroomCount || '—'} rooms</span>
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">group</span> max {a.maxCapacity || '—'}</span>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}

@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useParticipants } from '@/api/hooks'
 import { formatDateAu, getStatusColor } from '@/lib/utils'
@@ -9,12 +9,24 @@ import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, Task
 
 type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'history'
 
+const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'history']
+
 export default function TripDetailPage() {
   const { canWrite } = usePermissions()
   const { id } = useParams()
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // PP-60: URL-synced so a shared/reloaded link lands on the same tab.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab: Tab = (tabParam && (TAB_KEYS as string[]).includes(tabParam) ? tabParam : 'overview') as Tab
+  const setActiveTab = (tab: Tab) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('tab', tab)
+      return next
+    }, { replace: true })
+  }
   const [showEditTrip, setShowEditTrip] = useState(false)
 
   const { data: trip, isLoading } = useTrip(id)
@@ -23,6 +35,13 @@ export default function TripDetailPage() {
   const { data: vehicles = [] } = useTripVehicles(id)
   const { data: staff = [] } = useTripStaff(id)
   const { data: tasks = [] } = useTripTasks(id)
+  // PP-61 follow-up: NOT gated by activeTab, despite schedule/claims being among the
+  // least-visited tabs — both `schedule.reduce(...)` and `claims.length` feed the tab-label
+  // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
+  // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
+  // 0 until the corresponding tab was visited once. The `enabled` option added to
+  // useTripSchedule/useTripClaims for this stays in place as a harmless additive parameter, but
+  // nothing on this page currently uses it.
   const { data: schedule = [] } = useTripSchedule(id)
   const { data: claims = [] } = useTripClaims(id)
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.

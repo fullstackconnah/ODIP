@@ -526,3 +526,31 @@ describe('RecordAdministrationModal INC-03 drop into draft incident', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
+
+// PP-31: a backdrop click shouldn't silently discard a typed reason/witness/notes.
+describe('RecordAdministrationModal backdrop dismiss', () => {
+  function clickBackdrop() {
+    // The backdrop is Modal's own outer element, not exposed by any accessible role.
+    const dialog = screen.getByRole('dialog')
+    return userEvent.setup().click(dialog.parentElement!)
+  }
+
+  it('closes on a backdrop click while the form is pristine', async () => {
+    const onClose = vi.fn()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await clickBackdrop()
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not close on a backdrop click once a field has been edited', async () => {
+    const onClose = vi.fn()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} onClose={onClose} />)
+
+    await userEvent.setup().type(screen.getByLabelText(/^notes/i), 'Some notes')
+    await clickBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})

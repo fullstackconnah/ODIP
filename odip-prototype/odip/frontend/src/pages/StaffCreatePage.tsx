@@ -1,6 +1,7 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
+import type { AxiosError } from 'axios'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
@@ -54,6 +55,14 @@ const ROLE_LABELS: Record<string, string> = {
   ReadOnly: 'Read Only',
   Admin: 'Admin',
   SuperAdmin: 'SuperAdmin',
+}
+
+// PP-85 — same error-extraction idiom as RecordAdministrationModal.tsx/MedicationFormPage.tsx,
+// surfacing the backend's specific validation/conflict message (e.g. "A user with this email
+// already exists.") instead of a generic banner.
+function extractErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
 export default function StaffCreatePage() {
@@ -199,8 +208,8 @@ export default function StaffCreatePage() {
       </div>
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} staff member. Please check your input and try again.
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} staff member. Please check your input and try again.`)}
         </div>
       )}
 

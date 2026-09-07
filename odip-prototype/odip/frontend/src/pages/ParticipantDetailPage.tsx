@@ -21,9 +21,10 @@ import {
   ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
 } from './participant-detail'
 import { Card } from '@/components/Card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function ParticipantDetailPage() {
-  const { canWrite, canViewAlerts, canWriteParticipantDetails } = usePermissions()
+  const { canWrite, canViewAlerts, canWriteParticipantDetails, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'history'
@@ -31,8 +32,6 @@ export default function ParticipantDetailPage() {
   const [tab, setTab] = useState<Tab>(
     initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'history' ? initialTab : 'details'
   )
-  const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
-  const isAdmin = currentUser.role === 'Admin'
   const { data: p, isLoading } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
@@ -168,7 +167,7 @@ export default function ParticipantDetailPage() {
           { key: 'notes', label: 'Notes', icon: StickyNote },
           { key: 'routines', label: 'Routines', icon: ListChecks },
           { key: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
-          ...(isAdmin ? [{ key: 'history' as const, label: 'History' }] : []),
+          ...((isSuperAdmin || isAdmin) ? [{ key: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
         onChange={(key) => setTab(key as typeof tab)}
@@ -275,7 +274,7 @@ export default function ParticipantDetailPage() {
         <RestrictivePracticesTab participantId={id} />
       )}
 
-      {tab === 'history' && isAdmin && p && (
+      {tab === 'history' && (isSuperAdmin || isAdmin) && p && (
         <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />
       )}
     </div>
@@ -300,6 +299,7 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
   const generate = useGenerateCaregiverLink()
   const revoke = useRevokeCaregiverLink()
   const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
+  const [confirmingRevoke, setConfirmingRevoke] = useState(false)
   const drafts = useCaregiverSubmissions('Draft')
   const submitted = useCaregiverSubmissions('Submitted')
 
@@ -327,7 +327,7 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
         {active && (
           <button
             type="button"
-            onClick={() => revoke.mutate({ participantId })}
+            onClick={() => setConfirmingRevoke(true)}
             disabled={revoke.isPending}
             className="px-3 py-2 rounded-lg text-sm text-[var(--color-destructive)] hover:bg-[var(--color-accent)]"
           >
@@ -347,6 +347,19 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
       {(generate.isError || revoke.isError) && (
         <p role="alert" className="text-xs text-[var(--color-destructive)]">Something went wrong. Try again.</p>
       )}
+      <ConfirmDialog
+        open={confirmingRevoke}
+        onCancel={() => setConfirmingRevoke(false)}
+        onConfirm={async () => {
+          await revoke.mutateAsync({ participantId })
+          setConfirmingRevoke(false)
+        }}
+        title="Revoke caregiver link?"
+        message="The caregiver will no longer be able to access or submit this link. This can't be undone."
+        confirmLabel="Revoke"
+        variant="danger"
+        loading={revoke.isPending}
+      />
     </div>
   )
 }

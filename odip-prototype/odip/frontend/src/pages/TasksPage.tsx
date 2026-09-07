@@ -22,6 +22,7 @@ const TASK_STATUS_ITEMS = [
 export default function TasksPage() {
   const { canWrite } = usePermissions()
   const [statusFilter, setStatusFilter] = useState('')
+  const [failedRowId, setFailedRowId] = useState<string | null>(null)
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
 
@@ -73,21 +74,34 @@ export default function TasksPage() {
       header: 'Status',
       sortable: true,
       render: (t) => (
-        <Dropdown
-          variant="pill"
-          value={t.status}
-          onChange={val => updateTask.mutate({
-            id: t.id,
-            data: {
-              ...t,
-              status: val,
-              ...(val === 'Completed' ? { completedDate: new Date().toISOString().split('T')[0] } : {}),
-            },
-          })}
-          colorClass={getStatusColor(t.status)}
-          items={TASK_STATUS_ITEMS}
-          disabled={!canWrite}
-        />
+        <div>
+          <Dropdown
+            variant="pill"
+            value={t.status}
+            onChange={val => {
+              setFailedRowId(null)
+              updateTask.mutate({
+                id: t.id,
+                data: {
+                  ...t,
+                  status: val,
+                  ...(val === 'Completed' ? { completedDate: new Date().toISOString().split('T')[0] } : {}),
+                },
+              }, {
+                onError: () => setFailedRowId(t.id),
+                onSuccess: () => setFailedRowId(prev => prev === t.id ? null : prev),
+              })
+            }}
+            colorClass={getStatusColor(t.status)}
+            items={TASK_STATUS_ITEMS}
+            disabled={!canWrite}
+          />
+          {failedRowId === t.id && (
+            <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">
+              Couldn't update status. Try again.
+            </p>
+          )}
+        </div>
       ),
     },
     { key: 'actions', header: '', render: (t) => canWrite ? actionButtons(t) : null },

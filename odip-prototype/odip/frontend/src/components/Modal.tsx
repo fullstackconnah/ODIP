@@ -9,6 +9,9 @@ export type ModalProps = {
   footer?: ReactNode
   children: ReactNode
   className?: string
+  /** Whether clicking the backdrop closes the modal. Defaults to `true`. Set to `false` for a
+   * modal tracking unsaved/dirty input, so an accidental outside click doesn't discard it. */
+  closeOnBackdrop?: boolean
 }
 
 const SIZE_MAP = {
@@ -21,7 +24,7 @@ const SIZE_MAP = {
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<Element | null>(null)
@@ -79,7 +82,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         ref={dialogRef}
         role="dialog"

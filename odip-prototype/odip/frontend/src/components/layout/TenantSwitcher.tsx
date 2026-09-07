@@ -56,6 +56,15 @@ export default function TenantSwitcher() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
   const switchTenant = (tenantId: string) => {
     // Restore original SuperAdmin user if we were impersonating
     const savedAdmin = localStorage.getItem('odip_superadmin_user')
@@ -73,6 +82,8 @@ export default function TenantSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="flex items-center gap-1.5 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#e0e7ff] transition-colors"
       >
         <span className="text-[10px] bg-[#6366f1] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>

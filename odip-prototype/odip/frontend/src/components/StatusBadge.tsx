@@ -15,6 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   proposed: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   none: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+  archived: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   cancelled: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   unavailable: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   nolongerattending: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',

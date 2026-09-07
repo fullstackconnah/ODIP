@@ -88,6 +88,18 @@ export default function CompatibilityPage() {
   const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants({ isDraft: 'false' })
   const { data: staff = [], isLoading: staffLoading, isError: staffError, refetch: refetchStaff } = useStaff()
 
+  // PP-53: text filters on a matrix that can otherwise grow unbrowsably wide/tall.
+  const [staffFilter, setStaffFilter] = useState('')
+  const [participantFilter, setParticipantFilter] = useState('')
+  const filteredStaff = useMemo(
+    () => staff.filter(s => s.fullName.toLowerCase().includes(staffFilter.trim().toLowerCase())),
+    [staff, staffFilter],
+  )
+  const filteredParticipants = useMemo(
+    () => participants.filter(p => p.fullName.toLowerCase().includes(participantFilter.trim().toLowerCase())),
+    [participants, participantFilter],
+  )
+
   const participantIds = useMemo(() => participants.map(p => p.id), [participants])
   const matrix = useCompatibilityMatrix(participantIds)
   const upsertCompatibility = useUpsertCompatibility()
@@ -201,6 +213,27 @@ export default function CompatibilityPage() {
       )}
 
       {!isLoading && !isError && !noPeopleYet && (
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="text"
+            value={staffFilter}
+            onChange={e => setStaffFilter(e.target.value)}
+            placeholder="Filter staff…"
+            aria-label="Filter staff"
+            className="w-48 rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <input
+            type="text"
+            value={participantFilter}
+            onChange={e => setParticipantFilter(e.target.value)}
+            placeholder="Filter participants…"
+            aria-label="Filter participants"
+            className="w-48 rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+      )}
+
+      {!isLoading && !isError && !noPeopleYet && (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -208,7 +241,7 @@ export default function CompatibilityPage() {
                 <th className="sticky left-0 top-0 z-30 whitespace-nowrap border-b border-r border-border bg-surface-container-low px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                   Staff
                 </th>
-                {participants.map(participant => (
+                {filteredParticipants.map(participant => (
                   <th
                     key={participant.id}
                     className="sticky top-0 z-20 min-w-[7rem] whitespace-nowrap border-b border-border bg-surface-container-low px-2 py-2 text-left text-xs font-medium text-muted-foreground"
@@ -219,12 +252,12 @@ export default function CompatibilityPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {staff.map(staffMember => (
+              {filteredStaff.map(staffMember => (
                 <tr key={staffMember.id}>
                   <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card px-3 py-1 text-sm font-medium text-foreground">
                     {staffMember.fullName}
                   </td>
-                  {participants.map(participant => {
+                  {filteredParticipants.map(participant => {
                     const staffRef: PersonRef = { id: staffMember.id, fullName: staffMember.fullName }
                     const participantRef: PersonRef = { id: participant.id, fullName: participant.fullName }
                     const { level, reason } = resolveCell(staffMember.id, participant.id)

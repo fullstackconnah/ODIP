@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Plus } from 'lucide-react'
 
 // ── Status Pill Styles ──
@@ -24,24 +23,6 @@ export default function StatusBadge({ status, role, clickable, onClick, onUnassi
 }) {
   const s = statusStyles[status] || statusStyles.Available
   const isUnassignable = !!(onUnassign && status === 'Assigned')
-  const [justUnassigned, setJustUnassigned] = useState(false)
-
-  const handleUnassign = () => {
-    setJustUnassigned(true)
-    setTimeout(() => {
-      onUnassign?.()
-      setJustUnassigned(false)
-    }, 1000)
-  }
-
-  if (justUnassigned) {
-    return (
-      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--color-primary-fixed)]/25 text-[var(--color-primary)] text-xs font-medium">
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] flex-shrink-0" />
-        <span>Unassigned</span>
-      </div>
-    )
-  }
 
   if (clickable) {
     return (
@@ -63,7 +44,7 @@ export default function StatusBadge({ status, role, clickable, onClick, onUnassi
     return (
       <button
         type="button"
-        onClick={handleUnassign}
+        onClick={onUnassign}
         aria-label={unassignLabel ?? 'Unassign'}
         className="group relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-all bg-[var(--color-primary-fixed)]/25 text-[var(--color-primary)] hover:bg-rose-100 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
         title="Click to unassign"

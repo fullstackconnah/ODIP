@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import type { AxiosError } from 'axios'
 import { ArrowLeft, ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
 import {
   usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest,
@@ -14,6 +15,11 @@ import { formatWithTimeZone } from '@/lib/utils'
 
 function formatDateTime(value: string | null, timeZone: string | null) {
   return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
 /** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */
@@ -58,9 +64,13 @@ export default function PortalWitnessApprovalsPage() {
     setError(null)
     try {
       const res = await approve.mutateAsync(request.id)
-      if (!res.success) setError(res.errors?.[0] || res.message || 'Failed to approve.')
-    } catch {
-      setError('Failed to approve.')
+      if (!res.success) {
+        setError(res.errors?.[0] || res.message || 'Failed to approve.')
+        refetch()
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Failed to approve.'))
+      refetch()
     }
   }
 
@@ -78,9 +88,13 @@ export default function PortalWitnessApprovalsPage() {
           ? await approveIncident.mutateAsync({ id: request.id, statementText: statementText.trim() || undefined })
           : await declineIncident.mutateAsync({ id: request.id, statementText: statementText.trim() || undefined })
         : await decline.mutateAsync(request.id) // medication only ever reaches the dialog via Decline
-      if (!res.success) setError(res.errors?.[0] || res.message || `Failed to ${action}.`)
-    } catch {
-      setError(`Failed to ${action}.`)
+      if (!res.success) {
+        setError(res.errors?.[0] || res.message || `Failed to ${action}.`)
+        refetch()
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err, `Failed to ${action}.`))
+      refetch()
     } finally {
       setPendingAction(null)
       setStatementText('')

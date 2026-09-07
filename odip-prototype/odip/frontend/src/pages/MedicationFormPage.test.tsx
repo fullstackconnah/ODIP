@@ -4,17 +4,18 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import MedicationFormPage from './MedicationFormPage'
 
-const { mockUseMedication, mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync } = vi.hoisted(() => ({
+const { mockUseMedication, mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseCreateMedication } = vi.hoisted(() => ({
   mockUseMedication: vi.fn(),
   mockUseParticipant: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
+  mockUseCreateMedication: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Dropdown, ToggleGroup are the real components, so
 // this exercises the actual frequency-controls conditional rendering wiring.
 vi.mock('@/api/hooks', () => ({
-  useCreateMedication: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
+  useCreateMedication: mockUseCreateMedication,
   useUpdateMedication: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
   useMedication: mockUseMedication,
   useParticipant: mockUseParticipant,
@@ -43,6 +44,7 @@ beforeEach(() => {
   mockUseMedication.mockReturnValue({ data: undefined, isLoading: false })
   mockUseParticipant.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
+  mockUseCreateMedication.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
 })
 
 describe('MedicationFormPage frequency controls', () => {
@@ -174,5 +176,21 @@ describe('MedicationFormPage MED-01 pharmacy phone', () => {
         pharmacyPhone: '03 9123 4567',
       }),
     }))
+  })
+})
+
+// PP-32: the backend's specific validation message (MedicationsController.cs:609-635) should
+// reach the banner instead of the one generic "check your input" string for every failure.
+describe('MedicationFormPage save-failure banner', () => {
+  it('shows the server\'s specific validation message on a failed save', () => {
+    mockUseCreateMedication.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync,
+      isPending: false,
+      isError: true,
+      error: { response: { data: { message: 'A medication with this name is already active for this participant.' } } },
+    })
+    renderCreatePage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('A medication with this name is already active for this participant.')
   })
 })

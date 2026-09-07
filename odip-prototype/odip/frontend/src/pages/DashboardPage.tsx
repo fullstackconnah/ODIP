@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
@@ -60,6 +61,32 @@ export default function DashboardPage() {
   const { data: allStaff = [] } = useStaff({ isActive: 'true' })
   const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
 
+  const warningDays = settings?.qualificationWarningDays ?? 30
+
+  // Hooks must run unconditionally on every render — this has to sit above the isLoading/isError
+  // early returns below, not after them.
+  const qualIssueCount = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return (allStaff as any[]).reduce((count: number, s: any) => {
+      const checks = [
+        { flag: s.isFirstAidQualified, expiry: s.firstAidExpiryDate },
+        { flag: s.isDriverEligible, expiry: s.driverLicenceExpiryDate },
+        { flag: s.isManualHandlingCompetent, expiry: s.manualHandlingExpiryDate },
+        { flag: s.isMedicationCompetent, expiry: s.medicationCompetencyExpiryDate },
+        // Worker screening has no boolean qualification flag — it only "applies" (and can be
+        // an issue) once an expiry date has actually been entered.
+        { flag: !!s.workerScreeningExpiryDate, expiry: s.workerScreeningExpiryDate },
+      ]
+      return count + checks.filter(({ flag, expiry }) => {
+        if (!flag) return false
+        if (!expiry) return true  // no date set counts as an issue
+        const diff = Math.floor((new Date(expiry + 'T00:00:00').getTime() - today.getTime()) / 86400000)
+        return diff <= warningDays
+      }).length
+    }, 0)
+  }, [allStaff, warningDays])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -78,28 +105,6 @@ export default function DashboardPage() {
     tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
     qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
   }
-
-  const warningDays = settings?.qualificationWarningDays ?? 30
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const qualIssueCount = (allStaff as any[]).reduce((count: number, s: any) => {
-    const checks = [
-      { flag: s.isFirstAidQualified, expiry: s.firstAidExpiryDate },
-      { flag: s.isDriverEligible, expiry: s.driverLicenceExpiryDate },
-      { flag: s.isManualHandlingCompetent, expiry: s.manualHandlingExpiryDate },
-      { flag: s.isMedicationCompetent, expiry: s.medicationCompetencyExpiryDate },
-      // Worker screening has no boolean qualification flag — it only "applies" (and can be
-      // an issue) once an expiry date has actually been entered.
-      { flag: !!s.workerScreeningExpiryDate, expiry: s.workerScreeningExpiryDate },
-    ]
-    return count + checks.filter(({ flag, expiry }) => {
-      if (!flag) return false
-      if (!expiry) return true  // no date set counts as an issue
-      const diff = Math.floor((new Date(expiry + 'T00:00:00').getTime() - today.getTime()) / 86400000)
-      return diff <= warningDays
-    }).length
-  }, 0)
 
   // Defensive filter (fix round 1 — review finding): the aggregate endpoint already excludes
   // inactive/archived participants server-side, but an archived participant's stale data (e.g. a
@@ -316,8 +321,8 @@ export default function DashboardPage() {
                     <div className="w-7 h-7 rounded-full bg-[var(--color-primary-fixed)] border-2 border-white flex items-center justify-center text-[9px] font-bold text-[var(--color-on-primary-fixed)]">
                       {initials}
                     </div>
-                    <Link to="/tasks" className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 hover:underline">
-                      Resolve <ChevronRight className="w-3.5 h-3.5" />
+                    <Link to={`/tasks/${t.id}/edit`} className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 hover:underline">
+                      View <ChevronRight className="w-3.5 h-3.5" />
                     </Link>
                   </div>
                 </div>
@@ -358,7 +363,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-[var(--color-muted-foreground)] mb-4">{alert.message}</p>
                   <div className="flex items-center justify-end">
                     <span className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1">
-                      Resolve <ChevronRight className="w-3.5 h-3.5" />
+                      View <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   </div>
                 </Link>

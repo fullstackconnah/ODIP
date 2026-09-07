@@ -20,20 +20,29 @@ import TenantDetailView from '@/pages/settings/TenantDetailView'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
   const updateSettings = useUpdateSettings()
   const [warningDays, setWarningDays] = useState<number>(30)
+  const [initialWarningDays, setInitialWarningDays] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (settings) setWarningDays(settings.qualificationWarningDays)
+    if (settings) {
+      setWarningDays(settings.qualificationWarningDays)
+      setInitialWarningDays(current => current ?? settings.qualificationWarningDays)
+    }
   }, [settings])
+
+  const isDirty = initialWarningDays !== null && warningDays !== initialWarningDays
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   function handleSave() {
     updateSettings.mutate({ qualificationWarningDays: warningDays }, {
       onSuccess: () => {
+        setInitialWarningDays(warningDays)
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
       },
@@ -42,6 +51,7 @@ function QualificationSettingsTab() {
 
   return (
     <div className="max-w-md space-y-6">
+      {unsavedChangesDialog}
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Qualification Warning Window</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
@@ -158,6 +168,7 @@ export default function SettingsPage() {
                     onClick={() => { setEditingTemplate(t); setPanelOpen(true) }}
                     className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-[var(--color-accent)] transition-all"
                     title="Edit template"
+                    aria-label="Edit template"
                   >
                     <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
                   </button>
@@ -255,22 +266,25 @@ function ProviderSettingsTab() {
   const [init, setInit] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
 
   if (settings && !init) { setForm(settings); setInit(true) }
+
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
   const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
     value: (form[field] as string) ?? '',
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((p) => ({ ...p, [field]: e.target.value })),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setForm((p) => ({ ...p, [field]: e.target.value })); setDirty(true) },
     className: inputClass,
   })
 
   function handleSave() {
     setError(null)
     upsert.mutate(form as import('@/api/types').UpsertProviderSettingsDto, {
-      onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2000) },
+      onSuccess: () => { setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
       onError: (err: unknown) => {
         const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
         const status = axiosErr?.response?.status
@@ -284,6 +298,7 @@ function ProviderSettingsTab() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {unsavedChangesDialog}
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Organisation Details</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">Used on NDIS claims, BPR CSV files, and invoices.</p>
@@ -303,11 +318,11 @@ function ProviderSettingsTab() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={form.gstRegistered ?? false} onChange={e => setForm((p) => ({ ...p, gstRegistered: e.target.checked }))} className="w-4 h-4 accent-[var(--color-primary)]" id="gst" />
+            <input type="checkbox" checked={form.gstRegistered ?? false} onChange={e => { setForm((p) => ({ ...p, gstRegistered: e.target.checked })); setDirty(true) }} className="w-4 h-4 accent-[var(--color-primary)]" id="gst" />
             <label htmlFor="gst" className="text-sm text-[var(--color-muted-foreground)]">GST Registered</label>
           </div>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={form.isPaceProvider ?? false} onChange={e => setForm((p) => ({ ...p, isPaceProvider: e.target.checked }))} className="w-4 h-4 accent-[var(--color-primary)]" id="pace" />
+            <input type="checkbox" checked={form.isPaceProvider ?? false} onChange={e => { setForm((p) => ({ ...p, isPaceProvider: e.target.checked })); setDirty(true) }} className="w-4 h-4 accent-[var(--color-primary)]" id="pace" />
             <label htmlFor="pace" className="text-sm text-[var(--color-muted-foreground)]">PACE Provider <span className="text-xs text-[var(--color-muted-foreground)]/60">(16-col BPR CSV)</span></label>
           </div>
         </div>
@@ -335,13 +350,13 @@ function ProviderSettingsTab() {
         <textarea {...f('invoiceFooterNotes')} rows={3} className={inputClass + ' resize-none'} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
-        <div className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-2xl px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
           <span className="mt-0.5">⚠</span>
           <span>{error}</span>
         </div>
       )}
       {canEditProviderSettings && (
-        <button onClick={handleSave} disabled={upsert.isPending} className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:bg-[#294800] transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={upsert.isPending} className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50">
           {upsert.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
         </button>
       )}
@@ -419,7 +434,7 @@ function SupportCatalogueTab() {
           <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
         </div>
-        <button onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
+        <button onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all">
           Import Catalogue
         </button>
       </div>
@@ -464,7 +479,7 @@ function SupportCatalogueTab() {
             </div>
 
             {importError && (
-              <div role="alert" className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+              <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-2xl px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
                 <span className="mt-0.5">⚠</span>
                 <span>{importError}</span>
               </div>
@@ -498,7 +513,7 @@ function SupportCatalogueTab() {
                 </div>
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setPreviewStep('upload')} className="px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
-                  <button onClick={handleConfirm} disabled={confirming} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] disabled:opacity-50">
+                  <button onClick={handleConfirm} disabled={confirming} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">
                     {confirming ? 'Importing...' : 'Confirm Import'}
                   </button>
                 </div>
@@ -578,7 +593,7 @@ function PublicHolidaysTab() {
             items={states.map(s => ({ value: s, label: s }))}
             label="Select state"
           />
-          <button onClick={() => setAdding(true)} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all">
+          <button onClick={() => setAdding(true)} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all">
             + Add Holiday
           </button>
         </div>
@@ -597,7 +612,7 @@ function PublicHolidaysTab() {
               label="Select state"
             />
             <div className="flex gap-2">
-              <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-medium hover:bg-[#294800] disabled:opacity-50">Save</button>
+              <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">Save</button>
               <button onClick={() => setAdding(false)} className="px-3 py-1.5 rounded-full border border-[#c3c9b6] text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Cancel</button>
             </div>
           </div>
@@ -639,7 +654,7 @@ function PublicHolidaysTab() {
           <button
             onClick={handleSync}
             disabled={syncHolidays.isPending}
-            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
           </button>
@@ -679,7 +694,7 @@ function PublicHolidaysTab() {
               ? 'bg-green-50 text-green-700'
               : syncMessage.type === 'warning'
               ? 'bg-yellow-50 text-yellow-700'
-              : 'bg-red-50 text-red-700'
+              : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
           }`}>
             {syncMessage.text}
           </div>

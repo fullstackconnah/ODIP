@@ -44,7 +44,7 @@ export function BasicsStep({
 }: BasicsStepProps) {
   return (
     <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Details" className="md:col-span-2 space-y-4">
+      <Card title="Who" className="space-y-4">
         <FormField label="Involved Participant">
           <ParticipantPicker
             allowNone
@@ -77,7 +77,9 @@ export function BasicsStep({
             ]}
           />
         </FormField>
+      </Card>
 
+      <Card title="What" className="space-y-4">
         <FormField label="Service Type" required>
           <Dropdown
             variant="form"

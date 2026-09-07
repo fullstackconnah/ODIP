@@ -2,6 +2,7 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
+import type { AxiosError } from 'axios'
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
@@ -111,6 +112,15 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
     if (!errors[field]) errors[field] = { type: issue.code, message: issue.message }
   }
   return { values: {}, errors }
+}
+
+function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  return (
+    axiosErr?.response?.data?.errors?.[0] ||
+    axiosErr?.response?.data?.message ||
+    `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`
+  )
 }
 
 export default function MedicationFormPage() {
@@ -289,8 +299,8 @@ export default function MedicationFormPage() {
       </div>
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} medication. Please check your input and try again.
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          {extractMedicationErrorMessage(mutation.error, isEdit)}
         </div>
       )}
 
@@ -323,7 +333,7 @@ export default function MedicationFormPage() {
                 />
               </FormField>
               {formMismatch && (
-                <p className="text-xs text-amber-700 mt-1.5">Unusual form for this route — check the prescription</p>
+                <p className="text-xs text-[var(--color-on-warning-container)] mt-1.5">Unusual form for this route — check the prescription</p>
               )}
             </div>
             <FormField label="Route" required error={errors.route?.message}>
@@ -526,14 +536,14 @@ export default function MedicationFormPage() {
           </FormField>
 
           {isPsychotropic && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-3">
+            <div className="rounded-lg border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/40 px-3 py-2 space-y-3">
               <FormField label="Chemical Restraint" layout="checkbox">
                 <input type="checkbox" {...register('isChemicalRestraint')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
 
               {isChemicalRestraint && (
                 <div className="space-y-3">
-                  <p className="text-xs text-amber-800">
+                  <p className="text-xs text-[var(--color-on-warning-container)]">
                     A medication used primarily to influence behaviour is a regulated restrictive practice — it must be in a current
                     behaviour support plan and authorised in your state or territory. Unauthorised use is a reportable incident.
                   </p>

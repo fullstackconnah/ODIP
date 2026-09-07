@@ -27,4 +27,15 @@ describe('StatusBadge — keyboard accessibility (PP-9)', () => {
     render(<StatusBadge status="Available" clickable onClick={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Assign' })).toBeInTheDocument()
   })
+
+  it('PP-54: calls onUnassign immediately, with no intermediate "Unassigned" chip', async () => {
+    const user = userEvent.setup()
+    const onUnassign = vi.fn()
+    render(<StatusBadge status="Assigned" onUnassign={onUnassign} unassignLabel="Unassign" />)
+
+    await user.click(screen.getByRole('button', { name: 'Unassign' }))
+
+    expect(onUnassign).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()
+  })
 })

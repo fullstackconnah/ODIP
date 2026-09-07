@@ -10,6 +10,7 @@ import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -113,7 +114,7 @@ export default function VehicleCreatePage() {
 
       {mutation.isError && (
         <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} vehicle. Please check your input and try again.
+          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} vehicle. Please check your input and try again.`)}
         </div>
       )}
 

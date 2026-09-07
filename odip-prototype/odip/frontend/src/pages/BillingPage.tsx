@@ -16,6 +16,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 
@@ -128,6 +129,15 @@ function FundingSourcesTab() {
   const [routeTypeFilter, setRouteTypeFilter] = useState('')
   const [panelOpen, setPanelOpen] = useState(false)
   const [editing, setEditing] = useState<FundingSourceDto | undefined>(undefined)
+  const [deactivateTarget, setDeactivateTarget] = useState<FundingSourceDto | null>(null)
+
+  function handleActiveChange(fs: FundingSourceDto, active: boolean) {
+    if (!active) {
+      setDeactivateTarget(fs)
+    } else {
+      updateFundingSource.mutate({ id: fs.id, data: toUpdateFundingSourcePayload(fs, true) })
+    }
+  }
 
   const hasFilters = !!participantFilter || !!routeTypeFilter
   const queryParams: Record<string, string> = {}
@@ -164,7 +174,7 @@ function FundingSourcesTab() {
             <Dropdown
               variant="pill"
               value={current}
-              onChange={val => updateFundingSource.mutate({ id: fs.id, data: toUpdateFundingSourcePayload(fs, val === 'Active') })}
+              onChange={val => handleActiveChange(fs, val === 'Active')}
               colorClass={ACTIVE_STATUS_COLORS[current]}
               items={ACTIVE_STATUS_ITEMS}
               disabled={!canWrite}
@@ -250,6 +260,27 @@ function FundingSourcesTab() {
         isOpen={panelOpen}
         onClose={() => { setPanelOpen(false); setEditing(undefined) }}
         fundingSource={editing}
+      />
+
+      <ConfirmDialog
+        open={deactivateTarget !== null}
+        onCancel={() => setDeactivateTarget(null)}
+        onConfirm={() => {
+          if (!deactivateTarget) return
+          updateFundingSource.mutate(
+            { id: deactivateTarget.id, data: toUpdateFundingSourcePayload(deactivateTarget, false) },
+            { onSuccess: () => setDeactivateTarget(null) }
+          )
+        }}
+        variant="danger"
+        loading={updateFundingSource.isPending}
+        title="Deactivate funding source?"
+        confirmLabel="Deactivate"
+        message={
+          <p>
+            Mark <strong>{deactivateTarget?.participantName || 'this'}</strong>'s funding source as inactive?
+          </p>
+        }
       />
     </div>
   )
@@ -413,7 +444,16 @@ function BillableEventsTab() {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: ev => <StatusBadge status={ev.status} colorMap={BILLABLE_EVENT_STATUS_COLORS} />,
+      render: ev => (
+        <div className="flex flex-col gap-0.5">
+          <span title={ev.status === 'Rejected' && ev.rejectionReason ? ev.rejectionReason : undefined}>
+            <StatusBadge status={ev.status} colorMap={BILLABLE_EVENT_STATUS_COLORS} />
+          </span>
+          {ev.status === 'Rejected' && ev.rejectionReason && (
+            <span className="text-xs text-[var(--color-muted-foreground)]">{ev.rejectionReason}</span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'actions',

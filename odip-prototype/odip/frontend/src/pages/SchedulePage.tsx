@@ -126,14 +126,14 @@ export default function SchedulePage() {
             <button className="px-5 py-2 bg-white rounded-full text-sm font-bold shadow-sm text-[var(--color-foreground)]">
               Grid View
             </button>
-            <button className="px-5 py-2 text-[var(--color-muted-foreground)] text-sm font-medium hover:text-[var(--color-foreground)] transition-colors">
+            <button disabled title="Coming soon" className="px-5 py-2 text-[var(--color-muted-foreground)] text-sm font-medium hover:text-[var(--color-foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Timeline
             </button>
           </div>
-          <button className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)]">
+          <button disabled title="Coming soon" className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
             <Filter className="w-4 h-4" />
           </button>
-          <button className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)]">
+          <button disabled title="Coming soon" className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
             <Download className="w-4 h-4" />
           </button>
         </div>

@@ -71,24 +71,26 @@ export default function CaregiverSubmissionReviewPage() {
         Object.entries(byGroup).map(([group, groupRows]) => (
           <section key={group} className="rounded-2xl border border-[var(--color-border)] overflow-hidden">
             <h2 className="px-4 py-2 bg-[var(--color-accent)] text-sm font-medium">{group}</h2>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[var(--color-muted-foreground)]">
-                  <th className="p-3">Field</th>
-                  <th className="p-3">Current</th>
-                  <th className="p-3">Caregiver's value</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {groupRows.map((r) => (
-                  <tr key={r.field}>
-                    <td className="p-3 font-medium">{r.label}</td>
-                    <td className="p-3">{r.current}</td>
-                    <td className="p-3">{r.proposed}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[var(--color-muted-foreground)]">
+                    <th className="p-3">Field</th>
+                    <th className="p-3">Current</th>
+                    <th className="p-3">Caregiver's value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {groupRows.map((r) => (
+                    <tr key={r.field}>
+                      <td className="p-3 font-medium">{r.label}</td>
+                      <td className="p-3">{r.current}</td>
+                      <td className="p-3">{r.proposed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         ))
       )}

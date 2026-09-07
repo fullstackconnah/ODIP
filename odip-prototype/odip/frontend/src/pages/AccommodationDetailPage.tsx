@@ -4,9 +4,23 @@ import { ArrowLeft, Pencil } from 'lucide-react'
 
 export default function AccommodationDetailPage() {
   const { id } = useParams()
-  const { data: property, isLoading } = useAccommodationDetail(id)
+  const { data: property, isLoading, isError, refetch } = useAccommodationDetail(id)
 
   if (isLoading) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div>
+  if (isError) return (
+    <div className="text-center py-12 space-y-3">
+      <p className="text-sm text-[var(--color-muted-foreground)]" role="alert">
+        Failed to load this property. Check your connection and try again.
+      </p>
+      <button
+        type="button"
+        onClick={() => refetch()}
+        className="inline-flex items-center justify-center h-9 px-4 rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-colors"
+      >
+        Try again
+      </button>
+    </div>
+  )
   if (!property) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Property not found</div>
 
   return (
@@ -58,9 +72,9 @@ export default function AccommodationDetailPage() {
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-2">
-            {property.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-400">Wheelchair Accessible</span>}
-            {property.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Fully Modified</span>}
-            {property.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Semi Modified</span>}
+            {property.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]">Wheelchair Accessible</span>}
+            {property.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Fully Modified</span>}
+            {property.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Semi Modified</span>}
           </div>
         </div>
 

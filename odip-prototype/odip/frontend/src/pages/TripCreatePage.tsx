@@ -9,6 +9,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 
 const tripSchema = z.object({
   tripName: z.string().min(1, 'Trip name is required'),
@@ -89,7 +90,7 @@ export default function TripCreatePage() {
 
       {createTrip.isError && (
         <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to create trip. Please check your input and try again.
+          {extractErrorMessage(createTrip.error, 'Failed to create trip. Please check your input and try again.')}
         </div>
       )}
 
@@ -191,28 +192,28 @@ export default function TripCreatePage() {
         {/* Capacity & Requirements */}
         <Card title="Capacity & Requirements" className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Min Participants">
+            <FormField label="Min Participants" hint="Smallest group size this trip needs to go ahead.">
               <input type="number" min={0} {...register('minParticipants')} />
             </FormField>
-            <FormField label="Max Participants">
+            <FormField label="Max Participants" hint="Booking capacity before further bookings go to a waitlist.">
               <input type="number" min={0} {...register('maxParticipants')} />
             </FormField>
           </div>
 
-          <FormField label="Wheelchair Capacity">
+          <FormField label="Wheelchair Capacity" hint="Wheelchair-accessible spots this trip's vehicles/accommodation must provide.">
             <input type="number" min={0} {...register('requiredWheelchairCapacity')} />
           </FormField>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Required Beds">
+            <FormField label="Required Beds" hint="Total beds needed across all accommodation for this trip.">
               <input type="number" min={0} {...register('requiredBeds')} />
             </FormField>
-            <FormField label="Required Bedrooms">
+            <FormField label="Required Bedrooms" hint="Total bedrooms needed, e.g. for privacy or support needs.">
               <input type="number" min={0} {...register('requiredBedrooms')} />
             </FormField>
           </div>
 
-          <FormField label="Min Staff Required">
+          <FormField label="Min Staff Required" hint="Minimum staff that must be assigned before the trip can proceed.">
             <input type="number" min={0} {...register('minStaffRequired')} />
           </FormField>
         </Card>

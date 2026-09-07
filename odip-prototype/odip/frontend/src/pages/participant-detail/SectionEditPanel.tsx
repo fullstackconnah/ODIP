@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Pencil } from 'lucide-react'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -37,10 +37,18 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
   const [editing, setEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  useEffect(() => {
+    if (!saved) return
+    const timer = setTimeout(() => setSaved(false), 3000)
+    return () => clearTimeout(timer)
+  }, [saved])
 
   function handleEdit() {
     setError(null)
+    setSaved(false)
     onEditStart()
     setEditing(true)
   }
@@ -66,6 +74,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
     try {
       await onSave()
       setEditing(false)
+      setSaved(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save changes.')
     } finally {
@@ -92,6 +101,12 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
       {error && (
         <div role="alert" className="mb-4 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {error}
+        </div>
+      )}
+
+      {saved && (
+        <div role="status" className="mb-4 p-3 rounded-lg bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm border border-[var(--color-on-primary-fixed)]/20">
+          Saved.
         </div>
       )}
 

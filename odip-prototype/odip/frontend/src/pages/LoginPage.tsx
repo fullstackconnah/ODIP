@@ -131,7 +131,7 @@ export default function LoginPage() {
           )}
 
           {resetSent && (
-            <div className="mb-4 p-3 rounded-2xl bg-[#e8f5e9] text-[#2e7d32] text-sm">
+            <div className="mb-4 p-3 rounded-2xl bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm">
               Password reset email sent. Check your inbox.
             </div>
           )}
@@ -166,6 +166,8 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -252,7 +254,7 @@ export default function LoginPage() {
                 {devLogin.isPending ? 'Signing in...' : 'Sign in as selected user'}
               </button>
 
-              <p className="text-xs text-center text-[#7a5c00] bg-[#fff3cd] rounded-2xl py-2 px-3">
+              <p className="text-xs text-center text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)] rounded-2xl py-2 px-3">
                 Development mode — authentication bypassed.
               </p>
             </div>
