@@ -114,7 +114,7 @@ describe('ShiftSlideOver override gate', () => {
     await user.click(screen.getByRole('button', { name: /save with override/i }))
 
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText(/a reason is required to save with open warnings/i)).toBeInTheDocument()
+    expect(screen.getByText(/a reason is required to save over the warnings marked/i)).toBeInTheDocument()
   })
 
   it('enables save with Warning findings once a reason is entered, and submits overrideReason + acknowledgedFindingCodes', async () => {
@@ -186,7 +186,7 @@ describe('ShiftSlideOver override gate', () => {
     const [call] = mockUpdateMutateAsync.mock.calls[0]
     expect(call.data.overrideReason).toBeNull()
     expect(call.data.acknowledgedFindingCodes).toEqual(['STAFF_LEAVE_PENDING'])
-    expect(screen.queryByText(/a reason is required to save with open warnings/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
   })
 
   it('renders the override-reason field as optional when the only Warning present does not require a reason', () => {

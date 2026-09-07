@@ -146,7 +146,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     const handle = setTimeout(() => {
       checkShift.mutate(
         { id: existing?.id, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType },
-        { onSuccess: setFindings },
+        {
+          onSuccess: f => {
+            setFindings(f)
+            // A fresh dry-run can clear the finding that forced the reason (e.g. the coordinator
+            // changed staff/date) — don't leave the error copy pinned once it no longer applies.
+            if (!f.some(x => x.requiresReason)) setReasonRequired(false)
+          },
+        },
       )
     }, 400)
     return () => clearTimeout(handle)
@@ -423,7 +430,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <FormField
               label="Reason for override"
               required={reasonRequiredFindings.length > 0}
-              error={reasonRequired ? 'A reason is required to save with open warnings.' : undefined}
+              error={reasonRequired ? 'A reason is required to save over the warnings marked “Reason required”.' : undefined}
               hint="Stored on the shift and shown here whenever it's reopened."
             >
               <textarea

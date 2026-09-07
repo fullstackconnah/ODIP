@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate } from '@/api/hooks'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveCount } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
@@ -55,11 +55,12 @@ const statusBadge: Record<string, string> = {
 }
 
 export default function DashboardPage() {
-  const { canViewAlerts } = usePermissions()
+  const { canViewAlerts, canApproveLeave } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
   const { data: allStaff = [] } = useStaff({ isActive: 'true' })
   const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
+  const pendingLeaveCount = usePendingLeaveCount(canApproveLeave)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
 
@@ -217,6 +218,18 @@ export default function DashboardPage() {
             <p className={`text-lg md:text-xl font-display font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
+
+        {/* Pending Leave — coordinator/admin-facing (I-6), same zero-hides-the-card idiom as the
+            other small alert cards above, but clickable through to the approvals queue. */}
+        {canApproveLeave && pendingLeaveCount > 0 && (
+          <Link
+            to="/rostering/leave"
+            className="bg-[var(--color-warning-container)] p-3 md:p-4 rounded-2xl md:rounded-[2rem] flex flex-col justify-center hover:opacity-90 transition-opacity"
+          >
+            <p className="text-[10px] md:text-xs text-[var(--color-muted-foreground)] mb-1 font-medium">Pending Leave</p>
+            <p className="text-lg md:text-xl font-display font-bold text-[var(--color-on-warning-container)]">{pendingLeaveCount}</p>
+          </Link>
+        )}
       </div>
 
       {/* ── Main Content Grid ── */}

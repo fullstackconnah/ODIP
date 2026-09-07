@@ -50,7 +50,16 @@ vi.mock('@/api/hooks', () => ({
   useCreateUnavailabilityOnBehalf: () => ({ mutateAsync: mockCreateUnavailabilityOnBehalfMutateAsync, isPending: false }),
 }))
 
+function setUserRole(role: string) {
+  localStorage.setItem('odip_user', JSON.stringify({ role }))
+}
+
 beforeEach(() => {
+  localStorage.clear()
+  // canApproveLeave gates the actions column and "Enter on behalf" (I-5) — default to a role
+  // that can, so the rest of this suite's write-path tests keep working unchanged; the ReadOnly
+  // case gets its own test below.
+  setUserRole('Coordinator')
   mockUseLeaveRequests.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockUseRecurringUnavailabilities.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockApproveLeaveMutateAsync.mockReset()
@@ -58,6 +67,7 @@ beforeEach(() => {
   mockCancelLeaveMutateAsync.mockReset()
   mockApproveUnavailabilityMutateAsync.mockReset()
   mockDeclineUnavailabilityMutateAsync.mockReset()
+  mockCancelUnavailabilityMutateAsync.mockReset()
   mockCreateLeaveOnBehalfMutateAsync.mockReset()
   mockCreateUnavailabilityOnBehalfMutateAsync.mockReset()
 })
@@ -203,5 +213,102 @@ describe('LeaveApprovalsPage', () => {
     expect(mockCreateLeaveOnBehalfMutateAsync).toHaveBeenCalledWith({
       leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18', reason: null, userId: 'staff-1',
     })
+  })
+
+  it('"Enter on behalf" — Regular unavailability requires a staff selection and posts to the unavailability-on-behalf endpoint', async () => {
+    const user = userEvent.setup()
+    mockCreateUnavailabilityOnBehalfMutateAsync.mockResolvedValue(makeRecurringRule({ status: 'Approved' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /enter on behalf/i }))
+    await user.click(screen.getByRole('option', { name: 'Regular unavailability' }))
+
+    await user.click(screen.getByRole('combobox', { name: /staff member/i }))
+    await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
+    await user.type(screen.getByLabelText(/start time/i), '09:00')
+    await user.type(screen.getByLabelText(/end time/i), '12:00')
+    await user.type(screen.getByLabelText(/effective from/i), '2026-09-14')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateUnavailabilityOnBehalfMutateAsync).toHaveBeenCalledWith({
+      dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00', effectiveFrom: '2026-09-14', effectiveTo: null, notes: null, userId: 'staff-1',
+    })
+  })
+
+  it('approves a recurring unavailability request via the unavailability approve endpoint (M-5)', async () => {
+    const user = userEvent.setup()
+    mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ id: 'rule-1', userFullName: 'Jordan Smith' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveUnavailabilityMutateAsync.mockResolvedValue({ unavailability: makeRecurringRule({ id: 'rule-1', status: 'Approved' }), overlaps: [] })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(mockApproveUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
+    expect(await screen.findByText(/no rostered shifts or trips overlap this window/i)).toBeInTheDocument()
+  })
+
+  it('declines a recurring unavailability request with a note (M-5)', async () => {
+    const user = userEvent.setup()
+    mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ id: 'rule-1' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeclineUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule({ id: 'rule-1', status: 'Declined' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^decline$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.type(within(dialog).getByRole('textbox'), 'Roster gap')
+    await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
+
+    expect(mockDeclineUnavailabilityMutateAsync).toHaveBeenCalledWith({ id: 'rule-1', data: { decisionNote: 'Roster gap' } })
+  })
+
+  it('cancels an already-approved recurring unavailability request (M-5)', async () => {
+    const user = userEvent.setup()
+    mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ id: 'rule-1', status: 'Approved' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockCancelUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule({ id: 'rule-1', status: 'Cancelled' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
+
+    expect(mockCancelUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
+  })
+
+  it('narrowing the date range drops an out-of-range recurring unavailability row while the list hook is still called with status/userId only (I-1)', async () => {
+    const user = userEvent.setup()
+    mockUseRecurringUnavailabilities.mockReturnValue({
+      data: [
+        makeRecurringRule({ id: 'rule-old', userFullName: 'Old Rule', effectiveFrom: '2026-08-01', effectiveTo: '2026-08-31' }),
+        makeRecurringRule({ id: 'rule-ongoing', userFullName: 'Ongoing Rule', effectiveFrom: '2026-09-01', effectiveTo: null }),
+      ],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getByText('Old Rule')).toBeInTheDocument()
+    expect(screen.getByText('Ongoing Rule')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/from date/i), '2026-09-01')
+
+    expect(screen.queryByText('Old Rule')).not.toBeInTheDocument()
+    expect(screen.getByText('Ongoing Rule')).toBeInTheDocument()
+
+    // GET /leave/unavailability only binds status/userId server-side — from/to must never be sent.
+    const lastCall = mockUseRecurringUnavailabilities.mock.calls.at(-1)?.[0]
+    expect(lastCall).not.toHaveProperty('from')
+    expect(lastCall).not.toHaveProperty('to')
+  })
+
+  it('hides approve/decline/cancel actions and "Enter on behalf", showing a read-only notice instead, for a ReadOnly viewer (I-5)', () => {
+    setUserRole('ReadOnly')
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Pending' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /enter on behalf/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^decline$/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
   })
 })

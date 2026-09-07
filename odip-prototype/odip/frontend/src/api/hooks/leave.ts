@@ -27,7 +27,13 @@ export function useCreateLeaveRequest() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateLeaveRequestDto) => apiPost<LeaveRequestDto>('/portal/leave', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-my-leave'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
+      // canRequestLeave is true for Admin/Coordinator/SuperAdmin too, so a coordinator's own
+      // request needs the coordinator-side views (sidebar badge, roster board) refreshed as well.
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
   })
 }
 
@@ -35,7 +41,11 @@ export function useCancelMyLeave() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiPost<LeaveRequestDto>(`/portal/leave/${id}/cancel`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-my-leave'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
   })
 }
 
@@ -43,7 +53,10 @@ export function useCreateMyUnavailability() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateRecurringUnavailabilityDto) => apiPost<RecurringUnavailabilityDto>('/portal/unavailability', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-my-leave'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
+      qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
+    },
   })
 }
 
@@ -51,7 +64,10 @@ export function useCancelMyUnavailability() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiPost<RecurringUnavailabilityDto>(`/portal/unavailability/${id}/cancel`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-my-leave'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
+      qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
+    },
   })
 }
 
@@ -90,7 +106,10 @@ export function useRecurringUnavailabilities(filters: LeaveListFilters = {}) {
  * only server-side, so polling it every 60s for a role that can never get a non-error response
  * (SupportWorker, ReadOnly) is pure wasted/failing traffic. Same query key either way, so once a
  * gated caller becomes enabled it picks up the already-shared cache entry instead of a fresh
- * fetch. */
+ * fetch.
+ * Counts leave requests only (GET /leave?status=Pending) — pending recurring-unavailability
+ * requests are not included, so this can undercount what LeaveApprovalsPage's default Pending
+ * filter shows. */
 export function usePendingLeaveCount(enabled = true): number {
   const { data } = useLeaveRequests({ status: 'Pending' }, { enabled })
   return data?.length ?? 0
@@ -122,7 +141,13 @@ export function useDeclineLeave() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: LeaveDecisionDto }) => apiPost<LeaveRequestDto>(`/leave/${id}/decline`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-requests'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      // A Pending leave request is already on the roster board (StaffUnavailabilityQuery unions
+      // Approved and Pending), so declining removes a window from it just like approving/cancelling
+      // does — the board is exactly as stale after a decline as after an approve.
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
   })
 }
 
@@ -163,6 +188,8 @@ export function useDeclineUnavailability() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: LeaveDecisionDto }) => apiPost<RecurringUnavailabilityDto>(`/leave/unavailability/${id}/decline`, data),
+    // No ['roster-board'] invalidation here, deliberately: only Approved recurring rules feed the
+    // board, so a Pending-only decline never changes what it renders (unlike useDeclineLeave).
     onSuccess: () => qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] }),
   })
 }

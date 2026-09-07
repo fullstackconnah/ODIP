@@ -40,36 +40,46 @@ describe('leave hooks — portal (self-service)', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/portal/leave')
   })
 
-  it('useCreateLeaveRequest posts to /portal/leave and invalidates portal-my-leave', async () => {
+  it('useCreateLeaveRequest posts to /portal/leave and invalidates portal-my-leave + leave-requests + roster-board', async () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useCreateLeaveRequest(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync({ leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18' })
     expect(mockApiPost).toHaveBeenCalledWith('/portal/leave', { leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18' })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 
-  it('useCancelMyLeave posts to /portal/leave/{id}/cancel', async () => {
+  it('useCancelMyLeave posts to /portal/leave/{id}/cancel and invalidates portal-my-leave + leave-requests + roster-board', async () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useCancelMyLeave(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync('leave-1')
     expect(mockApiPost).toHaveBeenCalledWith('/portal/leave/leave-1/cancel')
     expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 
-  it('useCreateMyUnavailability posts to /portal/unavailability', async () => {
+  it('useCreateMyUnavailability posts to /portal/unavailability and invalidates portal-my-leave + recurring-unavailabilities', async () => {
     const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useCreateMyUnavailability(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync({ dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07' })
     expect(mockApiPost).toHaveBeenCalledWith('/portal/unavailability', { dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00', effectiveFrom: '2026-09-07' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
   })
 
-  it('useCancelMyUnavailability posts to /portal/unavailability/{id}/cancel', async () => {
+  it('useCancelMyUnavailability posts to /portal/unavailability/{id}/cancel and invalidates portal-my-leave + recurring-unavailabilities', async () => {
     const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useCancelMyUnavailability(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync('rule-1')
     expect(mockApiPost).toHaveBeenCalledWith('/portal/unavailability/rule-1/cancel')
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-my-leave'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
   })
 })
 
@@ -116,11 +126,14 @@ describe('leave hooks — coordinator', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 
-  it('useDeclineLeave posts the decision note to /leave/{id}/decline', async () => {
+  it('useDeclineLeave posts the decision note to /leave/{id}/decline and invalidates leave-requests + roster-board', async () => {
     const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useDeclineLeave(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync({ id: 'leave-1', data: { decisionNote: 'Not enough notice' } })
     expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/decline', { decisionNote: 'Not enough notice' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 
   it('useCancelLeave posts to /leave/{id}/cancel', async () => {

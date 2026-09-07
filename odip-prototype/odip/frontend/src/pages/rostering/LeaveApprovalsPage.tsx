@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CalendarOff, Plus } from 'lucide-react'
+import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
@@ -47,6 +48,7 @@ function rowWindow(row: ApprovalRow) {
 }
 
 export default function LeaveApprovalsPage() {
+  const { canApproveLeave } = usePermissions()
   const [statusFilter, setStatusFilter] = useState<LeaveStatus | ''>('Pending')
   const [staffFilter, setStaffFilter] = useState('')
   const [fromFilter, setFromFilter] = useState('')
@@ -59,9 +61,25 @@ export default function LeaveApprovalsPage() {
     to: toFilter || undefined,
   }), [statusFilter, staffFilter, fromFilter, toFilter])
 
+  // GET /leave/unavailability only binds status/userId server-side — from/to are silently
+  // dropped, so they're applied client-side below instead of being sent (I-1).
+  const unavailabilityFilters = useMemo(() => ({
+    status: statusFilter || undefined,
+    userId: staffFilter || undefined,
+  }), [statusFilter, staffFilter])
+
   const { data: leaveRequests = [], isLoading: leaveLoading, isError: leaveError, refetch: refetchLeave } = useLeaveRequests(filters)
-  const { data: unavailabilities = [], isLoading: unavailabilityLoading, isError: unavailabilityError, refetch: refetchUnavailability } = useRecurringUnavailabilities(filters)
+  const { data: unavailabilities = [], isLoading: unavailabilityLoading, isError: unavailabilityError, refetch: refetchUnavailability } = useRecurringUnavailabilities(unavailabilityFilters)
   const { data: staff = [] } = useStaff()
+
+  // Effective range [effectiveFrom, effectiveTo ?? ∞) overlaps the [fromFilter, toFilter] window
+  // the coordinator picked, so the one table stays coherent with what its own filter shows.
+  const visibleUnavailabilities = useMemo(
+    () => unavailabilities.filter(r =>
+      (!fromFilter || (r.effectiveTo ?? '9999-12-31') >= fromFilter) &&
+      (!toFilter || r.effectiveFrom <= toFilter)),
+    [unavailabilities, fromFilter, toFilter],
+  )
 
   const approveLeave = useApproveLeave()
   const declineLeave = useDeclineLeave()
@@ -86,10 +104,10 @@ export default function LeaveApprovalsPage() {
   const [cancelTarget, setCancelTarget] = useState<ApprovalRow | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
 
-  const rows: ApprovalRow[] = [
+  const rows: ApprovalRow[] = useMemo(() => [
     ...leaveRequests.map(r => ({ rowKind: 'leave' as const, key: `leave-${r.id}`, data: r })),
-    ...unavailabilities.map(r => ({ rowKind: 'unavailability' as const, key: `unavailability-${r.id}`, data: r })),
-  ].sort((a, b) => b.data.requestedAt.localeCompare(a.data.requestedAt))
+    ...visibleUnavailabilities.map(r => ({ rowKind: 'unavailability' as const, key: `unavailability-${r.id}`, data: r })),
+  ].sort((a, b) => b.data.requestedAt.localeCompare(a.data.requestedAt)), [leaveRequests, visibleUnavailabilities])
 
   const isLoading = leaveLoading || unavailabilityLoading
   const isError = leaveError || unavailabilityError
@@ -184,33 +202,43 @@ export default function LeaveApprovalsPage() {
         )}
       </div>
     ) },
-    { key: 'actions', header: '', align: 'right', render: row => row.data.status === 'Pending' ? (
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
-          Decline
+    ...(canApproveLeave ? [{
+      key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => row.data.status === 'Pending' ? (
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            Decline
+          </button>
+          <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+            Approve
+          </button>
+        </div>
+      ) : row.data.status === 'Approved' ? (
+        <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
+          Cancel
         </button>
-        <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
-          Approve
-        </button>
-      </div>
-    ) : row.data.status === 'Approved' ? (
-      <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
-        Cancel
-      </button>
-    ) : null },
+      ) : null,
+    }] : []),
   ]
 
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="Leave approvals" subtitle="Review and decide staff leave and regular-unavailability requests.">
-        <Dropdown
-          variant="menu"
-          label="Enter on behalf"
-          icon={<Plus className="w-4 h-4" />}
-          items={[{ value: 'leave', label: 'Leave' }, { value: 'unavailability', label: 'Regular unavailability' }]}
-          onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability') }}
-        />
+        {canApproveLeave && (
+          <Dropdown
+            variant="menu"
+            label="Enter on behalf"
+            icon={<Plus className="w-4 h-4" />}
+            items={[{ value: 'leave', label: 'Leave' }, { value: 'unavailability', label: 'Regular unavailability' }]}
+            onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability') }}
+          />
+        )}
       </PageHeader>
+
+      {!canApproveLeave && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          You have read-only access here — approving, declining, cancelling and entering requests on behalf of staff are unavailable.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-40">
@@ -233,7 +261,7 @@ export default function LeaveApprovalsPage() {
       ) : isError ? (
         <EmptyState
           icon={CalendarOff}
-          title="Couldn't load leave requests"
+          title="Couldn't load leave requests."
           description="Check your connection and try again."
           action={{ label: 'Try again', onClick: () => { refetchLeave(); refetchUnavailability() } }}
         />
@@ -243,22 +271,26 @@ export default function LeaveApprovalsPage() {
         <DataTable data={rows} columns={columns} keyField="key" emptyMessage="No requests found" />
       )}
 
-      <LeaveRequestFormModal
-        open={onBehalfMode === 'leave'}
-        onClose={() => setOnBehalfMode(null)}
-        onSubmit={handleOnBehalfLeave}
-        submitting={createLeaveOnBehalf.isPending}
-        errorMessage={onBehalfError}
-        staffOptions={staffOptions}
-      />
-      <UnavailabilityFormModal
-        open={onBehalfMode === 'unavailability'}
-        onClose={() => setOnBehalfMode(null)}
-        onSubmit={handleOnBehalfUnavailability}
-        submitting={createUnavailabilityOnBehalf.isPending}
-        errorMessage={onBehalfError}
-        staffOptions={staffOptions}
-      />
+      {onBehalfMode === 'leave' && (
+        <LeaveRequestFormModal
+          open
+          onClose={() => setOnBehalfMode(null)}
+          onSubmit={handleOnBehalfLeave}
+          submitting={createLeaveOnBehalf.isPending}
+          errorMessage={onBehalfError}
+          staffOptions={staffOptions}
+        />
+      )}
+      {onBehalfMode === 'unavailability' && (
+        <UnavailabilityFormModal
+          open
+          onClose={() => setOnBehalfMode(null)}
+          onSubmit={handleOnBehalfUnavailability}
+          submitting={createUnavailabilityOnBehalf.isPending}
+          errorMessage={onBehalfError}
+          staffOptions={staffOptions}
+        />
+      )}
 
       <ConfirmDialog
         open={approveTarget !== null && approveOverlaps === null}

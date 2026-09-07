@@ -1,11 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveCount } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
   mockUseDashboard: vi.fn(),
+  mockUsePendingLeaveCount: vi.fn(),
 }))
 
 // Only the API layer needs mocking — the rest of DashboardPage's rendering (trips/tasks lists)
@@ -15,6 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: undefined }),
   useStaff: () => ({ data: [] }),
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
+  usePendingLeaveCount: mockUsePendingLeaveCount,
 }))
 
 function renderPage() {
@@ -32,6 +34,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+  mockUsePendingLeaveCount.mockReturnValue(0)
 })
 
 describe('DashboardPage — Overdue Tasks link (PP-75)', () => {
@@ -153,5 +156,36 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     // state, from the useStaff mock's empty list) — assert only the Critical Alerts tile's own
     // copy is absent, by checking the count stays at that one pre-existing occurrence.
     expect(screen.getAllByText('All clear')).toHaveLength(1)
+  })
+})
+
+describe('DashboardPage — Pending Leave card (I-6)', () => {
+  it('links to the leave approvals queue with the pending count for a Coordinator', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUsePendingLeaveCount.mockReturnValue(3)
+    renderPage()
+
+    const link = screen.getByText('Pending Leave').closest('a')
+    expect(link).toHaveAttribute('href', '/rostering/leave')
+    expect(within(link as HTMLElement).getByText('3')).toBeInTheDocument()
+  })
+
+  it('is hidden when there are no pending leave requests', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUsePendingLeaveCount.mockReturnValue(0)
+    renderPage()
+
+    expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
+  })
+
+  it('is hidden for a SupportWorker (matches the backend Admin/Coordinator/SuperAdmin gate)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUsePendingLeaveCount.mockReturnValue(3)
+    renderPage()
+
+    expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
   })
 })

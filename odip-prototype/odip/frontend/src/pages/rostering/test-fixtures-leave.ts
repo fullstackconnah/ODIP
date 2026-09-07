@@ -4,7 +4,10 @@ export function makeLeaveBar(overrides: Partial<LeaveBarDto> = {}): LeaveBarDto 
   return {
     startDate: '2026-09-14',
     endDate: '2026-09-18',
-    availabilityType: 'Annual',
+    // The backend compat-fills AvailabilityType.Leave for both leave kinds and never sends the
+    // leave type — this default mirrors the wire rather than 'Annual', which the backend never
+    // actually produces.
+    availabilityType: 'Leave',
     notes: null,
     kind: 'ApprovedLeave',
     startTime: null,

@@ -158,7 +158,7 @@ export default function PortalLeavePage() {
       ) : isError ? (
         <EmptyState
           icon={CalendarOff}
-          title="Couldn't load your leave"
+          title="Couldn't load leave requests."
           description="Check your connection and try again."
           action={{ label: 'Try again', onClick: () => refetch() }}
         />
@@ -182,11 +182,11 @@ export default function PortalLeavePage() {
         <DataTable data={unavailability} columns={unavailabilityColumns} keyField="id" emptyMessage="No regular unavailability" />
       )}
 
-      {tab === 'leave' ? (
-        <LeaveRequestFormModal open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLeave} submitting={createLeave.isPending} errorMessage={formError} />
+      {formOpen && (tab === 'leave' ? (
+        <LeaveRequestFormModal open onClose={() => setFormOpen(false)} onSubmit={handleCreateLeave} submitting={createLeave.isPending} errorMessage={formError} />
       ) : (
-        <UnavailabilityFormModal open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateUnavailability} submitting={createUnavailability.isPending} errorMessage={formError} />
-      )}
+        <UnavailabilityFormModal open onClose={() => setFormOpen(false)} onSubmit={handleCreateUnavailability} submitting={createUnavailability.isPending} errorMessage={formError} />
+      ))}
 
       <ConfirmDialog
         open={withdrawTarget !== null}

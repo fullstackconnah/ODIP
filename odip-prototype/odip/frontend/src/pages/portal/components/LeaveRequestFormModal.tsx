@@ -64,8 +64,11 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
   // task's Interfaces section for the quoted precedent (VehicleCreatePage.tsx:49,101,106-107).
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
+  // Resets on every open/close transition, not just open — otherwise a successful submit or a
+  // Cancel leaves isDirty true on the still-mounted form, arming a spurious unsaved-changes
+  // prompt on the next navigation (see useUnsavedChangesWarning.tsx:16-24).
   useEffect(() => {
-    if (open) reset(DEFAULT_VALUES)
+    reset(DEFAULT_VALUES)
   }, [open, reset])
 
   const submit = handleSubmit(async values => {

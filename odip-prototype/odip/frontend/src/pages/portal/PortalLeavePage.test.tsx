@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import PortalLeavePage from './PortalLeavePage'
@@ -135,6 +135,30 @@ describe('PortalLeavePage', () => {
     await user.click(screen.getByRole('button', { name: /submit request/i }))
 
     expect(await screen.findByText('An identical request already exists.')).toBeInTheDocument()
+  })
+
+  it('does not warn before navigating away after a successful leave request submission (I-4)', async () => {
+    const user = userEvent.setup()
+    mockCreateLeaveMutateAsync.mockResolvedValue(makeLeaveRequest())
+    const router = createMemoryRouter(
+      [
+        { path: '/portal/leave', element: <PortalLeavePage /> },
+        { path: '/portal', element: <div>Portal home</div> },
+      ],
+      { initialEntries: ['/portal/leave'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await user.click(screen.getByRole('button', { name: /request leave/i }))
+    await user.type(screen.getByLabelText(/start date/i), '2026-09-14')
+    await user.type(screen.getByLabelText(/end date/i), '2026-09-18')
+    await user.click(screen.getByRole('button', { name: /submit request/i }))
+    await waitFor(() => expect(mockCreateLeaveMutateAsync).toHaveBeenCalled())
+
+    await act(async () => { await router.navigate('/portal') })
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('Portal home')).toBeInTheDocument()
   })
 
   it('hides the Request leave button and Withdraw actions for a ReadOnly viewer', () => {
