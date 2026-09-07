@@ -823,6 +823,30 @@ public class RosteringControllerTests
         Assert.Equal(UnavailabilityKind.ApprovedLeave, bar.Kind);
     }
 
+    // Regression for Fix round 1: UnavailabilityWindow.End is EXCLUSIVE
+    // (StaffUnavailabilityQuery builds whole-day leave as [StartDate 00:00, EndDate+1 00:00)),
+    // so a naive DateOnly.FromDateTime(w.End) renders a 3-day leave span as spanning 4 days.
+    [Fact]
+    public async Task GetBoard_StaffMode_MultiDayLeaveBar_EndDateIsLastCoveredDayNotOneDayPast()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var leaveStart = ServiceDate.AddDays(1); // Tue
+        var leaveEnd = ServiceDate.AddDays(3);   // Thu (inclusive) — 3-day span within the board week
+        SeedLeave(db, staff.Id, LeaveStatus.Approved, leaveStart, leaveEnd);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var row = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id);
+        var bar = Assert.Single(row.Leave);
+        Assert.Equal(UnavailabilityKind.ApprovedLeave, bar.Kind);
+        Assert.Equal(leaveStart, bar.StartDate);
+        Assert.Equal(leaveEnd, bar.EndDate);
+    }
+
     [Fact]
     public async Task GetBoard_StaffMode_LeaveBarPopulatesKindSpecificFields()
     {

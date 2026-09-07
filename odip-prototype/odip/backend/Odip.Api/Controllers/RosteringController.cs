@@ -250,7 +250,10 @@ public class RosteringController : ControllerBase
                     .Where(w => w.UserId == staff.Id)
                     .Select(w => new LeaveBarDto
                     {
-                        StartDate = DateOnly.FromDateTime(w.Start), EndDate = DateOnly.FromDateTime(w.End), Kind = w.Kind,
+                        // w.End is EXCLUSIVE (StaffUnavailabilityQuery builds whole-day leave as
+                        // [StartDate 00:00, EndDate+1 00:00)) — subtract a tick to land on the
+                        // last instant the window actually covers, so the bar's last day is correct.
+                        StartDate = DateOnly.FromDateTime(w.Start), EndDate = DateOnly.FromDateTime(w.End.AddTicks(-1)), Kind = w.Kind,
                         AvailabilityType = w.Kind == UnavailabilityKind.Legacy ? w.LegacySourceType : null,
                         Notes = w.Kind == UnavailabilityKind.Legacy ? w.LegacyNotes : null,
                         StartTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.Start) : null,
