@@ -15,7 +15,7 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
     <div
       style={{ gridColumn: `${startCol} / ${endCol}` }}
       className="flex items-center gap-1.5 rounded-sm bg-muted px-2 py-1.5 text-xs italic text-muted-foreground"
-      title={leave.notes ?? leave.availabilityType}
+      title={leave.notes ?? leave.availabilityType ?? undefined}
     >
       <span className="min-w-0 flex-1 truncate">{leave.availabilityType}</span>
     </div>

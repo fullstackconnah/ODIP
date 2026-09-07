@@ -1,10 +1,15 @@
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel } from './enums'
+import type { UnavailabilityKind } from './leave'
 
 // ── Roster Finding ───────────────────────────────────────
 export interface RosterFindingDto {
   code: string
   severity: RosterFindingSeverity
   message: string
+  /** True when a Warning finding requires a non-empty overrideReason before it can be saved
+   * (e.g. STAFF_ON_LEAVE); false when it's a soft warning acknowledged with no reason (e.g.
+   * STAFF_LEAVE_PENDING). Always false on a Blocking finding — Blocking can never be overridden. */
+  requiresReason: boolean
 }
 
 // ── Shift ─────────────────────────────────────────────────
@@ -60,8 +65,15 @@ export interface TripBarDto {
 export interface LeaveBarDto {
   startDate: string
   endDate: string
-  availabilityType: string
+  availabilityType: string | null
   notes: string | null
+  /** Which of the leave/unavailability/legacy sources this bar represents — drives LeaveBar's styling. */
+  kind: UnavailabilityKind
+  /** "HH:mm:ss" (TimeOnly). Populated only when kind === 'RecurringRule' — every other kind has
+   * these null, since a date-range leave/legacy row has no time-of-day component. Drives
+   * LeaveBar's partial-day rendering (Task 4). */
+  startTime: string | null
+  endTime: string | null
 }
 
 // ── Roster Board ──────────────────────────────────────────

@@ -35,6 +35,7 @@ export function makeFinding(overrides: Partial<RosterFindingDto> = {}): RosterFi
     code: 'DOUBLE_BOOKED',
     severity: 'Warning',
     message: 'Staff member is already rostered elsewhere at this time.',
+    requiresReason: false,
     ...overrides,
   }
 }
