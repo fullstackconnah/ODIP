@@ -3,14 +3,21 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AppLayout from './AppLayout'
 
-// AppLayout renders the portal nav's pending-witness-count badge via a TanStack Query hook —
-// stub just that one export (keeping the rest of the real module intact for
-// TenantSwitcher/UserSwitcher, unused by these tests but still imported transitively) so this
-// suite doesn't need a QueryClientProvider or a real network call, matching how the other
-// hook-backed page tests in this codebase mock '@/api/hooks' rather than provide a live client.
+// AppLayout renders the portal nav's pending-witness-count badge and the Rostering nav's
+// pending-leave-count badge via TanStack Query hooks — stub just those exports (keeping the
+// rest of the real module intact for TenantSwitcher/UserSwitcher, unused by these tests but
+// still imported transitively) so this suite doesn't need a QueryClientProvider or a real
+// network call, matching how the other hook-backed page tests in this codebase mock
+// '@/api/hooks' rather than provide a live client.
+const { mockUsePendingLeaveCount } = vi.hoisted(() => ({ mockUsePendingLeaveCount: vi.fn(() => 0) }))
+
 vi.mock('@/api/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/hooks')>()
-  return { ...actual, usePendingWitnessRequests: () => ({ data: [], isLoading: false }) }
+  return {
+    ...actual,
+    usePendingWitnessRequests: () => ({ data: [], isLoading: false }),
+    usePendingLeaveCount: mockUsePendingLeaveCount,
+  }
 })
 
 function renderAt(path: string) {
@@ -70,5 +77,28 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     renderAt('/trips')
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Mobile' })).toBeInTheDocument()
+  })
+})
+
+describe('AppLayout — Leave nav entry (leave-2)', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUsePendingLeaveCount.mockReturnValue(0)
+  })
+
+  it('renders the Leave entry under Rostering, linking to /rostering/leave', () => {
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Leave$/ })).toHaveAttribute('href', '/rostering/leave')
+  })
+
+  it('shows no badge when there are no pending leave requests', () => {
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Leave$/ })).not.toHaveTextContent(/\d/)
+  })
+
+  it('shows a pending-count badge on the Leave entry when usePendingLeaveCount is positive', () => {
+    mockUsePendingLeaveCount.mockReturnValue(3)
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Leave$/ })).toHaveTextContent('3')
   })
 })
