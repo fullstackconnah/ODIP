@@ -21,8 +21,8 @@
 - **Top features:** a complaints register (a stated core obligation with *zero* backend representation), a real two-deadline reportable-incident clock (24h notification + 5-business-day final report — currently one binary flag), and a shift→billable-event pipeline (`BillableEvent.SourceEntityType` exists and is never written, so shift data is re-keyed into claims by hand, contradicting the product's founding principle).
 - **One dated compliance risk:** from 1 July 2026 the NDIA moved travel / cancellation / non-face-to-face off `ClaimType` codes onto dedicated line-item suffixes. `ProdaBulkFileWriter.cs:51` still writes `CANC/REPW/TRAN/NF2F`.
 
-**Audit Health Score: 11/20 — Acceptable (significant work needed).**
-**Design Health Score (Nielsen): 22/40 — Acceptable.**
+**Audit Health Score: 11/20 — Acceptable (significant work needed).** Re-scored 2026-09-06 after Stage 0 (PR #105): **13/20** — Accessibility 2→3, Responsive 2→3; still "Acceptable".
+**Design Health Score (Nielsen): 22/40 — Acceptable.** Re-scored after Stage 0: **22/40, unchanged** — Stage 0 was semantics/contrast work; every heuristic's key issue (toasts, 401 redirect, dialects, help) is still open.
 
 ---
 
@@ -32,14 +32,16 @@
 
 ### Audit Health (audit.md rubric)
 
-| # | Dimension | Score | Key finding |
-|---|-----------|-------|-------------|
-| 1 | Accessibility | 2/4 | QSC breach banner at 2.32:1; focus rings at 1.61:1; `role="button"` on `<tr>`/`<th>`; no skip link |
-| 2 | Performance | 2/4 | No pagination or virtualisation on 35 tables; no debounce on list search; full-axis Material Symbols variable font *plus* lucide-react |
-| 3 | Theming | 2/4 | Three competing styling dialects; 247 hardcoded hex; one undefined token; Tailwind palette leakage |
-| 4 | Responsive | 2/4 | `.mobile-card-table` unused; 12-column table on phones; mobile sidebar has no focus trap or Esc |
-| 5 | Anti-Patterns | 3/4 | Not AI slop. Tells confined to the dashboard: gradient stack, `hover:scale-[0.98]`, bento grid |
-| **Total** | | **11/20** | **Acceptable — significant work needed** |
+Original score at audit time, then re-scored 2026-09-06 against current `main` after Stage 0 (PR #105).
+
+| # | Dimension | Original | Post-Stage 0 | Key finding (original) | Why it moved / didn't |
+|---|-----------|----------|--------------|------------------------|-----------------------|
+| 1 | Accessibility | 2/4 | **3/4** | QSC breach banner at 2.32:1; focus rings at 1.61:1; `role="button"` on `<tr>`/`<th>`; no skip link | Banner (`IncidentsPage.tsx:141-151`, now `role="alert"` on error-container tokens), focus rings (0 alpha-ring patterns left), table semantics (`DataTable.tsx:259-267,323-328`), skip link + landmarks (`AppLayout.tsx:136-140,163,342,348`) all fixed. Not 4: sidebar drawer still has no focus trap/Esc (I-7); icon buttons still title-only |
+| 2 | Performance | 2/4 | 2/4 | No pagination or virtualisation on 35 tables; no debounce on list search; full-axis Material Symbols variable font *plus* lucide-react | Untouched by Stage 0 |
+| 3 | Theming | 2/4 | 2/4 | Three competing styling dialects; 247 hardcoded hex; one undefined token; Tailwind palette leakage | Only `--color-surface` defined (`index.css:33`); 3 dialects persist, 79 `bg-[#hex]` sites across 26 files remain |
+| 4 | Responsive | 2/4 | **3/4** | `.mobile-card-table` unused; 12-column table on phones; mobile sidebar has no focus trap or Esc | `.mobile-card-table` + `data-label` wired into `DataTable.tsx:225,356,363`, so phone tables stack. Not 4: checkbox/error `<td>` lack `data-label`; drawer still not modal |
+| 5 | Anti-Patterns | 3/4 | 3/4 | Not AI slop. Tells confined to the dashboard: gradient stack, `hover:scale-[0.98]`, bento grid | Untouched — all cited tells still present verbatim |
+| **Total** | | **11/20** | **13/20** | **Acceptable — significant work needed** | Still "Acceptable"; Stage 1's C-4 dialect consolidation and C-5/C-6 are what move the band |
 
 ### Design Health (critique.md, Nielsen 0–4)
 
@@ -56,6 +58,8 @@
 | 9 | Error Recovery | 2 | Portal does it right; the rest say "check your input" without saying which |
 | 10 | Help and Documentation | 1 | No help for NDIS-technical fields where a new coordinator most needs it |
 | **Total** | | **22/40** | **Acceptable** |
+
+Re-scored 2026-09-06 after Stage 0: **22/40, no heuristic moved.** Stage 0 fixed contrast, semantics and titles; none of the key issues above were in scope. The one visible shift is under Match System / Real World — the incident review step now resolves participant/practice names (`IncidentCreatePage.tsx:457-484`, original I-3 wording fixed) — but row-select `aria-label`s still expose raw UUIDs (`DataTable.tsx:347`), so it stays at 3.
 
 ### Anti-Patterns Verdict
 
