@@ -25,6 +25,10 @@ const DEFAULT_VALUES: UnavailabilityFormValues = {
   userId: '', dayOfWeek: 'Monday', startTime: '', endTime: '', effectiveFrom: '', effectiveTo: '', notes: '',
 }
 
+/** Pads an <input type="time"> value ("HH:mm") to .NET TimeOnly's wire format ("HH:mm:ss") —
+ * a browser that already emits seconds is left untouched. */
+const toTimeOnly = (t: string) => (t.length === 5 ? `${t}:00` : t)
+
 function buildSchema(requireStaff: boolean) {
   return z
     .object({
@@ -69,8 +73,10 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
   const submit = handleSubmit(async values => {
     await onSubmit({
       dayOfWeek: values.dayOfWeek,
-      startTime: values.startTime,
-      endTime: values.endTime,
+      // <input type="time"> emits "HH:mm" with no seconds, but the backend's TimeOnly binder
+      // (System.Text.Json) rejects anything shorter than "HH:mm:ss" — pad to the wire format.
+      startTime: toTimeOnly(values.startTime),
+      endTime: toTimeOnly(values.endTime),
       effectiveFrom: values.effectiveFrom,
       effectiveTo: values.effectiveTo || null,
       notes: values.notes.trim() || null,

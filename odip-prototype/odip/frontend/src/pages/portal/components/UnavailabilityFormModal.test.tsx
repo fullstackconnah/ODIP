@@ -29,8 +29,8 @@ describe('UnavailabilityFormModal', () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       dayOfWeek: 'Monday',
-      startTime: '09:00',
-      endTime: '12:00',
+      startTime: '09:00:00',
+      endTime: '12:00:00',
       effectiveFrom: '2026-09-07',
       effectiveTo: null,
       notes: null,
@@ -52,8 +52,8 @@ describe('UnavailabilityFormModal', () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       dayOfWeek: 'Monday',
-      startTime: '09:00',
-      endTime: '12:00',
+      startTime: '09:00:00',
+      endTime: '12:00:00',
       effectiveFrom: '2026-09-07',
       effectiveTo: null,
       notes: null,
