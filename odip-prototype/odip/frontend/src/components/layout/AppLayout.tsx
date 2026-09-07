@@ -344,29 +344,41 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — items and the FAB are gated the same as the sidebar (same
+          canAccessPage/canWrite helper), so a ReadOnly or restricted role never sees a link or
+          a create action it doesn't have access to. */}
       <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#fbf9f5]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
-        <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
-          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
-          <span className="text-[10px] font-medium">Dashboard</span>
-        </NavLink>
-        <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
-          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
-          <span className="text-[10px] font-medium">Trips</span>
-        </NavLink>
-        <Link to="/trips/new" className="relative -top-5">
-          <div className="w-14 h-14 bg-[#396200] text-white rounded-full shadow-2xl shadow-[#396200]/40 flex items-center justify-center">
-            <Plus className="w-6 h-6" />
-          </div>
-        </Link>
-        <NavLink to="/participants" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
-          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
-          <span className="text-[10px] font-medium">People</span>
-        </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
-          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
-          <span className="text-[10px] font-medium">Settings</span>
-        </NavLink>
+        {permissions.canAccessPage('dashboard') && (
+          <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
+            <span className="text-[10px] font-medium">Dashboard</span>
+          </NavLink>
+        )}
+        {permissions.canAccessPage('trips') && (
+          <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
+            <span className="text-[10px] font-medium">Trips</span>
+          </NavLink>
+        )}
+        {permissions.canWrite && (
+          <Link to="/trips/new" className="relative -top-5">
+            <div className="w-14 h-14 bg-[#396200] text-white rounded-full shadow-2xl shadow-[#396200]/40 flex items-center justify-center">
+              <Plus className="w-6 h-6" />
+            </div>
+          </Link>
+        )}
+        {permissions.canAccessPage('participants') && (
+          <NavLink to="/participants" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
+            <span className="text-[10px] font-medium">People</span>
+          </NavLink>
+        )}
+        {permissions.canAccessPage('settings') && (
+          <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
+            <span className="text-[10px] font-medium">Settings</span>
+          </NavLink>
+        )}
       </nav>
     </div>
   )

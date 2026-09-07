@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantsSummary } from '@/api/hooks'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function TenantSwitcher() {
   const [open, setOpen] = useState(false)
+  const [pendingTenant, setPendingTenant] = useState<{ id: string; name: string } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const { data: tenants = [] } = useAdminTenantsSummary()
   const viewingId = localStorage.getItem('odip_viewing_tenant')
@@ -87,7 +89,7 @@ export default function TenantSwitcher() {
             {tenants.map(tenant => (
               <button
                 key={tenant.id}
-                onClick={() => switchTenant(tenant.id)}
+                onClick={() => setPendingTenant({ id: tenant.id, name: tenant.name })}
                 className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   tenant.id === viewingId
                     ? 'bg-[rgba(99,102,241,0.15)]'
@@ -109,6 +111,15 @@ export default function TenantSwitcher() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingTenant !== null}
+        onCancel={() => setPendingTenant(null)}
+        onConfirm={() => { if (pendingTenant) switchTenant(pendingTenant.id) }}
+        title="Switch tenant?"
+        confirmLabel="Switch tenant"
+        message={`Switch to ${pendingTenant?.name ?? 'this tenant'}? Unsaved changes on this page will be lost.`}
+      />
     </div>
   )
 }

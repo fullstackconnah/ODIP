@@ -1,4 +1,4 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -59,6 +59,8 @@ type TaskFormData = z.infer<typeof taskSchema>
 export default function TaskCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
+  const tripInstanceIdParam = searchParams.get('tripInstanceId') ?? ''
   const isEdit = !!id
   const createTask = useCreateTask()
   const updateTask = useUpdateTask()
@@ -71,6 +73,7 @@ export default function TaskCreatePage() {
   const { register, handleSubmit, reset, control, formState: { errors, isDirty } } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: {
+      tripInstanceId: tripInstanceIdParam,
       priority: 'Medium',
       taskType: 'Other',
       status: 'NotStarted',

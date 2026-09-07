@@ -46,8 +46,29 @@ export default function LoginPage() {
       if (!applyLoginSuccess(res)) {
         setError(res.errors?.[0] || 'Login failed')
       }
-    } catch {
-      setError('Invalid email or password')
+    } catch (err) {
+      // Distinguishes wrong credentials from network/rate-limit/other failures, mirroring
+      // handleDevLogin's branching below. login.mutateAsync can reject with either a Firebase
+      // AuthError (from signInWithEmailAndPassword — has a `.code`) or an Axios error from the
+      // /auth/exchange call (has `.response`/`.code === 'ERR_NETWORK'`).
+      const firebaseCode = (err as { code?: string })?.code
+      const httpStatus = (err as { response?: { status?: number } })?.response?.status
+      const isNetworkError = firebaseCode === 'auth/network-request-failed' || (err as { code?: string })?.code === 'ERR_NETWORK' || (!httpStatus && (err as { request?: unknown })?.request)
+
+      if (httpStatus === 429 || firebaseCode === 'auth/too-many-requests') {
+        setError('Too many sign-in attempts. Wait a few minutes and try again.')
+      } else if (
+        firebaseCode === 'auth/wrong-password' ||
+        firebaseCode === 'auth/user-not-found' ||
+        firebaseCode === 'auth/invalid-credential' ||
+        firebaseCode === 'auth/invalid-email'
+      ) {
+        setError('Invalid email or password')
+      } else if (isNetworkError) {
+        setError('Network error. Check your connection and try again.')
+      } else {
+        setError('Login failed. Please try again.')
+      }
     }
   }
 

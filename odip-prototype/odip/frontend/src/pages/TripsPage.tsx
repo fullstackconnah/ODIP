@@ -2,12 +2,13 @@ import { useTrips, useUpdateTrip, usePatchTrip, useTrip, useStaff, useEventTempl
 import type { TripStatus, TripListDto, TripDetailDto, StaffListDto, EventTemplateDto, UpdateTripDto } from '@/api/types'
 import { formatDateAu, getStatusColor } from '@/lib/utils'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, CheckCircle2, Pencil, X, MapPin } from 'lucide-react'
+import { Plus, Search, Filter, CheckCircle2, Pencil, X, MapPin, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { useState, useEffect, useRef } from 'react'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 
 type Tab = 'active' | 'completed'
 
@@ -58,6 +59,7 @@ export default function TripsPage() {
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<ReturnType<typeof buildEditForm> | null>(null)
   const formInitialized = useRef(false)
+  const [statusChangeError, setStatusChangeError] = useState<{ tripName: string; message: string } | null>(null)
 
   const params: Record<string, string> = {}
   if (search) params.search = search
@@ -117,6 +119,18 @@ export default function TripsPage() {
     setEditingTripId(null)
     setEditForm(null)
     formInitialized.current = false
+  }
+
+  const handleStatusChange = (trip: TripListDto, status: TripStatus) => {
+    setStatusChangeError(null)
+    patchTrip.mutate({ id: trip.id, data: { status } }, {
+      onError: (err) => {
+        setStatusChangeError({
+          tripName: trip.tripName,
+          message: extractErrorMessage(err, "Couldn't update the trip status. Please try again."),
+        })
+      },
+    })
   }
 
   const handleSaveEdit = () => {
@@ -207,6 +221,15 @@ export default function TripsPage() {
         )}
       </div>
 
+      {statusChangeError && (
+        <div role="alert" className="flex items-start gap-3 p-4 rounded-xl bg-[var(--color-error-container)] text-[var(--color-destructive)]">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-sm">
+            <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
+          </p>
+        </div>
+      )}
+
       {/* Trips grid */}
       {isLoading ? (
         <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading trips...</div>
@@ -274,7 +297,7 @@ export default function TripsPage() {
                   <Dropdown
                     variant="pill"
                     value={t.status}
-                    onChange={val => patchTrip.mutate({ id: t.id, data: { status: val as TripStatus } })}
+                    onChange={val => handleStatusChange(t, val as TripStatus)}
                     colorClass={getStatusColor(t.status)}
                     items={TRIP_STATUS_ITEMS}
                   />

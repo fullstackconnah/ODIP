@@ -77,7 +77,7 @@ export default function ClaimBatchDetailPage() {
           icon={FileWarning}
           title="Claim batch not found"
           description="It may have been removed, or the link you followed is incorrect."
-          action={{ label: 'Back to Billing', to: '/billing' }}
+          action={{ label: 'Back to Claim Batches', to: '/billing/claim-batches' }}
         />
       </div>
     )
@@ -94,7 +94,7 @@ export default function ClaimBatchDetailPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/billing" className={linkBtn}>← Back to Billing</Link>
+        <Link to="/billing/claim-batches" className={linkBtn}>← Back to Claim Batches</Link>
       </div>
 
       {/* Header */}

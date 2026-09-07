@@ -4,17 +4,33 @@ import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { getStatusColor } from '@/lib/utils'
 import { CalendarCheck } from 'lucide-react'
+import { useState } from 'react'
 import type { BookingStatus } from '@/api/types/enums'
+import type { BookingListDto } from '@/api/types/bookings'
+
+// Statuses that end a participant's involvement in a trip — confirmed before applying, same
+// pattern as AccommodationPage's/VehiclesPage's archive confirms.
+const CONFIRM_STATUSES: BookingStatus[] = ['Cancelled', 'NoLongerAttending']
 
 export default function BookingsPage() {
   const { data: bookings = [], isLoading, isError } = useBookings()
   const patchBooking = usePatchBooking()
+  const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
 
   if (isError) return (
     <div className="p-8 text-center text-red-600">Failed to load bookings. Please refresh the page.</div>
   )
+
+  function handleStatusChange(booking: BookingListDto, status: BookingStatus) {
+    if (CONFIRM_STATUSES.includes(status)) {
+      setConfirmTarget({ booking, status })
+    } else {
+      patchBooking.mutate({ id: booking.id, data: { bookingStatus: status } })
+    }
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -64,7 +80,7 @@ export default function BookingsPage() {
                 <Dropdown
                   variant="pill"
                   value={b.bookingStatus}
-                  onChange={val => patchBooking.mutate({ id: b.id, data: { bookingStatus: val as BookingStatus } })}
+                  onChange={val => handleStatusChange(b, val as BookingStatus)}
                   colorClass={getStatusColor(b.bookingStatus)}
                   items={[
                     { value: 'Enquiry', label: 'Enquiry' },
@@ -90,6 +106,30 @@ export default function BookingsPage() {
           ]}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onCancel={() => setConfirmTarget(null)}
+        onConfirm={() => {
+          if (!confirmTarget) return
+          patchBooking.mutate(
+            { id: confirmTarget.booking.id, data: { bookingStatus: confirmTarget.status } },
+            { onSuccess: () => setConfirmTarget(null) }
+          )
+        }}
+        variant="danger"
+        loading={patchBooking.isPending}
+        title={confirmTarget?.status === 'Cancelled' ? 'Cancel booking?' : 'Mark as no longer attending?'}
+        confirmLabel={confirmTarget?.status === 'Cancelled' ? 'Cancel booking' : 'Mark as no longer attending'}
+        message={
+          <p>
+            {confirmTarget?.status === 'Cancelled'
+              ? <>Cancel <strong>{confirmTarget?.booking.participantName || 'this participant'}</strong>'s booking on <strong>{confirmTarget?.booking.tripName || 'this trip'}</strong>?</>
+              : <>Mark <strong>{confirmTarget?.booking.participantName || 'this participant'}</strong> as no longer attending <strong>{confirmTarget?.booking.tripName || 'this trip'}</strong>?</>}
+            {' '}This cannot be undone.
+          </p>
+        }
+      />
     </div>
   )
 }

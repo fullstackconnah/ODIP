@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Layers, Plus, Pencil, Lock, Wallet, Receipt, ClipboardList, Filter,
+  Layers, Plus, Pencil, Lock, Wallet, Receipt, ClipboardList, Filter, FileStack,
 } from 'lucide-react'
 import {
   useFundingSources, useUpdateFundingSource,
@@ -79,13 +79,23 @@ export default function BillingPage() {
       <PageHeader
         title="Billing"
         subtitle="Funding sources, service bookings, and billable events"
-        action={canWrite && (
-          <Link
-            to="/billing/claim-batches/new"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-          >
-            <Layers className="w-4 h-4" /> New claim batch
-          </Link>
+        action={(
+          <div className="flex items-center gap-2">
+            <Link
+              to="/billing/claim-batches"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
+            >
+              <FileStack className="w-4 h-4" /> View claim batches
+            </Link>
+            {canWrite && (
+              <Link
+                to="/billing/claim-batches/new"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
+              >
+                <Layers className="w-4 h-4" /> New claim batch
+              </Link>
+            )}
+          </div>
         )}
       />
 
