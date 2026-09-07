@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -35,24 +36,14 @@ public class RosteringController : ControllerBase
     private readonly RosterConflictService _conflictService = new();
     private readonly ShiftPatternExpander _expander = new();
     private readonly StaffCompatibilityLinkService _compatLink;
+    private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
 
-    /// <summary>Availability types that render as a leave/unavailable bar on the board (matches <see cref="RosterConflictService"/>'s own STAFF_UNAVAILABLE set).</summary>
-    private static readonly AvailabilityType[] LeaveTypes =
-        { AvailabilityType.Unavailable, AvailabilityType.Leave, AvailabilityType.Training };
-
-    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink)
+    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery)
     {
         _db = db;
         _compatLink = compatLink;
+        _unavailabilityQuery = unavailabilityQuery;
     }
-
-    // TEMPORARY (removed in Task 5 when IStaffUnavailabilityQuery is injected): adapt legacy
-    // StaffAvailability rows to the UnavailabilityWindow shape RosterCheckContext now takes.
-    private static List<UnavailabilityWindow> ToLegacyWindows(IEnumerable<StaffAvailability> rows) =>
-        rows.Where(a => LeaveTypes.Contains(a.AvailabilityType))
-            .Select(a => new UnavailabilityWindow(a.UserId, a.StartDateTime, a.EndDateTime,
-                UnavailabilityKind.Legacy, a.AvailabilityType, a.Notes))
-            .ToList();
 
     // ══════════════════════════════════════════════════════════════
     // BOARD
@@ -103,11 +94,7 @@ public class RosteringController : ControllerBase
                         && a.AssignmentStart <= end && a.AssignmentEnd >= start)
             .ToListAsync(ct);
 
-        var startDt = start.ToDateTime(TimeOnly.MinValue);
-        var endDt = end.ToDateTime(TimeOnly.MaxValue);
-        var weekAvailability = await _db.StaffAvailabilities
-            .Where(a => staffIds.Contains(a.UserId) && a.StartDateTime < endDt && a.EndDateTime > startDt)
-            .ToListAsync(ct);
+        var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
 
         // ── Every ACTIVE participant, not just ones with shifts this week — an empty week
         // is itself the coverage gap the participant-mode board exists to surface. Shifts
@@ -148,12 +135,12 @@ public class RosteringController : ControllerBase
                 .Where(s => s.ParticipantId == shift.ParticipantId && s.ServiceDate == shift.ServiceDate && s.Id != shift.Id)
                 .ToList();
             var tripAssignments = weekTripAssignments.Where(a => a.UserId == shift.UserId).ToList();
-            var availability = weekAvailability.Where(a => a.UserId == shift.UserId).ToList();
+            var availability = weekWindows.Where(w => w.UserId == shift.UserId).ToList();
             var compatibility = compatByPair.TryGetValue((shift.UserId.Value, shift.ParticipantId), out var level)
                 ? level : CompatibilityLevel.Allowed;
 
             var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-                tripAssignments, ToLegacyWindows(availability), compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
             return _conflictService.Check(shift, ctx).ToList();
         }
 
@@ -259,12 +246,15 @@ public class RosteringController : ControllerBase
                     StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver
                 }).ToList();
 
-                var myLeave = weekAvailability
-                    .Where(a => a.UserId == staff.Id && LeaveTypes.Contains(a.AvailabilityType))
-                    .Select(a => new LeaveBarDto
+                var myLeave = weekWindows
+                    .Where(w => w.UserId == staff.Id)
+                    .Select(w => new LeaveBarDto
                     {
-                        StartDate = DateOnly.FromDateTime(a.StartDateTime), EndDate = DateOnly.FromDateTime(a.EndDateTime),
-                        AvailabilityType = a.AvailabilityType, Notes = a.Notes
+                        StartDate = DateOnly.FromDateTime(w.Start), EndDate = DateOnly.FromDateTime(w.End), Kind = w.Kind,
+                        AvailabilityType = w.Kind == UnavailabilityKind.Legacy ? w.LegacySourceType : null,
+                        Notes = w.Kind == UnavailabilityKind.Legacy ? w.LegacyNotes : null,
+                        StartTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.Start) : null,
+                        EndTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.End) : null,
                     }).ToList();
 
                 rows.Add(new RosterStaffRowDto
@@ -666,7 +656,7 @@ public class RosteringController : ControllerBase
         return false;
     }
 
-    private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message };
+    private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message, RequiresReason = f.RequiresReason };
 
     private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
@@ -766,11 +756,9 @@ public class RosteringController : ControllerBase
                         && a.AssignmentStart <= candidate.ServiceDate && a.AssignmentEnd >= candidate.ServiceDate)
             .ToListAsync(ct);
 
-        var dayStart = candidate.ServiceDate.ToDateTime(TimeOnly.MinValue);
-        var dayEnd = (candidate.EndsNextDay ? candidate.ServiceDate.AddDays(1) : candidate.ServiceDate).ToDateTime(TimeOnly.MaxValue);
-        var availability = await _db.StaffAvailabilities
-            .Where(a => a.UserId == candidate.UserId.Value && a.StartDateTime < dayEnd && a.EndDateTime > dayStart)
-            .ToListAsync(ct);
+        var toDate = candidate.EndsNextDay ? candidate.ServiceDate.AddDays(1) : candidate.ServiceDate;
+        var availability = await _unavailabilityQuery.GetWindowsAsync(
+            new[] { candidate.UserId.Value }, candidate.ServiceDate, toDate, ct);
 
         var compatibility = await _db.StaffParticipantCompatibilities
             .Where(c => c.UserId == candidate.UserId.Value && c.ParticipantId == candidate.ParticipantId)
@@ -778,19 +766,19 @@ public class RosteringController : ControllerBase
             .FirstOrDefaultAsync(ct) ?? CompatibilityLevel.Allowed;
 
         var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-            tripAssignments, ToLegacyWindows(availability), compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
 
         return _conflictService.Check(candidate, ctx).ToList();
     }
 
     /// <summary>
-    /// The Blocking/Warning/override gate every roster write runs through:
-    /// any Blocking finding rejects the write regardless of <paramref name="overrideReason"/>;
-    /// Warning findings without a reason reject; Warning findings with a non-empty reason (or
-    /// no findings at all) pass through and let the caller save. Returns the 422 response body
-    /// to return, or null when the write may proceed. Built via <see cref="ApiResponse{T}.Fail(T, List{string}, string?)"/>
-    /// so a rejected write carries the SAME envelope shape as a success — findings in
-    /// <c>data</c>, not a separate errors-only slot — matching what the frontend already reads.
+    /// The Blocking/RequiresReason/override gate every roster write runs through: any Blocking
+    /// finding rejects the write regardless of <paramref name="overrideReason"/>; any finding
+    /// with RequiresReason true needs a non-empty reason; a write whose findings are all
+    /// RequiresReason == false may proceed with no reason at all (ApplyOverride still records
+    /// their codes in AcknowledgedFindingCodes — see that method — so the board can show why a
+    /// cell looks tentative without ever having asked for input). Returns the 422 response body
+    /// to return, or null when the write may proceed.
     /// </summary>
     private ApiResponse<List<RosterFindingDto>>? EvaluateFindings(List<RosterFinding> findings, string? overrideReason)
     {
@@ -805,7 +793,7 @@ public class RosteringController : ControllerBase
                 findingDtos, errors, "One or more blocking findings prevent this shift from being saved.");
         }
 
-        if (string.IsNullOrWhiteSpace(overrideReason))
+        if (findings.Any(f => f.RequiresReason) && string.IsNullOrWhiteSpace(overrideReason))
         {
             return ApiResponse<List<RosterFindingDto>>.Fail(
                 findingDtos, errors, "This shift has warnings that must be acknowledged with an override reason before it can be saved.");

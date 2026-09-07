@@ -10,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -523,7 +524,7 @@ public class SameTenantWritePathTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
         var dto = new CreateShiftDto
         {
             ParticipantId = participant.Id, StaffId = foreignStaff.Id, ServiceDate = new DateOnly(2026, 9, 1),
@@ -545,7 +546,7 @@ public class SameTenantWritePathTests
         db.Participants.Add(participant);
         db.SaveChanges();
 
-        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db));
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
         var dto = new UpsertCompatibilityDto { StaffId = foreignStaff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred };
         var result = await controller.UpsertCompatibility(dto, CancellationToken.None);
 

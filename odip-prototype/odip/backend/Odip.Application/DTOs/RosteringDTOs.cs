@@ -1,5 +1,6 @@
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
+using Odip.Domain.Rostering.Services;
 
 namespace Odip.Application.DTOs;
 
@@ -23,6 +24,8 @@ public record RosterFindingDto
     public string Code { get; init; } = string.Empty;
     public RosterFindingSeverity Severity { get; init; }
     public string Message { get; init; } = string.Empty;
+    /// <summary>True when this finding demands a non-empty override reason before the write can save — see RosteringController.EvaluateFindings.</summary>
+    public bool RequiresReason { get; init; }
 }
 
 public record ShiftDto
@@ -56,12 +59,29 @@ public record TripBarDto
     public bool IsDriver { get; init; }
 }
 
+/// <summary>
+/// One bar on the roster board's staff-grouped view. Sourced from IStaffUnavailabilityQuery
+/// (approved + pending leave, approved recurring occurrences, legacy StaffAvailability rows) —
+/// see UnavailabilityKind for what Kind discriminates. AvailabilityType/Notes are populated only
+/// for Kind == Legacy (the source StaffAvailability row's own values, carried through
+/// UnavailabilityWindow.LegacySourceType/LegacyNotes); StartTime/EndTime are populated only for
+/// Kind == RecurringRule (so the frontend can draw a partial-day bar instead of a full-day one).
+/// Every field not relevant to a given row's Kind is left null, never a default/zero value that
+/// could be misread as meaningful.
+/// </summary>
 public record LeaveBarDto
 {
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
-    public AvailabilityType AvailabilityType { get; init; }
+    public UnavailabilityKind Kind { get; init; }
+    /// <summary>Legacy only — the source StaffAvailability row's AvailabilityType (Unavailable or Training).</summary>
+    public AvailabilityType? AvailabilityType { get; init; }
+    /// <summary>Legacy only — the source StaffAvailability row's free-text Notes.</summary>
     public string? Notes { get; init; }
+    /// <summary>RecurringRule only — the occurrence's time-of-day start. Serialises the same way ShiftPatternDto.StartTime does (built-in System.Text.Json TimeOnly support, no custom converter).</summary>
+    public TimeOnly? StartTime { get; init; }
+    /// <summary>RecurringRule only — the occurrence's time-of-day end.</summary>
+    public TimeOnly? EndTime { get; init; }
 }
 
 public record RosterStaffRowDto
