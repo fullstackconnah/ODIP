@@ -291,4 +291,121 @@ public class PortalLeaveTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // TENANT ISOLATION (fix round 1)
+    //
+    // Every test above runs with IsSuperAdmin = true (see CreateDb), which short-circuits
+    // OdipDbContext's ambient `IsSuperAdmin || TenantId == _tenant.TenantId` query filter before
+    // the TenantId half is ever evaluated — so none of them actually exercise tenant isolation,
+    // only the explicit UserId == staffId.Value ownership check. These three scope a genuine
+    // non-SuperAdmin Tenant A caller instead, reusing the fixture idiom from
+    // LeaveControllerTests.cs's ApproveLeave_RequestBelongsToAnotherTenant_ReturnsNotFound and
+    // SameTenantWritePathTests.cs's CreateDbWithTwoTenants. Where possible the "foreign" row's
+    // UserId is deliberately set to the caller's own id — so if the tenant filter were ever
+    // missing, the explicit UserId == staffId.Value check would incorrectly still let it through,
+    // making these a genuine test of the tenant filter rather than of the ownership filter.
+    // ══════════════════════════════════════════════════════════════
+
+    private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant) CreateTenantScopedDb(Guid tenantId)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.ViewAsUserId).Returns((Guid?)null);
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        return (new OdipDbContext(options, tenant.Object), tenant);
+    }
+
+    private static User SeedUserInTenant(OdipDbContext db, Guid tenantId, string firstName = "Ben", string lastName = "Turner")
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
+            FirstName = firstName, LastName = lastName, Role = UserRole.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(user);
+        db.SaveChanges();
+        return user;
+    }
+
+    [Fact]
+    public async Task CancelMyLeave_OtherTenantRequest_Returns404()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+        var (db, tenant) = CreateTenantScopedDb(tenantAId);
+        var caller = SeedUserInTenant(db, tenantAId);
+        var controller = MakeController(db, tenant.Object, caller.Id);
+
+        var leave = new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, UserId = caller.Id, LeaveType = LeaveType.Annual,
+            StartDate = Today, EndDate = Today, Status = LeaveStatus.Pending,
+            RequestedByUserId = caller.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.LeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        var result = await controller.CancelMyLeaveRequest(leave.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        var reloaded = await db.LeaveRequests.IgnoreQueryFilters().SingleAsync(l => l.Id == leave.Id);
+        Assert.Equal(LeaveStatus.Pending, reloaded.Status); // never mutated
+    }
+
+    [Fact]
+    public async Task GetMyLeave_NonSuperAdmin_ReturnsOnlyOwnTenantRows()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+        var (db, tenant) = CreateTenantScopedDb(tenantAId);
+        var caller = SeedUserInTenant(db, tenantAId);
+        var controller = MakeController(db, tenant.Object, caller.Id);
+
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, UserId = caller.Id, LeaveType = LeaveType.Annual,
+            StartDate = Today, EndDate = Today, Status = LeaveStatus.Pending,
+            RequestedByUserId = caller.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, UserId = caller.Id, LeaveType = LeaveType.Annual,
+            StartDate = Today.AddDays(5), EndDate = Today.AddDays(5), Status = LeaveStatus.Pending,
+            RequestedByUserId = caller.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await controller.GetMyLeave(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalLeaveResponseDto>>(ok.Value);
+        var row = Assert.Single(body.Data!.Leave);
+        var reloaded = await db.LeaveRequests.IgnoreQueryFilters().SingleAsync(l => l.Id == row.Id);
+        Assert.Equal(tenantAId, reloaded.TenantId);
+    }
+
+    [Fact]
+    public async Task PostLeave_NonSuperAdmin_StampsCallerTenantAndUser()
+    {
+        var tenantAId = Guid.NewGuid();
+        var (db, tenant) = CreateTenantScopedDb(tenantAId);
+        var caller = SeedUserInTenant(db, tenantAId);
+        var controller = MakeController(db, tenant.Object, caller.Id);
+
+        var result = await controller.CreateMyLeaveRequest(
+            new CreateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today },
+            CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(created.Value);
+        Assert.Equal(caller.Id, body.Data!.UserId);
+
+        var saved = await db.LeaveRequests.SingleAsync(l => l.Id == body.Data.Id);
+        Assert.Equal(tenantAId, saved.TenantId);
+        Assert.Equal(caller.Id, saved.UserId);
+    }
 }
