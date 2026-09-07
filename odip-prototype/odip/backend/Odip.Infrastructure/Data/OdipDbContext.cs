@@ -97,6 +97,9 @@ public class OdipDbContext : DbContext
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
+    /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1116,6 +1119,48 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.ShiftId });
         });
 
+        // ── LeaveRequest ─────────────────────────────────────────
+        modelBuilder.Entity<LeaveRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.DecisionNote).HasMaxLength(2000);
+
+            // Restrict: same idiom as Shift -> User — a staff member with leave history must not
+            // be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Coordinator list filters by status/user; StaffUnavailabilityQuery filters by
+            // user + status + date range.
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.Status });
+            entity.HasIndex(e => new { e.TenantId, e.StartDate, e.EndDate });
+        });
+
+        // ── RecurringUnavailability ──────────────────────────────
+        modelBuilder.Entity<RecurringUnavailability>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.DecisionNote).HasMaxLength(2000);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.Status });
+        });
+
+        // ── StaffAssignment override fields (PR 3 wires the gate; columns land now) ──
+        modelBuilder.Entity<StaffAssignment>(entity =>
+        {
+            entity.Property(e => e.OverrideReason).HasMaxLength(2000);
+            entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+        });
+
         // ── ParticipantMedication ────────────────────────────────
         modelBuilder.Entity<ParticipantMedication>(entity =>
         {
@@ -1492,6 +1537,16 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ShiftNote>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftNote>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<LeaveRequest>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<LeaveRequest>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RecurringUnavailability>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<RecurringUnavailability>()
             .HasIndex(e => e.TenantId);
 
         // ── Medication Management tenant query filters ────────────────────────────

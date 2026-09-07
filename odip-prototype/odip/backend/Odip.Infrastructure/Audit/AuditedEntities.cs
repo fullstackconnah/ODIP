@@ -52,6 +52,16 @@ public static class AuditedEntities
         // anonymously (no authenticated principal) — see AuditInterceptor's ActorItemKey
         // override for how that row still gets attributed to the caregiver by name.
         typeof(CaregiverProfileSubmission),
+
+        // Staff leave + recurring unavailability: a coordinator's approve/decline decision and
+        // note, and every subsequent field change, must be recoverable — same reasoning as
+        // Shift.OverrideReason above. StaffAvailability is added here too (it was conspicuously
+        // absent before this feature, per the design spec's Context section): its remaining
+        // Unavailable/Training/Preferred/Available rows now get history from this point forward,
+        // even though the entity itself is otherwise unchanged by this PR.
+        typeof(LeaveRequest),
+        typeof(RecurringUnavailability),
+        typeof(StaffAvailability),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()
