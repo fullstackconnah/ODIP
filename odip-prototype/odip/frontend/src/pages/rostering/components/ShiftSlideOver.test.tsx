@@ -98,7 +98,7 @@ describe('ShiftSlideOver override gate', () => {
   it('blocks save with Warning findings and an empty reason', async () => {
     const user = userEvent.setup()
     const shift = makeShift({
-      findings: [makeFinding({ severity: 'Warning', message: 'Needs a look' })],
+      findings: [makeFinding({ severity: 'Warning', message: 'Needs a look', requiresReason: true })],
       overrideReason: null,
     })
     render(
@@ -120,7 +120,7 @@ describe('ShiftSlideOver override gate', () => {
   it('enables save with Warning findings once a reason is entered, and submits overrideReason + acknowledgedFindingCodes', async () => {
     const user = userEvent.setup()
     const shift = makeShift({
-      findings: [makeFinding({ code: 'RATIO_SHORTFALL', severity: 'Warning', message: 'Ratio not met' })],
+      findings: [makeFinding({ code: 'RATIO_SHORTFALL', severity: 'Warning', message: 'Ratio not met', requiresReason: true })],
       overrideReason: null,
     })
     render(
@@ -159,6 +159,53 @@ describe('ShiftSlideOver override gate', () => {
     )
 
     expect(screen.getByLabelText(/reason for override/i)).toHaveValue('Approved by team lead')
+  })
+
+  it('allows save with a Warning finding that does not require a reason, still recording its code in acknowledgedFindingCodes', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({
+      findings: [makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', message: 'Pending leave overlaps this window.', requiresReason: false })],
+      overrideReason: null,
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    const saveButton = screen.getByRole('button', { name: /save with override/i })
+    expect(saveButton).not.toBeDisabled()
+
+    await user.click(saveButton)
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.overrideReason).toBeNull()
+    expect(call.data.acknowledgedFindingCodes).toEqual(['STAFF_LEAVE_PENDING'])
+    expect(screen.queryByText(/a reason is required to save with open warnings/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the override-reason field as optional when the only Warning present does not require a reason', () => {
+    const shift = makeShift({
+      findings: [makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })],
+      overrideReason: null,
+    })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    const field = screen.getByLabelText(/reason for override/i)
+    expect(field).not.toHaveAttribute('aria-required', 'true')
   })
 })
 

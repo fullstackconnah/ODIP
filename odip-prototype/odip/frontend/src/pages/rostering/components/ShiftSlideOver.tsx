@@ -157,12 +157,16 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   const blockingFindings = findings.filter(f => f.severity === 'Blocking')
   const warningFindings = findings.filter(f => f.severity === 'Warning')
+  // A Warning finding only forces a reason when the backend marks it requiresReason (e.g.
+  // STAFF_ON_LEAVE) — a soft warning like STAFF_LEAVE_PENDING can be acknowledged with no reason
+  // typed, though its code is still recorded in acknowledgedFindingCodes below.
+  const reasonRequiredFindings = warningFindings.filter(f => f.requiresReason)
   const isBusy = createShift.isPending || updateShift.isPending
 
   async function handleSave() {
     setError(null)
     if (blockingFindings.length > 0) return
-    if (warningFindings.length > 0 && !overrideReason.trim()) {
+    if (reasonRequiredFindings.length > 0 && !overrideReason.trim()) {
       setReasonRequired(true)
       return
     }
@@ -194,7 +198,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       const serverFindings = getRosterFindings(err)
       if (serverFindings) {
         setFindings(serverFindings)
-        if (serverFindings.some(f => f.severity === 'Warning') && !overrideReason.trim()) setReasonRequired(true)
+        if (serverFindings.some(f => f.requiresReason) && !overrideReason.trim()) setReasonRequired(true)
       } else {
         setError('Something went wrong saving this shift. Please try again.')
       }
@@ -418,7 +422,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           {(warningFindings.length > 0 || !!existing?.overrideReason) && (
             <FormField
               label="Reason for override"
-              required={warningFindings.length > 0}
+              required={reasonRequiredFindings.length > 0}
               error={reasonRequired ? 'A reason is required to save with open warnings.' : undefined}
               hint="Stored on the shift and shown here whenever it's reopened."
             >
