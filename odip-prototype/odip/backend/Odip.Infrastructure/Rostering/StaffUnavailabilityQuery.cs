@@ -45,10 +45,13 @@ public sealed class StaffUnavailabilityQuery : IStaffUnavailabilityQuery
         var rangeStart = from.ToDateTime(TimeOnly.MinValue);
         var rangeEndExclusive = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
-        // ── Leave: Approved + Pending, whole-day windows ──
+        // ── Leave: Approved + Pending, whole-day windows. Date-range predicate is pushed into
+        // SQL (DateOnly compares translate natively to `date` in Npgsql) so this doesn't pull
+        // every leave row for the tenure of each user just to filter it in memory. ──
         var leaveRequests = await _db.LeaveRequests
             .Where(l => userIds.Contains(l.UserId)
-                        && (l.Status == LeaveStatus.Approved || l.Status == LeaveStatus.Pending))
+                        && (l.Status == LeaveStatus.Approved || l.Status == LeaveStatus.Pending)
+                        && l.StartDate <= to && l.EndDate >= from)
             .ToListAsync(ct);
         foreach (var l in leaveRequests)
         {
@@ -60,9 +63,12 @@ public sealed class StaffUnavailabilityQuery : IStaffUnavailabilityQuery
                 l.Status == LeaveStatus.Approved ? UnavailabilityKind.ApprovedLeave : UnavailabilityKind.PendingLeave));
         }
 
-        // ── Recurring unavailability: Approved only, expanded to concrete occurrences ──
+        // ── Recurring unavailability: Approved only, expanded to concrete occurrences. Effective-
+        // range predicate is pushed into SQL for the same reason as the LeaveRequests query above
+        // — so the board path doesn't scale with a user's tenure. ──
         var rules = await _db.RecurringUnavailabilities
-            .Where(r => userIds.Contains(r.UserId) && r.Status == LeaveStatus.Approved)
+            .Where(r => userIds.Contains(r.UserId) && r.Status == LeaveStatus.Approved
+                        && r.EffectiveFrom <= to && (r.EffectiveTo == null || r.EffectiveTo >= from))
             .ToListAsync(ct);
         foreach (var rule in rules)
         {
