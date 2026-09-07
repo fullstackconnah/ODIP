@@ -46,6 +46,14 @@ public class RosteringController : ControllerBase
         _compatLink = compatLink;
     }
 
+    // TEMPORARY (removed in Task 5 when IStaffUnavailabilityQuery is injected): adapt legacy
+    // StaffAvailability rows to the UnavailabilityWindow shape RosterCheckContext now takes.
+    private static List<UnavailabilityWindow> ToLegacyWindows(IEnumerable<StaffAvailability> rows) =>
+        rows.Where(a => LeaveTypes.Contains(a.AvailabilityType))
+            .Select(a => new UnavailabilityWindow(a.UserId, a.StartDateTime, a.EndDateTime,
+                UnavailabilityKind.Legacy, a.AvailabilityType, a.Notes))
+            .ToList();
+
     // ══════════════════════════════════════════════════════════════
     // BOARD
     // ══════════════════════════════════════════════════════════════
@@ -145,7 +153,7 @@ public class RosteringController : ControllerBase
                 ? level : CompatibilityLevel.Allowed;
 
             var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+                tripAssignments, ToLegacyWindows(availability), compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
             return _conflictService.Check(shift, ctx).ToList();
         }
 
@@ -770,7 +778,7 @@ public class RosteringController : ControllerBase
             .FirstOrDefaultAsync(ct) ?? CompatibilityLevel.Allowed;
 
         var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+            tripAssignments, ToLegacyWindows(availability), compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
 
         return _conflictService.Check(candidate, ctx).ToList();
     }

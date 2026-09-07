@@ -4,8 +4,14 @@ using Odip.Domain.Enums;
 
 namespace Odip.Domain.Rostering.Services;
 
-/// <summary>One finding produced by <see cref="RosterConflictService"/> against a single candidate shift.</summary>
-public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, string Message);
+/// <summary>
+/// One finding produced by <see cref="RosterConflictService"/> against a single candidate shift.
+/// <see cref="RequiresReason"/> — new this feature — is true for a finding the Blocking/Warning
+/// gate demands a non-empty override reason for; false means the finding still gets recorded in
+/// AcknowledgedFindingCodes when the write saves, but no reason is required (e.g. a merely
+/// pending leave request is a softer signal than an already-approved one).
+/// </summary>
+public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, string Message, bool RequiresReason = false);
 
 /// <summary>
 /// Everything <see cref="RosterConflictService.Check"/> needs about the candidate's staff,
@@ -17,7 +23,7 @@ public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, 
 /// <param name="StaffShiftsInWeek">This staff member's other shifts in the candidate's week, excluding the candidate itself.</param>
 /// <param name="ParticipantShiftsOnDate">Other shifts already rostered for this participant on the candidate's <see cref="Shift.ServiceDate"/>, excluding the candidate — used to judge whether a 2:1 slot is actually covered.</param>
 /// <param name="TripAssignments">This staff member's trip assignments overlapping the candidate's <see cref="Shift.ServiceDate"/>.</param>
-/// <param name="Availability">This staff member's availability records relevant to the candidate's window.</param>
+/// <param name="Availability">This staff member's unavailability windows (leave, recurring rules, legacy StaffAvailability rows) relevant to the candidate's window — see <see cref="Infrastructure.Rostering.StaffUnavailabilityQuery"/>.</param>
 /// <param name="Compatibility">The staff-participant compatibility level (Allowed when no matrix row exists).</param>
 /// <param name="WeeklyHoursThreshold">Weekly hours above which <c>OVER_HOURS</c> fires. See <see cref="RosterConflictService.DefaultWeeklyHoursThreshold"/>.</param>
 public sealed record RosterCheckContext(
@@ -26,7 +32,7 @@ public sealed record RosterCheckContext(
     IReadOnlyList<Shift> StaffShiftsInWeek,
     IReadOnlyList<Shift> ParticipantShiftsOnDate,
     IReadOnlyList<StaffAssignment> TripAssignments,
-    IReadOnlyList<StaffAvailability> Availability,
+    IReadOnlyList<UnavailabilityWindow> Availability,
     CompatibilityLevel Compatibility,
     decimal WeeklyHoursThreshold);
 
@@ -49,15 +55,14 @@ public sealed class RosterConflictService
     public const string DoubleBookedShift = "DOUBLE_BOOKED_SHIFT";
     public const string DoubleBookedTrip = "DOUBLE_BOOKED_TRIP";
     public const string StaffUnavailable = "STAFF_UNAVAILABLE";
+    public const string StaffOnLeave = "STAFF_ON_LEAVE";
+    public const string StaffRecurringUnavailable = "STAFF_RECURRING_UNAVAILABLE";
+    public const string StaffLeavePending = "STAFF_LEAVE_PENDING";
     public const string CompatibilityExcluded = "COMPATIBILITY_EXCLUDED";
     public const string CredentialExpired = "CREDENTIAL_EXPIRED";
     public const string CompetencyMissing = "COMPETENCY_MISSING";
     public const string RatioShortfall = "RATIO_SHORTFALL";
     public const string OverHours = "OVER_HOURS";
-
-    /// <summary>Availability types that make a staff member unavailable to roster, as opposed to merely non-preferred.</summary>
-    private static readonly AvailabilityType[] UnavailableTypes =
-        { AvailabilityType.Unavailable, AvailabilityType.Leave, AvailabilityType.Training };
 
     /// <summary>Runs every rule against <paramref name="candidate"/> and returns every finding that fires.</summary>
     public IReadOnlyList<RosterFinding> Check(Shift candidate, RosterCheckContext ctx)
@@ -135,19 +140,43 @@ public sealed class RosterConflictService
         }
     }
 
+    /// <summary>
+    /// One finding per overlapping <see cref="UnavailabilityWindow"/>, discriminated on
+    /// <see cref="UnavailabilityKind"/>: an already-Approved leave request or recurring rule is a
+    /// hard Warning that demands a reason (STAFF_ON_LEAVE / STAFF_RECURRING_UNAVAILABLE); a
+    /// merely Pending leave request is a softer signal that needs none (STAFF_LEAVE_PENDING); a
+    /// legacy StaffAvailability Unavailable/Training row keeps the original STAFF_UNAVAILABLE
+    /// code and reason-not-required behaviour, unchanged from before this feature.
+    /// </summary>
     private static void CheckStaffUnavailable(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var candidateWindow = ToWindow(candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay);
 
-        foreach (var availability in ctx.Availability)
+        foreach (var window in ctx.Availability)
         {
-            if (!UnavailableTypes.Contains(availability.AvailabilityType))
+            if (window.Start >= candidateWindow.End || candidateWindow.Start >= window.End)
                 continue;
 
-            if (availability.StartDateTime < candidateWindow.End && candidateWindow.Start < availability.EndDateTime)
+            switch (window.Kind)
             {
-                findings.Add(new RosterFinding(StaffUnavailable, RosterFindingSeverity.Warning,
-                    $"{ctx.Staff.FullName} is marked {availability.AvailabilityType} for part of {Fmt(candidate.ServiceDate)}."));
+                case UnavailabilityKind.Legacy:
+                    findings.Add(new RosterFinding(StaffUnavailable, RosterFindingSeverity.Warning,
+                        $"{ctx.Staff.FullName} is marked unavailable for part of {Fmt(candidate.ServiceDate)}."));
+                    break;
+                case UnavailabilityKind.ApprovedLeave:
+                    findings.Add(new RosterFinding(StaffOnLeave, RosterFindingSeverity.Warning,
+                        $"{ctx.Staff.FullName}'s approved leave covers this window — cannot roster without a reason.",
+                        RequiresReason: true));
+                    break;
+                case UnavailabilityKind.PendingLeave:
+                    findings.Add(new RosterFinding(StaffLeavePending, RosterFindingSeverity.Warning,
+                        $"{ctx.Staff.FullName} has a pending leave request covering this window."));
+                    break;
+                case UnavailabilityKind.RecurringRule:
+                    findings.Add(new RosterFinding(StaffRecurringUnavailable, RosterFindingSeverity.Warning,
+                        $"{ctx.Staff.FullName} is recurringly unavailable {window.Start:dddd} {window.Start:HH:mm}-{window.End:HH:mm}.",
+                        RequiresReason: true));
+                    break;
             }
         }
     }
