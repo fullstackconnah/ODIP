@@ -52,6 +52,7 @@ const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage')
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
 const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
+const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,6 +139,7 @@ const router = createBrowserRouter(
         <Route path="/portal" element={<PrivateRoute page="portal"><PortalShiftsPage /></PrivateRoute>} />
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />
+        <Route path="/portal/leave" element={<PrivateRoute page="portal-leave"><PortalLeavePage /></PrivateRoute>} />
       </Route>
     </Route>
   )

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, AlertTriangle, ShieldCheck, CalendarOff } from 'lucide-react'
 import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
@@ -69,6 +69,13 @@ export default function PortalShiftsPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="My Shifts" subtitle="Your rostered shifts and what your participants need">
         <div className="flex items-center gap-2">
+          <Link
+            to="/portal/leave"
+            className="inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
+          >
+            <CalendarOff className="w-4 h-4" />
+            My leave
+          </Link>
           <Link
             to="/portal/witness-approvals"
             className="relative inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
