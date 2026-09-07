@@ -127,6 +127,17 @@ export function RecordAdministrationModal({
   // prompt below. Nothing is filed automatically — this is purely an offer to navigate.
   const [savedTriggerAdministration, setSavedTriggerAdministration] = useState<AdministrationDto | null>(null)
 
+  // PP-31: an accidental backdrop click shouldn't silently discard typed reason/witness/notes —
+  // only allow it once the tracked fields match their initial (pristine) values.
+  const isDirty =
+    status !== (existingAdministration?.status ?? 'Administered') ||
+    doseGiven !== (existingAdministration?.doseGiven ?? doseDescription ?? '') ||
+    reason !== (existingAdministration?.reason ?? '') ||
+    prnReason !== (existingAdministration?.prnReason ?? '') ||
+    witnessName !== (existingAdministration?.witnessName ?? '') ||
+    witnessStaffId !== (existingAdministration?.witnessStaffId ?? '') ||
+    notes !== (existingAdministration?.notes ?? '')
+
   const requiresReason = status !== 'Administered'
   const requiresPrnReason = isPrn && status === 'Administered'
   const requiresWitness = isHighRisk && status === 'Administered'
@@ -318,6 +329,7 @@ export function RecordAdministrationModal({
           ? 'Report as incident?'
           : `${isAmend ? 'Amend administration' : 'Record administration'} — ${medicationName}${strength ? ` ${strength}` : ''}`}
         size={savedTriggerAdministration ? 'lg' : 'md'}
+        closeOnBackdrop={savedTriggerAdministration ? true : !isDirty}
         footer={
           savedTriggerAdministration ? (
             canCreateIncidents ? (

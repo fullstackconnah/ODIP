@@ -43,6 +43,8 @@
   --color-on-warning-container: #92400e;
   --color-info: #515f74;
   --color-conflict: #ba1a1a;
+  --color-accessible-container: #ffd7ef;
+  --color-on-accessible-container: #7a2169;
 
   --radius-sm: 0.5rem;
   --radius-md: 1rem;

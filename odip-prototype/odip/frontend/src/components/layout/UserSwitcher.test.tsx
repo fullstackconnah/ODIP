@@ -85,6 +85,23 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     expect(savedAdmin.id).toBe('superadmin-1') // never overwritten with the impersonated user's id
   })
 
+  it('exposes aria-haspopup/aria-expanded on the trigger and closes the dropdown on Escape (PP-74)', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    const trigger = screen.getByRole('button', { name: /view as user/i })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/view as user$/i)).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('clearUser restores the original id on switch-back', async () => {
     setSuperAdminSignedIn()
     const user = userEvent.setup()

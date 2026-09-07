@@ -1,5 +1,6 @@
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
+import type { AxiosError } from 'axios'
 import { useForm, useWatch } from 'react-hook-form'
 import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
@@ -144,6 +145,23 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
     // signed-in user id.
     reportedByStaffId: currentUserId ?? '',
   }
+}
+
+/**
+ * ReadOnly/SupportWorker can reach this form and have the server reject the write with a 403 —
+ * see lib/permissions.ts's canWrite/canCreateIncidents doc comments. Surface that distinctly from
+ * a validation failure, and otherwise fall back to the server's own message when present.
+ */
+function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  if (axiosErr?.response?.status === 403) {
+    return "You don't have permission to file incident reports."
+  }
+  return (
+    axiosErr?.response?.data?.errors?.[0] ||
+    axiosErr?.response?.data?.message ||
+    `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`
+  )
 }
 
 /**
@@ -555,8 +573,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} incident report. Please check your input and try again.
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+          {extractIncidentErrorMessage(mutation.error, isEdit)}
         </div>
       )}
 

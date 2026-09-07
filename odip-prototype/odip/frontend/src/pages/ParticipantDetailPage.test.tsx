@@ -30,7 +30,7 @@ const {
   // cg04 Task 9 — the header's CaregiverLinkControl. Mocked the same way as the DOC-01 hooks
   // above so its own tests never run the real axios mutationFn body.
   mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
-  mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })),
   mockUseCaregiverSubmissions: vi.fn<(status?: string) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
 }))
 
@@ -123,7 +123,7 @@ beforeEach(() => {
   mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn(), isPending: false, isError: false })
-  mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+  mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })
   mockUseCaregiverSubmissions.mockReturnValue({ data: [] })
   // A role without canViewAlerts keeps the alerts banner path (and its own separate hook
   // contract) out of scope for these tests — see ParticipantAlertsBanner's own test file for that.
@@ -597,18 +597,72 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     expect(within(control).getByRole('button', { name: /regenerate caregiver link/i })).toBeInTheDocument()
   })
 
-  it('Revoke calls the mutation with the participant id', async () => {
+  // PP-40 — Revoke now stages behind a ConfirmDialog rather than firing immediately, same
+  // pattern as RiskEntriesSection's delete.
+  it('Revoke does not call the mutation until confirmed in the dialog', async () => {
     setUserRole('Admin')
     const user = userEvent.setup()
-    const revokeMutate = vi.fn()
-    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: revokeMutate, isPending: false, isError: false })
+    const revokeMutateAsync = vi.fn(async () => ({ success: true }))
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: revokeMutateAsync, isPending: false, isError: false })
     mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
       data: status === 'Submitted' ? [activeSubmission()] : [],
     }))
     setup()
 
     await user.click(screen.getByRole('button', { name: /^revoke$/i }))
+    expect(revokeMutateAsync).not.toHaveBeenCalled()
 
-    expect(revokeMutate).toHaveBeenCalledWith({ participantId: 'participant-1' })
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/revoke caregiver link/i)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /^revoke$/i }))
+
+    expect(revokeMutateAsync).toHaveBeenCalledWith({ participantId: 'participant-1' })
+  })
+
+  it('Revoke cancel dismisses the dialog without calling the mutation', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const revokeMutateAsync = vi.fn(async () => ({ success: true }))
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: revokeMutateAsync, isPending: false, isError: false })
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Submitted' ? [activeSubmission()] : [],
+    }))
+    setup()
+
+    await user.click(screen.getByRole('button', { name: /^revoke$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
+
+    expect(revokeMutateAsync).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+// PP-39 — the History tab (and its content) must be gated on usePermissions()'s isAdmin/isSuperAdmin,
+// not a raw localStorage-derived role check, so SuperAdmin also sees it.
+describe('ParticipantDetailPage — PP-39 History tab permissions', () => {
+  it('shows the History tab for a SuperAdmin role', () => {
+    setUserRole('SuperAdmin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+  })
+
+  it('shows the History tab for an Admin role', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+  })
+
+  it('hides the History tab for a SupportWorker role', () => {
+    setUserRole('SupportWorker')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
   })
 })

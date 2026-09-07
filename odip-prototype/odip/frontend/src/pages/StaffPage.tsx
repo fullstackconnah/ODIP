@@ -4,10 +4,14 @@ import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SearchInput } from '@/components/SearchInput'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check } from 'lucide-react'
+import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
 
 function isExpired(date: string): boolean {
   const today = new Date()
@@ -29,6 +33,10 @@ export default function StaffPage() {
   const { canWrite } = usePermissions()
   const deleteStaff = useDeleteStaff()
   const updateStaff = useUpdateStaff()
+  const [search, setSearch] = useState('')
+  // PP-46 — Active -> Inactive is staged behind a confirm, same pattern as BookingsPage's
+  // CONFIRM_STATUSES; Active (re-activation) stays immediate.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: string; name: string; data: UpdateStaffDto } | null>(null)
 
   const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteStaff,
@@ -38,7 +46,37 @@ export default function StaffPage() {
     editPath: (s) => `/staff/${s.id}/edit`,
   })
 
-  const { data: staff = [], isLoading } = useStaff(params)
+  const { data: staffData = [], isLoading } = useStaff(params)
+  // PP-45 — StaffController's GetAll only supports `isActive`, no server-side text search, so the
+  // filter is applied client-side (same approach CompatibilityPage takes for its matrix filters).
+  const staff = search
+    ? staffData.filter((s: StaffListDto) => {
+        const q = search.toLowerCase()
+        return s.fullName?.toLowerCase().includes(q) || s.position?.toLowerCase().includes(q) || s.region?.toLowerCase().includes(q)
+      })
+    : staffData
+
+  function handleStatusChange(s: StaffListDto, val: string) {
+    const data: UpdateStaffDto = {
+      ...s,
+      email: s.email ?? '',
+      mobile: s.mobile ?? undefined,
+      region: s.region ?? undefined,
+      notes: s.notes ?? undefined,
+      firstAidExpiryDate: s.firstAidExpiryDate ?? undefined,
+      driverLicenceExpiryDate: s.driverLicenceExpiryDate ?? undefined,
+      manualHandlingExpiryDate: s.manualHandlingExpiryDate ?? undefined,
+      medicationCompetencyExpiryDate: s.medicationCompetencyExpiryDate ?? undefined,
+      workerScreeningNumber: s.workerScreeningNumber ?? undefined,
+      workerScreeningExpiryDate: s.workerScreeningExpiryDate ?? undefined,
+      isActive: val === 'Active',
+    }
+    if (val === 'Inactive') {
+      setConfirmDeactivate({ id: s.id, name: s.fullName, data })
+    } else {
+      updateStaff.mutate({ id: s.id, data })
+    }
+  }
 
   const staffColumns: Column<any>[] = [
     { key: 'fullName', header: 'Name', sortable: true, className: 'font-medium' },
@@ -57,7 +95,7 @@ export default function StaffPage() {
         if (!s.workerScreeningExpiryDate) return null
         return isExpired(s.workerScreeningExpiryDate)
           ? <StatusBadge status="expired" label="Expired" />
-          : <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto" />
+          : <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto" aria-label="Worker screening current" />
       },
     },
     {
@@ -70,7 +108,7 @@ export default function StaffPage() {
           <Dropdown
             variant="pill"
             value={current}
-            onChange={val => updateStaff.mutate({ id: s.id, data: { ...s, email: s.email ?? '', isActive: val === 'Active' } })}
+            onChange={val => handleStatusChange(s, val)}
             colorClass={ACTIVE_STATUS_COLORS[current]}
             items={ACTIVE_STATUS_ITEMS}
             disabled={!canWrite}
@@ -93,15 +131,25 @@ export default function StaffPage() {
         )}
       >
         {toggleButtons}
+        <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
       </PageHeader>
 
       {!isLoading && staff.length === 0 ? (
-        <EmptyState
-          icon={UserCog}
-          title="No staff members yet"
-          description="Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them."
-          action={!showArchived && canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
-        />
+        search ? (
+          <EmptyState
+            icon={UserCog}
+            title="No staff match your search"
+            description="Try a different search term, or clear your search to see all staff."
+            action={{ label: 'Clear search', onClick: () => setSearch('') }}
+          />
+        ) : (
+          <EmptyState
+            icon={UserCog}
+            title="No staff members yet"
+            description="Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them."
+            action={!showArchived && canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
+          />
+        )
       ) : (
         <DataTable
           data={staff}
@@ -113,6 +161,22 @@ export default function StaffPage() {
         />
       )}
       {confirmDialog}
+      <ConfirmDialog
+        open={confirmDeactivate !== null}
+        onCancel={() => setConfirmDeactivate(null)}
+        onConfirm={() => {
+          if (!confirmDeactivate) return
+          updateStaff.mutate(
+            { id: confirmDeactivate.id, data: confirmDeactivate.data },
+            { onSuccess: () => setConfirmDeactivate(null) }
+          )
+        }}
+        variant="danger"
+        loading={updateStaff.isPending}
+        title="Mark staff member as inactive?"
+        confirmLabel="Mark inactive"
+        message={<p>Mark <strong>{confirmDeactivate?.name || 'this staff member'}</strong> as inactive?</p>}
+      />
     </div>
   )
 }

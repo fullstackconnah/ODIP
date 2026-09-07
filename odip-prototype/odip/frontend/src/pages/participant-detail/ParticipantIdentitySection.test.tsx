@@ -100,6 +100,22 @@ describe('ParticipantIdentitySection — edit/save cycle', () => {
     expect(screen.queryByLabelText('First Name')).not.toBeInTheDocument()
   })
 
+  // PP-82 — SectionEditPanel (shared chrome behind this and ~14 other Participant Detail cards)
+  // now shows a role="status" confirmation after a successful save, not just silence.
+  it('shows a "Saved." confirmation after a successful save', async () => {
+    const user = userEvent.setup()
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    const p = makeParticipant({ firstName: 'Sophie' })
+    render(<ParticipantIdentitySection p={p} participantId="participant-1" canEdit />)
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.clear(screen.getByLabelText(/^First Name/))
+    await user.type(screen.getByLabelText(/^First Name/), 'Sophia')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/saved/i)
+  })
+
   it('a failed save keeps the section in edit mode with the typed input intact', async () => {
     const user = userEvent.setup()
     mockPatchMutateAsync.mockRejectedValue({ response: { data: { message: 'Network error, please retry.' } } })

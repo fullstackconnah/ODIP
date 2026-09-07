@@ -102,7 +102,7 @@ export default function ClaimBatchDetailPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold text-[var(--color-foreground)] font-mono">{batch.fileName}</h1>
           {isSubmitted ? (
-            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">
+            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-semibold">
               <CheckCircle2 className="w-3.5 h-3.5" /> Submitted to NDIA
             </span>
           ) : (

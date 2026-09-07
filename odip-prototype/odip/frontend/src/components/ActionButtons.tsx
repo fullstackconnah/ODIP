@@ -20,28 +20,28 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
       {editTo && (
         <Link to={editTo} onClick={e => e.stopPropagation()}
           className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors inline-block"
-          title="Edit">
+          title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </Link>
       )}
       {onEdit && (
         <button onClick={e => stop(e, onEdit)}
           className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
-          title="Edit">
+          title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </button>
       )}
       {showArchived && onRestore && (
         <button onClick={e => stop(e, onRestore)}
           className="p-1.5 rounded hover:bg-green-500/20 text-[var(--color-muted-foreground)] hover:text-green-400 transition-colors"
-          title="Restore">
+          title="Restore" aria-label="Restore">
           <ArchiveRestore className="w-4 h-4" />
         </button>
       )}
       {!showArchived && onDelete && (
         <button onClick={e => stop(e, onDelete)}
           className="p-1.5 rounded hover:bg-red-500/20 text-[var(--color-muted-foreground)] hover:text-red-400 transition-colors"
-          title="Archive">
+          title="Archive" aria-label="Archive">
           <Trash2 className="w-4 h-4" />
         </button>
       )}

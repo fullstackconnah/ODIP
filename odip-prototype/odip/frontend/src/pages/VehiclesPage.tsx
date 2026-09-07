@@ -17,7 +17,7 @@ const vehicleTypeConfig: Record<VehicleTypeKey, { icon: React.ElementType; iconB
   Van: { icon: Truck, iconBg: 'bg-[var(--color-secondary-container)]', iconColor: 'text-[var(--color-secondary)]' },
   Bus: { icon: Bus, iconBg: 'bg-[var(--color-surface-container)]', iconColor: 'text-[var(--color-muted-foreground)]' },
   MiniBus: { icon: Bus, iconBg: 'bg-[var(--color-surface-container)]', iconColor: 'text-[var(--color-muted-foreground)]' },
-  AccessibleVan: { icon: Bus, iconBg: 'bg-[#ffd7ef]', iconColor: 'text-[#7a2169]' },
+  AccessibleVan: { icon: Bus, iconBg: 'bg-[var(--color-accessible-container)]', iconColor: 'text-[var(--color-on-accessible-container)]' },
   Other: { icon: Truck, iconBg: 'bg-[var(--color-surface-container-high)]', iconColor: 'text-[var(--color-muted-foreground)]' },
 }
 
@@ -183,19 +183,6 @@ export default function VehiclesPage() {
                     />
                   </div>
 
-                  {/* Accessibility note (available when detail data is present) */}
-                  {('rampHoistDetails' in v) && (v as import('@/api/types').VehicleDetailDto).rampHoistDetails && (
-                    <div className="bg-[var(--color-surface-container-low)] rounded-xl px-4 py-3 mb-5 text-sm">
-                      <span className="font-bold text-[#7a2169]">Accessibility: </span>
-                      <span className="text-[var(--color-muted-foreground)]">{(v as import('@/api/types').VehicleDetailDto).rampHoistDetails}</span>
-                    </div>
-                  )}
-
-                  {/* Notes preview (available when detail data is present) */}
-                  {('notes' in v) && (v as import('@/api/types').VehicleDetailDto).notes && (
-                    <p className="text-sm text-[var(--color-muted-foreground)] line-clamp-2 mb-4">{(v as import('@/api/types').VehicleDetailDto).notes}</p>
-                  )}
-
                   {/* Action row */}
                   {canWrite && (
                     <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 flex gap-3">
@@ -239,7 +226,7 @@ export default function VehiclesPage() {
           </div>
           <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5">
             <p className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider mb-1">Wheelchair Positions</p>
-            <p className="text-2xl font-bold text-[#8e337b]">{totalWheelchair} <span className="text-base font-semibold">Available</span></p>
+            <p className="text-2xl font-bold text-[var(--color-on-accessible-container)]">{totalWheelchair} <span className="text-base font-semibold">Available</span></p>
           </div>
           <div className="bg-[var(--color-primary-fixed)] rounded-2xl p-5">
             <p className="text-[10px] uppercase font-bold text-[var(--color-on-primary-fixed)] tracking-wider mb-1 opacity-70">Accessible Vehicles</p>

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type {
-  RestrictivePracticeDto, CreateRestrictivePracticeDto, UpdateRestrictivePracticeDto,
+  RestrictivePracticeDto, UpdateRestrictivePracticeDto,
   BulkCreateRestrictivePracticeDto,
 } from '../types'
 
@@ -13,19 +13,6 @@ export function useRestrictivePractices(participantId: string | undefined, inclu
         includeInactive: includeInactive ?? undefined,
       }),
     enabled: !!participantId,
-  })
-}
-
-export function useCreateRestrictivePractice() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ participantId, data }: { participantId: string; data: CreateRestrictivePracticeDto }) =>
-      apiPostRaw<RestrictivePracticeDto>(`/participants/${participantId}/restrictive-practices`, data),
-    onSuccess: (_res, variables) => {
-      qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participants'] })
-    },
   })
 }
 

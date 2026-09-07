@@ -228,6 +228,7 @@ export default function BillableEventFormPanel({ isOpen, onClose, event, default
 
         <fieldset disabled={locked} className="contents">
           <form id="billable-event-form" onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Who/What</h3>
             <FormField label="Participant" required error={errors.participantId?.message}>
               <Controller
                 control={control}
@@ -301,6 +302,7 @@ export default function BillableEventFormPanel({ isOpen, onClose, event, default
               />
             </FormField>
 
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)] pt-2">Delivery</h3>
             <FormField label="Support Item Number" required error={errors.supportItemNumber?.message}>
               <input {...register('supportItemNumber')} placeholder="e.g. 04_104_0125_6_1" />
             </FormField>
@@ -367,6 +369,7 @@ export default function BillableEventFormPanel({ isOpen, onClose, event, default
               </p>
             )}
 
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)] pt-2">Claim metadata</h3>
             <FormField label="GST Code" required error={errors.gstCode?.message}>
               <Controller
                 control={control}

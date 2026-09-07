@@ -522,7 +522,7 @@ export default function TenantFormPanel({
 
           {/* Success message */}
           {successMessage && (
-            <div className="bg-[#bff285] border border-[#8fc950] rounded-xl px-4 py-3 text-sm text-[#294800] font-medium">
+            <div className="bg-[var(--color-primary-fixed)] border border-[var(--color-primary)]/20 rounded-xl px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
               {successMessage}
             </div>
           )}

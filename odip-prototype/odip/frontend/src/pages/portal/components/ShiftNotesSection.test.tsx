@@ -116,6 +116,24 @@ describe('ShiftNotesSection', () => {
     expect(screen.getByText('Quiet shift, no concerns.')).toBeInTheDocument()
   })
 
+  // PP-56: ShiftNoteDto.updatedAt exists but was never surfaced — an edited note should say so.
+  it('shows an "edited" suffix when a note was updated after it was created', () => {
+    mockUseShiftNotes.mockReturnValue({
+      data: [makeNote({ updatedAt: '2026-08-17T10:15:00Z' })],
+      isLoading: false, isError: false, refetch: mockRefetch,
+    })
+    renderSection()
+
+    expect(screen.getByText('Ben Turner').closest('p')).toHaveTextContent(/edited/i)
+  })
+
+  it('does not show an "edited" suffix on an unedited note (updatedAt === createdAt)', () => {
+    mockUseShiftNotes.mockReturnValue({ data: [makeNote()], isLoading: false, isError: false, refetch: mockRefetch })
+    renderSection()
+
+    expect(screen.getByText('Ben Turner').closest('p')).not.toHaveTextContent(/edited/i)
+  })
+
   it('submits a new note and clears the textarea on success', async () => {
     const user = userEvent.setup()
     mockUseShiftNotes.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: mockRefetch })

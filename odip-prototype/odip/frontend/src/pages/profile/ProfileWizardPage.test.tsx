@@ -156,6 +156,42 @@ describe('ProfileWizardPage — PF-10.5 resume hydration', () => {
   })
 })
 
+// PP-42 — unsaved changes (a dirty form) must warn before navigating away, same
+// useUnsavedChangesWarning idiom as StaffCreatePage/TripCreatePage.
+describe('ProfileWizardPage — PP-42 unsaved changes warning', () => {
+  it('warns before navigating away once the form is dirty, and does nothing when the form is clean', async () => {
+    const user = userEvent.setup()
+    renderProfilePage()
+    await expectStep(/key identifiers/i)
+
+    const backLink = document.querySelector('a[href="/participants/participant-1"]') as HTMLAnchorElement
+    expect(backLink).toBeTruthy()
+
+    // Clean form: navigating away triggers no warning.
+    await user.click(backLink)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+  })
+
+  it('shows the "Leave without saving?" dialog when navigating away with a dirty form, and staying keeps the wizard', async () => {
+    const user = userEvent.setup()
+    renderProfilePage()
+    await expectStep(/key identifiers/i)
+
+    await user.type(screen.getByLabelText(/medicare number/i), '9999999999')
+
+    const backLink = document.querySelector('a[href="/participants/participant-1"]') as HTMLAnchorElement
+    await user.click(backLink)
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/leave without saving/i)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /keep editing/i }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/medicare number/i)).toHaveValue('9999999999')
+  })
+})
+
 describe('ProfileWizardPage — conditional sections (generic isVisible list, not special-cased)', () => {
   it('omits the Community Access step entirely when serviceStreams does not include CommunityAccessDailyLiving', async () => {
     renderProfilePage(makeParticipant({ serviceStreams: 'InHomeSupport' }))

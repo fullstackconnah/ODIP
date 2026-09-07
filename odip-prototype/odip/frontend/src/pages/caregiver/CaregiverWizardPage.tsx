@@ -257,6 +257,6 @@ function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<Caregiver
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.slice(0, 4).map((f) => ({ label: fieldLabel(String(f)), value: normValue((values as Record<string, unknown>)[f as string]) || '—' })),
+      : step.fields.map((f) => ({ label: fieldLabel(String(f)), value: normValue((values as Record<string, unknown>)[f as string]) || '—' })),
   }))
 }

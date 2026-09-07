@@ -13,19 +13,21 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enum
 
 const {
   mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
+  mockUseCreateIncident,
 } = vi.hoisted(() => ({
   mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockUseRestrictivePractices: vi.fn(),
   mockApiPost: vi.fn(),
+  mockUseCreateIncident: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
 // actual conditional-reveal wiring (INC-01 trip dropdown, INC-02 specify field) and the real
 // wizard shell (useWizard/WizardStepRail/WizardNavFooter/WizardReviewStep).
 vi.mock('@/api/hooks', () => ({
-  useCreateIncident: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
+  useCreateIncident: mockUseCreateIncident,
   useUpdateIncident: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
   useIncident: mockUseIncident,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }, { id: 'trip-2', tripName: 'Blue Mountains Adventure' }] }),
@@ -153,6 +155,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-incident-1' } })
+  mockUseCreateIncident.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
   mockApiPost.mockReset().mockResolvedValue({ success: true, data: null })
   localStorage.clear()
@@ -1149,6 +1152,7 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
 
       expect(screen.getByText('Approved')).toBeInTheDocument()
       expect(screen.queryByText(/will be asked to approve/i)).not.toBeInTheDocument()
+      expect(screen.getByText('I saw it.')).toBeInTheDocument()
     })
 
     it('echoes the persisted witness id back on an unmodified resubmit, so the server can preserve its Approved status', async () => {
@@ -1166,5 +1170,34 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
         { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
       ])
     })
+  })
+})
+
+// PP-28: a 403 (ReadOnly/SupportWorker reaching the save action, per lib/permissions.ts's
+// canWrite/canCreateIncidents doc comments) must read distinctly from a generic validation
+// failure, instead of the one hardcoded "check your input" string for every failure.
+describe('IncidentCreatePage — save-failure banner', () => {
+  it('shows a permission-specific message for a 403 response', async () => {
+    mockUseCreateIncident.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 403, data: { message: 'Forbidden' } } },
+    })
+    renderCreatePage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("You don't have permission to file incident reports.")
+  })
+
+  it('shows the server\'s specific validation message for a non-403 failure', async () => {
+    mockUseCreateIncident.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 400, data: { message: 'Incident date cannot be in the future.' } } },
+    })
+    renderCreatePage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incident date cannot be in the future.')
   })
 })

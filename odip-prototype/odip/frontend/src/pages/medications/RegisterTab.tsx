@@ -77,7 +77,7 @@ export default function RegisterTab() {
       key: 'drugSchedule',
       header: 'Schedule',
       render: m => (m.drugSchedule === 'Schedule4' || m.drugSchedule === 'Schedule8')
-        ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
+        ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
         : <span className="text-[var(--color-muted-foreground)]">—</span>,
     },
     { key: 'supportLevel', header: 'Support level', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },

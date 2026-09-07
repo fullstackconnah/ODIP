@@ -209,6 +209,7 @@ export function ShiftNotesSection({
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs text-[var(--color-muted-foreground)]">
                       <span className="font-medium text-[var(--color-foreground)]">{note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
+                      {note.updatedAt > note.createdAt && ` · edited ${formatNoteTimestamp(note.updatedAt)}`}
                     </p>
                     {note.authorUserId === currentUserId && (
                       <button

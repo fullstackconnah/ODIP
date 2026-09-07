@@ -124,4 +124,12 @@ describe('TaskCreatePage — edit mode single-task fetch (PP-10/PP-11)', () => {
     expect(screen.getByText(/couldn't find this task/i)).toBeInTheDocument()
     expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
   })
+
+  it('PP-59: shows a loading state instead of create-mode defaults while the edit-mode fetch is in flight', () => {
+    mockUseTask.mockReturnValue({ data: undefined, isError: false })
+    renderEditPage()
+
+    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Title *')).not.toBeInTheDocument()
+  })
 })

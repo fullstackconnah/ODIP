@@ -90,7 +90,14 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
         if (!persisted) {
           return <span className="text-xs text-[var(--color-muted-foreground)]">Will be asked to approve after this report is submitted</span>
         }
-        return <StatusBadge status={persisted.witnessStatus} label={WITNESS_STATUS_LABELS[persisted.witnessStatus]} colorMap={WITNESS_STATUS_COLOR_MAP} />
+        return (
+          <div className="flex flex-col gap-1">
+            <StatusBadge status={persisted.witnessStatus} label={WITNESS_STATUS_LABELS[persisted.witnessStatus]} colorMap={WITNESS_STATUS_COLOR_MAP} />
+            {persisted.statementText && (
+              <span className="text-xs text-[var(--color-muted-foreground)]">{persisted.statementText}</span>
+            )}
+          </div>
+        )
       },
     },
     {

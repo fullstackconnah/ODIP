@@ -48,6 +48,7 @@ import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES,
 import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
 import type { UpdateParticipantDto } from '@/api/types/participants'
 import { boolToTriState, focusField, extractErrorMessage } from '../intake/intakeFormat'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
 import { CulturalDepthConsentsStep } from './steps/CulturalDepthConsentsStep'
 import { MedicalDetailStep } from './steps/MedicalDetailStep'
@@ -105,9 +106,11 @@ export default function ProfileWizardPage() {
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
 
-  const { register, handleSubmit, control, getValues, setValue, setError, clearErrors, reset, formState: { errors } } = useForm<ParticipantFormData>({
+  const { register, handleSubmit, control, getValues, setValue, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<ParticipantFormData>({
     defaultValues: { consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [] },
   })
+
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   const healthConditionFieldArray = useFieldArray({ control, name: 'healthConditions' })
   const adlFieldArray = useFieldArray({ control, name: 'adlAssessments' })
@@ -393,6 +396,7 @@ export default function ProfileWizardPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <Link to={`/participants/${id}`} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />

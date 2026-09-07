@@ -1,16 +1,17 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 
-const { mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
+  mockUseDashboard: vi.fn(),
 }))
 
 // Only the API layer needs mocking — the rest of DashboardPage's rendering (trips/tasks lists)
 // falls back to its own built-in empty defaults when useDashboard returns no data.
 vi.mock('@/api/hooks', () => ({
-  useDashboard: () => ({ data: undefined, isLoading: false, isError: false }),
+  useDashboard: mockUseDashboard,
   useSettings: () => ({ data: undefined }),
   useStaff: () => ({ data: [] }),
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
@@ -27,6 +28,33 @@ function renderPage() {
 afterEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
+})
+
+beforeEach(() => {
+  mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+})
+
+describe('DashboardPage — Overdue Tasks link (PP-75)', () => {
+  it('deep-links each overdue task to its edit route and labels the link "View"', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue({
+      data: {
+        upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
+        overdueTaskCount: 1, conflictCount: 0, tripsMissingAccommodation: 0,
+        tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
+        qscOverdueCount: 0, upcomingTrips: [],
+        overdueTasks: [{ id: 'task-1', title: 'Chase invoice', priority: 'High', dueDate: new Date(Date.now() - 3600000).toISOString(), tripName: 'Beach Trip', ownerName: 'Sam Owner' }],
+      },
+      isLoading: false, isError: false,
+    })
+    renderPage()
+
+    const link = document.querySelector('a[href="/tasks/task-1/edit"]')
+    expect(link).not.toBeNull()
+    expect(link).toHaveTextContent(/view/i)
+    expect(screen.queryByText(/^resolve$/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('DashboardPage — Critical Participant Alerts card', () => {

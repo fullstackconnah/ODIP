@@ -97,7 +97,7 @@ export default function BookingsPage() {
             { key: 'bookingDate', header: 'Booking Date', type: 'date', sortable: true },
             {
               key: 'wheelchairRequired',
-              header: <span className="material-symbols-outlined text-base leading-none">accessible</span>,
+              header: 'WC',
               type: 'boolean',
               align: 'center' as const,
             },

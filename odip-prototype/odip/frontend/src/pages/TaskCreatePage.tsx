@@ -123,6 +123,12 @@ export default function TaskCreatePage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
+  // PP-59: don't render the form with create-mode defaults while an edit-mode fetch is still in
+  // flight — wait for it to resolve (success or the not-found case handled just below).
+  if (isEdit && !isTaskError && !existingTask) {
+    return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  }
+
   // PP-10/PP-11: a failed/not-found single-task fetch must surface visibly, not silently fall
   // back to rendering the create-mode form with blank defaults.
   if (isEdit && isTaskError) {

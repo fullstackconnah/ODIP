@@ -213,6 +213,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
                 onClick={() => onEditUser(user)}
                 className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
                 title="Edit user"
+                aria-label="Edit user"
               >
                 <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
               </button>

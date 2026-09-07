@@ -203,6 +203,7 @@ export default function QualificationsPage() {
             <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
               change in Settings
             </Link>
+            {' '}· showing active staff only
           </p>
         </div>
         <EmptyState
@@ -224,6 +225,7 @@ export default function QualificationsPage() {
           <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
             change in Settings
           </Link>
+          {' '}· showing active staff only
         </p>
       </div>
 
@@ -248,20 +250,29 @@ export default function QualificationsPage() {
         <div className="space-y-3">
           {filteredGroups.map(group => (
             <div key={group.staffId} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] overflow-hidden">
-              {/* Accordion header */}
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.staffId)}
-                className="flex w-full items-center justify-between p-4 cursor-pointer hover:bg-[var(--color-accent)]/50 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
+              {/* Accordion header — a flex row of TWO sibling interactive elements, never one
+                  nested inside the other: the native <button> (chevron + name) toggles the
+                  accordion, and a separate Link navigates to the staff record. */}
+              <div className="flex w-full items-center gap-3 p-4 hover:bg-[var(--color-accent)]/50 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.staffId)}
+                  className="flex flex-1 min-w-0 items-center gap-3 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm"
+                >
                   <span className="material-symbols-outlined text-[var(--color-muted-foreground)] text-lg">
                     {expandedIds.has(group.staffId) ? 'expand_less' : 'expand_more'}
                   </span>
-                  <span className="font-medium">{group.staffName}</span>
-                </div>
+                  <span className="font-medium truncate">{group.staffName}</span>
+                </button>
                 <StatusBadge status="Cancelled" label={`${group.issueCount} issue${group.issueCount !== 1 ? 's' : ''}`} />
-              </button>
+                <Link
+                  to={`/staff/${group.staffId}/edit`}
+                  aria-label={`Edit ${group.staffName}`}
+                  className="shrink-0 p-2 -m-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                >
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
+                </Link>
+              </div>
 
               {/* Accordion body */}
               {expandedIds.has(group.staffId) && (
@@ -275,7 +286,7 @@ export default function QualificationsPage() {
                     className="overflow-x-auto"
                     rowClassName={(q) =>
                       q.status === 'expired' ? 'bg-[var(--color-error-container)]/10' :
-                      q.status === 'expiring' ? 'bg-[#fef3c7]/10' : ''
+                      q.status === 'expiring' ? 'bg-[var(--color-warning-container)]/10' : ''
                     }
                     columns={[
                       {

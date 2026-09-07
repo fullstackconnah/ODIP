@@ -79,12 +79,15 @@ function makeIncidentRequest(overrides: Partial<PortalWitnessRequestDto> = {}): 
   })
 }
 
+const mockRefetch = vi.fn()
+
 beforeEach(() => {
   mockApproveMutateAsync.mockReset()
   mockDeclineMutateAsync.mockReset()
   mockApproveIncidentMutateAsync.mockReset()
   mockDeclineIncidentMutateAsync.mockReset()
-  mockUsePendingWitnessRequests.mockReturnValue({ data: [], isLoading: false })
+  mockRefetch.mockReset()
+  mockUsePendingWitnessRequests.mockReturnValue({ data: [], isLoading: false, refetch: mockRefetch })
 })
 
 describe('PortalWitnessApprovalsPage', () => {
@@ -145,6 +148,39 @@ describe('PortalWitnessApprovalsPage', () => {
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
     expect(mockDeclineMutateAsync).toHaveBeenCalledWith('admin-1')
+  })
+
+  // PP-33: a specific backend rejection (e.g. "already responded to") shouldn't be swallowed by
+  // a generic "Failed to approve/decline" string, and the list should refresh so a
+  // resolved-elsewhere request disappears immediately.
+  it('shows the server\'s specific message and refetches when approving fails', async () => {
+    const user = userEvent.setup()
+    mockUsePendingWitnessRequests.mockReturnValue({ data: [makeRequest()], isLoading: false, refetch: mockRefetch })
+    mockApproveMutateAsync.mockRejectedValue({
+      response: { data: { message: 'This request has already been responded to.' } },
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect(await screen.findByText('This request has already been responded to.')).toBeInTheDocument()
+    expect(mockRefetch).toHaveBeenCalled()
+  })
+
+  it('shows the server\'s specific message and refetches when declining fails', async () => {
+    const user = userEvent.setup()
+    mockUsePendingWitnessRequests.mockReturnValue({ data: [makeRequest()], isLoading: false, refetch: mockRefetch })
+    mockDeclineMutateAsync.mockRejectedValue({
+      response: { data: { message: 'This request has already been responded to.' } },
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /decline/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
+
+    expect(await screen.findByText('This request has already been responded to.')).toBeInTheDocument()
+    expect(mockRefetch).toHaveBeenCalled()
   })
 
   // IN-7: incident rows are discriminated by sourceType and use separate endpoints/mutations.

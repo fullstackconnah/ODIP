@@ -278,7 +278,7 @@ export default function ClaimBatchBuilderPage() {
                 className={`inline-flex items-start gap-1 text-xs px-2 py-0.5 rounded-full w-fit ${
                   r.severity === 'Error'
                     ? 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-                    : 'bg-amber-100 text-amber-700'
+                    : 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
                 }`}
               >
                 {r.severity === 'Error' ? (
@@ -490,7 +490,7 @@ export default function ClaimBatchBuilderPage() {
             if (!validation || isValidationStale) return ''
             const rowResults = resultsByEvent.get(e.id)
             if (rowResults?.some(r => r.severity === 'Error')) return 'bg-[var(--color-error-container)]/20'
-            if (rowResults?.some(r => r.severity === 'Warning')) return 'bg-amber-50'
+            if (rowResults?.some(r => r.severity === 'Warning')) return 'bg-[var(--color-warning-container)]/20'
             return ''
           }}
           emptyMessage="No unclaimed events found"

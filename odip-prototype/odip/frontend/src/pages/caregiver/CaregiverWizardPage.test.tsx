@@ -221,6 +221,32 @@ describe('CaregiverWizardPage — Review step (PP-6)', () => {
     expect(screen.queryByText('mobilitySupportOptions')).not.toBeInTheDocument()
     expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument()
   })
+
+  // PP-43 — reviewBuilder used to truncate every non-aboutYou step to its first 4 fields via
+  // `.slice(0, 4)`. Key Identifiers alone has 19 fields, so its Review card must show all of them.
+  it('shows every field for a step with more than 4 fields (Key Identifiers), not just the first 4', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto(),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+
+    const heading = screen.getByRole('heading', { name: 'Key Identifiers' })
+    const card = heading.closest('.space-y-2') as HTMLElement
+    expect(card).toBeTruthy()
+    const rowLabels = within(card).getAllByRole('term')
+    // 19 fields on the Key Identifiers step (see PROFILE_STEP_KEY_IDENTIFIERS_FIELDS) — well
+    // past the old truncation point of 4.
+    expect(rowLabels.length).toBeGreaterThan(4)
+  })
 })
 
 // Task 6 — the route is registered as a sibling of /login, outside the authenticated app shell

@@ -10,11 +10,14 @@ import type {
   UpdateClaimLineItemDto,
 } from '../types'
 
-export function useTripClaims(tripId: string | undefined) {
+/** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
+ * the fetch — additive, so existing callers passing nothing keep fetching as soon as `tripId`
+ * is known. */
+export function useTripClaims(tripId: string | undefined, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['trip-claims', tripId],
     queryFn: () => apiGet<TripClaimListDto[]>(`/trips/${tripId}/claims`),
-    enabled: !!tripId,
+    enabled: !!tripId && (options?.enabled ?? true),
   })
 }
 

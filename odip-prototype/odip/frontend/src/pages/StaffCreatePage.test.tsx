@@ -7,18 +7,21 @@ import type { StaffDetailDto } from '@/api/types'
 
 const {
   mockUseStaffDetail, mockCreateMutateAsync, mockUpdateMutateAsync, mockUsePermissions,
+  mockUseCreateStaff, mockUseUpdateStaff,
 } = vi.hoisted(() => ({
   mockUseStaffDetail: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockUsePermissions: vi.fn(),
+  mockUseCreateStaff: vi.fn(),
+  mockUseUpdateStaff: vi.fn(),
 }))
 
 // Only the API layer and usePermissions are mocked — FormField, Card are the real components,
 // so this exercises the actual role-lock/blocked-form wiring.
 vi.mock('@/api/hooks', () => ({
-  useCreateStaff: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
-  useUpdateStaff: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
+  useCreateStaff: mockUseCreateStaff,
+  useUpdateStaff: mockUseUpdateStaff,
   useStaffDetail: mockUseStaffDetail,
 }))
 
@@ -69,6 +72,8 @@ beforeEach(() => {
   mockUpdateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockResolvedValue({ success: true, data: {} })
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: {} })
+  mockUseCreateStaff.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
+  mockUseUpdateStaff.mockReturnValue({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false, error: null })
 })
 
 describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () => {
@@ -139,6 +144,42 @@ describe('StaffCreatePage account-role options (create mode)', () => {
     const optionNames = screen.getAllByRole('option').map(o => o.textContent)
     expect(optionNames).toContain('Admin')
     expect(optionNames).not.toContain('SuperAdmin')
+  })
+})
+
+// PP-85 — a failed save now shows the backend's specific message (e.g. the email-conflict 409)
+// instead of the generic "Failed to create/update staff member" banner.
+describe('StaffCreatePage — PP-85 specific save-failure message', () => {
+  it('shows the backend\'s conflict message when creating with a duplicate email', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: false })
+    mockCreateMutateAsync.mockRejectedValue({
+      response: { data: { success: false, errors: ['A user with this email already exists.'] } },
+    })
+    mockUseCreateStaff.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: true, error: { response: { data: { errors: ['A user with this email already exists.'] } } } })
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A user with this email already exists.')
+  })
+
+  it('falls back to the generic message when the error carries no specific text', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: false })
+    mockCreateMutateAsync.mockRejectedValue(new Error('network down'))
+    mockUseCreateStaff.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: true, error: new Error('network down') })
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/failed to create staff member/i)
   })
 })
 

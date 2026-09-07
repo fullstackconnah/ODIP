@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
+import { PageHeader } from '@/components/PageHeader'
 import { useCaregiverSubmissions } from '@/api/hooks/caregiver'
 import type { CaregiverSubmissionListItemDto, CaregiverSubmissionStatus } from '@/api/types/caregiver'
 
@@ -40,10 +41,10 @@ export default function CaregiverSubmissionsPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Caregiver forms</h1>
-        <Dropdown variant="pill" items={STATUS_ITEMS} value={status} onChange={(v) => setStatus(v as CaregiverSubmissionStatus)} label="Status" />
-      </div>
+      <PageHeader
+        title="Caregiver forms"
+        action={<Dropdown variant="pill" items={STATUS_ITEMS} value={status} onChange={(v) => setStatus(v as CaregiverSubmissionStatus)} label="Status" />}
+      />
       <DataTable
         data={data}
         columns={columns}
