@@ -821,6 +821,9 @@ public class RosteringControllerTests
         var row = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id);
         var bar = Assert.Single(row.Leave);
         Assert.Equal(UnavailabilityKind.ApprovedLeave, bar.Kind);
+        // Compat fill (Important #1): ApprovedLeave/PendingLeave bars fill AvailabilityType.Leave
+        // so the current frontend keeps rendering a label.
+        Assert.Equal(AvailabilityType.Leave, bar.AvailabilityType);
     }
 
     // Regression for Fix round 1: UnavailabilityWindow.End is EXCLUSIVE
@@ -843,6 +846,9 @@ public class RosteringControllerTests
         var row = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id);
         var bar = Assert.Single(row.Leave);
         Assert.Equal(UnavailabilityKind.ApprovedLeave, bar.Kind);
+        // Compat fill (Important #1): ApprovedLeave/PendingLeave bars fill AvailabilityType.Leave
+        // so the current frontend keeps rendering a label.
+        Assert.Equal(AvailabilityType.Leave, bar.AvailabilityType);
         Assert.Equal(leaveStart, bar.StartDate);
         Assert.Equal(leaveEnd, bar.EndDate);
     }
