@@ -102,3 +102,21 @@ describe('AppLayout — Leave nav entry (leave-2)', () => {
     expect(screen.getByRole('link', { name: /Leave$/ })).toHaveTextContent('3')
   })
 })
+
+describe('AppLayout — pending-leave poll gated on canApproveLeave', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUsePendingLeaveCount.mockClear()
+  })
+
+  it('disables the poll for a role without canApproveLeave (no user, e.g. SupportWorker/ReadOnly)', () => {
+    renderAt('/rostering')
+    expect(mockUsePendingLeaveCount).toHaveBeenCalledWith(false)
+  })
+
+  it('enables the poll for a role with canApproveLeave (Coordinator)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderAt('/rostering')
+    expect(mockUsePendingLeaveCount).toHaveBeenCalledWith(true)
+  })
+})

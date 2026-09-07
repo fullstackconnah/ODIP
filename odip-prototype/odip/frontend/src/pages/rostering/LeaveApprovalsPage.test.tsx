@@ -111,6 +111,24 @@ describe('LeaveApprovalsPage', () => {
     expect(await screen.findByText(/no rostered shifts or trips overlap this window/i)).toBeInTheDocument()
   })
 
+  it('shows a server error and keeps the approve dialog open when the approve mutation rejects', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', userFullName: 'Alex Rivera' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'This request has already been decided.' } } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    const confirmDialog = screen.getByRole('dialog')
+    await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(await within(confirmDialog).findByText(/this request has already been decided\./i)).toBeInTheDocument()
+    // The approve dialog stays open (not the overlaps notice) and the row is unchanged — still
+    // Pending, with its Approve/Decline actions intact — since the mutation never resolved.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
+  })
+
   it('requires a decline reason before submitting', async () => {
     const user = userEvent.setup()
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1' })], isLoading: false, isError: false, refetch: vi.fn() })
@@ -149,6 +167,23 @@ describe('LeaveApprovalsPage', () => {
     await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
+  })
+
+  it('shows a server error and keeps the cancel dialog open when the cancel mutation rejects', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Approved', userFullName: 'Alex Rivera' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockCancelLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'Only pending requests can be withdrawn.' } } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
+
+    expect(await within(dialog).findByText(/only pending requests can be withdrawn\./i)).toBeInTheDocument()
+    // The cancel dialog stays open and the row is unchanged — still Approved, with its own
+    // Cancel action intact — since the mutation never resolved.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
   })
 
   it('"Enter on behalf" — Leave requires a staff selection and lands the request Approved via the on-behalf endpoint', async () => {

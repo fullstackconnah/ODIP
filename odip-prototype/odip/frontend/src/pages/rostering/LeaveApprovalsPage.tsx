@@ -15,7 +15,7 @@ import {
 } from '@/api/hooks'
 import { LeaveRequestFormModal } from '@/pages/portal/components/LeaveRequestFormModal'
 import { UnavailabilityFormModal } from '@/pages/portal/components/UnavailabilityFormModal'
-import { LEAVE_STATUS_COLORS } from '@/api/types'
+import { LEAVE_STATUS_COLORS, LEAVE_TYPE_LABELS } from '@/api/types'
 import type { LeaveRequestDto, RecurringUnavailabilityDto, LeaveStatus, RosterFindingDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
 import { formatEffectiveRange } from './lib/roster'
 
@@ -37,7 +37,7 @@ const STATUS_FILTER_ITEMS = [
 ]
 
 function rowType(row: ApprovalRow) {
-  return row.rowKind === 'leave' ? `Leave — ${row.data.leaveType}` : 'Regular unavailability'
+  return row.rowKind === 'leave' ? `Leave — ${LEAVE_TYPE_LABELS[row.data.leaveType]}` : 'Regular unavailability'
 }
 
 function rowWindow(row: ApprovalRow) {
@@ -79,10 +79,12 @@ export default function LeaveApprovalsPage() {
   const [onBehalfError, setOnBehalfError] = useState<string | null>(null)
   const [approveTarget, setApproveTarget] = useState<ApprovalRow | null>(null)
   const [approveOverlaps, setApproveOverlaps] = useState<RosterFindingDto[] | null>(null)
+  const [approveError, setApproveError] = useState<string | null>(null)
   const [declineTarget, setDeclineTarget] = useState<ApprovalRow | null>(null)
   const [declineNote, setDeclineNote] = useState('')
   const [declineError, setDeclineError] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<ApprovalRow | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const rows: ApprovalRow[] = [
     ...leaveRequests.map(r => ({ rowKind: 'leave' as const, key: `leave-${r.id}`, data: r })),
@@ -94,6 +96,7 @@ export default function LeaveApprovalsPage() {
 
   async function handleApproveConfirm() {
     if (!approveTarget) return
+    setApproveError(null)
     try {
       if (approveTarget.rowKind === 'leave') {
         const result = await approveLeave.mutateAsync(approveTarget.data.id)
@@ -102,14 +105,15 @@ export default function LeaveApprovalsPage() {
         const result = await approveUnavailability.mutateAsync(approveTarget.data.id)
         setApproveOverlaps(result.overlaps)
       }
-    } catch {
-      setApproveTarget(null)
+    } catch (err) {
+      setApproveError(extractErrorMessage(err, 'Could not approve this request. Please try again.'))
     }
   }
 
   function closeApproveFlow() {
     setApproveTarget(null)
     setApproveOverlaps(null)
+    setApproveError(null)
   }
 
   async function handleDeclineConfirm() {
@@ -131,9 +135,14 @@ export default function LeaveApprovalsPage() {
 
   async function handleCancelConfirm() {
     if (!cancelTarget) return
-    if (cancelTarget.rowKind === 'leave') await cancelLeave.mutateAsync(cancelTarget.data.id)
-    else await cancelUnavailability.mutateAsync(cancelTarget.data.id)
-    setCancelTarget(null)
+    setCancelError(null)
+    try {
+      if (cancelTarget.rowKind === 'leave') await cancelLeave.mutateAsync(cancelTarget.data.id)
+      else await cancelUnavailability.mutateAsync(cancelTarget.data.id)
+      setCancelTarget(null)
+    } catch (err) {
+      setCancelError(extractErrorMessage(err, 'Could not cancel this request. Please try again.'))
+    }
   }
 
   async function handleOnBehalfLeave(payload: CreateLeaveRequestDto) {
@@ -254,9 +263,14 @@ export default function LeaveApprovalsPage() {
       <ConfirmDialog
         open={approveTarget !== null && approveOverlaps === null}
         onConfirm={handleApproveConfirm}
-        onCancel={() => setApproveTarget(null)}
+        onCancel={() => { setApproveTarget(null); setApproveError(null) }}
         title="Approve request"
-        message={approveTarget ? `Approve ${rowType(approveTarget).toLowerCase()} for ${approveTarget.data.userFullName}?` : ''}
+        message={
+          <div className="space-y-2">
+            <p>{approveTarget ? `Approve ${rowType(approveTarget).toLowerCase()} for ${approveTarget.data.userFullName}?` : ''}</p>
+            {approveError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{approveError}</p>}
+          </div>
+        }
         confirmLabel="Approve"
         loading={approveLeave.isPending || approveUnavailability.isPending}
       />
@@ -301,13 +315,18 @@ export default function LeaveApprovalsPage() {
 
       <ConfirmDialog
         open={cancelTarget !== null}
-        onCancel={() => setCancelTarget(null)}
+        onCancel={() => { setCancelTarget(null); setCancelError(null) }}
         onConfirm={handleCancelConfirm}
         title="Cancel approved request"
         variant="danger"
         confirmLabel="Cancel request"
         loading={cancelLeave.isPending || cancelUnavailability.isPending}
-        message={cancelTarget ? `Cancel the approved ${rowType(cancelTarget).toLowerCase()} for ${cancelTarget.data.userFullName}?` : ''}
+        message={
+          <div className="space-y-2">
+            <p>{cancelTarget ? `Cancel the approved ${rowType(cancelTarget).toLowerCase()} for ${cancelTarget.data.userFullName}?` : ''}</p>
+            {cancelError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{cancelError}</p>}
+          </div>
+        }
       />
     </div>
   )

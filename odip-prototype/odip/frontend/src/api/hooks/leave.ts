@@ -67,11 +67,12 @@ export type LeaveListFilters = { status?: LeaveStatus; userId?: string; from?: s
  * object shares this cache entry — usePendingLeaveCount and LeaveApprovalsPage's default view
  * read the same request when both resolve to { status: 'Pending' }.
  */
-export function useLeaveRequests(filters: LeaveListFilters = {}) {
+export function useLeaveRequests(filters: LeaveListFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['leave-requests', filters],
     queryFn: () => apiGetWithDefault<LeaveRequestDto[]>('/leave', [], filters),
     refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -84,9 +85,14 @@ export function useRecurringUnavailabilities(filters: LeaveListFilters = {}) {
 }
 
 /** Sidebar/nav badge count — shares the ['leave-requests', { status: 'Pending' }] cache entry
- * with LeaveApprovalsPage's default filter. */
-export function usePendingLeaveCount(): number {
-  const { data } = useLeaveRequests({ status: 'Pending' })
+ * with LeaveApprovalsPage's default filter. `enabled` (default true) lets a caller like
+ * AppLayout gate the poll on `canApproveLeave` — LeaveController is Admin/Coordinator/SuperAdmin
+ * only server-side, so polling it every 60s for a role that can never get a non-error response
+ * (SupportWorker, ReadOnly) is pure wasted/failing traffic. Same query key either way, so once a
+ * gated caller becomes enabled it picks up the already-shared cache entry instead of a fresh
+ * fetch. */
+export function usePendingLeaveCount(enabled = true): number {
+  const { data } = useLeaveRequests({ status: 'Pending' }, { enabled })
   return data?.length ?? 0
 }
 

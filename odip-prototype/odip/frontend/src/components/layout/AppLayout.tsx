@@ -88,7 +88,10 @@ export default function AppLayout() {
   // since usePendingWitnessRequests already resolves to an empty list for an unlinked account.
   const { data: pendingWitnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = pendingWitnessRequests?.length ?? 0
-  const pendingLeaveCount = usePendingLeaveCount()
+  // LeaveController is Admin/Coordinator/SuperAdmin only server-side — gate the poll so a
+  // SupportWorker/ReadOnly session doesn't 403-and-retry against /leave every 60s for the
+  // life of the app shell.
+  const pendingLeaveCount = usePendingLeaveCount(permissions.canApproveLeave)
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>()
     navItems.forEach(item => {
