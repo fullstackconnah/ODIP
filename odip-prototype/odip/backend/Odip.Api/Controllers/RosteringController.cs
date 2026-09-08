@@ -482,31 +482,45 @@ public class RosteringController : ControllerBase
         var statusFilter = status ?? ShiftStatus.PendingReview;
         var thresholdMinutes = VarianceReviewMinutes;
 
-        var query = _db.Shifts
-            .Include(s => s.Participant)
-            .Include(s => s.User)
+        // Narrow projection (critique P2 — "hydrates full graphs") instead of .Include(Participant)/
+        // .Include(User): only the fields GetCompletions actually needs, including the three the
+        // rostered-time conversion below needs (StartTime/EndTime/EndsNextDay).
+        var shiftQuery = _db.Shifts
             .Where(s => s.Status == statusFilter);
-        if (from.HasValue) query = query.Where(s => s.ServiceDate >= from.Value);
-        if (to.HasValue) query = query.Where(s => s.ServiceDate <= to.Value);
+        if (from.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate >= from.Value);
+        if (to.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate <= to.Value);
 
-        var shifts = await query.ToListAsync(ct);
-        var shiftIds = shifts.Select(s => s.Id).ToList();
+        var shiftRows = await shiftQuery
+            .Select(s => new
+            {
+                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount,
+                ParticipantName = s.Participant != null ? s.Participant.FullName : string.Empty,
+                StaffName = s.User != null ? s.User.FullName : string.Empty,
+            })
+            .ToListAsync(ct);
+        var shiftIds = shiftRows.Select(s => s.Id).ToList();
 
+        // Active-completion dictionary lookup stays (Task 6 design decision) — IsOutlierVariance
+        // and the rostered-time conversion need per-row TimeZoneInfo calls EF can't translate to SQL.
         var completionsByShiftId = await _db.ShiftCompletions
             .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
             .ToDictionaryAsync(c => c.ShiftId, ct);
 
         var items = new List<CompletionQueueItemDto>();
-        foreach (var shift in shifts)
+        foreach (var row in shiftRows)
         {
-            if (!completionsByShiftId.TryGetValue(shift.Id, out var completion)) continue;
-            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+            if (!completionsByShiftId.TryGetValue(row.Id, out var completion)) continue;
+            var rosteredShift = new Shift
+            {
+                ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
+            };
+            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, completion.TimeZoneId);
             var isOutlier = ShiftCompletionMapper.IsOutlierVariance(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, thresholdMinutes);
             items.Add(new CompletionQueueItemDto(
-                shift.Id, completion.Id, shift.Participant?.FullName ?? string.Empty, shift.User?.FullName ?? string.Empty,
-                shift.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
-                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, shift.Status,
-                completion.TimeZoneId, isOutlier, thresholdMinutes, shift.ReturnCount));
+                row.Id, completion.Id, row.ParticipantName, row.StaffName,
+                row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
+                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
+                completion.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount));
         }
 
         // Outlier-first, then chronological — the coordinator's queue previously had "no signal

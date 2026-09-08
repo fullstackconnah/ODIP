@@ -269,6 +269,51 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task GetCompletions_PagesResults()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        for (var i = 0; i < 3; i++)
+        {
+            var shift = Seed(db, new Shift
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
+                ServiceDate = ServiceDate.AddDays(i), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.PendingReview,
+            });
+            SeedCompletion(db, shift.Id, staff.Id);
+        }
+        var controller = MakeController(db);
+
+        var page1 = await controller.GetCompletions(null, null, null, 1, 2, CancellationToken.None);
+        var page2 = await controller.GetCompletions(null, null, null, 2, 2, CancellationToken.None);
+
+        var body1 = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(page1.Result).Value);
+        var body2 = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(page2.Result).Value);
+        Assert.Equal(2, body1.Data!.Items.Count);
+        Assert.Equal(1, body2.Data!.Items.Count);
+        Assert.Equal(3, body1.Data.TotalCount);
+        Assert.Equal(3, body2.Data.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetCompletions_PageSizeClampedTo200()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 5000, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(200, body.Data!.PageSize);
+    }
+
+    [Fact]
     public async Task GetShiftCompletion_ActiveRowExists_ReturnsDto()
     {
         using var db = CreateDb();
