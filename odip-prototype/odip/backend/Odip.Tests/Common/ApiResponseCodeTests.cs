@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Odip.Application.Common;
+using Odip.Domain.Rostering;
 using Xunit;
 
 namespace Odip.Tests.Common;
@@ -93,5 +94,25 @@ public class ShiftErrorCodesTests
 
         var duplicates = values.GroupBy(v => v).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
         Assert.True(duplicates.Count == 0, $"Duplicate ShiftErrorCodes value(s): {string.Join(", ", duplicates)}");
+    }
+
+    [Fact]
+    public void ActiveCompletionIndexName_MatchesMigration()
+    {
+        var migrationSource = File.ReadAllText(Path.Combine(BackendRoot,
+            "Odip.Infrastructure/Migrations/20260908113607_AddShiftCompletion.cs"));
+        Assert.Contains($"\"{ShiftCompletion.ActiveIndexName}\"", migrationSource);
+
+        foreach (var relativePath in new[]
+                 {
+                     "Odip.Api/Controllers/PortalController.cs",
+                     "Odip.Infrastructure/Data/OdipDbContext.cs",
+                 })
+        {
+            var source = File.ReadAllText(Path.Combine(BackendRoot, relativePath));
+            var occurrences = Regex.Matches(source, Regex.Escape($"\"{ShiftCompletion.ActiveIndexName}\"")).Count;
+            Assert.True(occurrences == 0,
+                $"{relativePath} still has the raw index-name string literal instead of ShiftCompletion.ActiveIndexName.");
+        }
     }
 }

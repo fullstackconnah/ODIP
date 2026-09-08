@@ -277,7 +277,7 @@ public class PortalController : ControllerBase
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { ConstraintName: "IX_ShiftCompletions_ShiftId_Active" })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.ConstraintName == ShiftCompletion.ActiveIndexName)
         {
             // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start —
             // narrowed (critique P3) from catching every DbUpdateException, which mapped any
