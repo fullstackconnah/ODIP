@@ -810,6 +810,38 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task GetShiftCompletions_InFlightCompletionSortsFirst()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.InProgress);
+        var older = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-10),
+            ActualEnd = DateTime.UtcNow.AddHours(-2), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = staff.Id, StartedAt = DateTime.UtcNow.AddHours(-10),
+            SubmittedAt = DateTime.UtcNow.AddHours(-2), IsActive = false,
+            ReviewOutcome = ReviewOutcome.Returned, ReturnReason = "First attempt was off.",
+        });
+        var inFlight = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-1),
+            ActualEnd = null, TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-1), SubmittedAt = null, IsActive = true,
+        });
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletions(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ShiftCompletionDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Equal(inFlight.Id, body.Data[0].Id);
+        Assert.Equal(older.Id, body.Data[1].Id);
+    }
+
+    [Fact]
     public async Task ReturnCompletion_ShiftNotPendingReview_Returns409()
     {
         using var db = CreateDb();

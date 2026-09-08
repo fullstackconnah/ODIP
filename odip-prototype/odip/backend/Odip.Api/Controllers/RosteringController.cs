@@ -565,7 +565,8 @@ public class RosteringController : ControllerBase
     {
         var completions = await _db.ShiftCompletions
             .Where(c => c.ShiftId == id)
-            .OrderByDescending(c => c.SubmittedAt)
+            // SubmittedAt is null while InProgress; Postgres sorts DESC NULLS FIRST, LINQ-to-Objects NULLS LAST — coalesce so the key is total.
+            .OrderByDescending(c => c.SubmittedAt ?? c.StartedAt)
             .ThenByDescending(c => c.StartedAt)
             .ToListAsync(ct);
         if (completions.Count == 0)
