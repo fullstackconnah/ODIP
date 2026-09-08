@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 export const statusStyles: Record<string, { bg: string; dot: string; text: string; label: string }> = {
   Available:   { bg: 'bg-[var(--color-surface-container)]', dot: 'bg-[#c3c9b5]', text: 'text-[var(--color-muted-foreground)]', label: 'Available' },
   Unavailable: { bg: 'bg-[#ffdad6]/50', dot: 'bg-[#ba1a1a]', text: 'text-[#ba1a1a]', label: 'Unavailable' },
+  Tentative:   { bg: 'bg-[var(--color-warning-container)]/50', dot: 'bg-[var(--color-warning)]', text: 'text-[var(--color-warning)]', label: 'Tentative' },
   Assigned:    { bg: 'bg-[var(--color-primary-fixed)]/25', dot: 'bg-[var(--color-primary)]', text: 'text-[var(--color-primary)]', label: 'Assigned' },
   Conflict:    { bg: 'bg-[#ffdad6]/50', dot: 'bg-[#ba1a1a]', text: 'text-[#ba1a1a]', label: 'Conflict' },
   Maintenance: { bg: 'bg-[var(--color-secondary-container)]/40', dot: 'bg-[var(--color-secondary)]', text: 'text-[var(--color-secondary)]', label: 'Maintenance' },
