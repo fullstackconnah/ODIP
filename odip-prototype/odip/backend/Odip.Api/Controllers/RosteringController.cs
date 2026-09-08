@@ -352,6 +352,12 @@ public class RosteringController : ControllerBase
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
+        if (dto.Status != shift.Status
+            && !(shift.Status is ShiftStatus.Draft or ShiftStatus.Published
+                 && dto.Status is ShiftStatus.Draft or ShiftStatus.Published))
+            return Conflict(ApiResponse<ShiftDto>.Fail(
+                "Status can only be changed via the shift-completion endpoints.", "STATUS_TRANSITION_VIA_COMPLETION"));
+
         var candidate = new Shift
         {
             Id = shift.Id, ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
