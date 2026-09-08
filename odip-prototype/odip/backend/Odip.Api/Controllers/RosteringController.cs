@@ -501,12 +501,14 @@ public class RosteringController : ControllerBase
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
 
-        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
-        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
-
+        // Status is checked before completion-existence (same order as ReturnCompletion) so a
+        // shift in the wrong state always 409s, even when it has no active completion row.
         if (shift.Status != ShiftStatus.PendingReview)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
                 "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
 
         var now = DateTime.UtcNow;
         completion.ReviewedByUserId = ResolveCurrentUserId();
@@ -534,8 +536,8 @@ public class RosteringController : ControllerBase
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
 
-        // Status is checked before completion-existence (opposite order to ApproveCompletion)
-        // so a shift in the wrong state always 409s, even when it has no active completion row.
+        // Status is checked before completion-existence (same order as ApproveCompletion) so a
+        // shift in the wrong state always 409s, even when it has no active completion row.
         if (shift.Status != ShiftStatus.PendingReview)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
                 "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
