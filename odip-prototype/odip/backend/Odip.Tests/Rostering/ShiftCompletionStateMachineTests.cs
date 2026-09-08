@@ -173,4 +173,141 @@ public class ShiftCompletionStateMachineTests
         Assert.Null(completion.StartLatitude);
         Assert.Null(completion.StartLongitude);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // FINISH
+    // ══════════════════════════════════════════════════════════════
+
+    private static void AddNote(OdipDbContext db, Guid shiftId, Guid authorId) => Seed(db, new ShiftNote
+    {
+        Id = Guid.NewGuid(), ShiftId = shiftId, AuthorUserId = authorId, AuthorName = "Ben Turner", Body = "All good today.",
+    });
+
+    [Fact]
+    public async Task FinishShift_InProgressWithNote_ComputesVariance_FlipsPendingReview()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.InProgress);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc), // exactly on time
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
+            StartedAt = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc), IsActive = true,
+        });
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal(ShiftStatus.PendingReview, body.Data!.Status);
+        Assert.NotNull(body.Data.Completion!.ActualEnd);
+        Assert.NotNull(body.Data.Completion.SubmittedAt);
+        Assert.Equal(0, body.Data.Completion.VarianceMinutesStart);
+
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.PendingReview, saved.Status);
+    }
+
+    [Fact]
+    public async Task FinishShift_NoShiftNotes_Returns409SHIFT_NOTE_REQUIRED()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.InProgress);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id, StartedAt = DateTime.UtcNow, IsActive = true,
+        });
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal("SHIFT_NOTE_REQUIRED", body.Code);
+    }
+
+    [Fact]
+    public async Task FinishShift_PublishedNoActualStartSupplied_Returns409SHIFT_NOT_IN_PROGRESS()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal("SHIFT_NOT_IN_PROGRESS", body.Code);
+    }
+
+    [Fact]
+    public async Task FinishShift_PublishedWithActualStartSupplied_ManualStartPath_CreatesCompletionAndFinishes()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        var manualStart = DateTime.UtcNow.AddHours(-8);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { ActualStart = manualStart }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal(ShiftStatus.PendingReview, body.Data!.Status);
+        Assert.True(body.Data.Completion!.StartWasManual);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(manualStart, completion.ActualStart);
+        Assert.True(completion.StartWasManual);
+        Assert.NotEqual(manualStart, completion.StartedAt); // StartedAt is the real Finish-time stamp
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Cancelled)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    public async Task FinishShift_NotPublishedOrInProgress_Returns409SHIFT_NOT_IN_PROGRESS(ShiftStatus status)
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, status);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal("SHIFT_NOT_IN_PROGRESS", body.Code);
+    }
+
+    [Fact]
+    public async Task FinishShift_ForeignShift_Returns404NotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var owner = SeedUser(db);
+        var caller = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, owner.Id, ShiftStatus.InProgress);
+        var controller = MakeController(db, tenant.Object, caller.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
 }

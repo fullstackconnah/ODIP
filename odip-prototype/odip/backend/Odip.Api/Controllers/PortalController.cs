@@ -228,6 +228,86 @@ public class PortalController : ControllerBase
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
+    /// <summary>
+    /// Worker taps Finish. 409 SHIFT_NOTE_REQUIRED if zero ShiftNote rows exist on the shift,
+    /// checked first so the worker gets one clear reason. Supports the manual-start path
+    /// (dto.ActualStart supplied while Shift.Status is still Published) per spec §3.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/finish")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishShift(
+        Guid id, [FromBody] FinishShiftDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
+        if (!hasNote)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Add a shift note before finishing.", "SHIFT_NOTE_REQUIRED"));
+
+        var now = DateTime.UtcNow;
+        ShiftCompletion completion;
+
+        if (shift.Status == ShiftStatus.Published)
+        {
+            if (dto.ActualStart is null)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+
+            var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            completion = new ShiftCompletion
+            {
+                Id = Guid.NewGuid(),
+                ShiftId = shift.Id,
+                ActualStart = dto.ActualStart.Value,
+                TimeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State),
+                StartWasManual = true,
+                SubmittedByUserId = shift.UserId!.Value,
+                StartedAt = now,
+                IsActive = true,
+            };
+            _db.ShiftCompletions.Add(completion);
+        }
+        else if (shift.Status == ShiftStatus.InProgress)
+        {
+            var existing = await _db.ShiftCompletions
+                .FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+            if (existing is null)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+            completion = existing;
+        }
+        else
+        {
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+        }
+
+        completion.ActualEnd = now;
+        completion.SubmittedAt = now;
+        completion.EndLatitude = dto.Latitude;
+        completion.EndLongitude = dto.Longitude;
+        completion.GeolocationDeclined = completion.GeolocationDeclined || dto.GeolocationDeclined;
+
+        var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+        completion.VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, rosteredStartUtc);
+        completion.VarianceMinutesEnd = ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd.Value, rosteredEndUtc);
+        completion.UpdatedAt = now;
+
+        shift.Status = ShiftStatus.PendingReview;
+        shift.UpdatedAt = now;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT NOTES (NOTES-01)
     // ══════════════════════════════════════════════════════════════
