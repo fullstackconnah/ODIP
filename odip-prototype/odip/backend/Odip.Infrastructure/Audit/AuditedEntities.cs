@@ -62,6 +62,10 @@ public static class AuditedEntities
         typeof(LeaveRequest),
         typeof(RecurringUnavailability),
         typeof(StaffAvailability),
+
+        // Shift-completion state machine: a Return's reason and every review decision must be
+        // recoverable — same reasoning as Shift.OverrideReason above.
+        typeof(ShiftCompletion),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

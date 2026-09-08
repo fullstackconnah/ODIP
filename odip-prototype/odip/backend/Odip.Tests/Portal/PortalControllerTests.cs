@@ -284,6 +284,23 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetShiftDetail_NoCompletionYet_ReturnsNullCompletionAndZeroReturnCount()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftDetail(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Null(body.Data!.Completion);
+        Assert.Equal(0, body.Data.ReturnCount);
+    }
+
+    [Fact]
     public async Task GetShiftDetail_UnfilledShift_NotVisibleToAnyStaff()
     {
         var (db, tenant) = CreateDb();

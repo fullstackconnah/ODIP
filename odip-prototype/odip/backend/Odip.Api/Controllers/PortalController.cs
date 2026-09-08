@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -122,7 +123,18 @@ public class PortalController : ControllerBase
         if (shift?.Participant is null || shift.Participant.IsDraft)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
-        var participant = shift.Participant;
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>
+    /// Shared shift-detail builder for GetShiftDetail/StartShift/FinishShift (shift-completion
+    /// design spec §2) — all three need the same participant/routines/risk/medications/
+    /// completion shape. Assumes shift.Participant is already loaded (every caller Includes it
+    /// and null-checks first).
+    /// </summary>
+    private async Task<PortalShiftDetailDto> BuildShiftDetailDtoAsync(Shift shift, CancellationToken ct)
+    {
+        var participant = shift.Participant!;
 
         var routines = await _db.ParticipantRoutines
             .Where(r => r.ParticipantId == participant.Id && r.IsActive)
@@ -141,15 +153,194 @@ public class PortalController : ControllerBase
             .OrderBy(m => m.Name)
             .ToListAsync(ct);
 
-        var dto = new PortalShiftDetailDto(
+        var activeCompletion = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id && c.IsActive)
+            .FirstOrDefaultAsync(ct);
+        var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, ct);
+
+        return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
             ToParticipantSummaryDto(participant),
             routines.Select(ToRoutineDto).ToList(),
             riskEntries.Select(ToRiskEntryDto).ToList(),
-            medications.Select(ToMedicationSummaryDto).ToList());
+            medications.Select(ToMedicationSummaryDto).ToList(),
+            completionDto,
+            shift.ReturnCount);
+    }
 
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(dto));
+    /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
+    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
+        ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
+
+    // ══════════════════════════════════════════════════════════════
+    // SHIFT COMPLETION (design spec §2/§3)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Worker taps Start on one of their own Published shifts. ActualStart/StartedAt are the
+    /// server's own DateTime.UtcNow — the client never supplies the "real" timestamp, only an
+    /// optional geolocation stamp and decline flag (spec ruling 1). Same 404-never-403
+    /// ownership scoping as every other portal action.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/start")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartShift(
+        Guid id, [FromBody] StartShiftDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        if (shift.Status != ShiftStatus.Published)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+
+        var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var now = DateTime.UtcNow;
+        var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+
+        // F7: variance-at-start, computed once here so the coordinator queue can show it before
+        // Finish. Finish still recomputes/overwrites VarianceMinutesStart from the final stored
+        // ActualStart — unchanged behaviour there.
+        var (rosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
+
+        var completion = new ShiftCompletion
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            ActualStart = now,
+            TimeZoneId = timeZoneId,
+            StartLatitude = dto.Latitude,
+            StartLongitude = dto.Longitude,
+            GeolocationDeclined = dto.GeolocationDeclined,
+            StartWasManual = false,
+            SubmittedByUserId = shift.UserId!.Value,
+            StartedAt = now,
+            VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(now, rosteredStartUtc),
+            IsActive = true,
+        };
+        _db.ShiftCompletions.Add(completion);
+
+        shift.Status = ShiftStatus.InProgress;
+        shift.UpdatedAt = now;
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start.
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+        }
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>
+    /// Worker taps Finish. 409 SHIFT_NOTE_REQUIRED if zero ShiftNote rows exist on the shift,
+    /// checked first so the worker gets one clear reason. Supports the manual-start path
+    /// (dto.ActualStart supplied while Shift.Status is still Published) per spec §3.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/finish")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishShift(
+        Guid id, [FromBody] FinishShiftDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
+        if (!hasNote)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Add a shift note before finishing.", "SHIFT_NOTE_REQUIRED"));
+
+        var now = DateTime.UtcNow;
+        ShiftCompletion completion;
+
+        if (shift.Status == ShiftStatus.Published)
+        {
+            if (dto.ActualStart is null)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+
+            var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+
+            // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
+            var actualStartUtc = dto.ActualStart.Value.Kind switch
+            {
+                DateTimeKind.Local => dto.ActualStart.Value.ToUniversalTime(),
+                DateTimeKind.Unspecified => DateTime.SpecifyKind(dto.ActualStart.Value, DateTimeKind.Utc),
+                _ => dto.ActualStart.Value,
+            };
+
+            // F3: reject an obviously-wrong client-supplied manual start before it's ever
+            // persisted — can't be in the future, and can't predate the rostered start by more
+            // than a day (generous slack for an overnight/sleepover shift's real start drifting
+            // from its rostered start, without accepting garbage).
+            var (manualRosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
+            if (actualStartUtc > now || actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Actual start time is invalid.", "SHIFT_ACTUAL_START_INVALID"));
+
+            completion = new ShiftCompletion
+            {
+                Id = Guid.NewGuid(),
+                ShiftId = shift.Id,
+                ActualStart = actualStartUtc,
+                TimeZoneId = timeZoneId,
+                StartWasManual = true,
+                SubmittedByUserId = shift.UserId!.Value,
+                StartedAt = now,
+                IsActive = true,
+            };
+            _db.ShiftCompletions.Add(completion);
+        }
+        else if (shift.Status == ShiftStatus.InProgress)
+        {
+            var existing = await _db.ShiftCompletions
+                .FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+            if (existing is null)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+            completion = existing;
+        }
+        else
+        {
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+        }
+
+        completion.ActualEnd = now;
+        completion.SubmittedAt = now;
+        completion.EndLatitude = dto.Latitude;
+        completion.EndLongitude = dto.Longitude;
+        completion.GeolocationDeclined = completion.GeolocationDeclined || dto.GeolocationDeclined;
+
+        var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+        completion.VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, rosteredStartUtc);
+        completion.VarianceMinutesEnd = ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd.Value, rosteredEndUtc);
+        completion.UpdatedAt = now;
+
+        shift.Status = ShiftStatus.PendingReview;
+        shift.UpdatedAt = now;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
     // ══════════════════════════════════════════════════════════════

@@ -9,12 +9,17 @@ public class ApiResponse<T>
     public T? Data { get; set; }
     public string? Message { get; set; }
     public List<string>? Errors { get; set; }
+    public string? Code { get; set; }
 
     public static ApiResponse<T> Ok(T data, string? message = null) =>
         new() { Success = true, Data = data, Message = message };
 
     public static ApiResponse<T> Fail(string error) =>
         new() { Success = false, Errors = new List<string> { error } };
+
+    /// <summary>Machine-readable code for clients that branch on the failure kind — e.g. state-machine 409s. Human text stays in Errors.</summary>
+    public static ApiResponse<T> Fail(string error, string code) =>
+        new() { Success = false, Errors = new List<string> { error }, Code = code };
 
     public static ApiResponse<T> Fail(List<string> errors) =>
         new() { Success = false, Errors = errors };

@@ -10,7 +10,9 @@ public enum ShiftStatus
     Draft = 0,
     Published = 1,
     Completed = 2,
-    Cancelled = 3
+    Cancelled = 3,
+    InProgress = 4,      // NEW — worker has tapped Start (design spec §1)
+    PendingReview = 5,   // NEW — worker has tapped Finish, awaiting office review
 }
 
 /// <summary>
@@ -75,6 +77,9 @@ public class Shift : ITenantEntity
 
     /// <summary>Comma-separated <see cref="Services.RosterFinding.Code"/> values the coordinator acknowledged.</summary>
     public string? AcknowledgedFindingCodes { get; set; }
+
+    /// <summary>Incremented every time office Returns this shift for correction (design spec §1/§3).</summary>
+    public int ReturnCount { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
