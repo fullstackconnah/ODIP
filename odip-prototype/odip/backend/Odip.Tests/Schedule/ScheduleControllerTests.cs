@@ -103,6 +103,29 @@ public class ScheduleControllerTests
     }
 
     [Fact]
+    public async Task LegacyTrainingAvailabilityOverlappingTrip_StatusIsUnavailable()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        db.StaffAvailabilities.Add(new StaffAvailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, AvailabilityType = AvailabilityType.Training,
+            Notes = "First aid refresher",
+            StartDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(9, 0)),
+            EndDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(12, 0)),
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Equal("Unavailable", StatusFor(body, staff.Id, trip.Id).Status);
+    }
+
+    [Fact]
     public async Task NoOverlap_StatusIsAvailable()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

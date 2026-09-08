@@ -274,7 +274,7 @@ public class StaffAssignmentGateTests
         {
             Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
             ServiceDate = assignmentStart.AddDays(-1),
-            StartTime = new TimeOnly(20, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = false,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
         });
         db.SaveChanges();
 
@@ -322,6 +322,30 @@ public class StaffAssignmentGateTests
 
         var saved = await db.StaffAssignments.SingleAsync(x => x.Id == created.Id);
         Assert.Equal(AssignmentStatus.Cancelled, saved.Status);
+    }
+
+    [Fact]
+    public async Task Create_BlockingFindingOverlap_WithReason_StillReturns422_AndDoesNotSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = new User
+        {
+            Id = Guid.NewGuid(), FirstName = "Ben", LastName = "Turner",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true,
+            WorkerScreeningNumber = "WSC-1", WorkerScreeningExpiryDate = new DateOnly(2020, 1, 1),
+        };
+        db.Users.Add(staff);
+        db.SaveChanges();
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), overrideReason: "reason");
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        Assert.Empty(await db.StaffAssignments.ToListAsync());
     }
 
     [Fact]

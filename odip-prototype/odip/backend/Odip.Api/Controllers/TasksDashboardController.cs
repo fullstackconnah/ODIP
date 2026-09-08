@@ -469,7 +469,9 @@ public class ConflictsController : ControllerBase
     private readonly OdipDbContext _db;
     public ConflictsController(OdipDbContext db) => _db = db;
 
-    /// <summary>Recheck all conflicts across accommodation, vehicles, and staff.</summary>
+    /// <summary>Recheck all conflicts across accommodation, vehicles, and staff.
+    /// Staff assignments are no longer re-derived here: HasConflict is normalised to
+    /// (OverrideReason != null), the acknowledged-override invariant maintained at write time.</summary>
     [HttpPost("recheck")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<object>>> Recheck(CancellationToken ct)
