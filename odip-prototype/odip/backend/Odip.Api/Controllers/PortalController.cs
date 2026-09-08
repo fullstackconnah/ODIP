@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -122,7 +123,18 @@ public class PortalController : ControllerBase
         if (shift?.Participant is null || shift.Participant.IsDraft)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
-        var participant = shift.Participant;
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>
+    /// Shared shift-detail builder for GetShiftDetail/StartShift/FinishShift (shift-completion
+    /// design spec §2) — all three need the same participant/routines/risk/medications/
+    /// completion shape. Assumes shift.Participant is already loaded (every caller Includes it
+    /// and null-checks first).
+    /// </summary>
+    private async Task<PortalShiftDetailDto> BuildShiftDetailDtoAsync(Shift shift, CancellationToken ct)
+    {
+        var participant = shift.Participant!;
 
         var routines = await _db.ParticipantRoutines
             .Where(r => r.ParticipantId == participant.Id && r.IsActive)
@@ -141,16 +153,26 @@ public class PortalController : ControllerBase
             .OrderBy(m => m.Name)
             .ToListAsync(ct);
 
-        var dto = new PortalShiftDetailDto(
+        var activeCompletion = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id && c.IsActive)
+            .FirstOrDefaultAsync(ct);
+        var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, ct);
+
+        return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
             ToParticipantSummaryDto(participant),
             routines.Select(ToRoutineDto).ToList(),
             riskEntries.Select(ToRiskEntryDto).ToList(),
-            medications.Select(ToMedicationSummaryDto).ToList());
-
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(dto));
+            medications.Select(ToMedicationSummaryDto).ToList(),
+            completionDto,
+            shift.ReturnCount);
     }
+
+    /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
+    /// identical mapping need stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
+        ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
 
     // ══════════════════════════════════════════════════════════════
     // SHIFT NOTES (NOTES-01)

@@ -69,3 +69,49 @@ public class ShiftCompletion : ITenantEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
+
+/// <summary>
+/// Design spec §3: TimeZoneId is resolved once, at Start, from a static AU-state → IANA-zone
+/// map keyed off ProviderSettings.State — the only geographic signal that exists on the tenant
+/// today. Unmatched/null state falls back to Australia/Sydney (same zone as the map's largest
+/// bucket, and the same zone ProviderSettings.State's own default "VIC" resolves to).
+/// </summary>
+public static class StateTimeZoneMap
+{
+    private static readonly Dictionary<string, string> Map = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["VIC"] = "Australia/Sydney",
+        ["NSW"] = "Australia/Sydney",
+        ["ACT"] = "Australia/Sydney",
+        ["TAS"] = "Australia/Sydney",
+        ["QLD"] = "Australia/Brisbane",
+        ["SA"] = "Australia/Adelaide",
+        ["WA"] = "Australia/Perth",
+        ["NT"] = "Australia/Darwin",
+    };
+
+    public static string Resolve(string? state) =>
+        state is not null && Map.TryGetValue(state, out var zone) ? zone : "Australia/Sydney";
+}
+
+/// <summary>
+/// Design spec §3: rostered start/end are computed from Shift.ServiceDate + StartTime/EndTime
+/// (+1 day on EndTime if EndsNextDay), interpreted as local time in the given IANA zone and
+/// converted to UTC. Variance is the signed minute difference against ActualStart/ActualEnd
+/// (positive = late/over, negative = early/under).
+/// </summary>
+public static class ShiftVarianceCalculator
+{
+    public static (DateTime RosteredStartUtc, DateTime RosteredEndUtc) ResolveRosteredTimesUtc(Shift shift, string timeZoneId)
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var rosteredStartLocal = shift.ServiceDate.ToDateTime(shift.StartTime, DateTimeKind.Unspecified);
+        var endDate = shift.EndsNextDay ? shift.ServiceDate.AddDays(1) : shift.ServiceDate;
+        var rosteredEndLocal = endDate.ToDateTime(shift.EndTime, DateTimeKind.Unspecified);
+
+        return (TimeZoneInfo.ConvertTimeToUtc(rosteredStartLocal, tz), TimeZoneInfo.ConvertTimeToUtc(rosteredEndLocal, tz));
+    }
+
+    public static int VarianceMinutes(DateTime actualUtc, DateTime rosteredUtc) =>
+        (int)Math.Round((actualUtc - rosteredUtc).TotalMinutes);
+}
