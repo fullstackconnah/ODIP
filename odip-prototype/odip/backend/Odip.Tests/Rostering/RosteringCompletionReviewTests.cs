@@ -173,4 +173,84 @@ public class RosteringCompletionReviewTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ── Authorisation posture ────────────────────────────────────────
+
+    // NOTE: brief lists a second [InlineData] row for nameof(RosteringController.ReturnCompletion)
+    // — omitted per controller Ruling 2 until Task 8 adds ReturnCompletion; Task 8 will append it.
+    [Theory]
+    [InlineData(nameof(RosteringController.ApproveCompletion))]
+    public void CompletionAction_CarriesNoPerActionAuthorizeOverride_ReliesOnClassLevelGate(string methodName)
+    {
+        var method = typeof(RosteringController).GetMethod(methodName)!;
+        Assert.Null(method.GetCustomAttribute<AuthorizeAttribute>());
+    }
+
+    // ── Approve ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApproveCompletion_PendingReview_FlipsCompleted_StampsReviewer()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveCompletion(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(ok.Value);
+        Assert.Equal(ReviewOutcome.Approved, body.Data!.ReviewOutcome);
+
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.Completed, savedShift.Status);
+        var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.Equal(ReviewOutcome.Approved, savedCompletion.ReviewOutcome);
+        Assert.Equal(ReviewerId, savedCompletion.ReviewedByUserId);
+        Assert.True(savedCompletion.IsActive); // Approve never touches IsActive.
+    }
+
+    [Fact]
+    public async Task ApproveCompletion_ShiftNotPendingReview_Returns409()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.InProgress);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveCompletion(shift.Id, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(conflict.Value);
+        Assert.Equal("SHIFT_NOT_PENDING_REVIEW", body.Code);
+    }
+
+    [Fact]
+    public async Task ApproveCompletion_NoShift_Returns404()
+    {
+        using var db = CreateDb();
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveCompletion(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task ApproveCompletion_NoActiveCompletion_Returns404()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveCompletion(shift.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
 }

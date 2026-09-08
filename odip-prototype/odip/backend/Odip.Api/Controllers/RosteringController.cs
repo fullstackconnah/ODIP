@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -489,6 +490,37 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
     }
 
+    /// <summary>
+    /// Office approves a PendingReview shift. 404 if no shift or no active ShiftCompletion; 409
+    /// SHIFT_NOT_PENDING_REVIEW if not PendingReview. No notification here — only Finish and
+    /// Return raise one (deferred to the notifications spec, out of scope for this PR).
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/completion/approve")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct)
+    {
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+
+        if (shift.Status != ShiftStatus.PendingReview)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
+
+        var now = DateTime.UtcNow;
+        completion.ReviewedByUserId = ResolveCurrentUserId();
+        completion.ReviewedAt = now;
+        completion.ReviewOutcome = ReviewOutcome.Approved;
+        completion.UpdatedAt = now;
+
+        shift.Status = ShiftStatus.Completed;
+        shift.UpdatedAt = now;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT PATTERNS
     // ══════════════════════════════════════════════════════════════
@@ -742,6 +774,13 @@ public class RosteringController : ControllerBase
     /// identical mapping need stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
         => ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
+
+    /// <summary>Resolves the reviewing coordinator's own user id from the JWT's NameIdentifier claim.</summary>
+    private Guid ResolveCurrentUserId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
 
     private async Task<ShiftPatternDto> LoadPatternDtoAsync(Guid id, CancellationToken ct)
     {
