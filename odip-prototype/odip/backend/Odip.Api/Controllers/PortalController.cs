@@ -199,8 +199,29 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
         if (shift.Status != ShiftStatus.Published)
+        {
+            // Idempotent replay: a worker's retry after a dropped response must read as success, not
+            // as a repeat failure (critique P1). SHIFT_NOT_STARTABLE now means only "the database
+            // rejected a racing double-Start" — see the DbUpdateException catch below.
+            if (shift.Status == ShiftStatus.InProgress)
+                return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+
+            if (shift.Status == ShiftStatus.PendingReview)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has already been finished and is waiting for review.", "SHIFT_ALREADY_FINISHED"));
+
+            if (shift.Status == ShiftStatus.Completed)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has already been reviewed and completed.", "SHIFT_ALREADY_COMPLETED"));
+
+            if (shift.Status == ShiftStatus.Cancelled)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has been cancelled.", "SHIFT_CANCELLED"));
+
+            // Draft
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+                "This shift hasn't been published yet.", "SHIFT_NOT_PUBLISHED"));
+        }
 
         var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         var now = DateTime.UtcNow;
@@ -262,6 +283,23 @@ public class PortalController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
         if (shift?.Participant is null || shift.Participant.IsDraft)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        // Idempotent replay / already-elsewhere guards, checked before the note-required gate — none
+        // of these states can be fixed by adding a note, so the note gate would be a misleading error.
+        if (shift.Status == ShiftStatus.PendingReview)
+            return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+
+        if (shift.Status == ShiftStatus.Completed)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been reviewed and completed.", "SHIFT_ALREADY_COMPLETED"));
+
+        if (shift.Status == ShiftStatus.Cancelled)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has been cancelled.", "SHIFT_CANCELLED"));
+
+        if (shift.Status == ShiftStatus.Draft)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been published yet.", "SHIFT_NOT_PUBLISHED"));
 
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
         if (!hasNote)

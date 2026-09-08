@@ -107,28 +107,40 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
-    public async Task StartShift_AlreadyInProgress_Returns409SHIFT_NOT_STARTABLE_AndDoesNotDuplicate()
+    public async Task StartShift_AlreadyInProgress_ReturnsCurrentDetail_NoDuplicateCompletion()
     {
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.InProgress);
+        var existing = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-1),
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-1), IsActive = true,
+        });
         var controller = MakeController(db, tenant.Object, user.Id);
 
         var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
 
-        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
-        Assert.Equal("SHIFT_NOT_STARTABLE", body.Code);
-        Assert.Empty(await db.ShiftCompletions.ToListAsync());
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal(ShiftStatus.InProgress, body.Data!.Status);
+        Assert.Equal(existing.Id, body.Data.Completion!.Id);
+
+        var completions = await db.ShiftCompletions.Where(c => c.ShiftId == shift.Id).ToListAsync();
+        var only = Assert.Single(completions);
+        Assert.Equal(existing.Id, only.Id);
+        Assert.Equal(existing.ActualStart, only.ActualStart);
+        Assert.Equal(existing.StartedAt, only.StartedAt); // idempotent replay must not re-stamp
     }
 
     [Theory]
-    [InlineData(ShiftStatus.Draft)]
-    [InlineData(ShiftStatus.Cancelled)]
-    [InlineData(ShiftStatus.PendingReview)]
-    [InlineData(ShiftStatus.Completed)]
-    public async Task StartShift_NotPublished_Returns409SHIFT_NOT_STARTABLE(ShiftStatus status)
+    [InlineData(ShiftStatus.PendingReview, "SHIFT_ALREADY_FINISHED")]
+    [InlineData(ShiftStatus.Completed, "SHIFT_ALREADY_COMPLETED")]
+    [InlineData(ShiftStatus.Cancelled, "SHIFT_CANCELLED")]
+    [InlineData(ShiftStatus.Draft, "SHIFT_NOT_PUBLISHED")]
+    public async Task StartShift_NotStartable_ReturnsDistinctCodePerStatus(ShiftStatus status, string expectedCode)
     {
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);
@@ -138,7 +150,10 @@ public class ShiftCompletionStateMachineTests
 
         var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal(expectedCode, body.Code);
+        Assert.Empty(await db.ShiftCompletions.ToListAsync());
     }
 
     [Fact]
@@ -357,25 +372,54 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(unspecified.Ticks, completion.ActualStart.Ticks);
     }
 
+    [Fact]
+    public async Task FinishShift_PendingReview_ReturnsCurrentDetail_NoWrites()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.PendingReview);
+        var existing = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow.AddHours(-1),
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow.AddHours(-1), IsActive = true,
+        });
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal(ShiftStatus.PendingReview, body.Data!.Status);
+        Assert.Equal(existing.Id, body.Data.Completion!.Id);
+
+        var completions = await db.ShiftCompletions.Where(c => c.ShiftId == shift.Id).ToListAsync();
+        var only = Assert.Single(completions);
+        Assert.Equal(existing.ActualEnd, only.ActualEnd);
+        Assert.Equal(existing.SubmittedAt, only.SubmittedAt); // idempotent replay must not re-stamp
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(0, saved.ReturnCount);
+    }
+
     [Theory]
-    [InlineData(ShiftStatus.Draft)]
-    [InlineData(ShiftStatus.Cancelled)]
-    [InlineData(ShiftStatus.PendingReview)]
-    [InlineData(ShiftStatus.Completed)]
-    public async Task FinishShift_NotPublishedOrInProgress_Returns409SHIFT_NOT_IN_PROGRESS(ShiftStatus status)
+    [InlineData(ShiftStatus.Completed, "SHIFT_ALREADY_COMPLETED")]
+    [InlineData(ShiftStatus.Cancelled, "SHIFT_CANCELLED")]
+    [InlineData(ShiftStatus.Draft, "SHIFT_NOT_PUBLISHED")]
+    public async Task FinishShift_NotFinishable_ReturnsDistinctCodePerStatus(ShiftStatus status, string expectedCode)
     {
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var shift = SeedShift(db, participant.Id, user.Id, status);
-        AddNote(db, shift.Id, user.Id);
         var controller = MakeController(db, tenant.Object, user.Id);
 
         var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
-        Assert.Equal("SHIFT_NOT_IN_PROGRESS", body.Code);
+        Assert.Equal(expectedCode, body.Code);
     }
 
     [Fact]
