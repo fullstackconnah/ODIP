@@ -331,9 +331,14 @@ public class PortalController : ControllerBase
             // than a day (generous slack for an overnight/sleepover shift's real start drifting
             // from its rostered start, without accepting garbage).
             var (manualRosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
-            if (actualStartUtc > now || actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+            // F3, hardened: split into two distinct causes (critique P1 — "never says which bound
+            // failed") plus a 5-minute grace on the future side for ordinary device clock skew.
+            if (actualStartUtc > now.AddMinutes(5))
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "Actual start time is invalid.", "SHIFT_ACTUAL_START_INVALID"));
+                    "Actual start time can't be in the future.", "SHIFT_ACTUAL_START_IN_FUTURE"));
+            if (actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Actual start time can't be more than 24 hours before the rostered start.", "SHIFT_ACTUAL_START_TOO_EARLY"));
 
             completion = new ShiftCompletion
             {

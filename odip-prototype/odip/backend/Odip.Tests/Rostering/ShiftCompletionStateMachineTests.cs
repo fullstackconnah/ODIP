@@ -325,7 +325,7 @@ public class ShiftCompletionStateMachineTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(badRequest.Value);
-        Assert.Equal("SHIFT_ACTUAL_START_INVALID", body.Code);
+        Assert.Equal("SHIFT_ACTUAL_START_IN_FUTURE", body.Code);
         Assert.Empty(await db.ShiftCompletions.ToListAsync());
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(ShiftStatus.Published, saved.Status);
@@ -347,10 +347,28 @@ public class ShiftCompletionStateMachineTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(badRequest.Value);
-        Assert.Equal("SHIFT_ACTUAL_START_INVALID", body.Code);
+        Assert.Equal("SHIFT_ACTUAL_START_TOO_EARLY", body.Code);
         Assert.Empty(await db.ShiftCompletions.ToListAsync());
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(ShiftStatus.Published, saved.Status);
+    }
+
+    [Fact]
+    public async Task FinishShift_ManualStart_ActualStartWithinClockSkewGrace_Returns200()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        var withinGrace = DateTime.UtcNow.AddMinutes(2); // < the 5-minute grace, must still pass
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { ActualStart = withinGrace }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal(ShiftStatus.PendingReview, body.Data!.Status);
     }
 
     [Fact]
