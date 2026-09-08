@@ -15,6 +15,7 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { FindingsList } from './FindingsList'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
+import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { getRelevantRoutines } from '../lib/routines'
 
@@ -151,7 +152,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             setFindings(f)
             // A fresh dry-run can clear the finding that forced the reason (e.g. the coordinator
             // changed staff/date) — don't leave the error copy pinned once it no longer applies.
-            if (!f.some(x => x.requiresReason)) setReasonRequired(false)
+            if (!getRosterGate(f).needsReason) setReasonRequired(false)
           },
         },
       )
@@ -162,12 +163,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   if (!open) return null
 
-  const blockingFindings = findings.filter(f => f.severity === 'Blocking')
   const warningFindings = findings.filter(f => f.severity === 'Warning')
   // A Warning finding only forces a reason when the backend marks it requiresReason (e.g.
   // STAFF_ON_LEAVE) — a soft warning like STAFF_LEAVE_PENDING can be acknowledged with no reason
-  // typed, though its code is still recorded in acknowledgedFindingCodes below.
-  const reasonRequiredFindings = warningFindings.filter(f => f.requiresReason)
+  // typed, though its code is still recorded in acknowledgedFindingCodes below. The backend never
+  // sets requiresReason on a Blocking finding, so deriving reasonRequiredFindings from all
+  // findings (via getRosterGate) rather than warningFindings alone is equivalent here.
+  const { blockingFindings, reasonRequiredFindings } = getRosterGate(findings)
   const isBusy = createShift.isPending || updateShift.isPending
 
   async function handleSave() {
@@ -205,7 +207,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       const serverFindings = getRosterFindings(err)
       if (serverFindings) {
         setFindings(serverFindings)
-        if (serverFindings.some(f => f.requiresReason) && !overrideReason.trim()) setReasonRequired(true)
+        if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
       } else {
         setError('Something went wrong saving this shift. Please try again.')
       }

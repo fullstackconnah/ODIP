@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import { formatDateAu } from '@/lib/utils'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -80,6 +81,9 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
   const [addReasonRequired, setAddReasonRequired] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
+  const addGate = getRosterGate(addFindings)
+  const editGate = getRosterGate(editFindings)
+
   // Compute availability set and already-assigned set
   const availableStaffIds = new Set(availableStaff.map((s: StaffListDto) => s.id))
   const assignedStaffIds = new Set(staff.map((s: StaffAssignmentDto) => s.staffId))
@@ -103,9 +107,6 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
   // assignment). Never writes.
   useEffect(() => {
     if (!showAddStaff || !selectedStaffId || !staffAssignmentStart || !staffAssignmentEnd) {
-      // Clearing stale findings when the staff picker is reset — guarded so it only fires once.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (!selectedStaffId && addFindings.length > 0) setAddFindings([])
       return
     }
     const handle = setTimeout(() => {
@@ -125,8 +126,8 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
 
   const handleCreateStaffAssignment = () => {
     if (!selectedStaffId || !tripId) return
-    if (addFindings.some(f => f.severity === 'Blocking')) return
-    if (addFindings.some(f => f.requiresReason) && !addOverrideReason.trim()) {
+    if (addGate.isBlocked) return
+    if (addGate.needsReason && !addOverrideReason.trim()) {
       setAddReasonRequired(true)
       return
     }
@@ -153,7 +154,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
         const serverFindings = getRosterFindings(err)
         if (serverFindings) {
           setAddFindings(serverFindings)
-          if (serverFindings.some(f => f.requiresReason) && !addOverrideReason.trim()) setAddReasonRequired(true)
+          if (getRosterGate(serverFindings).needsReason && !addOverrideReason.trim()) setAddReasonRequired(true)
         } else {
           setAddError('Failed to add staff. Please try again.')
         }
@@ -203,8 +204,8 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
 
   const handleUpdateStaffAssignment = () => {
     if (!editingStaff) return
-    if (editFindings.some(f => f.severity === 'Blocking')) return
-    if (editFindings.some(f => f.requiresReason) && !editOverrideReason.trim()) {
+    if (editGate.isBlocked) return
+    if (editGate.needsReason && !editOverrideReason.trim()) {
       setEditReasonRequired(true)
       return
     }
@@ -230,7 +231,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
         const serverFindings = getRosterFindings(err)
         if (serverFindings) {
           setEditFindings(serverFindings)
-          if (serverFindings.some(f => f.requiresReason) && !editOverrideReason.trim()) setEditReasonRequired(true)
+          if (getRosterGate(serverFindings).needsReason && !editOverrideReason.trim()) setEditReasonRequired(true)
         } else {
           setEditError('Failed to update assignment. Please try again.')
         }
@@ -436,9 +437,9 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
-                <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editFindings.some(f => f.severity === 'Blocking')}
+                <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}
                   className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {updateStaffAssignment.isPending ? 'Saving...' : editFindings.some(f => f.requiresReason) ? 'Save with override' : 'Save Changes'}
+                  {updateStaffAssignment.isPending ? 'Saving...' : editGate.needsReason ? 'Save with override' : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -554,9 +555,9 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   Cancel
                 </button>
                 <button onClick={handleCreateStaffAssignment}
-                  disabled={!selectedStaffId || createStaffAssignment.isPending || addFindings.some(f => f.severity === 'Blocking')}
+                  disabled={!selectedStaffId || createStaffAssignment.isPending || addGate.isBlocked}
                   className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {createStaffAssignment.isPending ? 'Adding...' : addFindings.some(f => f.requiresReason) ? 'Add with override' : 'Add Staff'}
+                  {createStaffAssignment.isPending ? 'Adding...' : addGate.needsReason ? 'Add with override' : 'Add Staff'}
                 </button>
               </div>
             </div>

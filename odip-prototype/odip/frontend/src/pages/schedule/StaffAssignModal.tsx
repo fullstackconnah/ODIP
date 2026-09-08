@@ -4,6 +4,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto, RosterFindingDto, SleepoverType } from '@/api/types'
 
 interface StaffAssignModalProps {
@@ -37,15 +38,14 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staff.id, trip.id, trip.startDate, trip.endDate])
 
-  const blockingFindings = findings.filter(f => f.severity === 'Blocking')
-  const requiresReasonFindings = findings.filter(f => f.requiresReason)
+  const gate = getRosterGate(findings)
   const isBusy = isLoading
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (blockingFindings.length > 0) return
-    if (requiresReasonFindings.length > 0 && !overrideReason.trim()) {
+    if (gate.isBlocked) return
+    if (gate.needsReason && !overrideReason.trim()) {
       setReasonRequired(true)
       return
     }
@@ -68,7 +68,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
       const serverFindings = getRosterFindings(err)
       if (serverFindings) {
         setFindings(serverFindings)
-        if (serverFindings.some(f => f.requiresReason) && !overrideReason.trim()) setReasonRequired(true)
+        if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
       } else {
         setError('Something went wrong assigning this staff member. Please try again.')
       }
@@ -169,9 +169,9 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
               className="flex-1 px-4 py-2.5 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-high)] transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={isBusy || blockingFindings.length > 0}
+            <button type="submit" disabled={isBusy || gate.isBlocked}
               className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#396200] to-[#4d7c0f] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-              {isBusy ? 'Assigning...' : requiresReasonFindings.length > 0 ? 'Assign with override' : 'Assign Staff'}
+              {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Staff'}
             </button>
           </div>
         </form>
