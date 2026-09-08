@@ -373,6 +373,11 @@ builder.Services.AddControllers()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
 
+// ── Health checks ────────────────────────────────────────────
+// Only the database check is registered, tagged "ready" so liveness can exclude it.
+builder.Services.AddHealthChecks()
+    .AddCheck<Odip.Api.Health.DatabaseHealthCheck>("database", tags: new[] { "ready" });
+
 var app = builder.Build();
 
 // ── Migrate + Seed (with retry for transient DB connectivity) ─
@@ -500,6 +505,28 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<Odip.Api.Middleware.ReadOnlyMiddleware>();
+
+// ── Health endpoints ─────────────────────────────────────────
+// The "/api/" prefix is mandatory: nginx (nginx/default.conf) proxies only `location /api/`
+// and `location /swagger` to the API — anything else falls through to the SPA's
+// `try_files … /index.html`, so a probe at bare "/health" would get index.html with a 200.
+// No .RequireRateLimiting(...): probes fire on a fixed interval and would eat the
+// "api" 100/min budget. The default plain-text writer is kept deliberately — these are
+// unauthenticated endpoints, so no JSON body and no exception detail leaves the process.
+
+// Liveness: process is up and serving. No dependency checks — a liveness probe that
+// fails on a database outage tells an orchestrator to restart a process that is fine.
+app.MapHealthChecks("/api/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+}).AllowAnonymous();
+
+// Readiness: liveness plus Postgres reachability.
+app.MapHealthChecks("/api/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+}).AllowAnonymous();
+
 app.MapControllers();
 
 app.Run();
