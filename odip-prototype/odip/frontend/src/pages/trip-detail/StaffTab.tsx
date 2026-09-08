@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, X, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import {
   useUpdateStaffAssignment,
   useDeleteStaffAssignment,
   useCreateStaffAssignment,
+  useCheckStaffAssignment,
+  getRosterFindings,
   useStaff,
   useAvailableStaff,
 } from '@/api/hooks'
@@ -11,11 +13,13 @@ import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { formatDateAu } from '@/lib/utils'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
 import type { BookingListDto } from '@/api/types/bookings'
+import type { RosterFindingDto } from '@/api/types'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -51,8 +55,12 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
   const updateStaffAssignment = useUpdateStaffAssignment()
   const deleteStaffAssignment = useDeleteStaffAssignment()
   const createStaffAssignment = useCreateStaffAssignment()
+  const checkStaffAssignment = useCheckStaffAssignment()
   const [editingStaff, setEditingStaff] = useState<StaffAssignmentDto | null>(null)
   const [editStaffForm, setEditStaffForm] = useState<StaffEditForm>({} as StaffEditForm)
+  const [editFindings, setEditFindings] = useState<RosterFindingDto[]>([])
+  const [editOverrideReason, setEditOverrideReason] = useState('')
+  const [editReasonRequired, setEditReasonRequired] = useState(false)
   const [deletingStaff, setDeletingStaff] = useState<StaffAssignmentDto | null>(null)
 
   // Add Staff state
@@ -113,10 +121,38 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       shiftNotes: s.shiftNotes ?? '',
       status: s.status ?? 'Proposed',
     })
+    setEditFindings([])
+    setEditOverrideReason('')
+    setEditReasonRequired(false)
   }
+
+  // Live dry-run check for the assignment being edited — same treatment StaffAssignModal gets in
+  // Task 7: a single un-debounced check fired when the modal opens (excludeAssignmentId keeps the
+  // assignment's own row from double-booking against itself). Never writes.
+  useEffect(() => {
+    if (!editingStaff) return
+    checkStaffAssignment.mutate(
+      {
+        staffId: editingStaff.staffId,
+        tripInstanceId: editingStaff.tripInstanceId,
+        assignmentStart: editingStaff.assignmentStart,
+        assignmentEnd: editingStaff.assignmentEnd,
+        excludeAssignmentId: editingStaff.id,
+      },
+      { onSuccess: setEditFindings },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingStaff?.id])
 
   const handleUpdateStaffAssignment = () => {
     if (!editingStaff) return
+    if (editFindings.some(f => f.severity === 'Blocking')) return
+    if (editFindings.some(f => f.requiresReason) && !editOverrideReason.trim()) {
+      setEditReasonRequired(true)
+      return
+    }
+    setEditReasonRequired(false)
+
     const data: UpdateStaffAssignmentDto = {
       tripInstanceId: editStaffForm.tripInstanceId,
       staffId: editStaffForm.staffId,
@@ -127,9 +163,18 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       sleepoverType: editStaffForm.sleepoverType || undefined,
       shiftNotes: editStaffForm.shiftNotes || undefined,
       status: editStaffForm.status,
+      overrideReason: editOverrideReason.trim() || undefined,
+      acknowledgedFindingCodes: editFindings.map(f => f.code),
     }
     updateStaffAssignment.mutate({ id: editingStaff.id, data }, {
       onSuccess: () => setEditingStaff(null),
+      onError: (err: unknown) => {
+        const serverFindings = getRosterFindings(err)
+        if (serverFindings) {
+          setEditFindings(serverFindings)
+          if (serverFindings.some(f => f.requiresReason) && !editOverrideReason.trim()) setEditReasonRequired(true)
+        }
+      },
     })
   }
 
@@ -211,7 +256,11 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
             align: 'center',
             render: (s: StaffAssignmentDto) => (
               <div className="flex items-center justify-center gap-2">
-                {s.hasConflict && <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />}
+                {s.hasConflict && (
+                  <span title={s.overrideReason ? `Overridden: ${s.overrideReason}` : 'Conflict acknowledged'}>
+                    <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />
+                  </span>
+                )}
                 {canWrite && (
                   <button onClick={() => openEditStaffModal(s)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="Edit assignment">
                     <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
@@ -303,6 +352,14 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   placeholder="Optional notes..." />
               </div>
 
+              {/* Conflict findings — same gate as StaffAssignModal, via the shared RosterGateFields */}
+              <RosterGateFields
+                findings={editFindings}
+                overrideReason={editOverrideReason}
+                onOverrideReasonChange={setEditOverrideReason}
+                reasonRequired={editReasonRequired}
+              />
+
               {/* Error */}
               {updateStaffAssignment.isError && (
                 <p className="text-sm text-[var(--color-destructive)]">Failed to update assignment. Please try again.</p>
@@ -314,9 +371,9 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
-                <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending}
+                <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editFindings.some(f => f.severity === 'Blocking')}
                   className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {updateStaffAssignment.isPending ? 'Saving...' : 'Save Changes'}
+                  {updateStaffAssignment.isPending ? 'Saving...' : editFindings.some(f => f.requiresReason) ? 'Save with override' : 'Save Changes'}
                 </button>
               </div>
             </div>

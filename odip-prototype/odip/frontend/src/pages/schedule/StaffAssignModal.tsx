@@ -3,7 +3,7 @@ import { UserPlus, X } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
-import { FindingsList } from '@/pages/rostering/components/FindingsList'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto, RosterFindingDto, SleepoverType } from '@/api/types'
 
 interface StaffAssignModalProps {
@@ -151,33 +151,12 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
             />
           </div>
 
-          {findings.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Findings</p>
-              <FindingsList findings={findings} />
-            </div>
-          )}
-
-          {requiresReasonFindings.length > 0 && (
-            <div>
-              <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">
-                Reason for override{reasonRequired && <span className="text-[#ba1a1a]"> — enter a reason to continue</span>}
-              </label>
-              <textarea
-                value={overrideReason}
-                onChange={e => setOverrideReason(e.target.value)}
-                rows={2}
-                placeholder="Why this assignment should proceed despite the warnings above"
-                className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
-              />
-            </div>
-          )}
-
-          {blockingFindings.length > 0 && (
-            <p role="alert" className="text-sm font-medium text-[#ba1a1a]">
-              This assignment can't be saved while a blocking finding is open.
-            </p>
-          )}
+          <RosterGateFields
+            findings={findings}
+            overrideReason={overrideReason}
+            onOverrideReasonChange={setOverrideReason}
+            reasonRequired={reasonRequired}
+          />
 
           {error && (
             <div role="alert" className="rounded-[1rem] bg-[#ffdad6]/50 px-3 py-2 text-sm text-[#ba1a1a]">
