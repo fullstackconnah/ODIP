@@ -224,4 +224,34 @@ public class StaffAssignmentGateTests
         Assert.False(body.Data!.HasConflict);
         Assert.True(body.Data.IsDriver);
     }
+
+    [Fact]
+    public async Task Recheck_DerivesHasConflictFromOverrideReason_NotFromOtherAssignmentsOrAvailability()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+
+        var overriddenButFlaggedFalse = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+            Status = AssignmentStatus.Confirmed, OverrideReason = "x", HasConflict = false,
+        };
+        var notOverriddenButFlaggedTrue = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 20), AssignmentEnd = new DateOnly(2026, 9, 22),
+            Status = AssignmentStatus.Confirmed, OverrideReason = null, HasConflict = true,
+        };
+        db.StaffAssignments.AddRange(overriddenButFlaggedFalse, notOverriddenButFlaggedTrue);
+        db.SaveChanges();
+
+        var controller = new ConflictsController(db);
+        await controller.Recheck(CancellationToken.None);
+
+        var refreshed = await db.StaffAssignments.ToDictionaryAsync(a => a.Id, a => a.HasConflict);
+        Assert.True(refreshed[overriddenButFlaggedFalse.Id]);
+        Assert.False(refreshed[notOverriddenButFlaggedTrue.Id]);
+    }
 }

@@ -510,23 +510,12 @@ public class ConflictsController : ControllerBase
             .Where(a => a.Status != AssignmentStatus.Cancelled)
             .ToListAsync(ct);
 
-        var unavailability = await _db.StaffAvailabilities
-            .Where(a => a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Leave)
-            .ToListAsync(ct);
-
         foreach (var a in staffAssignments)
         {
-            var hasConflict = staffAssignments.Any(other => other.Id != a.Id
-                && other.UserId == a.UserId
-                && other.AssignmentStart <= a.AssignmentEnd && other.AssignmentEnd >= a.AssignmentStart);
-
-            if (!hasConflict)
-            {
-                var startDt = a.AssignmentStart.ToDateTime(TimeOnly.MinValue);
-                var endDt = a.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
-                hasConflict = unavailability.Any(ua => ua.UserId == a.UserId
-                    && ua.StartDateTime < endDt && ua.EndDateTime > startDt);
-            }
+            // HasConflict is the persisted acknowledged-override flag, derived at write time by
+            // StaffAssignmentsController (RosterGate) — not re-derived here from other
+            // assignments/availability, which would clobber that invariant.
+            var hasConflict = a.OverrideReason != null;
             if (a.HasConflict != hasConflict) { a.HasConflict = hasConflict; updated++; }
         }
 

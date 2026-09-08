@@ -495,7 +495,8 @@ public class StaffController : ControllerBase
                 StaffId = a.UserId, AssignmentRole = a.AssignmentRole,
                 AssignmentStart = a.AssignmentStart, AssignmentEnd = a.AssignmentEnd,
                 Status = a.Status, IsDriver = a.IsDriver, SleepoverType = a.SleepoverType,
-                HasConflict = a.HasConflict
+                HasConflict = a.HasConflict,
+                OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<StaffAssignmentDto>>.Ok(items));
     }
