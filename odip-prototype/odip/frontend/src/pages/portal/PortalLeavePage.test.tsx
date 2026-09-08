@@ -85,6 +85,24 @@ describe('PortalLeavePage', () => {
     expect(screen.getByText('Tuesday')).toBeInTheDocument()
   })
 
+  it('submits a new recurring unavailability rule from the Regular unavailability tab', async () => {
+    const user = userEvent.setup()
+    mockCreateUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule())
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Regular unavailability' }))
+    await user.click(screen.getByRole('button', { name: /add unavailability/i }))
+    await user.type(screen.getByLabelText(/start time/i), '09:00')
+    await user.type(screen.getByLabelText(/end time/i), '12:00')
+    await user.type(screen.getByLabelText(/effective from/i), '2026-09-14')
+    await user.click(screen.getByRole('button', { name: /^submit request$/i }))
+
+    expect(mockCreateUnavailabilityMutateAsync).toHaveBeenCalledWith({
+      dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00', effectiveFrom: '2026-09-14', effectiveTo: null, notes: null,
+    })
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^submit request$/i })).not.toBeInTheDocument())
+  })
+
   it('opens the leave request form and submits a new request', async () => {
     const user = userEvent.setup()
     mockCreateLeaveMutateAsync.mockResolvedValue(makeLeaveRequest())
@@ -120,6 +138,25 @@ describe('PortalLeavePage', () => {
     await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-pending')
+  })
+
+  it('shows the withdraw-failure banner when cancelling fails', async () => {
+    const user = userEvent.setup()
+    mockCancelLeaveMutateAsync.mockRejectedValue({
+      response: { data: { message: 'Could not withdraw — already being processed.' } },
+    })
+    mockUseMyLeave.mockReturnValue({
+      data: { leave: [makeLeaveRequest({ id: 'leave-pending', status: 'Pending' })], unavailability: [] },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /withdraw/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not withdraw — already being processed.')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('surfaces the server error message when submitting fails', async () => {

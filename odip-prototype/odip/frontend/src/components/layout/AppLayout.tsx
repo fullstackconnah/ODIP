@@ -7,6 +7,8 @@ import {
 import { useState, useEffect } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
+import { NavCountBadge } from '@/components/layout/NavCountBadge'
+import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import { usePermissions, type PageKey } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount } from '@/api/hooks'
 
@@ -208,12 +210,7 @@ export default function AppLayout() {
                         return (
                           <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                             tabIndex={isOpen ? undefined : -1}
-                            // The badge's digit box is aria-hidden (below) and this aria-label carries
-                            // the pending-count announcement instead — ordered "<count>, <label>" so the
-                            // link's accessible name still ends with the plain label, matching every
-                            // other nav leaf's name-ends-with-label convention (see e.g. AppLayout.test.tsx's
-                            // `/Board$/`/`/Patterns$/` assertions) instead of trailing off with the badge text.
-                            aria-label={showLeaveBadge ? `${pendingLeaveCount} leave request${pendingLeaveCount === 1 ? '' : 's'} pending, ${label}` : undefined}
+                            aria-label={showLeaveBadge ? navBadgeLabel(pendingLeaveCount, 'leave request', label) : undefined}
                             className={({ isActive }) =>
                               `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
                                 isActive
@@ -225,14 +222,7 @@ export default function AppLayout() {
                           >
                             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{msIcon}</span>
                             <span className="flex-1">{label}</span>
-                            {showLeaveBadge && (
-                              <span
-                                aria-hidden="true"
-                                className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
-                              >
-                                {pendingLeaveCount > 99 ? '99+' : pendingLeaveCount}
-                              </span>
-                            )}
+                            {showLeaveBadge && <NavCountBadge count={pendingLeaveCount} />}
                           </NavLink>
                         )
                       })}
@@ -245,8 +235,10 @@ export default function AppLayout() {
             if (!permissions.canAccessPage(item.page)) return null
             const { to, label, msIcon } = item
 
+            const showWitnessBadge = to === '/portal' && pendingWitnessCount > 0
             return (
               <NavLink key={to} to={to} end={isExactMatchOnly(to)}
+                aria-label={showWitnessBadge ? navBadgeLabel(pendingWitnessCount, 'witness approval', label) : undefined}
                 className={({ isActive }) =>
                   `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
                     isActive
@@ -258,14 +250,7 @@ export default function AppLayout() {
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{msIcon}</span>
                 <span className="flex-1">{label}</span>
-                {to === '/portal' && pendingWitnessCount > 0 && (
-                  <span
-                    className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
-                    aria-label={`${pendingWitnessCount} witness approval${pendingWitnessCount === 1 ? '' : 's'} pending`}
-                  >
-                    {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
-                  </span>
-                )}
+                {showWitnessBadge && <NavCountBadge count={pendingWitnessCount} />}
               </NavLink>
             )
           })}

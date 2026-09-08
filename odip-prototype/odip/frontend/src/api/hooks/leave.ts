@@ -92,27 +92,28 @@ export function useLeaveRequests(filters: LeaveListFilters = {}, options?: { ena
   })
 }
 
-export function useRecurringUnavailabilities(filters: LeaveListFilters = {}) {
+export function useRecurringUnavailabilities(filters: LeaveListFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['recurring-unavailabilities', filters],
     queryFn: () => apiGetWithDefault<RecurringUnavailabilityDto[]>('/leave/unavailability', [], filters),
     refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
   })
 }
 
-/** Sidebar/nav badge count — shares the ['leave-requests', { status: 'Pending' }] cache entry
- * with LeaveApprovalsPage's default filter. `enabled` (default true) lets a caller like
- * AppLayout gate the poll on `canApproveLeave` — LeaveController is Admin/Coordinator/SuperAdmin
+/** Sidebar/nav badge count — shares the ['leave-requests', { status: 'Pending' }] and
+ * ['recurring-unavailabilities', { status: 'Pending' }] cache entries with LeaveApprovalsPage's
+ * default Pending filter, so the badge matches everything that view lists: pending leave
+ * requests AND pending recurring-unavailability rules. `enabled` (default true) lets a caller
+ * like AppLayout gate the poll on `canApproveLeave` — LeaveController is Admin/Coordinator/SuperAdmin
  * only server-side, so polling it every 60s for a role that can never get a non-error response
- * (SupportWorker, ReadOnly) is pure wasted/failing traffic. Same query key either way, so once a
- * gated caller becomes enabled it picks up the already-shared cache entry instead of a fresh
- * fetch.
- * Counts leave requests only (GET /leave?status=Pending) — pending recurring-unavailability
- * requests are not included, so this can undercount what LeaveApprovalsPage's default Pending
- * filter shows. */
+ * (SupportWorker, ReadOnly) is pure wasted/failing traffic. Same query keys either way, so once a
+ * gated caller becomes enabled it picks up the already-shared cache entries instead of a fresh
+ * fetch. */
 export function usePendingLeaveCount(enabled = true): number {
-  const { data } = useLeaveRequests({ status: 'Pending' }, { enabled })
-  return data?.length ?? 0
+  const { data: leave } = useLeaveRequests({ status: 'Pending' }, { enabled })
+  const { data: unavailability } = useRecurringUnavailabilities({ status: 'Pending' }, { enabled })
+  return (leave?.length ?? 0) + (unavailability?.length ?? 0)
 }
 
 export function useCreateLeaveOnBehalf() {
