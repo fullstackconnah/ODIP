@@ -1,4 +1,6 @@
+import { useId } from 'react'
 import { FindingsList } from './FindingsList'
+import { getRosterGate } from '../lib/rosterGate'
 import type { RosterFindingDto } from '@/api/types'
 
 export interface RosterGateFieldsProps {
@@ -11,13 +13,15 @@ export interface RosterGateFieldsProps {
 /**
  * The findings list + conditional override-reason textarea + blocking-finding message every
  * roster-checked write form renders around its own fields. Shared by StaffAssignModal (the
- * "Assign Staff" modal, schedule page) and StaffTab's inline "Edit Assignment" modal (trip detail
- * page) so the two forms can't drift — see
- * docs/specs/2026-09-07-staff-leave-unavailability-design.md §3.
+ * "Assign Staff" modal, schedule page) and both of StaffTab's modals (Add Staff and inline "Edit
+ * Assignment", trip detail page) so the forms can't drift — see
+ * docs/specs/2026-09-07-staff-leave-unavailability-design.md §3. The override-reason textarea's
+ * id is instance-scoped (useId), so multiple instances can be mounted at once without breaking
+ * their label association.
  */
 export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired }: RosterGateFieldsProps) {
-  const requiresReasonFindings = findings.filter(f => f.requiresReason)
-  const blockingFindings = findings.filter(f => f.severity === 'Blocking')
+  const reasonId = useId()
+  const { reasonRequiredFindings, blockingFindings } = getRosterGate(findings)
 
   return (
     <>
@@ -28,13 +32,13 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
         </div>
       )}
 
-      {requiresReasonFindings.length > 0 && (
+      {reasonRequiredFindings.length > 0 && (
         <div>
-          <label htmlFor="rosterOverrideReason" className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">
+          <label htmlFor={reasonId} className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">
             Reason for override{reasonRequired && <span role="alert" className="text-[#ba1a1a]"> — enter a reason to continue</span>}
           </label>
           <textarea
-            id="rosterOverrideReason"
+            id={reasonId}
             value={overrideReason}
             onChange={e => onOverrideReasonChange(e.target.value)}
             rows={2}
