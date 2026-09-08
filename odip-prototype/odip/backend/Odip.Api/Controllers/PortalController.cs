@@ -175,6 +175,60 @@ public class PortalController : ControllerBase
         ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
 
     // ══════════════════════════════════════════════════════════════
+    // SHIFT COMPLETION (design spec §2/§3)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Worker taps Start on one of their own Published shifts. ActualStart/StartedAt are the
+    /// server's own DateTime.UtcNow — the client never supplies the "real" timestamp, only an
+    /// optional geolocation stamp and decline flag (spec ruling 1). Same 404-never-403
+    /// ownership scoping as every other portal action.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/start")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartShift(
+        Guid id, [FromBody] StartShiftDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+
+        if (shift.Status != ShiftStatus.Published)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+
+        var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var now = DateTime.UtcNow;
+
+        var completion = new ShiftCompletion
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            ActualStart = now,
+            TimeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State),
+            StartLatitude = dto.Latitude,
+            StartLongitude = dto.Longitude,
+            GeolocationDeclined = dto.GeolocationDeclined,
+            StartWasManual = false,
+            SubmittedByUserId = shift.UserId!.Value,
+            StartedAt = now,
+            IsActive = true,
+        };
+        _db.ShiftCompletions.Add(completion);
+
+        shift.Status = ShiftStatus.InProgress;
+        shift.UpdatedAt = now;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // SHIFT NOTES (NOTES-01)
     // ══════════════════════════════════════════════════════════════
     //
