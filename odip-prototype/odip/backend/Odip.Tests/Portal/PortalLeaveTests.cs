@@ -127,6 +127,28 @@ public class PortalLeaveTests
         Assert.IsType<ConflictObjectResult>(result.Result);
     }
 
+    /// <summary>A1 ruling: a declined request being resubmitted is a legitimate flow — the duplicate check must ignore Declined rows (same as Cancelled) on the portal's own create path too.</summary>
+    [Fact]
+    public async Task PostLeave_AfterDeclined_SameDates_Succeeds()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today,
+            Status = LeaveStatus.Declined, RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.CreateMyLeaveRequest(
+            new CreateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today },
+            CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+    }
+
     [Fact]
     public async Task CancelMyLeave_OwnPendingRequest_Succeeds()
     {

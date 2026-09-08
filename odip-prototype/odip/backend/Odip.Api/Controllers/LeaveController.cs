@@ -61,12 +61,13 @@ public class LeaveController : ControllerBase
             return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
 
         var callerId = ResolveCallerId();
+        if (callerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
         var leave = new LeaveRequest
         {
             Id = Guid.NewGuid(), UserId = dto.UserId.Value, LeaveType = dto.LeaveType,
             StartDate = dto.StartDate, EndDate = dto.EndDate, Reason = dto.Reason,
-            Status = LeaveStatus.Approved, RequestedByUserId = callerId, RequestedAt = DateTime.UtcNow,
-            DecidedByUserId = callerId, DecidedAt = DateTime.UtcNow,
+            Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = DateTime.UtcNow,
+            DecidedByUserId = callerId.Value, DecidedAt = DateTime.UtcNow,
         };
         _db.LeaveRequests.Add(leave);
         await _db.SaveChangesAsync(ct);
@@ -82,8 +83,11 @@ public class LeaveController : ControllerBase
         if (leave.Status != LeaveStatus.Pending)
             return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("This request has already been decided."));
 
+        var approveCallerId = ResolveCallerId();
+        if (approveCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+
         leave.Status = LeaveStatus.Approved;
-        leave.DecidedByUserId = ResolveCallerId();
+        leave.DecidedByUserId = approveCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -106,8 +110,11 @@ public class LeaveController : ControllerBase
         if (leave.Status != LeaveStatus.Pending)
             return Conflict(ApiResponse<LeaveRequestDto>.Fail("This request has already been decided."));
 
+        var declineCallerId = ResolveCallerId();
+        if (declineCallerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
+
         leave.Status = LeaveStatus.Declined;
-        leave.DecidedByUserId = ResolveCallerId();
+        leave.DecidedByUserId = declineCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
         leave.DecisionNote = dto.DecisionNote.Trim();
@@ -122,10 +129,13 @@ public class LeaveController : ControllerBase
         var leave = await _db.LeaveRequests.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (leave == null) return NotFound(ApiResponse<LeaveRequestDto>.Fail("Leave request not found."));
         if (leave.Status != LeaveStatus.Pending && leave.Status != LeaveStatus.Approved)
-            return Conflict(ApiResponse<LeaveRequestDto>.Fail("This request has already been decided."));
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail(AlreadyClosedMessage(leave.Status)));
+
+        var cancelCallerId = ResolveCallerId();
+        if (cancelCallerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
 
         leave.Status = LeaveStatus.Cancelled;
-        leave.DecidedByUserId = ResolveCallerId();
+        leave.DecidedByUserId = cancelCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -162,13 +172,14 @@ public class LeaveController : ControllerBase
             return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail("An identical request already exists."));
 
         var callerId = ResolveCallerId();
+        if (callerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
         var rule = new RecurringUnavailability
         {
             Id = Guid.NewGuid(), UserId = dto.UserId.Value, DayOfWeek = dto.DayOfWeek,
             StartTime = dto.StartTime, EndTime = dto.EndTime, EffectiveFrom = dto.EffectiveFrom,
             EffectiveTo = dto.EffectiveTo, Notes = dto.Notes,
-            Status = LeaveStatus.Approved, RequestedByUserId = callerId, RequestedAt = DateTime.UtcNow,
-            DecidedByUserId = callerId, DecidedAt = DateTime.UtcNow,
+            Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = DateTime.UtcNow,
+            DecidedByUserId = callerId.Value, DecidedAt = DateTime.UtcNow,
         };
         _db.RecurringUnavailabilities.Add(rule);
         await _db.SaveChangesAsync(ct);
@@ -184,8 +195,11 @@ public class LeaveController : ControllerBase
         if (rule.Status != LeaveStatus.Pending)
             return Conflict(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("This request has already been decided."));
 
+        var approveRuleCallerId = ResolveCallerId();
+        if (approveRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+
         rule.Status = LeaveStatus.Approved;
-        rule.DecidedByUserId = ResolveCallerId();
+        rule.DecidedByUserId = approveRuleCallerId.Value;
         rule.DecidedAt = DateTime.UtcNow;
         rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -209,8 +223,11 @@ public class LeaveController : ControllerBase
         if (rule.Status != LeaveStatus.Pending)
             return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail("This request has already been decided."));
 
+        var declineRuleCallerId = ResolveCallerId();
+        if (declineRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
+
         rule.Status = LeaveStatus.Declined;
-        rule.DecidedByUserId = ResolveCallerId();
+        rule.DecidedByUserId = declineRuleCallerId.Value;
         rule.DecidedAt = DateTime.UtcNow;
         rule.UpdatedAt = DateTime.UtcNow;
         rule.DecisionNote = dto.DecisionNote.Trim();
@@ -224,10 +241,13 @@ public class LeaveController : ControllerBase
         var rule = await _db.RecurringUnavailabilities.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (rule == null) return NotFound(ApiResponse<RecurringUnavailabilityDto>.Fail("Unavailability request not found."));
         if (rule.Status != LeaveStatus.Pending && rule.Status != LeaveStatus.Approved)
-            return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail("This request has already been decided."));
+            return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail(AlreadyClosedMessage(rule.Status)));
+
+        var cancelRuleCallerId = ResolveCallerId();
+        if (cancelRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
 
         rule.Status = LeaveStatus.Cancelled;
-        rule.DecidedByUserId = ResolveCallerId();
+        rule.DecidedByUserId = cancelRuleCallerId.Value;
         rule.DecidedAt = DateTime.UtcNow;
         rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -238,8 +258,16 @@ public class LeaveController : ControllerBase
     // HELPERS
     // ══════════════════════════════════════════════════════════════
 
-    private Guid ResolveCallerId() =>
-        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : Guid.Empty;
+    private Guid? ResolveCallerId() =>
+        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+
+    /// <summary>Status-specific wording for a coordinator cancel attempted on an already-closed row (A2 ruling — the generic "already been decided" is correct for approve/decline, where Pending is the only valid source state, but not for cancel, which can also be attempted on a Declined row).</summary>
+    private static string AlreadyClosedMessage(LeaveStatus status) => status switch
+    {
+        LeaveStatus.Cancelled => "This request has already been cancelled.",
+        LeaveStatus.Declined => "This request has already been declined.",
+        _ => "This request has already been decided.",
+    };
 
     internal static string? ValidateLeaveDates(DateOnly start, DateOnly end) =>
         end < start ? "End date must be on or after the start date." : null;
@@ -254,14 +282,14 @@ public class LeaveController : ControllerBase
     private Task<bool> HasDuplicateLeaveAsync(Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct) =>
         _db.LeaveRequests.AnyAsync(l =>
             l.UserId == userId && l.LeaveType == leaveType && l.StartDate == start && l.EndDate == end
-            && l.Status != LeaveStatus.Cancelled, ct);
+            && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
 
     private Task<bool> HasDuplicateUnavailabilityAsync(
         Guid userId, DayOfWeek dayOfWeek, TimeOnly start, TimeOnly end, DateOnly effectiveFrom, DateOnly? effectiveTo, CancellationToken ct) =>
         _db.RecurringUnavailabilities.AnyAsync(r =>
             r.UserId == userId && r.DayOfWeek == dayOfWeek && r.StartTime == start && r.EndTime == end
             && r.EffectiveFrom == effectiveFrom && r.EffectiveTo == effectiveTo
-            && r.Status != LeaveStatus.Cancelled, ct);
+            && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined, ct);
 
     /// <summary>Overlapping Published shifts / Confirmed trip assignments for the just-approved leave window — informational only, approval is never blocked by this. See spec §3 "Reverse direction."</summary>
     private async Task<List<RosterFindingDto>> FindLeaveOverlapsAsync(Guid userId, DateOnly startDate, DateOnly endDate, CancellationToken ct)
