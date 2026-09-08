@@ -13,6 +13,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -502,6 +503,149 @@ public class RosteringCompletionReviewTests
 
         var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
         Assert.Null(savedCompletion.ReviewedByUserId); // no partial write on the auth failure
+    }
+
+    // ── Batch approve ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApproveBatch_MixedOutcomes_ApprovesValidOnes_ReportsOthers_OneSaveChanges()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+
+        var ok1 = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, ok1.Id, staff.Id);
+        var ok2 = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, ok2.Id, staff.Id);
+        var notPending = SeedShift(db, participant.Id, staff.Id, ShiftStatus.InProgress);
+        SeedCompletion(db, notPending.Id, staff.Id);
+        var missingId = Guid.NewGuid();
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveBatch(
+            new ApproveBatchDto([ok1.Id, ok2.Id, notPending.Id, missingId]), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(ok.Value);
+        Assert.Equal(4, body.Data!.Count);
+        Assert.True(body.Data.Single(r => r.ShiftId == ok1.Id).Approved);
+        Assert.True(body.Data.Single(r => r.ShiftId == ok2.Id).Approved);
+        var notPendingResult = body.Data.Single(r => r.ShiftId == notPending.Id);
+        Assert.False(notPendingResult.Approved);
+        Assert.Equal("SHIFT_NOT_PENDING_REVIEW", notPendingResult.Code);
+        var missingResult = body.Data.Single(r => r.ShiftId == missingId);
+        Assert.False(missingResult.Approved);
+        Assert.Null(missingResult.Code); // 404 path — not-found carries no machine code, matching GetShiftCompletion
+
+        var savedOk1 = await db.Shifts.SingleAsync(s => s.Id == ok1.Id);
+        var savedOk2 = await db.Shifts.SingleAsync(s => s.Id == ok2.Id);
+        var savedNotPending = await db.Shifts.SingleAsync(s => s.Id == notPending.Id);
+        Assert.Equal(ShiftStatus.Completed, savedOk1.Status);
+        Assert.Equal(ShiftStatus.Completed, savedOk2.Status);
+        Assert.Equal(ShiftStatus.InProgress, savedNotPending.Status); // untouched
+
+        var completion1 = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == ok1.Id);
+        Assert.Equal(ReviewOutcome.Approved, completion1.ReviewOutcome);
+        Assert.Equal(ReviewerId, completion1.ReviewedByUserId);
+    }
+
+    [Fact]
+    public async Task ApproveBatch_OtherTenantShift_ReportedAsNotFound()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantB = Guid.NewGuid();
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        Guid otherTenantShiftId;
+        using (var seedDb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            var staff = SeedStaff(seedDb);
+            var participant = SeedParticipant(seedDb);
+            var shift = SeedShift(seedDb, participant.Id, staff.Id, ShiftStatus.PendingReview);
+            SeedCompletion(seedDb, shift.Id, staff.Id);
+            otherTenantShiftId = shift.Id;
+        }
+
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(options, tenantAContext.Object);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
+        var result = await controller.ApproveBatch(new ApproveBatchDto([otherTenantShiftId]), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(ok.Value);
+        Assert.False(Assert.Single(body.Data!).Approved);
+    }
+
+    [Fact]
+    public async Task ApproveBatch_Approved_WritesAuditLogPerShiftCompletion()
+    {
+        // Audit coverage needs AuditInterceptor wired (this file's CreateDb() doesn't, since most
+        // facts here don't need it) — same construction as Odip.Tests/Audit/ShiftCompletionAuditTests.cs.
+        var actingUserId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, actingUserId.ToString()), new Claim("fullName", "Jane Coordinator")], "Test");
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext { User = new ClaimsPrincipal(identity) });
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object))
+            .Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift1 = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion1 = SeedCompletion(db, shift1.Id, staff.Id);
+        var shift2 = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion2 = SeedCompletion(db, shift2.Id, staff.Id);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
+        await controller.ApproveBatch(new ApproveBatchDto([shift1.Id, shift2.Id]), CancellationToken.None);
+
+        var updateLogs = db.AuditLogs
+            .Where(a => a.EntityType == nameof(ShiftCompletion) && a.Action == AuditAction.Updated
+                        && (a.EntityId == completion1.Id || a.EntityId == completion2.Id))
+            .ToList();
+        Assert.Equal(2, updateLogs.Count); // one audit row per approved ShiftCompletion, from the single SaveChangesAsync
+        Assert.All(updateLogs, l => Assert.Contains("ReviewOutcome", l.Changes));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public async Task ApproveBatch_InvalidSize_Returns400SHIFT_BATCH_SIZE_INVALID(int count)
+    {
+        using var db = CreateDb();
+        var controller = MakeController(db);
+        var ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
+
+        var result = await controller.ApproveBatch(new ApproveBatchDto(ids), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(badRequest.Value);
+        Assert.Equal("SHIFT_BATCH_SIZE_INVALID", body.Code);
     }
 
     // ── Return ────────────────────────────────────────────────────────

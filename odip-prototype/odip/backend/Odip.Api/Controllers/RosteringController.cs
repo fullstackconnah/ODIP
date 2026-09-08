@@ -651,6 +651,54 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
     }
 
+    /// <summary>
+    /// Approves up to 100 PendingReview shifts in one call (critique P3 — "no batch approve"; the
+    /// queue previously had no way to clear a day's clean submissions at once). Each id follows
+    /// exactly the single-approve rules via ResolvePendingReviewCompletionAsync — a failure on one
+    /// id doesn't abort the batch. One SaveChangesAsync at the end; overall response is always 200
+    /// even when some items failed, since the response body itself reports per-item outcome.
+    /// </summary>
+    [HttpPost("completions/approve-batch")]
+    public async Task<ActionResult<ApiResponse<List<ApproveBatchResultDto>>>> ApproveBatch(
+        [FromBody] ApproveBatchDto dto, CancellationToken ct)
+    {
+        if (dto.ShiftIds is null || dto.ShiftIds.Count == 0 || dto.ShiftIds.Count > 100)
+            return BadRequest(ApiResponse<List<ApproveBatchResultDto>>.Fail(
+                "Select between 1 and 100 shifts.", ShiftErrorCodes.ShiftBatchSizeInvalid));
+
+        var reviewerId = ResolveCurrentUserId();
+        if (reviewerId is null)
+            return Unauthorized(ApiResponse<List<ApproveBatchResultDto>>.Fail(
+                "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
+
+        var now = DateTime.UtcNow;
+        var results = new List<ApproveBatchResultDto>();
+
+        foreach (var shiftId in dto.ShiftIds)
+        {
+            var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(shiftId, ct);
+            if (error is not null)
+            {
+                var (code, message) = ExtractBatchFailure(error);
+                results.Add(new ApproveBatchResultDto(shiftId, false, code, message));
+                continue;
+            }
+
+            completion!.ReviewedByUserId = reviewerId;
+            completion.ReviewedAt = now;
+            completion.ReviewOutcome = ReviewOutcome.Approved;
+            completion.UpdatedAt = now;
+
+            shift!.Status = ShiftStatus.Completed;
+            shift.UpdatedAt = now;
+
+            results.Add(new ApproveBatchResultDto(shiftId, true, null, null));
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<List<ApproveBatchResultDto>>.Ok(results));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT PATTERNS
     // ══════════════════════════════════════════════════════════════
@@ -926,6 +974,18 @@ public class RosteringController : ControllerBase
             return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound)));
 
         return (shift, completion, null);
+    }
+
+    /// <summary>Unwraps the Code/Message a single-approve rejection would have returned, for the batch's per-item report.</summary>
+    private static (string? Code, string? Message) ExtractBatchFailure(ActionResult<ApiResponse<ShiftCompletionDto>> error)
+    {
+        var value = error.Result switch
+        {
+            ConflictObjectResult conflict => conflict.Value as ApiResponse<ShiftCompletionDto>,
+            NotFoundObjectResult notFound => notFound.Value as ApiResponse<ShiftCompletionDto>,
+            _ => null,
+        };
+        return (value?.Code, value?.Errors?.FirstOrDefault());
     }
 
     /// <summary>

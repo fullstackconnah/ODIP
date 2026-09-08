@@ -76,3 +76,9 @@ public record ReturnCompletionDto
     // code), so model-binding validation must not pre-empt either with a generic, code-less 400.
     public string Reason { get; init; } = string.Empty;
 }
+
+/// <summary>Batch-approve request (Task 8, critique P3 — "no batch approve"): 1-100 shift ids to approve in one call.</summary>
+public record ApproveBatchDto(List<Guid> ShiftIds);
+
+/// <summary>Per-item outcome for a batch-approve call. Code/Message are null on success, and also null for a not-found id (matching GetShiftCompletion's code-less 404).</summary>
+public record ApproveBatchResultDto(Guid ShiftId, bool Approved, string? Code, string? Message);
