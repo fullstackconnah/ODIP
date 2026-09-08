@@ -42,7 +42,10 @@ public record ShiftCompletionDto(
     ReviewOutcome? ReviewOutcome,
     string? ReturnReason,
     int VarianceMinutesStart,
-    int VarianceMinutesEnd);
+    int VarianceMinutesEnd,
+    bool IsOutlierVariance,
+    int VarianceReviewMinutes,
+    int ReturnCount);
 
 public record CompletionQueueItemDto(
     Guid ShiftId,
@@ -56,7 +59,11 @@ public record CompletionQueueItemDto(
     DateTime? ActualEnd,
     int VarianceMinutesStart,
     int VarianceMinutesEnd,
-    ShiftStatus Status);
+    ShiftStatus Status,
+    string TimeZoneId,
+    bool IsOutlierVariance,
+    int VarianceReviewMinutes,
+    int ReturnCount);
 
 public record ReturnCompletionDto
 {

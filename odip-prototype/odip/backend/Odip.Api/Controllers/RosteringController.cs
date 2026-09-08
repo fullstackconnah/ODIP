@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -39,13 +40,17 @@ public class RosteringController : ControllerBase
     private readonly ShiftPatternExpander _expander = new();
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
+    private readonly IConfiguration? _config;
 
-    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery)
+    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery, IConfiguration? config = null)
     {
         _db = db;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
+        _config = config;
     }
+
+    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
 
     // ══════════════════════════════════════════════════════════════
     // BOARD
@@ -463,10 +468,14 @@ public class RosteringController : ControllerBase
     /// shifts with a current active ShiftCompletion row are included.
     /// </summary>
     [HttpGet("completions")]
-    public async Task<ActionResult<ApiResponse<List<CompletionQueueItemDto>>>> GetCompletions(
-        [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PagedResult<CompletionQueueItemDto>>>> GetCompletions(
+        [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 200);
         var statusFilter = status ?? ShiftStatus.PendingReview;
+        var thresholdMinutes = VarianceReviewMinutes;
 
         var query = _db.Shifts
             .Include(s => s.Participant)
@@ -475,7 +484,7 @@ public class RosteringController : ControllerBase
         if (from.HasValue) query = query.Where(s => s.ServiceDate >= from.Value);
         if (to.HasValue) query = query.Where(s => s.ServiceDate <= to.Value);
 
-        var shifts = await query.OrderBy(s => s.ServiceDate).ToListAsync(ct);
+        var shifts = await query.ToListAsync(ct);
         var shiftIds = shifts.Select(s => s.Id).ToList();
 
         var completionsByShiftId = await _db.ShiftCompletions
@@ -487,12 +496,29 @@ public class RosteringController : ControllerBase
         {
             if (!completionsByShiftId.TryGetValue(shift.Id, out var completion)) continue;
             var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+            var isOutlier = ShiftCompletionMapper.IsOutlierVariance(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, thresholdMinutes);
             items.Add(new CompletionQueueItemDto(
                 shift.Id, completion.Id, shift.Participant?.FullName ?? string.Empty, shift.User?.FullName ?? string.Empty,
                 shift.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
-                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, shift.Status));
+                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, shift.Status,
+                completion.TimeZoneId, isOutlier, thresholdMinutes, shift.ReturnCount));
         }
-        return Ok(ApiResponse<List<CompletionQueueItemDto>>.Ok(items));
+
+        // Outlier-first, then chronological — the coordinator's queue previously had "no signal
+        // for what actually needs attention" (critique P1). In-memory sort: IsOutlierVariance and
+        // the RosteredStart used for the date/time tiebreak are both derived (timezone-aware),
+        // not translatable to SQL.
+        var sorted = items
+            .OrderByDescending(i => i.IsOutlierVariance)
+            .ThenBy(i => i.ServiceDate)
+            .ThenBy(i => i.RosteredStart)
+            .ToList();
+
+        var totalCount = sorted.Count;
+        var paged = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(
+            new PagedResult<CompletionQueueItemDto> { Items = paged, Page = page, PageSize = pageSize, TotalCount = totalCount }));
     }
 
     /// <summary>The current active ShiftCompletion for one shift, or 404 if none exists.</summary>
@@ -838,7 +864,7 @@ public class RosteringController : ControllerBase
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
 
     /// <summary>Resolves the reviewing coordinator's own user id from the JWT's NameIdentifier claim.</summary>
     private Guid ResolveCurrentUserId()

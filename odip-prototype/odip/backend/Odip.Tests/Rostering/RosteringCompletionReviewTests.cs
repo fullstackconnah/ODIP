@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -44,11 +45,11 @@ public class RosteringCompletionReviewTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static RosteringController MakeController(OdipDbContext db)
+    private static RosteringController MakeController(OdipDbContext db, IConfiguration? config = null)
     {
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
-        return new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        return new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), config)
         {
             ControllerContext = new ControllerContext
             {
@@ -112,11 +113,11 @@ public class RosteringCompletionReviewTests
         });
         var controller = MakeController(db);
 
-        var result = await controller.GetCompletions(null, null, null, CancellationToken.None);
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<CompletionQueueItemDto>>>(ok.Value);
-        var item = Assert.Single(body.Data!);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
         Assert.Equal(shift.Id, item.ShiftId);
         Assert.Equal(completion.Id, item.CompletionId);
         Assert.Equal(10, item.VarianceMinutesStart);
@@ -135,12 +136,136 @@ public class RosteringCompletionReviewTests
         SeedCompletion(db, inProgress.Id, staff.Id);
         var controller = MakeController(db);
 
-        var result = await controller.GetCompletions(ShiftStatus.InProgress, null, null, CancellationToken.None);
+        var result = await controller.GetCompletions(ShiftStatus.InProgress, null, null, 1, 50, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<CompletionQueueItemDto>>>(ok.Value);
-        var item = Assert.Single(body.Data!);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
         Assert.Equal(inProgress.Id, item.ShiftId);
+    }
+
+    [Fact]
+    public async Task GetCompletions_VarianceWithinThreshold_IsOutlierVarianceFalse()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
+            VarianceMinutesStart = 10, VarianceMinutesEnd = -5, IsActive = true, // both < 15
+        });
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.False(item.IsOutlierVariance);
+        Assert.Equal(15, item.VarianceReviewMinutes);
+        Assert.Equal("Australia/Sydney", item.TimeZoneId);
+        Assert.Equal(0, item.ReturnCount);
+    }
+
+    [Fact]
+    public async Task GetCompletions_VarianceOverThreshold_IsOutlierVarianceTrue()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        shift.ReturnCount = 2;
+        db.SaveChanges();
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
+            VarianceMinutesStart = 16, VarianceMinutesEnd = 0, IsActive = true, // > 15
+        });
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.True(item.IsOutlierVariance);
+        Assert.Equal(2, item.ReturnCount);
+    }
+
+    [Fact]
+    public async Task GetCompletions_SortsOutliersBeforeNonOutliers_ThenByServiceDate()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+
+        var early = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview); // 2026-09-08, clean
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = early.Id, ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id, StartedAt = DateTime.UtcNow.AddHours(-8),
+            SubmittedAt = DateTime.UtcNow, VarianceMinutesStart = 0, VarianceMinutesEnd = 0, IsActive = true,
+        });
+
+        var late = Seed(db, new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate.AddDays(3),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.PendingReview,
+        });
+        db.SaveChanges();
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = late.Id, ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id, StartedAt = DateTime.UtcNow.AddHours(-8),
+            SubmittedAt = DateTime.UtcNow, VarianceMinutesStart = 30, VarianceMinutesEnd = 0, IsActive = true, // outlier, later date
+        });
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Items.Count);
+        Assert.Equal(late.Id, body.Data.Items[0].ShiftId); // outlier first despite later date
+        Assert.Equal(early.Id, body.Data.Items[1].ShiftId);
+    }
+
+    [Fact]
+    public async Task GetCompletions_ThresholdFromConfig_OverridesDefault()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
+            VarianceMinutesStart = 20, VarianceMinutesEnd = 0, IsActive = true, // > default 15, < overridden 30
+        });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Rostering:VarianceReviewMinutes"] = "30" })
+            .Build();
+        var controller = MakeController(db, config);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.False(item.IsOutlierVariance); // 20 <= 30, no longer an outlier once the threshold is overridden
+        Assert.Equal(30, item.VarianceReviewMinutes);
     }
 
     [Fact]
