@@ -107,22 +107,21 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(user.Id, completion.SubmittedByUserId);
     }
 
-    [Fact]
-    public void StartShift_LatitudeOutOfRange_Returns400()
+    [Theory]
+    [InlineData(95, false)]
+    [InlineData(90.5, false)]
+    [InlineData(90, true)]
+    [InlineData(-90, true)]
+    [InlineData(-90.5, false)]
+    public void StartShiftDto_LatitudeOutOfRange_FailsValidation(double latitude, bool expectedValid)
     {
-        var (db, tenant) = CreateDb();
-        var user = SeedUser(db);
-        var participant = SeedParticipant(db);
-        var shift = SeedShift(db, participant.Id, user.Id);
-        var controller = MakeController(db, tenant.Object, user.Id);
-        var dto = new StartShiftDto { Latitude = 95m };
+        var dto = new StartShiftDto { Latitude = (decimal)latitude };
         var context = new ValidationContext(dto);
         var results = new List<ValidationResult>();
 
         var isValid = Validator.TryValidateObject(dto, context, results, validateAllProperties: true);
 
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(StartShiftDto.Latitude)));
+        Assert.Equal(expectedValid, isValid);
     }
 
     [Fact]
