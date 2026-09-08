@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import StaffTab from './StaffTab'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -136,6 +136,31 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     await user.click(screen.getByTitle('Edit assignment'))
 
     expect(await screen.findByText(/approved leave covers this window/)).toBeInTheDocument()
+  })
+
+  it('re-runs the dry-run check when Assignment Start/End are edited', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate
+      .mockImplementationOnce((_vars, { onSuccess }) => {
+        onSuccess([{ code: 'WSC_EXPIRED', severity: 'Blocking', message: 'Worker screening expired.', requiresReason: false }])
+      })
+      .mockImplementationOnce((_vars, { onSuccess }) => {
+        onSuccess([])
+      })
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+
+    await user.click(screen.getByTitle('Edit assignment'))
+    await screen.findByText('Worker screening expired.')
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+
+    fireEvent.change(screen.getByDisplayValue('2026-09-10'), { target: { value: '2026-09-15' } })
+
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(2))
+    expect(mockCheckMutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ assignmentStart: '2026-09-15' }),
+      expect.anything(),
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).not.toBeDisabled())
   })
 
   it('requires a non-empty override reason before submitting when a finding requires one', async () => {

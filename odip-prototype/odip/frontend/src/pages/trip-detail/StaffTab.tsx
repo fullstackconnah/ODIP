@@ -126,23 +126,26 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
     setEditReasonRequired(false)
   }
 
-  // Live dry-run check for the assignment being edited — same treatment StaffAssignModal gets in
-  // Task 7: a single un-debounced check fired when the modal opens (excludeAssignmentId keeps the
-  // assignment's own row from double-booking against itself). Never writes.
+  // Live dry-run: re-checks findings whenever the edited window changes, debounced 400ms like
+  // ShiftSlideOver (dates ARE editable here, unlike StaffAssignModal) — excludeAssignmentId keeps
+  // the assignment's own row from double-booking against itself. Never writes.
   useEffect(() => {
-    if (!editingStaff) return
-    checkStaffAssignment.mutate(
-      {
-        staffId: editingStaff.staffId,
-        tripInstanceId: editingStaff.tripInstanceId,
-        assignmentStart: editingStaff.assignmentStart,
-        assignmentEnd: editingStaff.assignmentEnd,
-        excludeAssignmentId: editingStaff.id,
-      },
-      { onSuccess: setEditFindings },
-    )
+    if (!editingStaff || !editStaffForm.assignmentStart || !editStaffForm.assignmentEnd) return
+    const handle = setTimeout(() => {
+      checkStaffAssignment.mutate(
+        {
+          staffId: editingStaff.staffId,
+          tripInstanceId: editingStaff.tripInstanceId,
+          assignmentStart: editStaffForm.assignmentStart,
+          assignmentEnd: editStaffForm.assignmentEnd,
+          excludeAssignmentId: editingStaff.id,
+        },
+        { onSuccess: setEditFindings },
+      )
+    }, 400)
+    return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingStaff?.id])
+  }, [editingStaff?.id, editStaffForm.assignmentStart, editStaffForm.assignmentEnd])
 
   const handleUpdateStaffAssignment = () => {
     if (!editingStaff) return
