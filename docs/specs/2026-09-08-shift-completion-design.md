@@ -496,15 +496,30 @@ row; the old one stays for history) and resubmits.
 
 | Rule | Status | Code / message |
 |---|---|---|
-| Start on a shift not `Published` (Cancelled, Draft, or already started/reviewed/completed) | 409 | `SHIFT_NOT_STARTABLE` |
+| Start on an owned shift already `InProgress` (idempotent replay) | 200 | current `PortalShiftDetailDto`, no writes |
+| Start on an owned shift `PendingReview` | 409 | `SHIFT_ALREADY_FINISHED` |
+| Start on an owned shift `Completed` | 409 | `SHIFT_ALREADY_COMPLETED` |
+| Start on an owned shift `Cancelled` | 409 | `SHIFT_CANCELLED` |
+| Start on an owned shift `Draft` | 409 | `SHIFT_NOT_PUBLISHED` |
+| Start racing a concurrent Start (DB constraint) | 409 | `SHIFT_NOT_STARTABLE` |
+| Finish on an owned shift already `PendingReview` (idempotent replay) | 200 | current `PortalShiftDetailDto`, no writes |
+| Finish on an owned shift `Completed` | 409 | `SHIFT_ALREADY_COMPLETED` |
+| Finish on an owned shift `Cancelled` | 409 | `SHIFT_CANCELLED` |
+| Finish on an owned shift `Draft` | 409 | `SHIFT_NOT_PUBLISHED` |
 | Finish with zero `ShiftNote` rows on the shift | 409 | `SHIFT_NOTE_REQUIRED` |
-| Finish before Start with no `actualStart` supplied | 409 | `SHIFT_NOT_IN_PROGRESS` |
-| Finish on a shift not `Published` (manual-start case) or `InProgress` | 409 | `SHIFT_NOT_IN_PROGRESS` |
+| Finish before Start with no `actualStart` supplied, or `Published` with no `actualStart` | 409 | `SHIFT_NOT_IN_PROGRESS` |
+| Manual-start `actualStart` more than 5 minutes in the future | 400 | `SHIFT_ACTUAL_START_IN_FUTURE` |
+| Manual-start `actualStart` more than 24h before the rostered start | 400 | `SHIFT_ACTUAL_START_TOO_EARLY` |
 | Start/Finish on a shift not belonging to the caller | 404 | (never 403 — matches `PortalController`'s existing idiom) |
 | Approve/Return on a shift not `PendingReview` | 409 | `SHIFT_NOT_PENDING_REVIEW` |
-| Return without a `reason` | 400 | "A return reason is required." |
-| Return on a shift that already has a claim line | 409 | `SHIFT_ALREADY_CLAIMED` (includes `ClaimReference`) |
-| `UpdateShift` PUT with a `Status` outside Draft↔Published | 409 | `STATUS_TRANSITION_VIA_COMPLETION` |
+| Approve/Return/GET completion(s) where the shift exists but has no active completion | 404 | `SHIFT_COMPLETION_NOT_FOUND` — "Shift completion not found." (added by the hardening pass; the shift-missing 404 stays code-less per the codebase-wide "Shift not found." convention) |
+| Return with a blank `reason` | 400 | `SHIFT_RETURN_REASON_REQUIRED` — "A return reason is required." |
+| Return with a `reason` over 500 characters | 400 | `SHIFT_RETURN_REASON_TOO_LONG` — "Return reason must be 500 characters or fewer." |
+| Return on a shift that already has a claim line | 409 | `SHIFT_ALREADY_CLAIMED` (includes `ClaimReference`) — still deferred to PR3, unreachable until then |
+| `UpdateShift` PUT with a `Status` outside Draft/Published/Cancelled↔Draft/Published | 409 | `SHIFT_STATUS_LOCKED` — "This shift's status can only be changed by starting, finishing, approving or returning it." (renamed from `STATUS_TRANSITION_VIA_COMPLETION`) |
+| `UpdateShift` PUT changing rostered times once `InProgress`/`PendingReview`/`Completed` | 409 | `SHIFT_TIMES_LOCKED` |
+| Batch-approve with an empty or >100-id list | 400 | `SHIFT_BATCH_SIZE_INVALID` — "Select between 1 and 100 shifts." |
+| Approve/Return with no resolvable reviewer identity on the JWT | 401 | `AUTH_USER_MISSING` — "Your session is missing a user identity. Sign in again." |
 | Claim-from-shifts with no Completed/unclaimed shifts in range | 400 | "No completed, unclaimed shifts found in this date range." |
 
 **State-transition matrix** (`ShiftStatus`):
@@ -516,7 +531,15 @@ row; the old one stays for history) and resubmits.
 | InProgress | — | Worker (Finish) | — | — |
 | PendingReview | — | — | Office (Approve) | Office (Return) |
 | Completed | — | — | — | — (terminal, short of the defence-in-depth guard above) |
-| Cancelled | — | — | — | — |
+| Cancelled | — | — | — | Coordinator (PUT, un-cancel now allowed — hardening plan ruling 5) |
+
+**Un-cancel ruling (post-launch hardening).** The matrix above originally left every
+`Cancelled` cell blank, matching a PUT gate that blocked all transitions out of `Cancelled`.
+The hardening pass (`docs/plans/2026-09-09-shift-completion-hardening.md`, Task 5) allows
+`Cancelled → Draft` and `Cancelled → Published` via `UpdateShift`, restoring the pre-PR-#124
+un-cancel path — every other transition into/out of `InProgress`/`PendingReview`/`Completed`
+remains locked to the completion endpoints (`SHIFT_STATUS_LOCKED`, renamed from
+`STATUS_TRANSITION_VIA_COMPLETION`).
 
 ## Out of scope / explicitly deferred
 
