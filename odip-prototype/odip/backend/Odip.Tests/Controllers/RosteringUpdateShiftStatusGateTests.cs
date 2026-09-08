@@ -71,6 +71,8 @@ public class RosteringUpdateShiftStatusGateTests
     [InlineData(ShiftStatus.Draft, ShiftStatus.Draft)]
     [InlineData(ShiftStatus.Draft, ShiftStatus.Cancelled)]
     [InlineData(ShiftStatus.Published, ShiftStatus.Cancelled)]
+    [InlineData(ShiftStatus.Cancelled, ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Cancelled, ShiftStatus.Published)]
     public async Task UpdateShift_DraftPublishedToggle_Succeeds(ShiftStatus from, ShiftStatus to)
     {
         using var db = CreateDb();
@@ -93,6 +95,8 @@ public class RosteringUpdateShiftStatusGateTests
     [InlineData(ShiftStatus.InProgress, ShiftStatus.Published)]
     [InlineData(ShiftStatus.PendingReview, ShiftStatus.Completed)]
     [InlineData(ShiftStatus.Completed, ShiftStatus.Published)]
+    [InlineData(ShiftStatus.Cancelled, ShiftStatus.Completed)]
+    [InlineData(ShiftStatus.Cancelled, ShiftStatus.InProgress)]
     public async Task UpdateShift_AnyOtherStatusJump_Returns409_WithStatusTransitionCode(ShiftStatus from, ShiftStatus to)
     {
         using var db = CreateDb();
@@ -104,7 +108,7 @@ public class RosteringUpdateShiftStatusGateTests
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
-        Assert.Equal("STATUS_TRANSITION_VIA_COMPLETION", body.Code);
+        Assert.Equal("SHIFT_STATUS_LOCKED", body.Code);
 
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(from, saved.Status); // rejected write must not persist

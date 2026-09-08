@@ -357,11 +357,16 @@ public class RosteringController : ControllerBase
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
-        if (dto.Status != shift.Status
-            && !(shift.Status is ShiftStatus.Draft or ShiftStatus.Published
-                 && dto.Status is ShiftStatus.Draft or ShiftStatus.Published or ShiftStatus.Cancelled))
+        // Un-cancelling is allowed (critique P2 — pre-PR this was reachable and the spec's own
+        // matrix left it a product-ruling gap): Cancelled -> Draft/Published passes, alongside the
+        // existing Draft<->Published toggle and either status -> Cancelled. Every transition
+        // into/out of InProgress/PendingReview/Completed stays locked to the completion endpoints.
+        var fromAllowed = shift.Status is ShiftStatus.Draft or ShiftStatus.Published or ShiftStatus.Cancelled;
+        var toAllowed = dto.Status is ShiftStatus.Draft or ShiftStatus.Published or ShiftStatus.Cancelled;
+        if (dto.Status != shift.Status && !(fromAllowed && toAllowed))
             return Conflict(ApiResponse<ShiftDto>.Fail(
-                "Status can only be changed via the shift-completion endpoints.", "STATUS_TRANSITION_VIA_COMPLETION"));
+                "This shift's status can only be changed by starting, finishing, approving or returning it.",
+                ShiftErrorCodes.ShiftStatusLocked));
 
         // F6: once a shift has moved past Published (worker has started it), its rostered
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
@@ -373,7 +378,7 @@ public class RosteringController : ControllerBase
                 || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
             return Conflict(ApiResponse<ShiftDto>.Fail(
                 "Shift times cannot be changed after the shift has started. Return the completion to the worker first.",
-                "SHIFT_TIMES_LOCKED"));
+                ShiftErrorCodes.ShiftTimesLocked));
 
         var candidate = new Shift
         {
@@ -529,7 +534,7 @@ public class RosteringController : ControllerBase
             .Where(c => c.ShiftId == id && c.IsActive)
             .FirstOrDefaultAsync(ct);
         if (completion is null)
-            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
     }
@@ -550,7 +555,7 @@ public class RosteringController : ControllerBase
             .ThenByDescending(c => c.StartedAt)
             .ToListAsync(ct);
         if (completions.Count == 0)
-            return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found."));
+            return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
         var thresholdMinutes = VarianceReviewMinutes;
         var dtos = new List<ShiftCompletionDto>();
@@ -574,7 +579,7 @@ public class RosteringController : ControllerBase
         // shift in the wrong state always 409s, even when it has no active completion row.
         if (shift.Status != ShiftStatus.PendingReview)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
-                "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
+                "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview));
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
         if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
@@ -609,16 +614,16 @@ public class RosteringController : ControllerBase
         // shift in the wrong state always 409s, even when it has no active completion row.
         if (shift.Status != ShiftStatus.PendingReview)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
-                "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
+                "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview));
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
         if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
 
         var trimmedReason = (dto.Reason ?? string.Empty).Trim(); // JSON null must not NRE
         if (trimmedReason.Length == 0)
-            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required.", "SHIFT_RETURN_REASON_REQUIRED"));
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required.", ShiftErrorCodes.ShiftReturnReasonRequired));
         if (trimmedReason.Length > 500)
-            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("Return reason must be 500 characters or fewer.", "SHIFT_RETURN_REASON_TOO_LONG"));
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("Return reason must be 500 characters or fewer.", ShiftErrorCodes.ShiftReturnReasonTooLong));
 
         // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
         // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can

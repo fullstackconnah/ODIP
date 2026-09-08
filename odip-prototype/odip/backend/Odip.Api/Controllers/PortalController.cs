@@ -223,19 +223,19 @@ public class PortalController : ControllerBase
 
             if (shift.Status == ShiftStatus.PendingReview)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift has already been finished and is waiting for review.", "SHIFT_ALREADY_FINISHED"));
+                    "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished));
 
             if (shift.Status == ShiftStatus.Completed)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift has already been reviewed and completed.", "SHIFT_ALREADY_COMPLETED"));
+                    "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted));
 
             if (shift.Status == ShiftStatus.Cancelled)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift has been cancelled.", "SHIFT_CANCELLED"));
+                    "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
 
             // Draft
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been published yet.", "SHIFT_NOT_PUBLISHED"));
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
         }
 
         var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
@@ -275,7 +275,7 @@ public class PortalController : ControllerBase
         {
             // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start.
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+                "This shift can't be started right now.", ShiftErrorCodes.ShiftNotStartable));
         }
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
@@ -306,20 +306,20 @@ public class PortalController : ControllerBase
 
         if (shift.Status == ShiftStatus.Completed)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift has already been reviewed and completed.", "SHIFT_ALREADY_COMPLETED"));
+                "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted));
 
         if (shift.Status == ShiftStatus.Cancelled)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift has been cancelled.", "SHIFT_CANCELLED"));
+                "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
 
         if (shift.Status == ShiftStatus.Draft)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been published yet.", "SHIFT_NOT_PUBLISHED"));
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
 
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
         if (!hasNote)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "Add a shift note before finishing.", "SHIFT_NOTE_REQUIRED"));
+                "Add a shift note before finishing.", ShiftErrorCodes.ShiftNoteRequired));
 
         var now = DateTime.UtcNow;
         ShiftCompletion completion;
@@ -328,7 +328,7 @@ public class PortalController : ControllerBase
         {
             if (dto.ActualStart is null)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                    "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
             var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
             var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
@@ -350,10 +350,10 @@ public class PortalController : ControllerBase
             // failed") plus a 5-minute grace on the future side for ordinary device clock skew.
             if (actualStartUtc > now.AddMinutes(5))
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "Actual start time can't be in the future.", "SHIFT_ACTUAL_START_IN_FUTURE"));
+                    "Actual start time can't be in the future.", ShiftErrorCodes.ShiftActualStartInFuture));
             if (actualStartUtc < manualRosteredStartUtc.AddHours(-24))
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "Actual start time can't be more than 24 hours before the rostered start.", "SHIFT_ACTUAL_START_TOO_EARLY"));
+                    "Actual start time can't be more than 24 hours before the rostered start.", ShiftErrorCodes.ShiftActualStartTooEarly));
 
             completion = new ShiftCompletion
             {
@@ -374,13 +374,13 @@ public class PortalController : ControllerBase
                 .FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
             if (existing is null)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                    "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
             completion = existing;
         }
         else
         {
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
         }
 
         completion.ActualEnd = now;
