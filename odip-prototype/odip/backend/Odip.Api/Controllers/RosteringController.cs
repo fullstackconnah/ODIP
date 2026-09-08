@@ -521,6 +521,51 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
     }
 
+    /// <summary>
+    /// Office returns a PendingReview shift to the worker for correction. Same 404/409 as
+    /// Approve, plus 400 if reason is blank. Sets ReviewOutcome = Returned, IsActive = false
+    /// (excluding this row from the "current" 1:1 without deleting it), increments
+    /// Shift.ReturnCount, flips Shift.Status back to Published.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/completion/return")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ReturnCompletion(
+        Guid id, [FromBody] ReturnCompletionDto dto, CancellationToken ct)
+    {
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
+
+        // Status is checked before completion-existence (opposite order to ApproveCompletion)
+        // so a shift in the wrong state always 409s, even when it has no active completion row.
+        if (shift.Status != ShiftStatus.PendingReview)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                "This shift isn't awaiting review.", "SHIFT_NOT_PENDING_REVIEW"));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+
+        if (string.IsNullOrWhiteSpace(dto.Reason))
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required."));
+
+        // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
+        // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
+        // attach a claim to a shift, so the check is structurally unreachable until then.
+
+        var now = DateTime.UtcNow;
+        completion.ReviewedByUserId = ResolveCurrentUserId();
+        completion.ReviewedAt = now;
+        completion.ReviewOutcome = ReviewOutcome.Returned;
+        completion.ReturnReason = dto.Reason.Trim();
+        completion.IsActive = false;
+        completion.UpdatedAt = now;
+
+        shift.Status = ShiftStatus.Published;
+        shift.ReturnCount += 1;
+        shift.UpdatedAt = now;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT PATTERNS
     // ══════════════════════════════════════════════════════════════

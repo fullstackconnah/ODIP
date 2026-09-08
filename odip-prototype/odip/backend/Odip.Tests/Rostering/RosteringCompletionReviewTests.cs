@@ -176,10 +176,9 @@ public class RosteringCompletionReviewTests
 
     // ── Authorisation posture ────────────────────────────────────────
 
-    // NOTE: brief lists a second [InlineData] row for nameof(RosteringController.ReturnCompletion)
-    // — omitted per controller Ruling 2 until Task 8 adds ReturnCompletion; Task 8 will append it.
     [Theory]
     [InlineData(nameof(RosteringController.ApproveCompletion))]
+    [InlineData(nameof(RosteringController.ReturnCompletion))]
     public void CompletionAction_CarriesNoPerActionAuthorizeOverride_ReliesOnClassLevelGate(string methodName)
     {
         var method = typeof(RosteringController).GetMethod(methodName)!;
@@ -252,5 +251,99 @@ public class RosteringCompletionReviewTests
         var result = await controller.ApproveCompletion(shift.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    // ── Return ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ReturnCompletion_PendingReview_WithReason_FlipsPublished_IncrementsReturnCount_DeactivatesCompletion()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "Times look wrong, please recheck." }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(ok.Value);
+        Assert.Equal(ReviewOutcome.Returned, body.Data!.ReviewOutcome);
+        Assert.Equal("Times look wrong, please recheck.", body.Data.ReturnReason);
+
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.Published, savedShift.Status);
+        Assert.Equal(1, savedShift.ReturnCount);
+        var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.False(savedCompletion.IsActive);
+    }
+
+    [Fact]
+    public async Task ReturnCompletion_BlankReason_Returns400_DoesNotChangeShiftOrCompletion()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "   " }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.PendingReview, savedShift.Status);
+        Assert.Equal(0, savedShift.ReturnCount);
+    }
+
+    [Fact]
+    public async Task ReturnCompletion_ShiftNotPendingReview_Returns409()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.Published);
+        var controller = MakeController(db);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "reason" }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(conflict.Value);
+        Assert.Equal("SHIFT_NOT_PENDING_REVIEW", body.Code);
+    }
+
+    [Fact]
+    public async Task ReturnThenResubmit_OldCompletionStaysInactive_NewActiveRowCreated()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var firstCompletion = SeedCompletion(db, shift.Id, staff.Id);
+        var rosteringController = MakeController(db);
+
+        await rosteringController.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "Recheck please." }, CancellationToken.None);
+
+        // Worker resubmits via Start — reuse PortalController directly against the same db.
+        var portalTenant = new Mock<ICurrentTenant>();
+        portalTenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        portalTenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var portalIdentity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, staff.Id.ToString())], "Test");
+        var portalController = new PortalController(db, portalTenant.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(portalIdentity) }
+            }
+        };
+        await portalController.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        var allCompletions = await db.ShiftCompletions.Where(c => c.ShiftId == shift.Id).ToListAsync();
+        Assert.Equal(2, allCompletions.Count);
+        var old = allCompletions.Single(c => c.Id == firstCompletion.Id);
+        Assert.False(old.IsActive);
+        var fresh = allCompletions.Single(c => c.Id != firstCompletion.Id);
+        Assert.True(fresh.IsActive);
     }
 }
