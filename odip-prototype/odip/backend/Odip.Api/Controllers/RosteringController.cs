@@ -435,6 +435,61 @@ public class RosteringController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
+    // SHIFT COMPLETION REVIEW (design spec §2/§3)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The review queue. status defaults to PendingReview; other ShiftStatus values let the
+    /// queue show shifts in other states (e.g. Completed, for already-approved history). Only
+    /// shifts with a current active ShiftCompletion row are included.
+    /// </summary>
+    [HttpGet("completions")]
+    public async Task<ActionResult<ApiResponse<List<CompletionQueueItemDto>>>> GetCompletions(
+        [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        var statusFilter = status ?? ShiftStatus.PendingReview;
+
+        var query = _db.Shifts
+            .Include(s => s.Participant)
+            .Include(s => s.User)
+            .Where(s => s.Status == statusFilter);
+        if (from.HasValue) query = query.Where(s => s.ServiceDate >= from.Value);
+        if (to.HasValue) query = query.Where(s => s.ServiceDate <= to.Value);
+
+        var shifts = await query.OrderBy(s => s.ServiceDate).ToListAsync(ct);
+        var shiftIds = shifts.Select(s => s.Id).ToList();
+
+        var completionsByShiftId = await _db.ShiftCompletions
+            .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
+            .ToDictionaryAsync(c => c.ShiftId, ct);
+
+        var items = new List<CompletionQueueItemDto>();
+        foreach (var shift in shifts)
+        {
+            if (!completionsByShiftId.TryGetValue(shift.Id, out var completion)) continue;
+            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+            items.Add(new CompletionQueueItemDto(
+                shift.Id, completion.Id, shift.Participant?.FullName ?? string.Empty, shift.User?.FullName ?? string.Empty,
+                shift.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
+                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, shift.Status));
+        }
+        return Ok(ApiResponse<List<CompletionQueueItemDto>>.Ok(items));
+    }
+
+    /// <summary>The current active ShiftCompletion for one shift, or 404 if none exists.</summary>
+    [HttpGet("shifts/{id:guid}/completion")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> GetShiftCompletion(Guid id, CancellationToken ct)
+    {
+        var completion = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == id && c.IsActive)
+            .FirstOrDefaultAsync(ct);
+        if (completion is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // SHIFT PATTERNS
     // ══════════════════════════════════════════════════════════════
 
@@ -682,6 +737,11 @@ public class RosteringController : ControllerBase
         ParticipantId = c.ParticipantId, ParticipantName = c.Participant?.FullName ?? string.Empty,
         Level = c.Level, Reason = c.Reason, UpdatedAt = c.UpdatedAt
     };
+
+    /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
+    /// identical mapping need stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
 
     private async Task<ShiftPatternDto> LoadPatternDtoAsync(Guid id, CancellationToken ct)
     {

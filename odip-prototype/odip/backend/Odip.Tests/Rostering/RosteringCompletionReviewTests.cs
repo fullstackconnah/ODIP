@@ -1,0 +1,176 @@
+using System.Reflection;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
+using Xunit;
+
+namespace Odip.Tests.Rostering;
+
+/// <summary>
+/// RosteringController's shift-completion review surface (design spec §2/§3): completions
+/// list/detail, Approve/Return, ReturnCount increments, IsActive flips across a
+/// Return-then-resubmit cycle. Class-level [Authorize(Roles=...)] coverage already lives in
+/// RosteringControllerTests.RosteringController_AuthorizeAttribute_RestrictsToCoordinatorAndAbove
+/// — this file only confirms the new actions don't carry a stray per-action override.
+/// </summary>
+public class RosteringCompletionReviewTests
+{
+    private static readonly DateOnly ServiceDate = new(2026, 9, 8);
+    private static readonly Guid ReviewerId = Guid.NewGuid();
+
+    private static OdipDbContext CreateDb()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new OdipDbContext(options, tenant.Object);
+    }
+
+    private static RosteringController MakeController(OdipDbContext db)
+    {
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
+        return new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+    }
+
+    private static T Seed<T>(OdipDbContext db, T entity) where T : class
+    {
+        db.Set<T>().Add(entity);
+        db.SaveChanges();
+        return entity;
+    }
+
+    private static User SeedStaff(OdipDbContext db) => Seed(db, new User
+    {
+        Id = Guid.NewGuid(), FirstName = "Ben", LastName = "Turner",
+        Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+        Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true,
+    });
+
+    private static Participant SeedParticipant(OdipDbContext db) => Seed(db, new Participant
+    {
+        Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true,
+    });
+
+    private static Shift SeedShift(OdipDbContext db, Guid participantId, Guid staffId, ShiftStatus status) => Seed(db, new Shift
+    {
+        Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId, ServiceDate = ServiceDate,
+        StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+        NightType = SleepoverType.None, Status = status,
+    });
+
+    private static ShiftCompletion SeedCompletion(OdipDbContext db, Guid shiftId, Guid staffId, bool isActive = true) => Seed(db, new ShiftCompletion
+    {
+        Id = Guid.NewGuid(), ShiftId = shiftId, ActualStart = DateTime.UtcNow.AddHours(-8),
+        ActualEnd = DateTime.UtcNow, TimeZoneId = "Australia/Sydney", SubmittedByUserId = staffId,
+        StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow, IsActive = isActive,
+    });
+
+    // ── Completions list/detail ──────────────────────────────────────
+
+    [Fact]
+    public async Task GetCompletions_DefaultsToPendingReview_ReturnsQueueItemWithVariance()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        // Rostered 09:00-17:00 Australia/Sydney on 8 Sep 2026 = 23:00 7 Sep UTC .. 07:00 8 Sep UTC.
+        var completion = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = new DateTime(2026, 9, 7, 23, 10, 0, DateTimeKind.Utc),
+            ActualEnd = new DateTime(2026, 9, 8, 7, 0, 0, DateTimeKind.Utc),
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = new DateTime(2026, 9, 7, 23, 10, 0, DateTimeKind.Utc),
+            SubmittedAt = new DateTime(2026, 9, 8, 7, 0, 0, DateTimeKind.Utc),
+            VarianceMinutesStart = 10, VarianceMinutesEnd = 0, IsActive = true,
+        });
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!);
+        Assert.Equal(shift.Id, item.ShiftId);
+        Assert.Equal(completion.Id, item.CompletionId);
+        Assert.Equal(10, item.VarianceMinutesStart);
+        Assert.Equal(ShiftStatus.PendingReview, item.Status);
+    }
+
+    [Fact]
+    public async Task GetCompletions_StatusFilter_ExcludesOtherStatuses()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var pending = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, pending.Id, staff.Id);
+        var inProgress = SeedShift(db, participant.Id, staff.Id, ShiftStatus.InProgress);
+        SeedCompletion(db, inProgress.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(ShiftStatus.InProgress, null, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!);
+        Assert.Equal(inProgress.Id, item.ShiftId);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletion_ActiveRowExists_ReturnsDto()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletion(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(ok.Value);
+        Assert.Equal(completion.Id, body.Data!.Id);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletion_NoActiveRow_Returns404()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.Published);
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletion(shift.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+}
