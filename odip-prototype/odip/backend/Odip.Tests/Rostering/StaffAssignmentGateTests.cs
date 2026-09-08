@@ -226,6 +226,105 @@ public class StaffAssignmentGateTests
     }
 
     [Fact]
+    public async Task Check_OvernightShiftEndingDayBefore_FiresDoubleBookedShift()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng" };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var assignmentStart = new DateOnly(2026, 9, 10);
+        var assignmentEnd = new DateOnly(2026, 9, 12);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
+            ServiceDate = assignmentStart.AddDays(-1),
+            StartTime = new TimeOnly(20, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = true,
+        });
+        db.SaveChanges();
+
+        var trip = SeedTrip(db, assignmentStart);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = new CheckStaffAssignmentDto
+        {
+            StaffId = staff.Id, TripInstanceId = trip.Id,
+            AssignmentStart = assignmentStart, AssignmentEnd = assignmentEnd,
+        };
+
+        var result = await controller.Check(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        Assert.Contains(body.Data!, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
+    [Fact]
+    public async Task Check_ShiftDayBeforeNotOvernight_DoesNotFireDoubleBookedShift()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng" };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+
+        var assignmentStart = new DateOnly(2026, 9, 10);
+        var assignmentEnd = new DateOnly(2026, 9, 12);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
+            ServiceDate = assignmentStart.AddDays(-1),
+            StartTime = new TimeOnly(20, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = false,
+        });
+        db.SaveChanges();
+
+        var trip = SeedTrip(db, assignmentStart);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = new CheckStaffAssignmentDto
+        {
+            StaffId = staff.Id, TripInstanceId = trip.Id,
+            AssignmentStart = assignmentStart, AssignmentEnd = assignmentEnd,
+        };
+
+        var result = await controller.Check(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
+    [Fact]
+    public async Task Update_StatusCancelled_SkipsGate_NoOverrideReasonRequired()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        SeedApprovedLeave(db, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12));
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var createResult = await controller.Create(
+            CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), overrideReason: "Covering shortfall."),
+            CancellationToken.None);
+        var created = ((ApiResponse<StaffAssignmentDto>)((OkObjectResult)createResult.Result!).Value!).Data!;
+        Assert.True(created.HasConflict);
+
+        var updateDto = new UpdateStaffAssignmentDto
+        {
+            TripInstanceId = trip.Id, StaffId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+            IsDriver = false, SleepoverType = SleepoverType.None, Status = AssignmentStatus.Cancelled,
+        };
+        var updateResult = await controller.Update(created.Id, updateDto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(updateResult.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(ok.Value);
+        Assert.Equal(AssignmentStatus.Cancelled, body.Data!.Status);
+
+        var saved = await db.StaffAssignments.SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(AssignmentStatus.Cancelled, saved.Status);
+    }
+
+    [Fact]
     public async Task Recheck_DerivesHasConflictFromOverrideReason_NotFromOtherAssignmentsOrAvailability()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

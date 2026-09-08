@@ -641,8 +641,12 @@ public class StaffAssignmentsController : ControllerBase
         if (staff is null)
             return new List<RosterFinding>();
 
+        // Pad one day before assignmentStart so an overnight/sleepover shift that starts the evening
+        // before the trip and ends after midnight (EndsNextDay = true) is still fetched — the domain
+        // overlap math in RosterConflictService.CheckStaffAssignment already discards a day-before
+        // shift that does not actually cross midnight into the window.
         var staffShiftsInWindow = await _db.Shifts
-            .Where(s => s.UserId == staffId && s.ServiceDate >= assignmentStart && s.ServiceDate <= assignmentEnd)
+            .Where(s => s.UserId == staffId && s.ServiceDate >= assignmentStart.AddDays(-1) && s.ServiceDate <= assignmentEnd)
             .ToListAsync(ct);
 
         var otherTripAssignments = await _db.StaffAssignments
@@ -720,19 +724,28 @@ public class StaffAssignmentsController : ControllerBase
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
 
-        var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, a.Id, ct);
-        var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
-        if (rejection != null) return UnprocessableEntity(rejection);
+        // Cancelling via PUT mirrors Delete: a Cancelled row is excluded from every conflict query
+        // (see the otherTripAssignments filter in CheckAsync), so demanding an override reason to
+        // cancel is a trap. Skip the gate entirely and leave OverrideReason/AcknowledgedFindingCodes/
+        // HasConflict untouched.
+        var isCancelling = dto.Status == AssignmentStatus.Cancelled;
+
+        if (!isCancelling)
+        {
+            var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, a.Id, ct);
+            var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
+            if (rejection != null) return UnprocessableEntity(rejection);
+
+            var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+            a.OverrideReason = overrideReason;
+            a.AcknowledgedFindingCodes = codes;
+            a.HasConflict = overrideReason != null;
+        }
 
         a.UserId = dto.StaffId; a.AssignmentRole = dto.AssignmentRole;
         a.AssignmentStart = dto.AssignmentStart; a.AssignmentEnd = dto.AssignmentEnd;
         a.IsDriver = dto.IsDriver; a.SleepoverType = dto.SleepoverType;
         a.ShiftNotes = dto.ShiftNotes; a.Status = dto.Status; a.UpdatedAt = DateTime.UtcNow;
-
-        var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
-        a.OverrideReason = overrideReason;
-        a.AcknowledgedFindingCodes = codes;
-        a.HasConflict = overrideReason != null;
 
         await _db.SaveChangesAsync(ct);
         await _db.Entry(a).Reference(x => x.TripInstance).LoadAsync(ct);
