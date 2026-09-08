@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
+import { apiGet, apiPost, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type {
   StaffListDto,
   StaffDetailDto,
@@ -8,8 +8,10 @@ import type {
   StaffAssignmentDto,
   CreateStaffAssignmentDto,
   UpdateStaffAssignmentDto,
+  CheckStaffAssignmentDto,
   StaffAvailabilityDto,
   UpdateStaffAvailabilityDto,
+  RosterFindingDto,
 } from '../types'
 
 export function useStaff(params?: Record<string, string>) {
@@ -76,6 +78,17 @@ export function useDeleteStaff() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+  })
+}
+
+/**
+ * Dry-run findings for a candidate trip assignment — a POST that writes nothing. Mirrors
+ * useCheckShift (rostering.ts). Used by StaffAssignModal to preview findings for the fixed
+ * staff/trip pairing the modal opened with.
+ */
+export function useCheckStaffAssignment() {
+  return useMutation({
+    mutationFn: (data: CheckStaffAssignmentDto) => apiPost<RosterFindingDto[]>('/staff-assignments/check', data),
   })
 }
 

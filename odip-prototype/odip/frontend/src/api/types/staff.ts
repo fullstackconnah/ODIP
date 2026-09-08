@@ -96,6 +96,8 @@ export interface StaffAssignmentDto {
   sleepoverType: SleepoverType
   shiftNotes: string | null
   hasConflict: boolean
+  overrideReason: string | null
+  acknowledgedFindingCodes: string | null
 }
 
 export interface CreateStaffAssignmentDto {
@@ -107,8 +109,19 @@ export interface CreateStaffAssignmentDto {
   isDriver: boolean
   sleepoverType?: SleepoverType
   shiftNotes?: string
+  overrideReason?: string
+  acknowledgedFindingCodes?: string[]
 }
 
 export interface UpdateStaffAssignmentDto extends CreateStaffAssignmentDto {
   status: AssignmentStatus
+}
+
+/** Dry-run input for POST /staff-assignments/check — mirrors CreateStaffAssignmentDto's shape. */
+export interface CheckStaffAssignmentDto {
+  staffId: string
+  tripInstanceId: string
+  assignmentStart: string
+  assignmentEnd: string
+  excludeAssignmentId?: string
 }
