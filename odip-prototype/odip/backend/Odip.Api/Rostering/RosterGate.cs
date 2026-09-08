@@ -63,6 +63,12 @@ public static class RosterGate
         if (findings.Count == 0) return (null, null);
 
         var codes = acknowledgedCodes is { Count: > 0 } ? acknowledgedCodes : findings.Select(f => f.Code).Distinct();
-        return (overrideReason, string.Join(",", codes));
+        // Spec §3: HasConflict = "a hard finding was overridden". A reason supplied when no finding
+        // requires one is discarded so OverrideReason (and the HasConflict invariant derived from
+        // it) only ever records a real override; the soft codes are still acknowledged.
+        var reason = findings.Any(f => f.RequiresReason) && !string.IsNullOrWhiteSpace(overrideReason)
+            ? overrideReason.Trim()
+            : null;
+        return (reason, string.Join(",", codes));
     }
 }

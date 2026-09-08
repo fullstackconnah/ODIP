@@ -139,4 +139,71 @@ public class ScheduleControllerTests
         var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
         Assert.Equal("Available", StatusFor(body, staff.Id, trip.Id).Status);
     }
+
+    /// <summary>
+    /// Being assigned to THIS trip wins over a pending-leave overlap — the assignedToThis check
+    /// runs before the pendingLeave check in GetScheduleOverview, so the cell reads Assigned, not
+    /// Tentative.
+    /// </summary>
+    [Fact]
+    public async Task AssignedToTrip_WithPendingLeaveOverlap_StatusIsAssigned()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        db.StaffAssignments.Add(new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+            Status = AssignmentStatus.Confirmed,
+        });
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 12),
+            Status = LeaveStatus.Pending, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Equal("Assigned", StatusFor(body, staff.Id, trip.Id).Status);
+    }
+
+    /// <summary>
+    /// Being assigned to a DIFFERENT overlapping trip wins over a pending-leave overlap — the
+    /// conflicting check runs before the pendingLeave check in GetScheduleOverview, so the cell
+    /// reads Conflict, not Tentative.
+    /// </summary>
+    [Fact]
+    public async Task AssignedToOtherOverlappingTrip_WithPendingLeaveOverlap_StatusIsConflict()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var otherTrip = SeedTrip(db, new DateOnly(2026, 9, 11));
+        db.StaffAssignments.Add(new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = otherTrip.Id, UserId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 11), AssignmentEnd = new DateOnly(2026, 9, 13),
+            Status = AssignmentStatus.Confirmed,
+        });
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 12),
+            Status = LeaveStatus.Pending, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Equal("Conflict", StatusFor(body, staff.Id, trip.Id).Status);
+    }
 }
