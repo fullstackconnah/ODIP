@@ -30,10 +30,11 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
 
       {requiresReasonFindings.length > 0 && (
         <div>
-          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">
-            Reason for override{reasonRequired && <span className="text-[#ba1a1a]"> — enter a reason to continue</span>}
+          <label htmlFor="rosterOverrideReason" className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">
+            Reason for override{reasonRequired && <span role="alert" className="text-[#ba1a1a]"> — enter a reason to continue</span>}
           </label>
           <textarea
+            id="rosterOverrideReason"
             value={overrideReason}
             onChange={e => onOverrideReasonChange(e.target.value)}
             rows={2}

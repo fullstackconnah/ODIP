@@ -215,5 +215,100 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
+    expect(screen.queryByText(/Failed to update assignment/)).toBeNull()
+  })
+})
+
+describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
+  function lastAddStaffButton() {
+    const buttons = screen.getAllByRole('button', { name: /^add staff$|add with override/i })
+    return buttons[buttons.length - 1]
+  }
+
+  it('runs the live dry-run check with the selected staff/trip and no excludeAssignmentId, rendering a requiresReason finding', async () => {
+    const user = openAddStaffModal()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
+      onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: "Jo Lee's approved leave covers this window — cannot roster without a reason.", requiresReason: true }])
+    })
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+
+    await user.click(screen.getByRole('combobox', { name: 'Staff Member' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())
+    expect(mockCheckMutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ staffId: 'staff-2', tripInstanceId: 'trip-1' }),
+      expect.anything(),
+    )
+    expect(mockCheckMutate.mock.calls.at(-1)?.[0]).not.toHaveProperty('excludeAssignmentId')
+
+    expect(await screen.findByText(/approved leave covers this window/)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/why this assignment should proceed/i)).toBeInTheDocument()
+  })
+
+  it('requires a non-empty override reason before submitting when a finding requires one', async () => {
+    const user = openAddStaffModal()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
+      onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
+    })
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    await user.click(screen.getByRole('combobox', { name: 'Staff Member' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+    await screen.findByText('Leave overlap')
+
+    await user.click(lastAddStaffButton())
+
+    expect(mockCreateMutate).not.toHaveBeenCalled()
+    expect(screen.getByText(/enter a reason to continue/i)).toBeInTheDocument()
+  })
+
+  it('submits with overrideReason and acknowledgedFindingCodes once a reason is entered', async () => {
+    const user = openAddStaffModal()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
+      onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
+    })
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    await user.click(screen.getByRole('combobox', { name: 'Staff Member' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+    await screen.findByText('Leave overlap')
+
+    await user.type(screen.getByPlaceholderText(/why this assignment should proceed/i), 'Covering shortfall')
+    await user.click(screen.getByRole('button', { name: /add with override/i }))
+
+    expect(mockCreateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ overrideReason: 'Covering shortfall', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] }),
+      expect.anything(),
+    )
+  })
+
+  it('disables the submit button and shows the blocking alert when a finding is Blocking', async () => {
+    const user = openAddStaffModal()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
+      onSuccess([{ code: 'WSC_EXPIRED', severity: 'Blocking', message: 'Worker screening expired.', requiresReason: false }])
+    })
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    await user.click(screen.getByRole('combobox', { name: 'Staff Member' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+    await screen.findByText('Worker screening expired.')
+
+    expect(lastAddStaffButton()).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/can't be saved while a blocking finding is open/i)
+  })
+
+  it('surfaces server-rejected findings from a 422 on submit without a generic error alongside them', async () => {
+    const user = openAddStaffModal()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    const serverFindings = [{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap (server)', requiresReason: true }]
+    mockGetRosterFindings.mockReturnValue(serverFindings)
+    mockCreateMutate.mockImplementation((_vars, { onError }) => onError(new Error('422')))
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    await user.click(screen.getByRole('combobox', { name: 'Staff Member' }))
+    await user.click(screen.getByRole('option', { name: 'Jo Lee' }))
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())
+
+    await user.click(lastAddStaffButton())
+
+    expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
+    expect(screen.queryByText(/Failed to add staff/)).toBeNull()
   })
 })

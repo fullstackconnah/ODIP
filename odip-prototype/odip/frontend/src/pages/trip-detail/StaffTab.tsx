@@ -61,6 +61,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
   const [editFindings, setEditFindings] = useState<RosterFindingDto[]>([])
   const [editOverrideReason, setEditOverrideReason] = useState('')
   const [editReasonRequired, setEditReasonRequired] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const [deletingStaff, setDeletingStaff] = useState<StaffAssignmentDto | null>(null)
 
   // Add Staff state
@@ -74,6 +75,10 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
   const [staffIsDriver, setStaffIsDriver] = useState(false)
   const [staffSleepoverType, setStaffSleepoverType] = useState('None')
   const [staffShiftNotes, setStaffShiftNotes] = useState('')
+  const [addFindings, setAddFindings] = useState<RosterFindingDto[]>([])
+  const [addOverrideReason, setAddOverrideReason] = useState('')
+  const [addReasonRequired, setAddReasonRequired] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   // Compute availability set and already-assigned set
   const availableStaffIds = new Set(availableStaff.map((s: StaffListDto) => s.id))
@@ -87,10 +92,47 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
     setStaffIsDriver(false)
     setStaffSleepoverType('None')
     setStaffShiftNotes('')
+    setAddFindings([])
+    setAddOverrideReason('')
+    setAddReasonRequired(false)
+    setAddError(null)
   }
+
+  // Live dry-run: re-checks findings whenever the selected staff/dates change, debounced 400ms,
+  // mirroring the edit-modal effect above — no excludeAssignmentId (this is always a new
+  // assignment). Never writes.
+  useEffect(() => {
+    if (!showAddStaff || !selectedStaffId || !staffAssignmentStart || !staffAssignmentEnd) {
+      // Clearing stale findings when the staff picker is reset — guarded so it only fires once.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (!selectedStaffId && addFindings.length > 0) setAddFindings([])
+      return
+    }
+    const handle = setTimeout(() => {
+      checkStaffAssignment.mutate(
+        {
+          staffId: selectedStaffId,
+          tripInstanceId: tripId,
+          assignmentStart: staffAssignmentStart,
+          assignmentEnd: staffAssignmentEnd,
+        },
+        { onSuccess: setAddFindings },
+      )
+    }, 400)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAddStaff, selectedStaffId, staffAssignmentStart, staffAssignmentEnd])
 
   const handleCreateStaffAssignment = () => {
     if (!selectedStaffId || !tripId) return
+    if (addFindings.some(f => f.severity === 'Blocking')) return
+    if (addFindings.some(f => f.requiresReason) && !addOverrideReason.trim()) {
+      setAddReasonRequired(true)
+      return
+    }
+    setAddReasonRequired(false)
+    setAddError(null)
+
     createStaffAssignment.mutate({
       tripInstanceId: tripId,
       staffId: selectedStaffId,
@@ -100,10 +142,21 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       isDriver: staffIsDriver,
       sleepoverType: (staffSleepoverType || undefined) as SleepoverType | undefined,
       shiftNotes: staffShiftNotes || undefined,
+      overrideReason: addOverrideReason.trim() || undefined,
+      acknowledgedFindingCodes: addFindings.map(f => f.code),
     }, {
       onSuccess: () => {
         setShowAddStaff(false)
         resetStaffForm()
+      },
+      onError: (err: unknown) => {
+        const serverFindings = getRosterFindings(err)
+        if (serverFindings) {
+          setAddFindings(serverFindings)
+          if (serverFindings.some(f => f.requiresReason) && !addOverrideReason.trim()) setAddReasonRequired(true)
+        } else {
+          setAddError('Failed to add staff. Please try again.')
+        }
       },
     })
   }
@@ -124,6 +177,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
     setEditFindings([])
     setEditOverrideReason('')
     setEditReasonRequired(false)
+    setEditError(null)
   }
 
   // Live dry-run: re-checks findings whenever the edited window changes, debounced 400ms like
@@ -155,6 +209,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       return
     }
     setEditReasonRequired(false)
+    setEditError(null)
 
     const data: UpdateStaffAssignmentDto = {
       tripInstanceId: editStaffForm.tripInstanceId,
@@ -176,6 +231,8 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
         if (serverFindings) {
           setEditFindings(serverFindings)
           if (serverFindings.some(f => f.requiresReason) && !editOverrideReason.trim()) setEditReasonRequired(true)
+        } else {
+          setEditError('Failed to update assignment. Please try again.')
         }
       },
     })
@@ -260,8 +317,13 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
             render: (s: StaffAssignmentDto) => (
               <div className="flex items-center justify-center gap-2">
                 {s.hasConflict && (
-                  <span title={s.overrideReason ? `Overridden: ${s.overrideReason}` : 'Conflict acknowledged'}>
-                    <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />
+                  <span
+                    title={s.overrideReason ? `Overridden: ${s.overrideReason}` : 'Conflict acknowledged'}
+                    tabIndex={0}
+                    role="img"
+                    aria-label={s.overrideReason ? `Overridden: ${s.overrideReason}` : 'Conflict acknowledged'}
+                  >
+                    <AlertTriangle aria-hidden className="w-4 h-4 text-[var(--color-warning)]" />
                   </span>
                 )}
                 {canWrite && (
@@ -364,8 +426,8 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               />
 
               {/* Error */}
-              {updateStaffAssignment.isError && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to update assignment. Please try again.</p>
+              {editError && (
+                <p className="text-sm text-[var(--color-destructive)]">{editError}</p>
               )}
 
               {/* Actions */}
@@ -472,9 +534,17 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   placeholder="Optional notes..." />
               </div>
 
+              {/* Conflict findings — same gate as the edit modal, via the shared RosterGateFields */}
+              <RosterGateFields
+                findings={addFindings}
+                overrideReason={addOverrideReason}
+                onOverrideReasonChange={setAddOverrideReason}
+                reasonRequired={addReasonRequired}
+              />
+
               {/* Error */}
-              {createStaffAssignment.isError && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to add staff. Please try again.</p>
+              {addError && (
+                <p className="text-sm text-[var(--color-destructive)]">{addError}</p>
               )}
 
               {/* Actions */}
@@ -483,9 +553,10 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                   className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
-                <button onClick={handleCreateStaffAssignment} disabled={!selectedStaffId || createStaffAssignment.isPending}
+                <button onClick={handleCreateStaffAssignment}
+                  disabled={!selectedStaffId || createStaffAssignment.isPending || addFindings.some(f => f.severity === 'Blocking')}
                   className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {createStaffAssignment.isPending ? 'Adding...' : 'Add Staff'}
+                  {createStaffAssignment.isPending ? 'Adding...' : addFindings.some(f => f.requiresReason) ? 'Add with override' : 'Add Staff'}
                 </button>
               </div>
             </div>
