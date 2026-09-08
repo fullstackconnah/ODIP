@@ -587,13 +587,13 @@ public class RosteringController : ControllerBase
     [HttpPost("shifts/{id:guid}/completion/approve")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct)
     {
-        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
-        if (error is not null) return error;
-
         var reviewerId = ResolveCurrentUserId();
         if (reviewerId is null)
             return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
                 "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
+
+        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
+        if (error is not null) return error;
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;
@@ -618,13 +618,13 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ReturnCompletion(
         Guid id, [FromBody] ReturnCompletionDto dto, CancellationToken ct)
     {
-        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
-        if (error is not null) return error;
-
         var reviewerId = ResolveCurrentUserId();
         if (reviewerId is null)
             return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
                 "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
+
+        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
+        if (error is not null) return error;
 
         var trimmedReason = (dto.Reason ?? string.Empty).Trim(); // JSON null must not NRE
         if (trimmedReason.Length == 0)
