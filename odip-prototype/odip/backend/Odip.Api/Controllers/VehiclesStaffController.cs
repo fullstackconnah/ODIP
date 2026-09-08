@@ -1,11 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
+using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Api.Controllers;
 
@@ -604,7 +608,14 @@ public class StaffAvailabilityController : ControllerBase
 public class StaffAssignmentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public StaffAssignmentsController(OdipDbContext db) => _db = db;
+    private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
+    private readonly RosterConflictService _conflictService = new();
+
+    public StaffAssignmentsController(OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery)
+    {
+        _db = db;
+        _unavailabilityQuery = unavailabilityQuery;
+    }
 
     /// <summary>
     /// §4.4 same-tenant validation for the trip staffing assignment's staff/user ref (required,
@@ -614,12 +625,60 @@ public class StaffAssignmentsController : ControllerBase
     private Task<bool> IsValidStaffRefAsync(Guid userId, CancellationToken ct) =>
         _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
 
+    /// <summary>
+    /// Builds the RosterCheckContext for a candidate trip assignment and runs
+    /// RosterConflictService.CheckStaffAssignment — the trip-side analogue of
+    /// RosteringController.CheckAsync. Participant is left null: a trip assignment has no
+    /// participant-scoped rules to evaluate. excludeAssignmentId is the assignment's own prior Id
+    /// on an update (or Guid.Empty for a brand-new candidate / the dry-run check), so an
+    /// assignment never conflicts with itself.
+    /// </summary>
+    private async Task<List<RosterFinding>> CheckAsync(
+        Guid staffId, DateOnly assignmentStart, DateOnly assignmentEnd, Guid excludeAssignmentId, CancellationToken ct)
+    {
+        var staff = await _db.Users.FirstOrDefaultAsync(u => u.Id == staffId, ct);
+        if (staff is null)
+            return new List<RosterFinding>();
+
+        var staffShiftsInWindow = await _db.Shifts
+            .Where(s => s.UserId == staffId && s.ServiceDate >= assignmentStart && s.ServiceDate <= assignmentEnd)
+            .ToListAsync(ct);
+
+        var otherTripAssignments = await _db.StaffAssignments
+            .Where(a => a.UserId == staffId && a.Id != excludeAssignmentId && a.Status != AssignmentStatus.Cancelled
+                        && a.AssignmentStart <= assignmentEnd && a.AssignmentEnd >= assignmentStart)
+            .ToListAsync(ct);
+
+        var availability = await _unavailabilityQuery.GetWindowsAsync(new[] { staffId }, assignmentStart, assignmentEnd, ct);
+
+        var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
+            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
+
+        return _conflictService.CheckStaffAssignment(assignmentStart, assignmentEnd, excludeAssignmentId, ctx).ToList();
+    }
+
+    /// <summary>Dry-run findings for a candidate trip assignment. Never writes — mirrors POST /rostering/shifts/check.</summary>
+    [HttpPost("check")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> Check([FromBody] CheckStaffAssignmentDto dto, CancellationToken ct)
+    {
+        if (!await IsValidStaffRefAsync(dto.StaffId, ct))
+            return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail("Staff member not found."));
+
+        var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, dto.ExcludeAssignmentId ?? Guid.Empty, ct);
+        return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(RosterGate.ToFindingDto).ToList()));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Create([FromBody] CreateStaffAssignmentDto dto, CancellationToken ct)
     {
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
+
+        var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, Guid.Empty, ct);
+        var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
+        if (rejection != null) return UnprocessableEntity(rejection);
 
         var assignment = new StaffAssignment
         {
@@ -629,24 +688,11 @@ public class StaffAssignmentsController : ControllerBase
             SleepoverType = dto.SleepoverType, ShiftNotes = dto.ShiftNotes
         };
 
-        // Check staff overlap conflict
-        var hasConflict = await _db.StaffAssignments
-            .AnyAsync(a => a.UserId == dto.StaffId && a.Id != assignment.Id
-                && a.Status != AssignmentStatus.Cancelled
-                && a.AssignmentStart <= dto.AssignmentEnd && a.AssignmentEnd >= dto.AssignmentStart, ct);
+        var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        assignment.OverrideReason = overrideReason;
+        assignment.AcknowledgedFindingCodes = codes;
+        assignment.HasConflict = overrideReason != null;
 
-        // Check staff availability conflict
-        if (!hasConflict)
-        {
-            var startDt = dto.AssignmentStart.ToDateTime(TimeOnly.MinValue);
-            var endDt = dto.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
-            hasConflict = await _db.StaffAvailabilities
-                .AnyAsync(sa => sa.UserId == dto.StaffId
-                    && (sa.AvailabilityType == AvailabilityType.Unavailable || sa.AvailabilityType == AvailabilityType.Leave)
-                    && sa.StartDateTime < endDt && sa.EndDateTime > startDt, ct);
-        }
-
-        assignment.HasConflict = hasConflict;
         _db.StaffAssignments.Add(assignment);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(assignment).Reference(a => a.TripInstance).LoadAsync(ct);
@@ -658,7 +704,8 @@ public class StaffAssignmentsController : ControllerBase
             StaffName = assignment.User != null ? assignment.User.FirstName + " " + assignment.User.LastName : null,
             AssignmentRole = assignment.AssignmentRole, AssignmentStart = assignment.AssignmentStart, AssignmentEnd = assignment.AssignmentEnd,
             Status = assignment.Status, IsDriver = assignment.IsDriver, SleepoverType = assignment.SleepoverType,
-            ShiftNotes = assignment.ShiftNotes, HasConflict = hasConflict
+            ShiftNotes = assignment.ShiftNotes, HasConflict = assignment.HasConflict,
+            OverrideReason = assignment.OverrideReason, AcknowledgedFindingCodes = assignment.AcknowledgedFindingCodes
         }));
     }
 
@@ -672,10 +719,19 @@ public class StaffAssignmentsController : ControllerBase
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
 
+        var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, a.Id, ct);
+        var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
+        if (rejection != null) return UnprocessableEntity(rejection);
+
         a.UserId = dto.StaffId; a.AssignmentRole = dto.AssignmentRole;
         a.AssignmentStart = dto.AssignmentStart; a.AssignmentEnd = dto.AssignmentEnd;
         a.IsDriver = dto.IsDriver; a.SleepoverType = dto.SleepoverType;
         a.ShiftNotes = dto.ShiftNotes; a.Status = dto.Status; a.UpdatedAt = DateTime.UtcNow;
+
+        var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        a.OverrideReason = overrideReason;
+        a.AcknowledgedFindingCodes = codes;
+        a.HasConflict = overrideReason != null;
 
         await _db.SaveChangesAsync(ct);
         await _db.Entry(a).Reference(x => x.TripInstance).LoadAsync(ct);
@@ -686,7 +742,8 @@ public class StaffAssignmentsController : ControllerBase
             StaffId = a.UserId, StaffName = a.User != null ? a.User.FirstName + " " + a.User.LastName : null,
             AssignmentRole = a.AssignmentRole, AssignmentStart = a.AssignmentStart, AssignmentEnd = a.AssignmentEnd,
             Status = a.Status, IsDriver = a.IsDriver, SleepoverType = a.SleepoverType,
-            ShiftNotes = a.ShiftNotes, HasConflict = a.HasConflict
+            ShiftNotes = a.ShiftNotes, HasConflict = a.HasConflict,
+            OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
         }));
     }
 

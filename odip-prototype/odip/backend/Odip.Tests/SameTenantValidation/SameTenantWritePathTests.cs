@@ -408,7 +408,7 @@ public class SameTenantWritePathTests
         var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
         var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
         var trip = SeedTrip(db, tenantAId);
-        var controller = new StaffAssignmentsController(db);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
 
         var dto = new CreateStaffAssignmentDto
         {
@@ -431,7 +431,7 @@ public class SameTenantWritePathTests
         inactiveStaff.IsActive = false;
         db.SaveChanges();
         var trip = SeedTrip(db, tenantAId);
-        var controller = new StaffAssignmentsController(db);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
 
         var dto = new CreateStaffAssignmentDto
         {
@@ -452,7 +452,7 @@ public class SameTenantWritePathTests
         var ownStaff = SeedUserInTenant(db, tenantAId, "Own", "Staff");
         var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
         var trip = SeedTrip(db, tenantAId);
-        var controller = new StaffAssignmentsController(db);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
 
         var created = await controller.Create(
             new CreateStaffAssignmentDto
