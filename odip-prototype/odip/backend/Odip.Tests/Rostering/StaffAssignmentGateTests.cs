@@ -169,6 +169,37 @@ public class StaffAssignmentGateTests
         Assert.Contains(RosterConflictService.StaffLeavePending, body.Data.AcknowledgedFindingCodes);
     }
 
+    /// <summary>
+    /// Spec §3: HasConflict means "a hard finding was overridden". A pending-leave overlap only
+    /// raises STAFF_LEAVE_PENDING (RequiresReason == false), so a reason typed against it anyway
+    /// must be discarded rather than persisted — otherwise HasConflict would flip true off a soft
+    /// finding nobody was required to justify.
+    /// </summary>
+    [Fact]
+    public async Task Create_PendingLeaveOverlap_WithReasonTyped_StillHasConflictFalse_ReasonNotStored()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        SeedPendingLeave(db, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12));
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), overrideReason: "not needed");
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(ok.Value);
+        Assert.False(body.Data!.HasConflict);
+        Assert.Null(body.Data.OverrideReason);
+        Assert.Contains(RosterConflictService.StaffLeavePending, body.Data.AcknowledgedFindingCodes);
+
+        var saved = await db.StaffAssignments.SingleAsync();
+        Assert.False(saved.HasConflict);
+        Assert.Null(saved.OverrideReason);
+        Assert.Contains(RosterConflictService.StaffLeavePending, saved.AcknowledgedFindingCodes);
+    }
+
     [Fact]
     public async Task Update_MovingOutOfLeaveWindow_ClearsHasConflictAndOverrideReason()
     {
@@ -376,5 +407,74 @@ public class StaffAssignmentGateTests
         var refreshed = await db.StaffAssignments.ToDictionaryAsync(a => a.Id, a => a.HasConflict);
         Assert.True(refreshed[overriddenButFlaggedFalse.Id]);
         Assert.False(refreshed[notOverriddenButFlaggedTrue.Id]);
+    }
+
+    [Fact]
+    public async Task Check_WithExcludeAssignmentId_DoesNotDoubleBookAgainstExcludedAssignment()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var otherTrip = SeedTrip(db, new DateOnly(2026, 9, 11));
+
+        var existing = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+            Status = AssignmentStatus.Confirmed,
+        };
+        db.StaffAssignments.Add(existing);
+        db.SaveChanges();
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+
+        // Without ExcludeAssignmentId, the overlapping existing assignment fires DOUBLE_BOOKED_TRIP.
+        var withoutExclude = await controller.Check(new CheckStaffAssignmentDto
+        {
+            StaffId = staff.Id, TripInstanceId = otherTrip.Id,
+            AssignmentStart = new DateOnly(2026, 9, 11), AssignmentEnd = new DateOnly(2026, 9, 13),
+        }, CancellationToken.None);
+        var withoutExcludeBody = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<OkObjectResult>(withoutExclude.Result).Value);
+        Assert.Contains(withoutExcludeBody.Data!, f => f.Code == RosterConflictService.DoubleBookedTrip);
+
+        // With ExcludeAssignmentId pointing at the same row being re-checked, it no longer double-books against itself.
+        var withExclude = await controller.Check(new CheckStaffAssignmentDto
+        {
+            StaffId = staff.Id, TripInstanceId = trip.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+            ExcludeAssignmentId = existing.Id,
+        }, CancellationToken.None);
+        var withExcludeBody = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<OkObjectResult>(withExclude.Result).Value);
+        Assert.DoesNotContain(withExcludeBody.Data!, f => f.Code == RosterConflictService.DoubleBookedTrip);
+    }
+
+    [Fact]
+    public async Task Create_ApprovedRecurringRuleOverlap_NoReason_Returns422_WithStaffRecurringUnavailableCode()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+
+        // Fixed date (not Today) so the weekday is deterministic across runs.
+        var assignmentStart = new DateOnly(2026, 9, 10);
+        var trip = SeedTrip(db, assignmentStart, days: 1);
+
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = assignmentStart.DayOfWeek,
+            StartTime = new TimeOnly(0, 0), EndTime = new TimeOnly(23, 59),
+            EffectiveFrom = assignmentStart, Status = LeaveStatus.Approved,
+            RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = CreateDto(trip.Id, staff.Id, assignmentStart, assignmentStart);
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var unprocessable = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(unprocessable.Value);
+        Assert.Contains(body.Data!, f => f.Code == RosterConflictService.StaffRecurringUnavailable && f.RequiresReason);
+        Assert.Empty(await db.StaffAssignments.ToListAsync());
     }
 }

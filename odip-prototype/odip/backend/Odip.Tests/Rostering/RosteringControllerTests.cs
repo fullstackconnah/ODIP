@@ -197,8 +197,15 @@ public class RosteringControllerTests
         Assert.Empty(await db.Shifts.ToListAsync());
     }
 
+    /// <summary>
+    /// Spec §3 / RosterGate.ComputeOverride: a reason typed against a finding that does not
+    /// RequiresReason (COMPATIBILITY_EXCLUDED is a plain Warning) is discarded rather than
+    /// persisted — only the code is still recorded in AcknowledgedFindingCodes. Was
+    /// CreateShift_NonRequiredWarningWithOverrideReason_PersistsReasonAndCodes before the B1
+    /// ComputeOverride ruling; updated to the new rule rather than the old one it exercised.
+    /// </summary>
     [Fact]
-    public async Task CreateShift_NonRequiredWarningWithOverrideReason_PersistsReasonAndCodes()
+    public async Task CreateShift_NonRequiredWarningWithOverrideReason_ReasonDiscarded_CodeStillRecorded()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
@@ -219,11 +226,11 @@ public class RosteringControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
         Assert.True(body.Success);
-        Assert.Equal("Coordinator approved despite the exclusion flag", body.Data!.OverrideReason);
+        Assert.Null(body.Data!.OverrideReason);
         Assert.Contains(body.Data.Findings, f => f.Code == RosterConflictService.CompatibilityExcluded);
 
         var saved = await db.Shifts.SingleAsync();
-        Assert.Equal("Coordinator approved despite the exclusion flag", saved.OverrideReason);
+        Assert.Null(saved.OverrideReason);
         Assert.Equal(RosterConflictService.CompatibilityExcluded, saved.AcknowledgedFindingCodes);
     }
 

@@ -161,11 +161,18 @@ public class ScheduleController : ControllerBase
         var overallEndDate = trips.Max(t => t.StartDate.AddDays(t.DurationDays - 1));
         var unavailabilityWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, overallStartDate, overallEndDate, ct);
 
+        // Grouped once up front instead of a linear Where(...) scan per staff row inside the
+        // allStaff.Select below — an ILookup returns an empty sequence for a missing key, so no
+        // null check is needed at either call site.
+        var assignmentsByStaff = staffAssignments.ToLookup(a => a.UserId);
+        var availabilityByStaff = staffAvailability.ToLookup(a => a.UserId);
+        var windowsByStaff = unavailabilityWindows.ToLookup(w => w.UserId);
+
         var staffDtos = allStaff.Select(s =>
         {
-            var myAssignments = staffAssignments.Where(a => a.UserId == s.Id).ToList();
-            var myAvailability = staffAvailability.Where(a => a.UserId == s.Id).ToList();
-            var myWindows = unavailabilityWindows.Where(w => w.UserId == s.Id).ToList();
+            var myAssignments = assignmentsByStaff[s.Id].ToList();
+            var myAvailability = availabilityByStaff[s.Id].ToList();
+            var myWindows = windowsByStaff[s.Id].ToList();
 
             var tripStatuses = trips.Select(t =>
             {
