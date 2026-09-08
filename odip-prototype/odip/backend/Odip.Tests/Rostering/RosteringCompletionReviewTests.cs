@@ -84,11 +84,12 @@ public class RosteringCompletionReviewTests
         NightType = SleepoverType.None, Status = status,
     });
 
-    private static ShiftCompletion SeedCompletion(OdipDbContext db, Guid shiftId, Guid staffId, bool isActive = true) => Seed(db, new ShiftCompletion
+    private static ShiftCompletion SeedCompletion(OdipDbContext db, Guid shiftId, Guid staffId, bool isActive = true, int varianceStart = 0) => Seed(db, new ShiftCompletion
     {
         Id = Guid.NewGuid(), ShiftId = shiftId, ActualStart = DateTime.UtcNow.AddHours(-8),
         ActualEnd = DateTime.UtcNow, TimeZoneId = "Australia/Sydney", SubmittedByUserId = staffId,
         StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow, IsActive = isActive,
+        VarianceMinutesStart = varianceStart,
     });
 
     // ── Completions list/detail ──────────────────────────────────────
@@ -294,6 +295,59 @@ public class RosteringCompletionReviewTests
         Assert.Equal(2, body1.Data!.Items.Count);
         Assert.Equal(1, body2.Data!.Items.Count);
         Assert.Equal(3, body1.Data.TotalCount);
+        Assert.Equal(3, body2.Data.TotalCount);
+    }
+
+    /// <summary>
+    /// GetCompletions_PagesResults only proves item counts across pages; it never proves the
+    /// outlier-first sort (critique P1) actually holds once the full-list sort crosses a page
+    /// boundary. Three shifts on consecutive ServiceDates (D, D+1, D+2) where only D+2 is an
+    /// outlier — by date alone D+2 would be last, so page 1 must show the sort reordered it ahead
+    /// of D, and D+1 (the true chronological second) must land alone on page 2.
+    /// </summary>
+    [Fact]
+    public async Task GetCompletions_OutlierSortsFirstAcrossPages()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+
+        var dayD = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview); // ServiceDate, clean
+        SeedCompletion(db, dayD.Id, staff.Id);
+
+        var dayD1 = Seed(db, new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.PendingReview,
+        });
+        SeedCompletion(db, dayD1.Id, staff.Id);
+
+        var dayD2 = Seed(db, new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate.AddDays(2),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.PendingReview,
+        });
+        SeedCompletion(db, dayD2.Id, staff.Id, varianceStart: 45); // outlier — well above the default 15-minute threshold
+        var controller = MakeController(db);
+
+        var page1 = await controller.GetCompletions(null, null, null, 1, 2, CancellationToken.None);
+        var page2 = await controller.GetCompletions(null, null, null, 2, 2, CancellationToken.None);
+
+        var body1 = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(page1.Result).Value);
+        var body2 = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(page2.Result).Value);
+
+        Assert.Equal(2, body1.Data!.Items.Count);
+        Assert.Equal(dayD2.Id, body1.Data.Items[0].ShiftId); // outlier (D+2) sorts first despite being the latest date
+        Assert.True(body1.Data.Items[0].IsOutlierVariance);
+        Assert.Equal(dayD.Id, body1.Data.Items[1].ShiftId); // then chronological: D
+        Assert.False(body1.Data.Items[1].IsOutlierVariance);
+        Assert.Equal(3, body1.Data.TotalCount);
+
+        Assert.Single(body2.Data!.Items);
+        Assert.Equal(dayD1.Id, body2.Data.Items[0].ShiftId); // D+1 lands alone on page 2
+        Assert.False(body2.Data.Items[0].IsOutlierVariance);
         Assert.Equal(3, body2.Data.TotalCount);
     }
 

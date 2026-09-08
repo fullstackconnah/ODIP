@@ -483,8 +483,8 @@ public class RosteringController : ControllerBase
         var thresholdMinutes = VarianceReviewMinutes;
 
         // Narrow projection (critique P2 — "hydrates full graphs") instead of .Include(Participant)/
-        // .Include(User): only the fields GetCompletions actually needs, including the three the
-        // rostered-time conversion below needs (StartTime/EndTime/EndsNextDay).
+        // .Include(User): only the fields GetCompletions actually needs, including the four the
+        // rostered-time conversion below needs (ServiceDate/StartTime/EndTime/EndsNextDay).
         var shiftQuery = _db.Shifts
             .Where(s => s.Status == statusFilter);
         if (from.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate >= from.Value);
