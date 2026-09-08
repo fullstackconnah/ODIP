@@ -1428,6 +1428,8 @@ public record StaffAssignmentDto
     public SleepoverType SleepoverType { get; init; }
     public string? ShiftNotes { get; init; }
     public bool HasConflict { get; init; }
+    public string? OverrideReason { get; init; }
+    public string? AcknowledgedFindingCodes { get; init; }
 }
 
 public record CreateStaffAssignmentDto
@@ -1440,11 +1442,26 @@ public record CreateStaffAssignmentDto
     public bool IsDriver { get; init; }
     public SleepoverType SleepoverType { get; init; } = SleepoverType.None;
     public string? ShiftNotes { get; init; }
+    /// <summary>Required when the candidate carries a RequiresReason finding; ignored (never enough) for a Blocking finding.</summary>
+    public string? OverrideReason { get; init; }
+    /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
+    public List<string>? AcknowledgedFindingCodes { get; init; }
 }
 
 public record UpdateStaffAssignmentDto : CreateStaffAssignmentDto
 {
     public AssignmentStatus Status { get; init; }
+}
+
+/// <summary>Dry-run input for POST /staff-assignments/check — mirrors CheckShiftDto's shape for the trip-assignment analogue.</summary>
+public record CheckStaffAssignmentDto
+{
+    public Guid StaffId { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public DateOnly AssignmentStart { get; init; }
+    public DateOnly AssignmentEnd { get; init; }
+    /// <summary>The existing assignment being re-checked, if any — excluded from its own conflict queries. Null for a brand-new candidate.</summary>
+    public Guid? ExcludeAssignmentId { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

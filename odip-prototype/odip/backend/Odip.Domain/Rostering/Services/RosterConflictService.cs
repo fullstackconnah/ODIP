@@ -19,7 +19,11 @@ public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, 
 /// this from Infrastructure queries — the service itself does no I/O.
 /// </summary>
 /// <param name="Staff">The staff member being considered for the candidate shift.</param>
-/// <param name="Participant">The participant the candidate shift is for.</param>
+/// <param name="Participant">The participant the candidate shift is for. Null for a trip-assignment
+/// candidate (<see cref="RosterConflictService.CheckStaffAssignment"/>) — participant-scoped rules are skipped
+/// entirely in that path, and <see cref="RosterConflictService"/>'s CheckCompatibility/CheckCompetencyMissing/
+/// CheckRatioShortfall all no-op on a null Participant so <see cref="RosterConflictService.Check"/> stays
+/// safe if it's ever called with one too.</param>
 /// <param name="StaffShiftsInWeek">This staff member's other shifts in the candidate's week, excluding the candidate itself.</param>
 /// <param name="ParticipantShiftsOnDate">Other shifts already rostered for this participant on the candidate's <see cref="Shift.ServiceDate"/>, excluding the candidate — used to judge whether a 2:1 slot is actually covered.</param>
 /// <param name="TripAssignments">This staff member's trip assignments overlapping the candidate's <see cref="Shift.ServiceDate"/>.</param>
@@ -28,7 +32,7 @@ public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, 
 /// <param name="WeeklyHoursThreshold">Weekly hours above which <c>OVER_HOURS</c> fires. See <see cref="RosterConflictService.DefaultWeeklyHoursThreshold"/>.</param>
 public sealed record RosterCheckContext(
     User Staff,
-    Participant Participant,
+    Participant? Participant,
     IReadOnlyList<Shift> StaffShiftsInWeek,
     IReadOnlyList<Shift> ParticipantShiftsOnDate,
     IReadOnlyList<StaffAssignment> TripAssignments,
@@ -86,6 +90,32 @@ public sealed class RosterConflictService
     }
 
     /// <summary>
+    /// Trip-side analogue of <see cref="Check(Shift, RosterCheckContext)"/> for a candidate
+    /// StaffAssignment: WSC, double-booked-shift, double-booked-trip and staff-unavailability rules
+    /// only — participant-scoped rules (compatibility, credential/competency, ratio, over-hours) are
+    /// skipped outright rather than merely tolerated, since a trip assignment carries no participant
+    /// at all. See docs/specs/2026-09-07-staff-leave-unavailability-design.md §3. Trip windows are
+    /// whole days: AssignmentStart 00:00 through the day AFTER AssignmentEnd at 00:00 (AssignmentEnd
+    /// itself is inclusive). ctx.Participant is expected to be null — build the context the same way
+    /// StaffAssignmentsController.CheckAsync does.
+    /// </summary>
+    public IReadOnlyList<RosterFinding> CheckStaffAssignment(
+        DateOnly assignmentStart, DateOnly assignmentEnd, Guid excludeAssignmentId, RosterCheckContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        var findings = new List<RosterFinding>();
+        var window = (Start: assignmentStart.ToDateTime(TimeOnly.MinValue), End: assignmentEnd.AddDays(1).ToDateTime(TimeOnly.MinValue));
+
+        CheckWorkerScreeningForDate(assignmentStart, ctx, findings);
+        CheckDoubleBookedShiftForWindow(window, Guid.Empty, ctx, findings);
+        CheckDoubleBookedTripForRange(assignmentStart, assignmentEnd, excludeAssignmentId, ctx, findings);
+        CheckStaffUnavailableForWindow(window, assignmentStart, ctx, findings);
+
+        return findings;
+    }
+
+    /// <summary>
     /// Two distinct facts get two distinct findings. A null
     /// <see cref="Staff.WorkerScreeningExpiryDate"/> means nobody has entered the number yet —
     /// a data gap, not a verdict on the worker — and fires <see cref="WscMissing"/> (Warning).
@@ -94,6 +124,10 @@ public sealed class RosterConflictService
     /// <see cref="WscExpired"/> (Blocking), the only Blocking finding this engine produces.
     /// </summary>
     private static void CheckWorkerScreening(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
+        => CheckWorkerScreeningForDate(candidate.ServiceDate, ctx, findings);
+
+    /// <summary>Core WSC rule, decoupled from Shift so CheckStaffAssignment can reuse it against an assignment's start date.</summary>
+    private static void CheckWorkerScreeningForDate(DateOnly referenceDate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var expiry = ctx.Staff.WorkerScreeningExpiryDate;
         if (expiry is null)
@@ -103,7 +137,7 @@ public sealed class RosterConflictService
             return;
         }
 
-        if (expiry.Value < candidate.ServiceDate)
+        if (expiry.Value < referenceDate)
         {
             findings.Add(new RosterFinding(WscExpired, RosterFindingSeverity.Blocking,
                 $"{ctx.Staff.FullName}'s worker screening expired {Fmt(expiry.Value)} — cannot roster."));
@@ -113,10 +147,16 @@ public sealed class RosterConflictService
     private static void CheckDoubleBookedShift(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var candidateWindow = ToWindow(candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay);
+        CheckDoubleBookedShiftForWindow(candidateWindow, candidate.Id, ctx, findings);
+    }
 
+    /// <summary>Core overlap rule, decoupled from Shift so CheckStaffAssignment can reuse it — excludeShiftId
+    /// is Guid.Empty for a trip-assignment candidate (nothing to exclude, it isn't itself a Shift row).</summary>
+    private static void CheckDoubleBookedShiftForWindow((DateTime Start, DateTime End) candidateWindow, Guid excludeShiftId, RosterCheckContext ctx, List<RosterFinding> findings)
+    {
         foreach (var other in ctx.StaffShiftsInWeek)
         {
-            if (other.Id == candidate.Id)
+            if (other.Id == excludeShiftId)
                 continue;
 
             var otherWindow = ToWindow(other.ServiceDate, other.StartTime, other.EndTime, other.EndsNextDay);
@@ -129,13 +169,24 @@ public sealed class RosterConflictService
     }
 
     private static void CheckDoubleBookedTrip(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
+        => CheckDoubleBookedTripForRange(candidate.ServiceDate, candidate.ServiceDate, Guid.Empty, ctx, findings);
+
+    /// <summary>Core overlap rule, decoupled from Shift so CheckStaffAssignment can reuse it against a
+    /// multi-day AssignmentStart..AssignmentEnd range; excludeAssignmentId skips the assignment's own
+    /// prior row on an update. For the Shift path rangeStart == rangeEnd, so the message text is
+    /// byte-identical to the pre-extraction version.</summary>
+    private static void CheckDoubleBookedTripForRange(DateOnly rangeStart, DateOnly rangeEnd, Guid excludeAssignmentId, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         foreach (var assignment in ctx.TripAssignments)
         {
-            if (assignment.AssignmentStart <= candidate.ServiceDate && candidate.ServiceDate <= assignment.AssignmentEnd)
+            if (assignment.Id == excludeAssignmentId)
+                continue;
+
+            if (assignment.AssignmentStart <= rangeEnd && rangeStart <= assignment.AssignmentEnd)
             {
+                var when = rangeStart == rangeEnd ? Fmt(rangeStart) : $"{Fmt(rangeStart)}-{Fmt(rangeEnd)}";
                 findings.Add(new RosterFinding(DoubleBookedTrip, RosterFindingSeverity.Warning,
-                    $"{ctx.Staff.FullName} is assigned to a trip covering {Fmt(candidate.ServiceDate)}."));
+                    $"{ctx.Staff.FullName} is assigned to a trip covering {when}."));
             }
         }
     }
@@ -151,7 +202,15 @@ public sealed class RosterConflictService
     private static void CheckStaffUnavailable(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var candidateWindow = ToWindow(candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay);
+        CheckStaffUnavailableForWindow(candidateWindow, candidate.ServiceDate, ctx, findings);
+    }
 
+    /// <summary>Core rule, decoupled from Shift so CheckStaffAssignment can reuse it. referenceDate is
+    /// only used in the Legacy-kind message text (the ApprovedLeave/PendingLeave/RecurringRule
+    /// messages don't need one) — for the Shift path this is candidate.ServiceDate, byte-identical to
+    /// the pre-extraction message; for the trip path this is the assignment's start date.</summary>
+    private static void CheckStaffUnavailableForWindow((DateTime Start, DateTime End) candidateWindow, DateOnly referenceDate, RosterCheckContext ctx, List<RosterFinding> findings)
+    {
         foreach (var window in ctx.Availability)
         {
             if (window.Start >= candidateWindow.End || candidateWindow.Start >= window.End)
@@ -161,7 +220,7 @@ public sealed class RosterConflictService
             {
                 case UnavailabilityKind.Legacy:
                     findings.Add(new RosterFinding(StaffUnavailable, RosterFindingSeverity.Warning,
-                        $"{ctx.Staff.FullName} is marked unavailable for part of {Fmt(candidate.ServiceDate)}."));
+                        $"{ctx.Staff.FullName} is marked unavailable for part of {Fmt(referenceDate)}."));
                     break;
                 case UnavailabilityKind.ApprovedLeave:
                     findings.Add(new RosterFinding(StaffOnLeave, RosterFindingSeverity.Warning,
@@ -183,6 +242,8 @@ public sealed class RosterConflictService
 
     private static void CheckCompatibility(RosterCheckContext ctx, List<RosterFinding> findings)
     {
+        if (ctx.Participant is null) return;
+
         if (ctx.Compatibility == CompatibilityLevel.Excluded)
         {
             findings.Add(new RosterFinding(CompatibilityExcluded, RosterFindingSeverity.Warning,
@@ -224,6 +285,7 @@ public sealed class RosterConflictService
     {
         var staff = ctx.Staff;
         var participant = ctx.Participant;
+        if (participant is null) return;
 
         if ((participant.OvernightSupport != OvernightSupportType.None || candidate.NightType != SleepoverType.None)
             && !staff.IsOvernightEligible)
@@ -256,7 +318,8 @@ public sealed class RosterConflictService
     /// </summary>
     private static void CheckRatioShortfall(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
-        if (candidate.Ratio != SupportRatio.TwoToOne) return;
+        var participant = ctx.Participant;
+        if (candidate.Ratio != SupportRatio.TwoToOne || participant is null) return;
 
         var window = ToWindow(candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay);
 
@@ -272,7 +335,7 @@ public sealed class RosterConflictService
         if (covering < 2)
         {
             findings.Add(new RosterFinding(RatioShortfall, RosterFindingSeverity.Warning,
-                $"{ctx.Participant.FullName}'s 2:1 shift on {Fmt(candidate.ServiceDate)} has only " +
+                $"{participant.FullName}'s 2:1 shift on {Fmt(candidate.ServiceDate)} has only " +
                 $"{covering} of 2 support workers rostered."));
         }
     }

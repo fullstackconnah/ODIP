@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Api.Controllers;
 
@@ -14,7 +16,13 @@ namespace Odip.Api.Controllers;
 public class ScheduleController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ScheduleController(OdipDbContext db) => _db = db;
+    private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
+
+    public ScheduleController(OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery)
+    {
+        _db = db;
+        _unavailabilityQuery = unavailabilityQuery;
+    }
 
     /// <summary>
     /// Returns a scheduling overview: all trips with staff/vehicle availability matrix.
@@ -145,10 +153,19 @@ public class ScheduleController : ControllerBase
                 && a.StartDateTime < overallEnd && a.EndDateTime > overallStart)
             .ToListAsync(ct);
 
+        // Unavailability windows (approved leave, approved recurring rules, legacy StaffAvailability
+        // Unavailable/Training rows) via the shared IStaffUnavailabilityQuery — see
+        // docs/specs/2026-09-07-staff-leave-unavailability-design.md §3/§4. staffAvailability above
+        // stays as-is: it still feeds ScheduleStaffDto.Availability, which this change doesn't touch.
+        var overallStartDate = trips.Min(t => t.StartDate);
+        var overallEndDate = trips.Max(t => t.StartDate.AddDays(t.DurationDays - 1));
+        var unavailabilityWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, overallStartDate, overallEndDate, ct);
+
         var staffDtos = allStaff.Select(s =>
         {
             var myAssignments = staffAssignments.Where(a => a.UserId == s.Id).ToList();
             var myAvailability = staffAvailability.Where(a => a.UserId == s.Id).ToList();
+            var myWindows = unavailabilityWindows.Where(w => w.UserId == s.Id).ToList();
 
             var tripStatuses = trips.Select(t =>
             {
@@ -181,17 +198,34 @@ public class ScheduleController : ControllerBase
                     };
                 }
 
-                // Check availability records for unavailability/leave
+                // Unavailability windows (approved leave, approved recurring rules, legacy
+                // StaffAvailability Unavailable/Training rows) via the shared
+                // IStaffUnavailabilityQuery — see docs/specs/2026-09-07-staff-leave-unavailability-design.md §4.
                 var tripStartDt = tripStart.ToDateTime(TimeOnly.MinValue);
                 var tripEndDt = tripEnd.ToDateTime(TimeOnly.MaxValue);
-                var unavailable = myAvailability.Any(a =>
-                    (a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Leave)
-                    && a.StartDateTime < tripEndDt && a.EndDateTime > tripStartDt);
+                var unavailable = myWindows.Any(w =>
+                    (w.Kind == UnavailabilityKind.ApprovedLeave || w.Kind == UnavailabilityKind.RecurringRule || w.Kind == UnavailabilityKind.Legacy)
+                    && w.Start < tripEndDt && tripStartDt < w.End);
                 if (unavailable)
                 {
                     return new ScheduleStaffTripStatusDto
                     {
                         TripId = t.Id, Status = "Unavailable"
+                    };
+                }
+
+                // Pending leave is a softer signal than an approved one — the coordinator can still
+                // assign, but the cell shows Tentative rather than Available so the risk is visible
+                // up front. Pending RecurringUnavailability rules never produce a window at all
+                // (StaffUnavailabilityQuery only expands Approved rules), so there's no
+                // Tentative-via-pending-recurring case to handle here.
+                var pendingLeave = myWindows.Any(w =>
+                    w.Kind == UnavailabilityKind.PendingLeave && w.Start < tripEndDt && tripStartDt < w.End);
+                if (pendingLeave)
+                {
+                    return new ScheduleStaffTripStatusDto
+                    {
+                        TripId = t.Id, Status = "Tentative"
                     };
                 }
 

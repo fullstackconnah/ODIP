@@ -1,35 +1,78 @@
-import React, { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UserPlus, X } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
-import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto } from '@/api/types'
+import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto, RosterFindingDto, SleepoverType } from '@/api/types'
 
 interface StaffAssignModalProps {
   staff: ScheduleStaffDto
   trip: ScheduleTripDto
   onClose: () => void
-  onAssign: (data: CreateStaffAssignmentDto) => void
+  onAssign: (data: CreateStaffAssignmentDto) => Promise<void>
   isLoading: boolean
 }
 
 export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoading }: StaffAssignModalProps) {
   const [role, setRole] = useState('Support Worker')
   const [isDriver, setIsDriver] = useState(false)
-  const [sleepoverType, setSleepoverType] = useState<import('@/api/types').SleepoverType>('None')
+  const [sleepoverType, setSleepoverType] = useState<SleepoverType>('None')
   const [shiftNotes, setShiftNotes] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
+  const [findings, setFindings] = useState<RosterFindingDto[]>([])
+  const [reasonRequired, setReasonRequired] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const checkAssignment = useCheckStaffAssignment()
+
+  // Live dry-run: staff and trip are fixed props for this modal's whole lifetime (no editable
+  // staff/date fields here, unlike ShiftSlideOver) — one un-debounced check on mount is enough.
+  // Never writes — POST /staff-assignments/check is a pure preview.
+  useEffect(() => {
+    checkAssignment.mutate(
+      { staffId: staff.id, tripInstanceId: trip.id, assignmentStart: trip.startDate, assignmentEnd: trip.endDate },
+      { onSuccess: setFindings },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff.id, trip.id, trip.startDate, trip.endDate])
+
+  const blockingFindings = findings.filter(f => f.severity === 'Blocking')
+  const requiresReasonFindings = findings.filter(f => f.requiresReason)
+  const isBusy = isLoading
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onAssign({
-      tripInstanceId: trip.id,
-      staffId: staff.id,
-      assignmentRole: role,
-      assignmentStart: trip.startDate,
-      assignmentEnd: trip.endDate,
-      isDriver,
-      sleepoverType,
-      shiftNotes: shiftNotes || undefined,
-    })
+    setError(null)
+    if (blockingFindings.length > 0) return
+    if (requiresReasonFindings.length > 0 && !overrideReason.trim()) {
+      setReasonRequired(true)
+      return
+    }
+    setReasonRequired(false)
+
+    try {
+      await onAssign({
+        tripInstanceId: trip.id,
+        staffId: staff.id,
+        assignmentRole: role,
+        assignmentStart: trip.startDate,
+        assignmentEnd: trip.endDate,
+        isDriver,
+        sleepoverType,
+        shiftNotes: shiftNotes || undefined,
+        overrideReason: overrideReason.trim() || undefined,
+        acknowledgedFindingCodes: findings.map(f => f.code),
+      })
+    } catch (err: unknown) {
+      const serverFindings = getRosterFindings(err)
+      if (serverFindings) {
+        setFindings(serverFindings)
+        if (serverFindings.some(f => f.requiresReason) && !overrideReason.trim()) setReasonRequired(true)
+      } else {
+        setError('Something went wrong assigning this staff member. Please try again.')
+      }
+    }
   }
 
   return (
@@ -75,7 +118,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
             <Dropdown
               variant="form"
               value={sleepoverType}
-              onChange={(val: string) => setSleepoverType(val as import('@/api/types').SleepoverType)}
+              onChange={(val: string) => setSleepoverType(val as SleepoverType)}
               items={[
                 { value: 'None', label: 'None' },
                 { value: 'ActiveNight', label: 'Active Night' },
@@ -107,14 +150,28 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
               className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
           </div>
+
+          <RosterGateFields
+            findings={findings}
+            overrideReason={overrideReason}
+            onOverrideReasonChange={setOverrideReason}
+            reasonRequired={reasonRequired}
+          />
+
+          {error && (
+            <div role="alert" className="rounded-[1rem] bg-[#ffdad6]/50 px-3 py-2 text-sm text-[#ba1a1a]">
+              {error}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 px-4 py-2.5 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-high)] transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={isLoading}
+            <button type="submit" disabled={isBusy || blockingFindings.length > 0}
               className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#396200] to-[#4d7c0f] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-              {isLoading ? 'Assigning...' : 'Assign Staff'}
+              {isBusy ? 'Assigning...' : requiresReasonFindings.length > 0 ? 'Assign with override' : 'Assign Staff'}
             </button>
           </div>
         </form>

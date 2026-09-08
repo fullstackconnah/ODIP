@@ -50,13 +50,10 @@ export default function SchedulePage() {
     tripEnd?: string
   } | null>(null)
 
-  const handleStaffAssign = (assignData: CreateStaffAssignmentDto) => {
-    staffAssign.mutate(assignData, {
-      onSuccess: () => {
-        setAssignModal(null)
-        queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
-      },
-    })
+  const handleStaffAssign = async (assignData: CreateStaffAssignmentDto) => {
+    await staffAssign.mutateAsync(assignData)
+    setAssignModal(null)
+    queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
   }
 
   const handleVehicleAssign = (assignData: CreateVehicleAssignmentDto) => {

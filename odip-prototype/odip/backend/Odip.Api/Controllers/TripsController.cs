@@ -373,7 +373,8 @@ public class TripsController : ControllerBase
                 StaffName = s.User.FirstName + " " + s.User.LastName, AssignmentRole = s.AssignmentRole,
                 AssignmentStart = s.AssignmentStart, AssignmentEnd = s.AssignmentEnd,
                 Status = s.Status, IsDriver = s.IsDriver, SleepoverType = s.SleepoverType,
-                ShiftNotes = s.ShiftNotes, HasConflict = s.HasConflict
+                ShiftNotes = s.ShiftNotes, HasConflict = s.HasConflict,
+                OverrideReason = s.OverrideReason, AcknowledgedFindingCodes = s.AcknowledgedFindingCodes
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<StaffAssignmentDto>>.Ok(items));
     }

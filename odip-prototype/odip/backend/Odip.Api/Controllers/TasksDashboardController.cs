@@ -469,7 +469,9 @@ public class ConflictsController : ControllerBase
     private readonly OdipDbContext _db;
     public ConflictsController(OdipDbContext db) => _db = db;
 
-    /// <summary>Recheck all conflicts across accommodation, vehicles, and staff.</summary>
+    /// <summary>Recheck all conflicts across accommodation, vehicles, and staff.
+    /// Staff assignments are no longer re-derived here: HasConflict is normalised to
+    /// (OverrideReason != null), the acknowledged-override invariant maintained at write time.</summary>
     [HttpPost("recheck")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<object>>> Recheck(CancellationToken ct)
@@ -510,23 +512,12 @@ public class ConflictsController : ControllerBase
             .Where(a => a.Status != AssignmentStatus.Cancelled)
             .ToListAsync(ct);
 
-        var unavailability = await _db.StaffAvailabilities
-            .Where(a => a.AvailabilityType == AvailabilityType.Unavailable || a.AvailabilityType == AvailabilityType.Leave)
-            .ToListAsync(ct);
-
         foreach (var a in staffAssignments)
         {
-            var hasConflict = staffAssignments.Any(other => other.Id != a.Id
-                && other.UserId == a.UserId
-                && other.AssignmentStart <= a.AssignmentEnd && other.AssignmentEnd >= a.AssignmentStart);
-
-            if (!hasConflict)
-            {
-                var startDt = a.AssignmentStart.ToDateTime(TimeOnly.MinValue);
-                var endDt = a.AssignmentEnd.ToDateTime(TimeOnly.MaxValue);
-                hasConflict = unavailability.Any(ua => ua.UserId == a.UserId
-                    && ua.StartDateTime < endDt && ua.EndDateTime > startDt);
-            }
+            // HasConflict is the persisted acknowledged-override flag, derived at write time by
+            // StaffAssignmentsController (RosterGate) — not re-derived here from other
+            // assignments/availability, which would clobber that invariant.
+            var hasConflict = a.OverrideReason != null;
             if (a.HasConflict != hasConflict) { a.HasConflict = hasConflict; updated++; }
         }
 

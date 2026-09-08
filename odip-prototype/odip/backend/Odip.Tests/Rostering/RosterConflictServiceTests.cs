@@ -66,7 +66,7 @@ public class RosterConflictServiceTests
 
     private static RosterCheckContext CompliantContext(
         User staff,
-        Participant participant,
+        Participant? participant,
         IReadOnlyList<Shift>? staffShiftsInWeek = null,
         IReadOnlyList<Shift>? participantShiftsOnDate = null,
         IReadOnlyList<StaffAssignment>? tripAssignments = null,
@@ -660,5 +660,114 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
 
         Assert.All(findings, f => Assert.False(f.RequiresReason));
+    }
+
+    // ── Trip-side parity: null-participant tolerance + CheckStaffAssignment ──
+
+    [Fact]
+    public void Check_ToleratesNullParticipant_SkipsParticipantScopedFindings()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, ratio: SupportRatio.TwoToOne);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, null, compatibility: CompatibilityLevel.Excluded));
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.CompatibilityExcluded);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.CompetencyMissing);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.RatioShortfall);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_ApprovedLeaveOverlappingWholeDayWindow_FiresStaffOnLeave()
+    {
+        var staff = CompliantStaff();
+        var window = new UnavailabilityWindow(staff.Id,
+            new DateTime(2026, 9, 10), new DateTime(2026, 9, 13), UnavailabilityKind.ApprovedLeave);
+        var ctx = CompliantContext(staff, null, availability: new[] { window });
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffOnLeave);
+        Assert.True(finding.RequiresReason);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_NeverProducesParticipantScopedCodes()
+    {
+        var staff = CompliantStaff();
+        var ctx = CompliantContext(staff, null, compatibility: CompatibilityLevel.Excluded);
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.CompatibilityExcluded);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.CompetencyMissing);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.RatioShortfall);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.OverHours);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_ExpiredScreeningAtAssignmentStart_FiresBlockingWscExpired()
+    {
+        var staff = CompliantStaff();
+        staff.WorkerScreeningExpiryDate = new DateOnly(2026, 9, 1);
+        var ctx = CompliantContext(staff, null);
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.WscExpired);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_ExcludesItsOwnPriorAssignmentFromDoubleBookedTrip()
+    {
+        var staff = CompliantStaff();
+        var selfId = Guid.NewGuid();
+        var selfAssignment = new StaffAssignment
+        {
+            Id = selfId, UserId = staff.Id, TripInstanceId = Guid.NewGuid(),
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+        };
+        var ctx = CompliantContext(staff, null, tripAssignments: new[] { selfAssignment });
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), selfId, ctx);
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_OverlappingOtherTripAssignment_FiresDoubleBookedTrip()
+    {
+        var staff = CompliantStaff();
+        var other = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, TripInstanceId = Guid.NewGuid(),
+            AssignmentStart = new DateOnly(2026, 9, 11), AssignmentEnd = new DateOnly(2026, 9, 13),
+        };
+        var ctx = CompliantContext(staff, null, tripAssignments: new[] { other });
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_OverlappingShiftInWindow_FiresDoubleBookedShift()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var shift = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 9, 11));
+        var ctx = CompliantContext(staff, null, staffShiftsInWeek: new[] { shift });
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
     }
 }
