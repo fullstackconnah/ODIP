@@ -43,10 +43,11 @@ describe('StaffAssignModal — live conflict check (trip-side parity)', () => {
     render(<StaffAssignModal staff={staff} trip={trip} onClose={vi.fn()} onAssign={onAssign} isLoading={false} />)
 
     await screen.findByText('Leave overlap')
+    expect(screen.queryByText(/enter a reason to continue/i)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /assign with override/i }))
 
     expect(onAssign).not.toHaveBeenCalled()
-    expect(screen.getByText(/required/i)).toBeInTheDocument()
+    expect(screen.getByText(/enter a reason to continue/i)).toBeInTheDocument()
   })
 
   it('submits with overrideReason and acknowledgedFindingCodes once a reason is entered', async () => {
