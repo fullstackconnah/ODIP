@@ -10,18 +10,18 @@ namespace Odip.Application.DTOs;
 
 public record StartShiftDto
 {
-    [Range(-90, 90)]
+    [Range(-90.0, 90.0)]
     public decimal? Latitude { get; init; }
-    [Range(-180, 180)]
+    [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
 }
 
 public record FinishShiftDto
 {
-    [Range(-90, 90)]
+    [Range(-90.0, 90.0)]
     public decimal? Latitude { get; init; }
-    [Range(-180, 180)]
+    [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
     /// <summary>Supplied only on the manual-start path — Start was skipped, so Finish supplies the real ActualStart.</summary>
