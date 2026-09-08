@@ -536,7 +536,7 @@ public class RosteringCompletionReviewTests
         Assert.Equal("SHIFT_NOT_PENDING_REVIEW", notPendingResult.Code);
         var missingResult = body.Data.Single(r => r.ShiftId == missingId);
         Assert.False(missingResult.Approved);
-        Assert.Null(missingResult.Code); // 404 path — not-found carries no machine code, matching GetShiftCompletion
+        Assert.Null(missingResult.Code); // shift-missing 404 stays code-less per the codebase-wide "Shift not found." convention
 
         var savedOk1 = await db.Shifts.SingleAsync(s => s.Id == ok1.Id);
         var savedOk2 = await db.Shifts.SingleAsync(s => s.Id == ok2.Id);

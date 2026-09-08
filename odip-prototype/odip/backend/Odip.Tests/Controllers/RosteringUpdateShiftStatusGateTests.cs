@@ -19,6 +19,7 @@ namespace Odip.Tests.Controllers;
 /// UpdateShift's status-transition gate (design spec §2): PUT can still toggle Draft↔Published
 /// (today's only real use) but can no longer jump straight to Completed/InProgress/
 /// PendingReview — those are only reachable via the shift-completion endpoints from this point on.
+/// Cancelled → Draft/Published (un-cancel) is also allowed via PUT.
 /// </summary>
 public class RosteringUpdateShiftStatusGateTests
 {
