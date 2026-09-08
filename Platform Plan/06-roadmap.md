@@ -31,36 +31,45 @@ Sequencing principle: **revenue-critical operations first** (participants → tr
 
 **Exit:** 2026/27 season trips run end-to-end in ODIP.
 
-## Phase 3 · Money
+## Phase 3 · Shift-to-claim loop
 
-- M3 Agreements & funding; versioned rate card with NDIS pricing import.
-- M10 Billing engine: trip claims + invoices first (highest pain), then community access.
-- **Xero connector** (invoices out, payments back). **PRODA bulk CSV export** for agency-managed claims.
-- **Brevity connector v1** (participant/contact sync — per Phase 0 findings) and the claiming cutover plan.
+- **[Shift completion](../docs/specs/2026-09-08-shift-completion-design.md)**: worker Start/Finish in the portal, office review-and-approve queue, Completed shifts feed a shift-kind claim-generation path alongside the existing trip-claim path.
+- **[Notifications](../docs/specs/2026-09-08-notifications-design.md)**: email first (SMS stubbed behind `INotificationChannel`), per-user per-event-type preferences.
 - Revenue dashboard v1.
 
-**Exit:** every dollar across streams visible in one dashboard; no manually assembled claims/invoices.
+**Exit:** a completed shift becomes a claim line with no manual re-keying; staff and office are told when something needs them.
 
-## Phase 4 · Rostering & field delivery
+## Phase 4 · Agreements, budgets & money
 
-- M4 full rostering (recurring shifts, availability, conflicts, compliance gates, open shifts), timesheets → **Employment Hero connector**.
-- M6 shift/progress notes, mobile field experience, offline drafts.
-- Delivered-hours → billing engine linkage (community access/capacity building claims now evidence-backed).
+- M3 agreements & funding → **[service agreements & plan budgets](../docs/specs/2026-09-08-service-agreements-and-budgets-design.md)**: token-link e-signed agreements (PDF snapshot + SHA-256 hash), manually-entered plan budgets per PACE category drawn down by claims; versioned rate card with NDIS pricing import.
+- M10 Billing engine: trip claims + invoices first (highest pain), then community access.
+- **[Integration ring 1](../docs/specs/2026-09-08-integration-framework-design.md)**: **Xero** (invoices out, payments back), **Employment Hero** timesheet CSV export, **Brevity connector v1** (inbound-only, reverse-engineered web transport, review-before-apply, until an official API exists). **PRODA bulk CSV export** for agency-managed claims.
 
-**Exit:** ODIP is the roster master; Brevity receives delivered services; EH receives timesheets.
+**Exit:** every dollar across streams visible in one dashboard, no manually assembled claims/invoices; budgets visible per participant.
 
-## Phase 5 · Compliance suite
+## Phase 5 · Field hardening & compliance
 
+- Defect repair sweep — plan to follow; no spec.
+- **[PWA offline notes](../docs/specs/2026-09-08-pwa-offline-notes-design.md)**: installable PWA, ShiftNote outbox in IndexedDB, Idempotency-Key replay for exactly-once sync.
 - M9: incidents & reportables (with deadline timers), complaints register, restrictive practices register, audit evidence registers (shaped by Phase 0 policy review).
-- Incident quick-capture already collected in Phase 4 mobile work is upgraded to full workflow.
+- Incident quick-capture (already in the worker portal) is upgraded to full workflow.
+- M4 full rostering (recurring shifts, availability, conflicts, compliance gates, open shifts).
+- Delivered-hours → billing engine linkage (community access/capacity building claims now evidence-backed).
+- AI assistance (note drafting, claim anomaly flags) — deferred; revisit after Phase 5 exit.
 
-**Exit:** audit-ready registers; compliance dashboards for the owner.
+**Exit:** ODIP is the roster master; audit-ready registers; notes survive a dead signal.
+
+## Integration ring (standing)
+
+- Ring 1 — **Xero**, **Employment Hero**, **Brevity** — built in Phase 4, see **[integration framework](../docs/specs/2026-09-08-integration-framework-design.md)**.
+- Ring 2 — **Splose**, **Linxio**, **Budgetly** — shown as `NotConfigured` tiles on the Integrations dashboard from Phase 4, built out in Phase 6 when their streams are real.
+- Every connector goes through the same connector/sync-job/ExternalRef/dashboard-status surface — no one-off integrations.
 
 ## Phase 6 · Streams build-out
 
 - M8 Training module (mixed-payer enrolments, certificates, B2B invoicing).
-- M7 Clinical thin-slice + **Splose connector**; PBS register & practitioner billing.
-- STA standalone templates; **Linxio** and **Budgetly** connectors (trip P&L actuals).
+- M7 Clinical thin-slice + **Splose connector (ring 2)**; PBS register & practitioner billing.
+- STA standalone templates; **Linxio** and **Budgetly** connectors (ring 2, trip P&L actuals).
 
 **Exit:** all current income streams managed and billed through the ODIP spine.
 
@@ -71,11 +80,13 @@ Sequencing principle: **revenue-critical operations first** (participants → tr
 - **Productisation to multi-provider SaaS** — now planned in detail in `10-productisation.md`: dogfood gate → isolation hardening/pen test → first cohort of 3–5 holiday/STA providers → widen. During all earlier phases, enforce its config-over-code rule and cross-tenant test harness so this phase stays cheap.
 - Participant/family portal (bookings, schedules, e-sign) — deliberately out of initial scope.
 - Reporting warehouse/BI if dashboard needs outgrow in-app reporting.
+- **PRODA/NDIA API** submission (replacing bulk-CSV upload) when NDIA opens API access; **Brevity official API** replaces the v1 web transport when available.
+- AI assistance — see Phase 5 deferral.
 
 ## Risks to manage throughout
 
 1. **Single-developer bus factor** — mitigations: boring tech, strong docs (continue the TripCore `docs/` discipline), IaC/scripted deploys, owner-accessible admin.
-2. **Integration facts unknown** (Brevity/EH API access) — resolved in Phase 0 before dependent design.
+2. **Integration facts unknown** (Brevity/EH API access) — Brevity v1 uses a reverse-engineered web transport with response-shape fingerprinting that degrades to paused rather than corrupting data; EH is file-based. Both are replaced when official APIs exist.
 3. **NDIS pricing churn** — versioned rate cards + annual import routine, never hard-coded prices.
 4. **Scope gravity** — every stream is "evolving"; the spine model absorbs change, but new modules only start when a stream has real revenue and a defined process.
 5. **Parallel-run fatigue** — each phase defines a hard cutover per function; avoid indefinite double-entry.
