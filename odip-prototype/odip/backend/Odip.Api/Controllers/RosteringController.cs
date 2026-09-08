@@ -675,7 +675,8 @@ public class RosteringController : ControllerBase
         var now = DateTime.UtcNow;
         var results = new List<ApproveBatchResultDto>();
 
-        foreach (var shiftId in dto.ShiftIds)
+        // De-dup: EF identity resolution would hand the second occurrence the already-approved tracked entity and report a false SHIFT_NOT_PENDING_REVIEW.
+        foreach (var shiftId in dto.ShiftIds.Distinct())
         {
             var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(shiftId, ct);
             if (error is not null)

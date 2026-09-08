@@ -648,6 +648,27 @@ public class RosteringCompletionReviewTests
         Assert.Equal("SHIFT_BATCH_SIZE_INVALID", body.Code);
     }
 
+    [Fact]
+    public async Task ApproveBatch_DuplicateIds_ApprovedOnceNoFalseFailure()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ApproveBatch(new ApproveBatchDto([shift.Id, shift.Id]), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(ok.Value);
+        Assert.Single(body.Data!);
+        Assert.True(body.Data![0].Approved);
+
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.Completed, savedShift.Status);
+    }
+
     // ── Return ────────────────────────────────────────────────────────
 
     [Fact]
