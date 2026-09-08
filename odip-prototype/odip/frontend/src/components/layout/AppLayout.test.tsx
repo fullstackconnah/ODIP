@@ -9,13 +9,16 @@ import AppLayout from './AppLayout'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount } = vi.hoisted(() => ({ mockUsePendingLeaveCount: vi.fn(() => 0) }))
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests } = vi.hoisted(() => ({
+  mockUsePendingLeaveCount: vi.fn(() => 0),
+  mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
+}))
 
 vi.mock('@/api/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/hooks')>()
   return {
     ...actual,
-    usePendingWitnessRequests: () => ({ data: [], isLoading: false }),
+    usePendingWitnessRequests: mockUsePendingWitnessRequests,
     usePendingLeaveCount: mockUsePendingLeaveCount,
   }
 })
@@ -100,6 +103,19 @@ describe('AppLayout — Leave nav entry (leave-2)', () => {
     mockUsePendingLeaveCount.mockReturnValue(3)
     renderAt('/rostering')
     expect(screen.getByRole('link', { name: /Leave$/ })).toHaveTextContent('3')
+  })
+})
+
+describe('AppLayout — witness-approval nav badge (leave-2, shares NavCountBadge/navBadgeLabel with the Leave badge)', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUsePendingWitnessRequests.mockReturnValue({ data: [], isLoading: false })
+  })
+
+  it('gives the /portal link an accessible name ending in "Portal" and announcing the pending count', () => {
+    mockUsePendingWitnessRequests.mockReturnValue({ data: [{}, {}], isLoading: false })
+    renderAt('/trips')
+    expect(screen.getByRole('link', { name: '2 witness approvals pending, My Shifts' })).toHaveAttribute('href', '/portal')
   })
 })
 

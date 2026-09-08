@@ -8,6 +8,8 @@ export type ConfirmDialogProps = {
   title: string
   message: ReactNode
   confirmLabel?: string
+  /** Label for the default dismiss button. Ignored when `footer` is provided. */
+  cancelLabel?: string
   variant?: 'default' | 'danger'
   loading?: boolean
   /**
@@ -21,7 +23,7 @@ export type ConfirmDialogProps = {
 
 export function ConfirmDialog({
   open, onConfirm, onCancel, title, message,
-  confirmLabel = 'Confirm', variant = 'default', loading, footer,
+  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, footer,
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -36,7 +38,7 @@ export function ConfirmDialog({
               onClick={onCancel}
               className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
             >
-              Cancel
+              {cancelLabel}
             </button>
             <button
               onClick={onConfirm}

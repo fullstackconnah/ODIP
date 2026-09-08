@@ -676,6 +676,67 @@ const tripVehicleAssignments = {
 // Settings (AppSettingsDto)
 const appSettings = { qualificationWarningDays: 30 }
 
+// Leave requests (LeaveRequestDto) + recurring unavailability (RecurringUnavailabilityDto) —
+// offline preview fixtures for the coordinator LeaveApprovalsPage and self-service
+// PortalLeavePage. CURRENT_STAFF_ID mirrors myDashboard.staffId — the "current user" the
+// portal/* routes below answer for.
+const CURRENT_STAFF_ID = 's-0003'
+
+const leaveRequests = [
+  {
+    id: 'leave-0001', userId: 's-0003', userFullName: "Jack O'Sullivan",
+    leaveType: 'Annual', startDate: '2026-09-14', endDate: '2026-09-18',
+    status: 'Pending', reason: 'Family trip interstate.',
+    requestedByUserId: 's-0003', requestedAt: '2026-09-01T09:00:00Z',
+    decidedByUserId: null, decidedAt: null, decisionNote: null,
+  },
+  {
+    id: 'leave-0002', userId: 's-0004', userFullName: 'Mei Zhang',
+    leaveType: 'Sick', startDate: '2026-09-08', endDate: '2026-09-09',
+    status: 'Approved', reason: null,
+    requestedByUserId: 's-0004', requestedAt: '2026-09-07T07:30:00Z',
+    decidedByUserId: 's-0001', decidedAt: '2026-09-07T08:00:00Z', decisionNote: null,
+  },
+  {
+    id: 'leave-0003', userId: 's-0002', userFullName: 'Priya Nadarajah',
+    leaveType: 'Personal', startDate: '2026-09-21', endDate: '2026-09-21',
+    status: 'Declined', reason: 'Medical appointment.',
+    requestedByUserId: 's-0002', requestedAt: '2026-09-03T10:15:00Z',
+    decidedByUserId: 's-0001', decidedAt: '2026-09-04T09:00:00Z',
+    decisionNote: 'Already short-staffed that day.',
+  },
+]
+
+const recurringUnavailabilities = [
+  {
+    id: 'rule-0001', userId: 's-0003', userFullName: "Jack O'Sullivan",
+    dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00',
+    effectiveFrom: '2026-09-07', effectiveTo: null, notes: 'Regular medical appointment.',
+    status: 'Pending', requestedByUserId: 's-0003', requestedAt: '2026-09-01T09:05:00Z',
+    decidedByUserId: null, decidedAt: null, decisionNote: null,
+  },
+  {
+    id: 'rule-0002', userId: 's-0005', userFullName: 'Tom Beattie',
+    dayOfWeek: 'Friday', startTime: '15:00:00', endTime: '17:00:00',
+    effectiveFrom: '2026-08-01', effectiveTo: null, notes: null,
+    status: 'Approved', requestedByUserId: 's-0005', requestedAt: '2026-07-20T09:00:00Z',
+    decidedByUserId: 's-0001', decidedAt: '2026-07-21T09:00:00Z', decisionNote: null,
+  },
+]
+
+/** Returns a copy of a leave/unavailability fixture row with a decision applied — mirrors what
+ * the real approve/decline/cancel endpoints hand back, without mutating the fixture array (this
+ * file is stateless across requests, same as every other GET find-or-fallback route below). */
+function withDecision(row, status, decisionNote) {
+  return {
+    ...row,
+    status,
+    decisionNote: decisionNote !== undefined ? decisionNote : row.decisionNote,
+    decidedByUserId: 's-0001',
+    decidedAt: new Date().toISOString(),
+  }
+}
+
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
@@ -776,6 +837,49 @@ const routes = [
   ['schedule', () => scheduleOverview],
   ['settings', () => appSettings],
   ['public-holidays', () => publicHolidays],
+
+  // leave + recurring unavailability — GET /leave and /leave/unavailability don't filter by the
+  // `status`/`userId` query string here: the GET dispatch loop below never passes url.searchParams
+  // into the handler (unlike the path-segment `:id` params other routes use), so there's nothing
+  // to read a filter off without changing that dispatch loop for every other GET route too. Returns
+  // the full fixture list; the frontend pages that read it don't rely on the mock filtering
+  // (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
+  ['leave', () => leaveRequests],
+  ['leave/unavailability', () => recurringUnavailabilities],
+  ['portal/leave', () => ({
+    leave: leaveRequests.filter((r) => r.userId === CURRENT_STAFF_ID),
+    unavailability: recurringUnavailabilities.filter((r) => r.userId === CURRENT_STAFF_ID),
+  })],
+]
+
+// POST routes needing a specific response shape rather than the generic echo-body-back fallback
+// (see the POST handler below) — status-transition endpoints that must return the fixture row
+// with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
+// that must return an array of findings, not an echoed object.
+const postRoutes = [
+  ['staff-assignments/check', () => []],
+
+  ['leave/:id/approve', (id) => ({
+    leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
+    overlaps: [],
+  })],
+  ['leave/:id/decline', (id, body) =>
+    withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Declined', body?.decisionNote ?? null)],
+  ['leave/:id/cancel', (id) =>
+    withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Cancelled', null)],
+  ['portal/leave/:id/cancel', (id) =>
+    withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Cancelled', null)],
+
+  ['leave/unavailability/:id/approve', (id) => ({
+    unavailability: withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Approved', null),
+    overlaps: [],
+  })],
+  ['leave/unavailability/:id/decline', (id, body) =>
+    withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Declined', body?.decisionNote ?? null)],
+  ['leave/unavailability/:id/cancel', (id) =>
+    withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
+  ['portal/unavailability/:id/cancel', (id) =>
+    withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
 ]
 
 function matchRoute(pattern, segments) {
@@ -844,6 +948,19 @@ const server = http.createServer((req, res) => {
     let body = {}
     if (raw) {
       try { body = JSON.parse(raw) } catch { body = {} }
+    }
+
+    // Status-transition + pure-preview POST routes that need a specific response shape (see
+    // postRoutes above) — checked before the generic fallback below, same idea as the
+    // auth/exchange special-case that already existed here.
+    if (req.method === 'POST') {
+      for (const [pattern, handler] of postRoutes) {
+        const params = matchRoute(pattern, segments)
+        if (params) {
+          send(res, 200, ok(handler(...params, body)))
+          return
+        }
+      }
     }
 
     // Special-case auth exchange so login flows get a plausible AuthResponseDto

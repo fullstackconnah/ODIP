@@ -214,7 +214,7 @@ export default function LeaveApprovalsPage() {
         </div>
       ) : row.data.status === 'Approved' ? (
         <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
-          Cancel
+          {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
         </button>
       ) : null,
     }] : []),
@@ -351,7 +351,8 @@ export default function LeaveApprovalsPage() {
         onConfirm={handleCancelConfirm}
         title="Cancel approved request"
         variant="danger"
-        confirmLabel="Cancel request"
+        confirmLabel="Yes, cancel it"
+        cancelLabel="Keep"
         loading={cancelLeave.isPending || cancelUnavailability.isPending}
         message={
           <div className="space-y-2">

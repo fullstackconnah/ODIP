@@ -172,9 +172,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Cancelled' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
     const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
   })
@@ -185,9 +185,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'Only pending requests can be withdrawn.' } } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
     const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(await within(dialog).findByText(/only pending requests can be withdrawn\./i)).toBeInTheDocument()
     // The cancel dialog stays open and the row is unchanged — still Approved, with its own
@@ -269,9 +269,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule({ id: 'rule-1', status: 'Cancelled' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel rule$/i }))
     const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(mockCancelUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
   })

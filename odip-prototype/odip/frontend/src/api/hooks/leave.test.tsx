@@ -98,12 +98,15 @@ describe('leave hooks — coordinator', () => {
     expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { userId: 'staff-1' })
   })
 
-  it('usePendingLeaveCount derives a count from the same Pending list', async () => {
-    mockApiGetWithDefault.mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
+  it('usePendingLeaveCount sums pending leave requests and pending recurring-unavailability rules', async () => {
+    mockApiGetWithDefault
+      .mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
+      .mockResolvedValueOnce([{ id: 'rule-1' }])
     const qc = new QueryClient()
     const { result } = renderHook(() => usePendingLeaveCount(), { wrapper: wrapper(qc) })
-    await waitFor(() => expect(result.current).toBe(2))
+    await waitFor(() => expect(result.current).toBe(3))
     expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave', [], { status: 'Pending' })
+    expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { status: 'Pending' })
   })
 
   it('useCreateLeaveOnBehalf posts to /leave and invalidates leave-requests + roster-board', async () => {
