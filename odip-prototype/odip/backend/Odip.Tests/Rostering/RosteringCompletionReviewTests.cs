@@ -462,6 +462,27 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task ReturnCompletion_ReasonExactly500Chars_Accepted()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+        var exactly500 = new string('a', 500);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = exactly500 }, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(ok.Value);
+        Assert.Equal(ReviewOutcome.Returned, body.Data!.ReviewOutcome);
+
+        var saved = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.Equal(exactly500, saved.ReturnReason);
+    }
+
+    [Fact]
     public async Task ReturnCompletion_ReasonWithSurroundingWhitespace_IsTrimmedBeforeSaving()
     {
         using var db = CreateDb();
@@ -623,5 +644,50 @@ public class RosteringCompletionReviewTests
         Assert.Null(completionAfter.ReviewOutcome);
         var shiftAfter = await verifyDb.Shifts.SingleAsync(s => s.Id == shiftId);
         Assert.Equal(ShiftStatus.PendingReview, shiftAfter.Status);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletions_OtherTenant_Returns404()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        // Seed under tenant B — a real (non-super-admin) tenant context so SaveChangesAsync
+        // auto-stamps TenantId on every ITenantEntity row (see OdipDbContext.SaveChangesAsync).
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        Guid shiftId;
+        using (var seedDb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            var staff = SeedStaff(seedDb);
+            var participant = SeedParticipant(seedDb);
+            var shift = SeedShift(seedDb, participant.Id, staff.Id, ShiftStatus.PendingReview);
+            SeedCompletion(seedDb, shift.Id, staff.Id);
+            shiftId = shift.Id;
+        }
+
+        // Query as tenant A — same pattern as ApproveCompletion_OtherTenant_Returns404, but scoped (non-super-admin).
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(options, tenantAContext.Object);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
+        var result = await controller.GetShiftCompletions(shiftId, CancellationToken.None);
+
+        // Same 404-not-403 envelope shape as GetShiftCompletions_NoCompletions_Returns404 — the
+        // tenant filter hides tenant B's completions entirely, so this is indistinguishable from
+        // "no completions for this shift" rather than a distinct "forbidden" response.
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 }
