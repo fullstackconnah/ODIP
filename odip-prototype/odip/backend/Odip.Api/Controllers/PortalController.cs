@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -116,19 +117,10 @@ public class PortalController : ControllerBase
     [HttpGet("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> GetShiftDetail(Guid id, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        // INTAKE-08: same defence-in-depth draft exclusion as GetMyShifts above — treat it
-        // identically to "no participant at all" rather than surfacing a draft's detail.
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
-
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
     }
 
     /// <summary>
@@ -189,6 +181,27 @@ public class PortalController : ControllerBase
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
         ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
 
+    /// <summary>
+    /// Resolves one of the caller's own shifts (Participant included, draft-excluded — same rule
+    /// as every portal shift read), or the 404 ActionResult to short-circuit with. Extracted
+    /// (critique P3) from the identical block previously duplicated across GetShiftDetail/
+    /// StartShift/FinishShift.
+    /// </summary>
+    private async Task<(Shift? Shift, ActionResult<ApiResponse<PortalShiftDetailDto>>? Error)> ResolveOwnedShiftAsync(Guid id, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
+
+        return (shift, null);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT COMPLETION (design spec §2/§3)
     // ══════════════════════════════════════════════════════════════
@@ -203,17 +216,10 @@ public class PortalController : ControllerBase
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartShift(
         Guid id, [FromBody] StartShiftDto dto, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
-
-        if (shift.Status != ShiftStatus.Published)
+        if (shift!.Status != ShiftStatus.Published)
         {
             // Idempotent replay: a worker's retry after a dropped response must read as success, not
             // as a repeat failure (critique P1). SHIFT_NOT_STARTABLE now means only "the database
@@ -271,9 +277,11 @@ public class PortalController : ControllerBase
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { ConstraintName: "IX_ShiftCompletions_ShiftId_Active" })
         {
-            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start.
+            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start —
+            // narrowed (critique P3) from catching every DbUpdateException, which mapped any
+            // unrelated DB failure to the same misleading "can't be started" message.
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift can't be started right now.", ShiftErrorCodes.ShiftNotStartable));
         }
@@ -289,19 +297,12 @@ public class PortalController : ControllerBase
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishShift(
         Guid id, [FromBody] FinishShiftDto dto, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
-
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
         // Idempotent replay / already-elsewhere guards, checked before the note-required gate — none
         // of these states can be fixed by adding a note, so the note gate would be a misleading error.
-        if (shift.Status == ShiftStatus.PendingReview)
+        if (shift!.Status == ShiftStatus.PendingReview)
             return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
 
         if (shift.Status == ShiftStatus.Completed)

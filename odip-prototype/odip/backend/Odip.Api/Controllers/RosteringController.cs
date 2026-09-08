@@ -586,25 +586,21 @@ public class RosteringController : ControllerBase
     [HttpPost("shifts/{id:guid}/completion/approve")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct)
     {
-        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
+        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
+        if (error is not null) return error;
 
-        // Status is checked before completion-existence (same order as ReturnCompletion) so a
-        // shift in the wrong state always 409s, even when it has no active completion row.
-        if (shift.Status != ShiftStatus.PendingReview)
-            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
-                "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview));
-
-        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
-        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+        var reviewerId = ResolveCurrentUserId();
+        if (reviewerId is null)
+            return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
+                "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
 
         var now = DateTime.UtcNow;
-        completion.ReviewedByUserId = ResolveCurrentUserId();
+        completion!.ReviewedByUserId = reviewerId;
         completion.ReviewedAt = now;
         completion.ReviewOutcome = ReviewOutcome.Approved;
         completion.UpdatedAt = now;
 
-        shift.Status = ShiftStatus.Completed;
+        shift!.Status = ShiftStatus.Completed;
         shift.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
@@ -621,17 +617,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ReturnCompletion(
         Guid id, [FromBody] ReturnCompletionDto dto, CancellationToken ct)
     {
-        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (shift is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
-
-        // Status is checked before completion-existence (same order as ApproveCompletion) so a
-        // shift in the wrong state always 409s, even when it has no active completion row.
-        if (shift.Status != ShiftStatus.PendingReview)
-            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
-                "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview));
-
-        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
-        if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
+        var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
+        if (error is not null) return error;
 
         var trimmedReason = (dto.Reason ?? string.Empty).Trim(); // JSON null must not NRE
         if (trimmedReason.Length == 0)
@@ -643,15 +630,20 @@ public class RosteringController : ControllerBase
         // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
         // attach a claim to a shift, so the check is structurally unreachable until then.
 
+        var reviewerId = ResolveCurrentUserId();
+        if (reviewerId is null)
+            return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
+                "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
+
         var now = DateTime.UtcNow;
-        completion.ReviewedByUserId = ResolveCurrentUserId();
+        completion!.ReviewedByUserId = reviewerId;
         completion.ReviewedAt = now;
         completion.ReviewOutcome = ReviewOutcome.Returned;
         completion.ReturnReason = trimmedReason;
         completion.IsActive = false;
         completion.UpdatedAt = now;
 
-        shift.Status = ShiftStatus.Published;
+        shift!.Status = ShiftStatus.Published;
         shift.ReturnCount += 1;
         shift.UpdatedAt = now;
 
@@ -913,11 +905,38 @@ public class RosteringController : ControllerBase
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
         => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
 
-    /// <summary>Resolves the reviewing coordinator's own user id from the JWT's NameIdentifier claim.</summary>
-    private Guid ResolveCurrentUserId()
+    /// <summary>
+    /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the
+    /// ActionResult to short-circuit with. Preserves the existing check order: shift-404 ->
+    /// status-409 -> completion-404. Extracted (critique P3) from the identical block previously
+    /// duplicated across ApproveCompletion/ReturnCompletion.
+    /// </summary>
+    private async Task<(Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<ShiftCompletionDto>>? Error)> ResolvePendingReviewCompletionAsync(Guid shiftId, CancellationToken ct)
+    {
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == shiftId, ct);
+        if (shift is null)
+            return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found.")));
+
+        if (shift.Status != ShiftStatus.PendingReview)
+            return (null, null, Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview)));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shiftId && c.IsActive, ct);
+        if (completion is null)
+            return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound)));
+
+        return (shift, completion, null);
+    }
+
+    /// <summary>
+    /// Null when the caller's JWT has no resolvable NameIdentifier claim — previously silently
+    /// fell back to Guid.Empty, which the audit trail would then record as the reviewer (critique
+    /// P3). Callers must check for null and 401 rather than proceed.
+    /// </summary>
+    private Guid? ResolveCurrentUserId()
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+        return Guid.TryParse(claim, out var id) ? id : null;
     }
 
     private async Task<ShiftPatternDto> LoadPatternDtoAsync(Guid id, CancellationToken ct)

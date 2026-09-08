@@ -477,6 +477,33 @@ public class RosteringCompletionReviewTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task ApproveCompletion_ReviewerIdentityUnresolvable_ReturnsUnauthorizedAUTH_USER_MISSING()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        // No NameIdentifier claim at all — an authenticated-but-claimless principal.
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity("Test")) }
+            }
+        };
+
+        var result = await controller.ApproveCompletion(shift.Id, CancellationToken.None);
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(unauthorized.Value);
+        Assert.Equal("AUTH_USER_MISSING", body.Code);
+
+        var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Null(savedCompletion.ReviewedByUserId); // no partial write on the auth failure
+    }
+
     // ── Return ────────────────────────────────────────────────────────
 
     [Fact]

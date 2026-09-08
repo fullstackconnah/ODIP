@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -104,6 +105,24 @@ public class ShiftCompletionStateMachineTests
         var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
         Assert.True(completion.IsActive);
         Assert.Equal(user.Id, completion.SubmittedByUserId);
+    }
+
+    [Fact]
+    public async Task StartShift_LatitudeOutOfRange_Returns400()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        var dto = new StartShiftDto { Latitude = 95m };
+        var context = new ValidationContext(dto);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(dto, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(StartShiftDto.Latitude)));
     }
 
     [Fact]
