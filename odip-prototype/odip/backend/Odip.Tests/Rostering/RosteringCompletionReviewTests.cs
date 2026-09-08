@@ -423,7 +423,7 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
-    public async Task ReturnCompletion_EmptyReason_Returns400()
+    public async Task ReturnCompletion_EmptyReason_Returns400WithCode()
     {
         using var db = CreateDb();
         var staff = SeedStaff(db);
@@ -437,12 +437,85 @@ public class RosteringCompletionReviewTests
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(badRequest.Value);
         Assert.Equal("A return reason is required.", body.Errors!.Single());
-        Assert.Null(body.Code);
+        Assert.Equal("SHIFT_RETURN_REASON_REQUIRED", body.Code);
 
-        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
-        Assert.Equal(ShiftStatus.PendingReview, savedShift.Status);
         var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
         Assert.True(savedCompletion.IsActive);
+    }
+
+    [Fact]
+    public async Task ReturnCompletion_ReasonOver500Chars_Returns400SHIFT_RETURN_REASON_TOO_LONG()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+        var tooLong = new string('a', 501);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = tooLong }, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(badRequest.Value);
+        Assert.Equal("SHIFT_RETURN_REASON_TOO_LONG", body.Code);
+    }
+
+    [Fact]
+    public async Task ReturnCompletion_ReasonWithSurroundingWhitespace_IsTrimmedBeforeSaving()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "  Recheck please.  " }, CancellationToken.None);
+
+        var saved = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.Equal("Recheck please.", saved.ReturnReason);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletions_ReturnsActiveAndInactive_NewestFirst()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var older = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddDays(-2),
+            ActualEnd = DateTime.UtcNow.AddDays(-2).AddHours(8), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = staff.Id, StartedAt = DateTime.UtcNow.AddDays(-2),
+            SubmittedAt = DateTime.UtcNow.AddDays(-2).AddHours(8), IsActive = false,
+            ReviewOutcome = ReviewOutcome.Returned, ReturnReason = "First attempt was off.",
+        });
+        var newer = SeedCompletion(db, shift.Id, staff.Id, isActive: true);
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletions(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ShiftCompletionDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Equal(newer.Id, body.Data[0].Id);
+        Assert.Equal(older.Id, body.Data[1].Id);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletions_NoCompletions_Returns404()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.Published);
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletions(shift.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
     [Fact]

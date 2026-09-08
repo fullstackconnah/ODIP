@@ -163,6 +163,15 @@ public class PortalController : ControllerBase
             .FirstOrDefaultAsync(ct);
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, ct);
 
+        // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
+        // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
+        // why". Most recent Returned row's reason, independent of the current active completion.
+        var lastReturnReason = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id && !c.IsActive && c.ReviewOutcome == ReviewOutcome.Returned)
+            .OrderByDescending(c => c.ReviewedAt)
+            .Select(c => c.ReturnReason)
+            .FirstOrDefaultAsync(ct);
+
         return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
@@ -171,7 +180,8 @@ public class PortalController : ControllerBase
             riskEntries.Select(ToRiskEntryDto).ToList(),
             medications.Select(ToMedicationSummaryDto).ToList(),
             completionDto,
-            shift.ReturnCount);
+            shift.ReturnCount,
+            lastReturnReason);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's

@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Rostering;
 
 namespace Odip.Application.DTOs;
@@ -67,9 +66,8 @@ public record CompletionQueueItemDto(
 
 public record ReturnCompletionDto
 {
-    // F2: no [Required]/MinimumLength — RosteringController.ReturnCompletion's own
-    // IsNullOrWhiteSpace guard owns the empty-reason contract (400 with its existing
-    // message/code), so model-binding validation must not pre-empt it with a generic 400.
-    [StringLength(2000)]
+    // F2: no [Required]/[StringLength] — RosteringController.ReturnCompletion's own empty-
+    // check and 500-char cap own the entire reason-validation contract (both carry a SHIFT_*
+    // code), so model-binding validation must not pre-empt either with a generic, code-less 400.
     public string Reason { get; init; } = string.Empty;
 }

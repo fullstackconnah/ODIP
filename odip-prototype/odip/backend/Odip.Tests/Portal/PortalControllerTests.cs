@@ -301,6 +301,50 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetShiftDetail_PublishedAfterReturn_ExposesLastReturnReason()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        shift.ReturnCount = 1;
+        db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddDays(-1),
+            ActualEnd = DateTime.UtcNow.AddDays(-1).AddHours(8), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = user.Id, StartedAt = DateTime.UtcNow.AddDays(-1),
+            SubmittedAt = DateTime.UtcNow.AddDays(-1).AddHours(8),
+            ReviewedByUserId = Guid.NewGuid(), ReviewedAt = DateTime.UtcNow,
+            ReviewOutcome = ReviewOutcome.Returned, ReturnReason = "Times look wrong, please recheck.",
+            IsActive = false,
+        });
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftDetail(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Equal("Times look wrong, please recheck.", body.Data!.LastReturnReason);
+    }
+
+    [Fact]
+    public async Task GetShiftDetail_NeverReturned_LastReturnReasonIsNull()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftDetail(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value);
+        Assert.Null(body.Data!.LastReturnReason);
+    }
+
+    [Fact]
     public async Task GetShiftDetail_UnfilledShift_NotVisibleToAnyStaff()
     {
         var (db, tenant) = CreateDb();

@@ -535,6 +535,31 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
+    /// Every completion for one shift, active and inactive, newest first — the review history
+    /// PR2's review page needs (critique P2: "the resubmitting worker sees ReturnCount and nothing
+    /// about why" — this is the coordinator-side counterpart). Same 404 rule as
+    /// GetShiftCompletion: no rows for this ShiftId (whether the shift itself doesn't exist, or it
+    /// simply hasn't been started yet) 404s identically — this surface never distinguishes them.
+    /// </summary>
+    [HttpGet("shifts/{id:guid}/completions")]
+    public async Task<ActionResult<ApiResponse<List<ShiftCompletionDto>>>> GetShiftCompletions(Guid id, CancellationToken ct)
+    {
+        var completions = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == id)
+            .OrderByDescending(c => c.SubmittedAt)
+            .ThenByDescending(c => c.StartedAt)
+            .ToListAsync(ct);
+        if (completions.Count == 0)
+            return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found."));
+
+        var thresholdMinutes = VarianceReviewMinutes;
+        var dtos = new List<ShiftCompletionDto>();
+        foreach (var c in completions)
+            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, ct));
+        return Ok(ApiResponse<List<ShiftCompletionDto>>.Ok(dtos));
+    }
+
+    /// <summary>
     /// Office approves a PendingReview shift. 404 if no shift or no active ShiftCompletion; 409
     /// SHIFT_NOT_PENDING_REVIEW if not PendingReview. No notification here — only Finish and
     /// Return raise one (deferred to the notifications spec, out of scope for this PR).
@@ -589,8 +614,11 @@ public class RosteringController : ControllerBase
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
         if (completion is null) return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found."));
 
-        if (string.IsNullOrWhiteSpace(dto.Reason))
-            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required."));
+        var trimmedReason = (dto.Reason ?? string.Empty).Trim(); // JSON null must not NRE
+        if (trimmedReason.Length == 0)
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required.", "SHIFT_RETURN_REASON_REQUIRED"));
+        if (trimmedReason.Length > 500)
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("Return reason must be 500 characters or fewer.", "SHIFT_RETURN_REASON_TOO_LONG"));
 
         // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
         // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
@@ -600,7 +628,7 @@ public class RosteringController : ControllerBase
         completion.ReviewedByUserId = ResolveCurrentUserId();
         completion.ReviewedAt = now;
         completion.ReviewOutcome = ReviewOutcome.Returned;
-        completion.ReturnReason = dto.Reason.Trim();
+        completion.ReturnReason = trimmedReason;
         completion.IsActive = false;
         completion.UpdatedAt = now;
 
