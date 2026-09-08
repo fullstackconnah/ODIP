@@ -435,7 +435,7 @@ public class PortalController : ControllerBase
 
         var duplicate = await _db.LeaveRequests.AnyAsync(l =>
             l.UserId == staffId.Value && l.LeaveType == dto.LeaveType && l.StartDate == dto.StartDate
-            && l.EndDate == dto.EndDate && l.Status != LeaveStatus.Cancelled, ct);
+            && l.EndDate == dto.EndDate && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
         if (duplicate) return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
 
         var leave = new LeaveRequest
@@ -486,7 +486,7 @@ public class PortalController : ControllerBase
         var duplicate = await _db.RecurringUnavailabilities.AnyAsync(r =>
             r.UserId == staffId.Value && r.DayOfWeek == dto.DayOfWeek && r.StartTime == dto.StartTime
             && r.EndTime == dto.EndTime && r.EffectiveFrom == dto.EffectiveFrom && r.EffectiveTo == dto.EffectiveTo
-            && r.Status != LeaveStatus.Cancelled, ct);
+            && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined, ct);
         if (duplicate) return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail("An identical request already exists."));
 
         var rule = new RecurringUnavailability

@@ -42,6 +42,19 @@ public class LeaveControllerTests
         };
     }
 
+    /// <summary>A3 fixture: an authenticated identity with no NameIdentifier claim at all — the case ResolveCallerId now surfaces as null instead of persisting Guid.Empty.</summary>
+    private static LeaveController MakeControllerWithoutNameIdentifier(OdipDbContext db)
+    {
+        var identity = new System.Security.Claims.ClaimsIdentity([], "Test");
+        return new LeaveController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal(identity) }
+            }
+        };
+    }
+
     private static User SeedUser(OdipDbContext db)
     {
         var user = new User
@@ -167,6 +180,46 @@ public class LeaveControllerTests
     }
 
     [Fact]
+    public async Task CreateLeave_AfterDeclined_SameDates_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Declined);
+        var result = await MakeController(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today },
+            CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateLeave_AfterCancelled_SameDates_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Cancelled);
+        var result = await MakeController(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today },
+            CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+    }
+
+    /// <summary>A3 ruling: a missing/unparseable NameIdentifier claim must 401, not silently persist Guid.Empty as the requester.</summary>
+    [Fact]
+    public async Task CreateLeave_NoNameIdentifierClaim_Returns401()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var result = await MakeControllerWithoutNameIdentifier(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today },
+            CancellationToken.None);
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
     public async Task CreateLeave_Valid_LandsApprovedWithRequesterAsDecider()
     {
         using var db = CreateDb();
@@ -203,6 +256,17 @@ public class LeaveControllerTests
         var leave = SeedLeave(db, user.Id, LeaveStatus.Approved);
         var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
         Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    /// <summary>A3 ruling: same as CreateLeave_NoNameIdentifierClaim_Returns401, on the approve path — asserted before any DB mutation.</summary>
+    [Fact]
+    public async Task ApproveLeave_NoNameIdentifierClaim_Returns401()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeControllerWithoutNameIdentifier(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
     [Fact]
@@ -278,15 +342,16 @@ public class LeaveControllerTests
     }
 
     [Theory]
-    [InlineData(LeaveStatus.Declined)]
-    [InlineData(LeaveStatus.Cancelled)]
-    public async Task CancelLeave_FromDeclinedOrCancelled_Returns409(LeaveStatus status)
+    [InlineData(LeaveStatus.Declined, "This request has already been declined.")]
+    [InlineData(LeaveStatus.Cancelled, "This request has already been cancelled.")]
+    public async Task CancelLeave_FromDeclinedOrCancelled_Returns409(LeaveStatus status, string expected)
     {
         using var db = CreateDb();
         var user = SeedUser(db);
         var leave = SeedLeave(db, user.Id, status);
         var result = await MakeController(db).CancelLeave(leave.Id, CancellationToken.None);
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(expected, ((ApiResponse<LeaveRequestDto>)conflict.Value!).Errors!.Single());
     }
 
     // ── Leave: list filters ──
@@ -344,6 +409,20 @@ public class LeaveControllerTests
             new CreateRecurringUnavailabilityDto { UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
             CancellationToken.None);
         Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateUnavailability_AfterDeclined_SameRule_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedRule(db, user.Id, LeaveStatus.Declined);
+        var result = await MakeController(db).CreateUnavailability(
+            new CreateRecurringUnavailabilityDto { UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
     }
 
     [Fact]
@@ -422,5 +501,19 @@ public class LeaveControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<RecurringUnavailabilityDto>>(ok.Value);
         Assert.Equal(LeaveStatus.Cancelled, body.Data!.Status);
+    }
+
+    /// <summary>A2 ruling: mirrors CancelLeave_FromDeclinedOrCancelled_Returns409 — no such theory existed for CancelUnavailability before this task.</summary>
+    [Theory]
+    [InlineData(LeaveStatus.Declined, "This request has already been declined.")]
+    [InlineData(LeaveStatus.Cancelled, "This request has already been cancelled.")]
+    public async Task CancelUnavailability_FromDeclinedOrCancelled_Returns409(LeaveStatus status, string expected)
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, status);
+        var result = await MakeController(db).CancelUnavailability(rule.Id, CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(expected, ((ApiResponse<RecurringUnavailabilityDto>)conflict.Value!).Errors!.Single());
     }
 }
