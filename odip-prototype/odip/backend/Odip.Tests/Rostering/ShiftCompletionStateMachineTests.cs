@@ -108,7 +108,7 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
-    public async Task StartShift_LatitudeOutOfRange_Returns400()
+    public void StartShift_LatitudeOutOfRange_Returns400()
     {
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);

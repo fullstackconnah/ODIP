@@ -620,6 +620,11 @@ public class RosteringController : ControllerBase
         var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
         if (error is not null) return error;
 
+        var reviewerId = ResolveCurrentUserId();
+        if (reviewerId is null)
+            return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
+                "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
+
         var trimmedReason = (dto.Reason ?? string.Empty).Trim(); // JSON null must not NRE
         if (trimmedReason.Length == 0)
             return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("A return reason is required.", ShiftErrorCodes.ShiftReturnReasonRequired));
@@ -629,11 +634,6 @@ public class RosteringController : ControllerBase
         // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
         // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
         // attach a claim to a shift, so the check is structurally unreachable until then.
-
-        var reviewerId = ResolveCurrentUserId();
-        if (reviewerId is null)
-            return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
-                "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;
