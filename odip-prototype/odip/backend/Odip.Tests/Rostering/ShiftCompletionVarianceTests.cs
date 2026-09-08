@@ -38,6 +38,37 @@ public class ShiftCompletionVarianceTests
     }
 
     [Fact]
+    public void ResolveRosteredTimesUtc_SpringForwardGap_DoesNotThrow()
+    {
+        // Sydney DST starts 2026-10-04 02:00 -> 03:00 local (spring forward); a sleepover shift
+        // whose rostered end falls at 02:30 local on that date lands inside the skipped hour.
+        var shift = new Shift
+        {
+            ServiceDate = new DateOnly(2026, 10, 3),
+            StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(2, 30), EndsNextDay = true,
+        };
+
+        var (_, end) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, "Australia/Sydney");
+
+        Assert.Equal(new DateTime(2026, 10, 3, 16, 30, 0, DateTimeKind.Utc), end); // 03:30 AEDT
+    }
+
+    [Fact]
+    public void ResolveRosteredTimesUtc_UnknownTimeZoneId_FallsBackToSydney()
+    {
+        var shift = new Shift
+        {
+            ServiceDate = new DateOnly(2026, 9, 8),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+        };
+
+        var (start, end) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, "Not/A/Real/Zone");
+
+        Assert.Equal(new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc), start);
+        Assert.Equal(new DateTime(2026, 9, 8, 7, 0, 0, DateTimeKind.Utc), end);
+    }
+
+    [Fact]
     public void VarianceMinutes_ActualLaterThanRostered_ReturnsPositiveMinutes()
     {
         var rostered = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc);

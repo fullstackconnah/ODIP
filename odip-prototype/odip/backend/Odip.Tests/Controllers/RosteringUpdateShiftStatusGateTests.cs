@@ -69,6 +69,8 @@ public class RosteringUpdateShiftStatusGateTests
     [InlineData(ShiftStatus.Draft, ShiftStatus.Published)]
     [InlineData(ShiftStatus.Published, ShiftStatus.Draft)]
     [InlineData(ShiftStatus.Draft, ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Draft, ShiftStatus.Cancelled)]
+    [InlineData(ShiftStatus.Published, ShiftStatus.Cancelled)]
     public async Task UpdateShift_DraftPublishedToggle_Succeeds(ShiftStatus from, ShiftStatus to)
     {
         using var db = CreateDb();
@@ -106,5 +108,43 @@ public class RosteringUpdateShiftStatusGateTests
 
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(from, saved.Status); // rejected write must not persist
+    }
+
+    [Fact]
+    public async Task UpdateShift_PendingReview_TimeChange_Returns409()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.PendingReview);
+        var dto = DtoFor(shift, shift.Status) with { StartTime = shift.StartTime.AddHours(1) };
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.UpdateShift(shift.Id, dto, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+        Assert.Equal("SHIFT_TIMES_LOCKED", body.Code);
+
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(shift.StartTime, saved.StartTime); // rejected write must not persist
+    }
+
+    [Fact]
+    public async Task UpdateShift_PendingReview_NonTimeChange_Returns200()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.PendingReview);
+        var dto = DtoFor(shift, shift.Status) with { Notes = "Updated coordinator note." };
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.UpdateShift(shift.Id, dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
+        Assert.Equal("Updated coordinator note.", body.Data!.Notes);
+
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal("Updated coordinator note.", saved.Notes);
     }
 }

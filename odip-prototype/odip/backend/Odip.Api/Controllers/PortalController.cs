@@ -170,7 +170,7 @@ public class PortalController : ControllerBase
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
-    /// identical mapping need stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
+    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
         ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
 
@@ -204,19 +204,26 @@ public class PortalController : ControllerBase
 
         var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         var now = DateTime.UtcNow;
+        var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+
+        // F7: variance-at-start, computed once here so the coordinator queue can show it before
+        // Finish. Finish still recomputes/overwrites VarianceMinutesStart from the final stored
+        // ActualStart — unchanged behaviour there.
+        var (rosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
 
         var completion = new ShiftCompletion
         {
             Id = Guid.NewGuid(),
             ShiftId = shift.Id,
             ActualStart = now,
-            TimeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State),
+            TimeZoneId = timeZoneId,
             StartLatitude = dto.Latitude,
             StartLongitude = dto.Longitude,
             GeolocationDeclined = dto.GeolocationDeclined,
             StartWasManual = false,
             SubmittedByUserId = shift.UserId!.Value,
             StartedAt = now,
+            VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(now, rosteredStartUtc),
             IsActive = true,
         };
         _db.ShiftCompletions.Add(completion);
@@ -224,7 +231,16 @@ public class PortalController : ControllerBase
         shift.Status = ShiftStatus.InProgress;
         shift.UpdatedAt = now;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start.
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+        }
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
@@ -262,12 +278,31 @@ public class PortalController : ControllerBase
                     "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
 
             var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+
+            // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
+            var actualStartUtc = dto.ActualStart.Value.Kind switch
+            {
+                DateTimeKind.Local => dto.ActualStart.Value.ToUniversalTime(),
+                DateTimeKind.Unspecified => DateTime.SpecifyKind(dto.ActualStart.Value, DateTimeKind.Utc),
+                _ => dto.ActualStart.Value,
+            };
+
+            // F3: reject an obviously-wrong client-supplied manual start before it's ever
+            // persisted — can't be in the future, and can't predate the rostered start by more
+            // than a day (generous slack for an overnight/sleepover shift's real start drifting
+            // from its rostered start, without accepting garbage).
+            var (manualRosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
+            if (actualStartUtc > now || actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Actual start time is invalid.", "SHIFT_ACTUAL_START_INVALID"));
+
             completion = new ShiftCompletion
             {
                 Id = Guid.NewGuid(),
                 ShiftId = shift.Id,
-                ActualStart = dto.ActualStart.Value,
-                TimeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State),
+                ActualStart = actualStartUtc,
+                TimeZoneId = timeZoneId,
                 StartWasManual = true,
                 SubmittedByUserId = shift.UserId!.Value,
                 StartedAt = now,

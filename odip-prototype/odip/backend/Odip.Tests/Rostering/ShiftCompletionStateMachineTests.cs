@@ -157,6 +157,26 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
+    public async Task StartShift_SetsVarianceMinutesStart()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        // Published, 09:00-17:00 Australia/Sydney on 2026-09-08 -> rostered start 2026-09-07T23:00Z.
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        var rosteredStartUtc = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc);
+        var expected = (int)Math.Round((completion.ActualStart - rosteredStartUtc).TotalMinutes);
+        Assert.Equal(expected, completion.VarianceMinutesStart);
+        Assert.NotEqual(0, completion.VarianceMinutesStart); // real clock is well past the rostered start in these fixtures
+    }
+
+    [Fact]
     public async Task StartShift_GeolocationDeclined_RecordsDeclineWithNoCoordinates()
     {
         var (db, tenant) = CreateDb();
@@ -273,6 +293,68 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(manualStart, completion.ActualStart);
         Assert.True(completion.StartWasManual);
         Assert.NotEqual(manualStart, completion.StartedAt); // StartedAt is the real Finish-time stamp
+    }
+
+    [Fact]
+    public async Task FinishShift_ManualStart_FutureActualStart_Returns400()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        var futureStart = DateTime.UtcNow.AddHours(1);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { ActualStart = futureStart }, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(badRequest.Value);
+        Assert.Equal("SHIFT_ACTUAL_START_INVALID", body.Code);
+        Assert.Empty(await db.ShiftCompletions.ToListAsync());
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.Published, saved.Status);
+    }
+
+    [Fact]
+    public async Task FinishShift_ManualStart_ActualStartTooEarly_Returns400()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        // Rostered start = 2026-09-08 09:00 Australia/Sydney (AEST, no DST) = 2026-09-07T23:00Z.
+        var tooEarly = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc).AddHours(-25);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { ActualStart = tooEarly }, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(badRequest.Value);
+        Assert.Equal("SHIFT_ACTUAL_START_INVALID", body.Code);
+        Assert.Empty(await db.ShiftCompletions.ToListAsync());
+        var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.Published, saved.Status);
+    }
+
+    [Fact]
+    public async Task FinishShift_ManualStart_UnspecifiedKind_StoredAsUtc()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.Published);
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+        var unspecified = DateTime.SpecifyKind(new DateTime(2026, 9, 7, 23, 10, 0), DateTimeKind.Unspecified);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { ActualStart = unspecified }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(DateTimeKind.Utc, completion.ActualStart.Kind);
+        Assert.Equal(unspecified.Ticks, completion.ActualStart.Ticks);
     }
 
     [Theory]

@@ -298,6 +298,29 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task ReturnCompletion_EmptyReason_Returns400()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "" }, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(badRequest.Value);
+        Assert.Equal("A return reason is required.", body.Errors!.Single());
+        Assert.Null(body.Code);
+
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.PendingReview, savedShift.Status);
+        var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.True(savedCompletion.IsActive);
+    }
+
+    [Fact]
     public async Task ReturnCompletion_ShiftNotPendingReview_Returns409()
     {
         using var db = CreateDb();
@@ -345,5 +368,62 @@ public class RosteringCompletionReviewTests
         Assert.False(old.IsActive);
         var fresh = allCompletions.Single(c => c.Id != firstCompletion.Id);
         Assert.True(fresh.IsActive);
+    }
+
+    // ── Cross-tenant isolation (F9) ──────────────────────────────────
+
+    [Fact]
+    public async Task ApproveCompletion_OtherTenant_Returns404()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        // Seed under tenant B — a real (non-super-admin) tenant context so SaveChangesAsync
+        // auto-stamps TenantId on every ITenantEntity row (see OdipDbContext.SaveChangesAsync).
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        Guid shiftId, completionId;
+        using (var seedDb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            var staff = SeedStaff(seedDb);
+            var participant = SeedParticipant(seedDb);
+            var shift = SeedShift(seedDb, participant.Id, staff.Id, ShiftStatus.PendingReview);
+            var completion = SeedCompletion(seedDb, shift.Id, staff.Id);
+            shiftId = shift.Id;
+            completionId = completion.Id;
+        }
+
+        // Query as tenant A — same pattern as CurrentTenantTests, but scoped (non-super-admin).
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(options, tenantAContext.Object);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+
+        var result = await controller.ApproveCompletion(shiftId, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+
+        // Verify tenant B's data is untouched — read back with a super-admin context so the
+        // tenant filter doesn't hide it.
+        var superAdminContext = new Mock<ICurrentTenant>();
+        superAdminContext.Setup(t => t.TenantId).Returns((Guid?)null);
+        superAdminContext.Setup(t => t.IsSuperAdmin).Returns(true);
+        using var verifyDb = new OdipDbContext(options, superAdminContext.Object);
+        var completionAfter = await verifyDb.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        Assert.Null(completionAfter.ReviewedByUserId);
+        Assert.Null(completionAfter.ReviewOutcome);
+        var shiftAfter = await verifyDb.Shifts.SingleAsync(s => s.Id == shiftId);
+        Assert.Equal(ShiftStatus.PendingReview, shiftAfter.Status);
     }
 }

@@ -60,6 +60,9 @@ public record CompletionQueueItemDto(
 
 public record ReturnCompletionDto
 {
-    [Required, StringLength(2000, MinimumLength = 1)]
+    // F2: no [Required]/MinimumLength — RosteringController.ReturnCompletion's own
+    // IsNullOrWhiteSpace guard owns the empty-reason contract (400 with its existing
+    // message/code), so model-binding validation must not pre-empt it with a generic 400.
+    [StringLength(2000)]
     public string Reason { get; init; } = string.Empty;
 }

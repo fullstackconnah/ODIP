@@ -98,7 +98,7 @@ public class OdipDbContext : DbContext
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
 
-    /// <summary>Shift-completion state machine: see <see cref="Entities.ShiftCompletion"/>'s type doc.</summary>
+    /// <summary>Shift-completion state machine: see <see cref="Rostering.ShiftCompletion"/>'s type doc.</summary>
     public DbSet<ShiftCompletion> ShiftCompletions => Set<ShiftCompletion>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();

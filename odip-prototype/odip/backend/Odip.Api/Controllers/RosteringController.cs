@@ -354,9 +354,21 @@ public class RosteringController : ControllerBase
 
         if (dto.Status != shift.Status
             && !(shift.Status is ShiftStatus.Draft or ShiftStatus.Published
-                 && dto.Status is ShiftStatus.Draft or ShiftStatus.Published))
+                 && dto.Status is ShiftStatus.Draft or ShiftStatus.Published or ShiftStatus.Cancelled))
             return Conflict(ApiResponse<ShiftDto>.Fail(
                 "Status can only be changed via the shift-completion endpoints.", "STATUS_TRANSITION_VIA_COMPLETION"));
+
+        // F6: once a shift has moved past Published (worker has started it), its rostered
+        // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
+        // variance is computed against those values, so editing them out from under an
+        // in-flight or already-reviewed completion would silently invalidate it. Every other
+        // field (Notes, Ratio, NightType, StaffId, etc.) remains editable on these statuses.
+        if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed
+            && (dto.ServiceDate != shift.ServiceDate || dto.StartTime != shift.StartTime
+                || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
+            return Conflict(ApiResponse<ShiftDto>.Fail(
+                "Shift times cannot be changed after the shift has started. Return the completion to the worker first.",
+                "SHIFT_TIMES_LOCKED"));
 
         var candidate = new Shift
         {
@@ -824,7 +836,7 @@ public class RosteringController : ControllerBase
     };
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
-    /// identical mapping need stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
+    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
         => ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
 

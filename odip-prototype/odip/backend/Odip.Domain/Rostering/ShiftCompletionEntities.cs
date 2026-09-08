@@ -104,12 +104,35 @@ public static class ShiftVarianceCalculator
 {
     public static (DateTime RosteredStartUtc, DateTime RosteredEndUtc) ResolveRosteredTimesUtc(Shift shift, string timeZoneId)
     {
-        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        TimeZoneInfo tz;
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            // F5: an unresolvable/corrupt IANA id must never 500 the whole request — fall back
+            // to the same zone StateTimeZoneMap.Resolve defaults to for an unmatched state.
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        }
+
         var rosteredStartLocal = shift.ServiceDate.ToDateTime(shift.StartTime, DateTimeKind.Unspecified);
         var endDate = shift.EndsNextDay ? shift.ServiceDate.AddDays(1) : shift.ServiceDate;
         var rosteredEndLocal = endDate.ToDateTime(shift.EndTime, DateTimeKind.Unspecified);
 
-        return (TimeZoneInfo.ConvertTimeToUtc(rosteredStartLocal, tz), TimeZoneInfo.ConvertTimeToUtc(rosteredEndLocal, tz));
+        return (ToUtcSafe(rosteredStartLocal, tz), ToUtcSafe(rosteredEndLocal, tz));
+    }
+
+    /// <summary>
+    /// F5: a rostered local time can land inside a spring-forward gap (the clock skips an hour,
+    /// e.g. 02:00-03:00 doesn't exist on the day DST starts) — TimeZoneInfo.ConvertTimeToUtc
+    /// throws for those. Skew one hour later into the first valid instant rather than fail the
+    /// whole completion flow over an edge-of-DST rostered time.
+    /// </summary>
+    private static DateTime ToUtcSafe(DateTime local, TimeZoneInfo tz)
+    {
+        if (tz.IsInvalidTime(local)) local = local.AddHours(1);
+        return TimeZoneInfo.ConvertTimeToUtc(local, tz);
     }
 
     public static int VarianceMinutes(DateTime actualUtc, DateTime rosteredUtc) =>
