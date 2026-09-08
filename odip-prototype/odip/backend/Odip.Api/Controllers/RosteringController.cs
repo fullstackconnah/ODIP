@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Api.Rostering;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
@@ -667,7 +668,7 @@ public class RosteringController : ControllerBase
         return false;
     }
 
-    private static RosterFindingDto ToFindingDto(RosterFinding f) => new() { Code = f.Code, Severity = f.Severity, Message = f.Message, RequiresReason = f.RequiresReason };
+    private static RosterFindingDto ToFindingDto(RosterFinding f) => RosterGate.ToFindingDto(f);
 
     private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
@@ -791,41 +792,15 @@ public class RosteringController : ControllerBase
     /// cell looks tentative without ever having asked for input). Returns the 422 response body
     /// to return, or null when the write may proceed.
     /// </summary>
-    private ApiResponse<List<RosterFindingDto>>? EvaluateFindings(List<RosterFinding> findings, string? overrideReason)
-    {
-        if (findings.Count == 0) return null;
-
-        var findingDtos = findings.Select(ToFindingDto).ToList();
-        var errors = findings.Select(f => f.Message).ToList();
-
-        if (findings.Any(f => f.Severity == RosterFindingSeverity.Blocking))
-        {
-            return ApiResponse<List<RosterFindingDto>>.Fail(
-                findingDtos, errors, "One or more blocking findings prevent this shift from being saved.");
-        }
-
-        if (findings.Any(f => f.RequiresReason) && string.IsNullOrWhiteSpace(overrideReason))
-        {
-            return ApiResponse<List<RosterFindingDto>>.Fail(
-                findingDtos, errors, "This shift has warnings that must be acknowledged with an override reason before it can be saved.");
-        }
-
-        return null;
-    }
+    private ApiResponse<List<RosterFindingDto>>? EvaluateFindings(List<RosterFinding> findings, string? overrideReason) =>
+        RosterGate.EvaluateFindings(findings, overrideReason);
 
     /// <summary>Persists (or clears) the override fields to match the outcome <see cref="EvaluateFindings"/> already approved.</summary>
     private static void ApplyOverride(Shift shift, List<RosterFinding> findings, string? overrideReason, List<string>? acknowledgedCodes)
     {
-        if (findings.Count == 0)
-        {
-            shift.OverrideReason = null;
-            shift.AcknowledgedFindingCodes = null;
-            return;
-        }
-
-        shift.OverrideReason = overrideReason;
-        var codes = acknowledgedCodes is { Count: > 0 } ? acknowledgedCodes : findings.Select(f => f.Code).Distinct();
-        shift.AcknowledgedFindingCodes = string.Join(",", codes);
+        var (reason, codes) = RosterGate.ComputeOverride(findings, overrideReason, acknowledgedCodes);
+        shift.OverrideReason = reason;
+        shift.AcknowledgedFindingCodes = codes;
     }
 
     /// <summary>Staff-level compliance for the board row, evaluated once at the week's Monday — independent of any specific shift's findings.</summary>
