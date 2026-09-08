@@ -98,6 +98,9 @@ public class RosteringUpdateShiftStatusGateTests
     [InlineData(ShiftStatus.Completed, ShiftStatus.Published)]
     [InlineData(ShiftStatus.Cancelled, ShiftStatus.Completed)]
     [InlineData(ShiftStatus.Cancelled, ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.InProgress, ShiftStatus.Cancelled)]
+    [InlineData(ShiftStatus.PendingReview, ShiftStatus.Cancelled)]
+    [InlineData(ShiftStatus.Completed, ShiftStatus.Cancelled)]
     public async Task UpdateShift_AnyOtherStatusJump_Returns409_WithStatusTransitionCode(ShiftStatus from, ShiftStatus to)
     {
         using var db = CreateDb();

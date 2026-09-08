@@ -669,6 +669,27 @@ public class RosteringCompletionReviewTests
         Assert.Equal(ShiftStatus.Completed, savedShift.Status);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(100)]
+    public async Task ApproveBatch_SizeBoundaries_Accepted(int count)
+    {
+        using var db = CreateDb();
+        var controller = MakeController(db);
+        var ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
+
+        var result = await controller.ApproveBatch(new ApproveBatchDto(ids), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(ok.Value);
+        Assert.Equal(count, body.Data!.Count);
+        Assert.All(body.Data, r =>
+        {
+            Assert.False(r.Approved);
+            Assert.Null(r.Code); // shift-missing 404 stays code-less per the codebase-wide "Shift not found." convention
+        });
+    }
+
     // ── Return ────────────────────────────────────────────────────────
 
     [Fact]
