@@ -97,6 +97,9 @@ public class OdipDbContext : DbContext
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
+
+    /// <summary>Shift-completion state machine: see <see cref="Entities.ShiftCompletion"/>'s type doc.</summary>
+    public DbSet<ShiftCompletion> ShiftCompletions => Set<ShiftCompletion>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
@@ -1119,6 +1122,30 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.ShiftId });
         });
 
+        // ── ShiftCompletion (shift-completion state machine) ────────
+        modelBuilder.Entity<ShiftCompletion>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(100);
+            entity.Property(e => e.ReturnReason).HasMaxLength(2000);
+
+            // Restrict: same idiom as ShiftNote -> Shift — a shift's completion history must
+            // not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftId });
+
+            // "At most one active" per Shift — mirrors CaregiverProfileSubmission's
+            // partial-index precedent (OdipDbContext.cs:~650-653).
+            entity.HasIndex(e => e.ShiftId)
+                .IsUnique()
+                .HasDatabaseName("IX_ShiftCompletions_ShiftId_Active")
+                .HasFilter("\"IsActive\"");
+        });
+
         // ── LeaveRequest ─────────────────────────────────────────
         modelBuilder.Entity<LeaveRequest>(entity =>
         {
@@ -1537,6 +1564,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ShiftNote>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftNote>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftCompletion>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftCompletion>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()
