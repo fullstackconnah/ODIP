@@ -117,7 +117,8 @@ public record PortalShiftDetailDto(
     List<ParticipantRiskEntryDto> RiskEntries,
     List<PortalMedicationSummaryDto> Medications,
     ShiftCompletionDto? Completion,
-    int ReturnCount);
+    int ReturnCount,
+    string? LastReturnReason);
 
 /// <summary>
 /// A medication administration OR an incident report (IN-7) awaiting (or already given) the

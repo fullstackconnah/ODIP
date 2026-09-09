@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -46,12 +48,16 @@ public class PortalController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
+    private readonly IConfiguration? _config;
 
-    public PortalController(OdipDbContext db, ICurrentTenant currentTenant)
+    public PortalController(OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _config = config;
     }
+
+    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
 
     /// <summary>
     /// The caller's own upcoming shifts (and, if cheap, trip staffing assignments) in
@@ -111,19 +117,10 @@ public class PortalController : ControllerBase
     [HttpGet("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> GetShiftDetail(Guid id, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        // INTAKE-08: same defence-in-depth draft exclusion as GetMyShifts above — treat it
-        // identically to "no participant at all" rather than surfacing a draft's detail.
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
-
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
     }
 
     /// <summary>
@@ -158,6 +155,15 @@ public class PortalController : ControllerBase
             .FirstOrDefaultAsync(ct);
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, ct);
 
+        // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
+        // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
+        // why". Most recent Returned row's reason, independent of the current active completion.
+        var lastReturnReason = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id && !c.IsActive && c.ReviewOutcome == ReviewOutcome.Returned)
+            .OrderByDescending(c => c.ReviewedAt)
+            .Select(c => c.ReturnReason)
+            .FirstOrDefaultAsync(ct);
+
         return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
@@ -166,13 +172,35 @@ public class PortalController : ControllerBase
             riskEntries.Select(ToRiskEntryDto).ToList(),
             medications.Select(ToMedicationSummaryDto).ToList(),
             completionDto,
-            shift.ReturnCount);
+            shift.ReturnCount,
+            lastReturnReason);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
-        ShiftCompletionMapper.ToDtoAsync(_db, c, ct);
+        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
+
+    /// <summary>
+    /// Resolves one of the caller's own shifts (Participant included, draft-excluded — same rule
+    /// as every portal shift read), or the 404 ActionResult to short-circuit with. Extracted
+    /// (critique P3) from the identical block previously duplicated across GetShiftDetail/
+    /// StartShift/FinishShift.
+    /// </summary>
+    private async Task<(Shift? Shift, ActionResult<ApiResponse<PortalShiftDetailDto>>? Error)> ResolveOwnedShiftAsync(Guid id, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
+
+        var shift = await _db.Shifts
+            .Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
+
+        return (shift, null);
+    }
 
     // ══════════════════════════════════════════════════════════════
     // SHIFT COMPLETION (design spec §2/§3)
@@ -188,19 +216,33 @@ public class PortalController : ControllerBase
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartShift(
         Guid id, [FromBody] StartShiftDto dto, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        if (shift!.Status != ShiftStatus.Published)
+        {
+            // Idempotent replay: a worker's retry after a dropped response must read as success, not
+            // as a repeat failure (critique P1). SHIFT_NOT_STARTABLE now means only "the database
+            // rejected a racing double-Start" — see the DbUpdateException catch below.
+            if (shift.Status == ShiftStatus.InProgress)
+                return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
 
-        if (shift.Status != ShiftStatus.Published)
+            if (shift.Status == ShiftStatus.PendingReview)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished));
+
+            if (shift.Status == ShiftStatus.Completed)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted));
+
+            if (shift.Status == ShiftStatus.Cancelled)
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
+
+            // Draft
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
+        }
 
         var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         var now = DateTime.UtcNow;
@@ -235,11 +277,13 @@ public class PortalController : ControllerBase
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.ConstraintName == ShiftCompletion.ActiveIndexName)
         {
-            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start.
+            // Partial unique index IX_ShiftCompletions_ShiftId_Active rejects a racing second Start —
+            // narrowed (critique P3) from catching every DbUpdateException, which mapped any
+            // unrelated DB failure to the same misleading "can't be started" message.
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift can't be started right now.", "SHIFT_NOT_STARTABLE"));
+                "This shift can't be started right now.", ShiftErrorCodes.ShiftNotStartable));
         }
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
@@ -253,20 +297,30 @@ public class PortalController : ControllerBase
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishShift(
         Guid id, [FromBody] FinishShiftDto dto, CancellationToken ct)
     {
-        var staffId = await ResolveCurrentStaffIdAsync(ct);
-        if (staffId is null)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
 
-        var shift = await _db.Shifts
-            .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
-            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        // Idempotent replay / already-elsewhere guards, checked before the note-required gate — none
+        // of these states can be fixed by adding a note, so the note gate would be a misleading error.
+        if (shift!.Status == ShiftStatus.PendingReview)
+            return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+
+        if (shift.Status == ShiftStatus.Completed)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted));
+
+        if (shift.Status == ShiftStatus.Cancelled)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
+
+        if (shift.Status == ShiftStatus.Draft)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
 
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
         if (!hasNote)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "Add a shift note before finishing.", "SHIFT_NOTE_REQUIRED"));
+                "Add a shift note before finishing.", ShiftErrorCodes.ShiftNoteRequired));
 
         var now = DateTime.UtcNow;
         ShiftCompletion completion;
@@ -275,7 +329,7 @@ public class PortalController : ControllerBase
         {
             if (dto.ActualStart is null)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                    "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
             var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
             var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
@@ -293,9 +347,14 @@ public class PortalController : ControllerBase
             // than a day (generous slack for an overnight/sleepover shift's real start drifting
             // from its rostered start, without accepting garbage).
             var (manualRosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
-            if (actualStartUtc > now || actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+            // F3, hardened: split into two distinct causes (critique P1 — "never says which bound
+            // failed") plus a 5-minute grace on the future side for ordinary device clock skew.
+            if (actualStartUtc > now.AddMinutes(5))
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "Actual start time is invalid.", "SHIFT_ACTUAL_START_INVALID"));
+                    "Actual start time can't be in the future.", ShiftErrorCodes.ShiftActualStartInFuture));
+            if (actualStartUtc < manualRosteredStartUtc.AddHours(-24))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Actual start time can't be more than 24 hours before the rostered start.", ShiftErrorCodes.ShiftActualStartTooEarly));
 
             completion = new ShiftCompletion
             {
@@ -316,13 +375,13 @@ public class PortalController : ControllerBase
                 .FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
             if (existing is null)
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                    "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                    "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
             completion = existing;
         }
         else
         {
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been started.", "SHIFT_NOT_IN_PROGRESS"));
+                "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
         }
 
         completion.ActualEnd = now;

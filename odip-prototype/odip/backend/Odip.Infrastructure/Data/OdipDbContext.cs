@@ -1055,6 +1055,8 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.UserId, e.ServiceDate });
             // Pattern generation idempotency check: "does this pattern already have a shift on this date".
             entity.HasIndex(e => new { e.ShiftPatternId, e.ServiceDate });
+            // Review-queue filter (design spec §2, GetCompletions): status + date-range scan, tenant-scoped.
+            entity.HasIndex(e => new { e.TenantId, e.Status, e.ServiceDate });
         });
 
         // ── ShiftPattern ─────────────────────────────────────────
@@ -1142,7 +1144,7 @@ public class OdipDbContext : DbContext
             // partial-index precedent (OdipDbContext.cs:~650-653).
             entity.HasIndex(e => e.ShiftId)
                 .IsUnique()
-                .HasDatabaseName("IX_ShiftCompletions_ShiftId_Active")
+                .HasDatabaseName(ShiftCompletion.ActiveIndexName)
                 .HasFilter("\"IsActive\"");
         });
 

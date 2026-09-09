@@ -18,6 +18,11 @@ public enum ReviewOutcome
 /// </summary>
 public class ShiftCompletion : ITenantEntity
 {
+    /// <summary>Database name of the partial unique index enforcing one active completion per shift
+    /// (OdipDbContext + migration 20260908113607). PortalController.StartShift matches this name on
+    /// PostgresException.ConstraintName to turn a racing double-Start into 409 SHIFT_NOT_STARTABLE.</summary>
+    public const string ActiveIndexName = "IX_ShiftCompletions_ShiftId_Active";
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
 
