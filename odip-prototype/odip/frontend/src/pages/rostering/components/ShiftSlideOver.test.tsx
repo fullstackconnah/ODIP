@@ -189,7 +189,7 @@ describe('ShiftSlideOver override gate', () => {
     expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
   })
 
-  it('renders the override-reason field as optional when the only Warning present does not require a reason', () => {
+  it('hides the override-reason field entirely when the only Warning present does not require a reason', () => {
     const shift = makeShift({
       findings: [makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })],
       overrideReason: null,
@@ -204,8 +204,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    const field = screen.getByLabelText(/reason for override/i)
-    expect(field).not.toHaveAttribute('aria-required', 'true')
+    // A soft warning alone must never summon the override-reason box — that was the bug being
+    // fixed by routing this through the shared RosterGateFields (see RosterGateFields.tsx).
+    expect(screen.queryByLabelText(/reason for override/i)).not.toBeInTheDocument()
   })
 })
 
