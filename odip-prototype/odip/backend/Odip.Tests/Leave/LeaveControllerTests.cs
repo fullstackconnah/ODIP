@@ -301,14 +301,21 @@ public class LeaveControllerTests
         Assert.Contains(body.Data.Overlaps, o => o.Code == "TRIP_OVERLAP");
     }
 
+    /// <summary>Product ruling (2026-09-09): a decline reason is optional, not required — levelled
+    /// down to match cancel, which has never demanded one. This replaces the old
+    /// DeclineLeave_NoNote_Returns400, which encoded the now-reversed "reason mandatory" rule.</summary>
     [Fact]
-    public async Task DeclineLeave_NoNote_Returns400()
+    public async Task DeclineLeave_NoNote_Succeeds()
     {
         using var db = CreateDb();
         var user = SeedUser(db);
         var leave = SeedLeave(db, user.Id);
         var result = await MakeController(db).DeclineLeave(leave.Id, new LeaveDecisionDto(), CancellationToken.None);
-        Assert.IsType<BadRequestObjectResult>(result.Result);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(ok.Value);
+        Assert.Equal(LeaveStatus.Declined, body.Data!.Status);
+        Assert.Null(body.Data.DecisionNote);
     }
 
     [Fact]
@@ -478,14 +485,21 @@ public class LeaveControllerTests
         Assert.Contains(body.Data.Overlaps, o => o.Code == "SHIFT_OVERLAP");
     }
 
+    /// <summary>Product ruling (2026-09-09): mirrors DeclineLeave_NoNote_Succeeds — a decline
+    /// reason is optional here too, not required. Replaces the old
+    /// DeclineUnavailability_NoNote_Returns400, which encoded the now-reversed rule.</summary>
     [Fact]
-    public async Task DeclineUnavailability_NoNote_Returns400()
+    public async Task DeclineUnavailability_NoNote_Succeeds()
     {
         using var db = CreateDb();
         var user = SeedUser(db);
         var rule = SeedRule(db, user.Id);
         var result = await MakeController(db).DeclineUnavailability(rule.Id, new LeaveDecisionDto(), CancellationToken.None);
-        Assert.IsType<BadRequestObjectResult>(result.Result);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityDto>>(ok.Value);
+        Assert.Equal(LeaveStatus.Declined, body.Data!.Status);
+        Assert.Null(body.Data.DecisionNote);
     }
 
     [Theory]

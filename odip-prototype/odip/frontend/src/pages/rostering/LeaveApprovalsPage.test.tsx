@@ -139,17 +139,20 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
   })
 
-  it('requires a decline reason before submitting', async () => {
+  // Product ruling (2026-09-09): a decline reason is optional, not required — levelled down to
+  // match cancel, which has never demanded one. Replaces the old "requires a decline reason
+  // before submitting" test, which encoded the now-reversed rule.
+  it('declines with a blank reason', async () => {
     const user = userEvent.setup()
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeclineLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Declined' }))
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^decline$/i }))
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
-    expect(mockDeclineLeaveMutateAsync).not.toHaveBeenCalled()
-    expect(within(dialog).getByText(/a decline reason is required/i)).toBeInTheDocument()
+    expect(mockDeclineLeaveMutateAsync).toHaveBeenCalledWith({ id: 'leave-1', data: { decisionNote: '' } })
   })
 
   it('declines with a note', async () => {

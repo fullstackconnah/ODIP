@@ -137,10 +137,6 @@ export default function LeaveApprovalsPage() {
   async function handleDeclineConfirm() {
     if (!declineTarget) return
     setDeclineError(null)
-    if (!declineNote.trim()) {
-      setDeclineError('A decline reason is required.')
-      return
-    }
     try {
       if (declineTarget.rowKind === 'leave') await declineLeave.mutateAsync({ id: declineTarget.data.id, data: { decisionNote: declineNote.trim() } })
       else await declineUnavailability.mutateAsync({ id: declineTarget.data.id, data: { decisionNote: declineNote.trim() } })
@@ -337,7 +333,7 @@ export default function LeaveApprovalsPage() {
           <div className="space-y-2">
             <p>{declineTarget ? `Decline ${rowType(declineTarget).toLowerCase()} for ${declineTarget.data.userFullName}?` : ''}</p>
             <label className="block text-sm text-[var(--color-foreground)]">
-              Reason <span className="text-[var(--color-destructive)]">*</span>
+              Reason (optional)
               <textarea value={declineNote} onChange={e => setDeclineNote(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm" />
             </label>
             {declineError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{declineError}</p>}

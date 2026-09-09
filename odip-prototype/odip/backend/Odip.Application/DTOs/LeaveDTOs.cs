@@ -39,7 +39,7 @@ public record CreateLeaveRequestDto
 
 public record LeaveDecisionDto
 {
-    /// <summary>Required (400 if blank) on decline. Unused on approve/cancel.</summary>
+    /// <summary>Optional on decline — a coordinator may record why, but it's never required. Unused on approve/cancel.</summary>
     public string? DecisionNote { get; init; }
 }
 
