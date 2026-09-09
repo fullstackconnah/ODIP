@@ -24,7 +24,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 import { usePublicCaregiverForm, useSaveCaregiverDraft, useSubmitCaregiverForm } from '@/api/hooks/caregiver'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup,
 } from '@/components/wizard'
 import {
@@ -177,6 +177,10 @@ export default function CaregiverWizardPage() {
       />
 
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} noValidate>
+        <WizardStepHeading
+          stepKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
+          label={wizard.isReviewStep ? 'Review' : wizard.currentStep.label}
+        />
         {!wizard.isReviewStep && wizard.currentStep.key === 'aboutYou' && (
           <AboutYouStep register={register} errors={errors} />
         )}
