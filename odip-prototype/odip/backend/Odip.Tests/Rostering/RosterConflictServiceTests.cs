@@ -791,4 +791,122 @@ public class RosterConflictServiceTests
 
         Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
     }
+
+    // ── CheckVehicleAssignment ───────────────────────────────
+
+    private static Vehicle CompliantVehicle(int totalSeats = 10, int wheelchairPositions = 2) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        VehicleName = "Bus 1",
+        VehicleType = VehicleType.Bus,
+        TotalSeats = totalSeats,
+        WheelchairPositions = wheelchairPositions,
+    };
+
+    private static VehicleCheckContext VehicleContext(
+        Vehicle vehicle,
+        IReadOnlyList<VehicleAssignmentWindow>? otherAssignments = null,
+        int participantCount = 0,
+        int wheelchairCount = 0) => new(
+        Vehicle: vehicle,
+        OtherAssignments: otherAssignments ?? Array.Empty<VehicleAssignmentWindow>(),
+        ParticipantCount: participantCount,
+        WheelchairCount: wheelchairCount);
+
+    [Fact]
+    public void CheckVehicleAssignment_OverlappingOtherTrip_FiresVehicleDoubleBooked_AsBlocking()
+    {
+        var vehicle = CompliantVehicle();
+        var other = new VehicleAssignmentWindow(Guid.NewGuid(), new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 13));
+        var ctx = VehicleContext(vehicle, otherAssignments: new[] { other });
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(RosterConflictService.VehicleDoubleBooked, finding.Code);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_NonOverlappingOtherTrip_FiresNoFindings()
+    {
+        var vehicle = CompliantVehicle();
+        var other = new VehicleAssignmentWindow(Guid.NewGuid(), new DateOnly(2026, 9, 20), new DateOnly(2026, 9, 22));
+        var ctx = VehicleContext(vehicle, otherAssignments: new[] { other });
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_ExcludedAssignmentId_DoesNotDoubleBookAgainstItself()
+    {
+        var vehicle = CompliantVehicle();
+        var selfId = Guid.NewGuid();
+        var self = new VehicleAssignmentWindow(selfId, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12));
+        var ctx = VehicleContext(vehicle, otherAssignments: new[] { self });
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), selfId, ctx);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_ParticipantsExceedSeats_FiresVehicleOverSeats_AsRequiresReasonWarning()
+    {
+        var vehicle = CompliantVehicle(totalSeats: 5);
+        var ctx = VehicleContext(vehicle, participantCount: 6);
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(RosterConflictService.VehicleOverSeats, finding.Code);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.True(finding.RequiresReason);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_ParticipantsWithinSeats_FiresNoFindings()
+    {
+        var vehicle = CompliantVehicle(totalSeats: 5);
+        var ctx = VehicleContext(vehicle, participantCount: 5);
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_WheelchairUsersExceedPositions_FiresVehicleOverWheelchair_AsRequiresReasonWarning()
+    {
+        var vehicle = CompliantVehicle(wheelchairPositions: 1);
+        var ctx = VehicleContext(vehicle, wheelchairCount: 2);
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(RosterConflictService.VehicleOverWheelchair, finding.Code);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.True(finding.RequiresReason);
+    }
+
+    [Fact]
+    public void CheckVehicleAssignment_WheelchairUsersWithinPositions_FiresNoFindings()
+    {
+        var vehicle = CompliantVehicle(wheelchairPositions: 2);
+        var ctx = VehicleContext(vehicle, wheelchairCount: 2);
+
+        var findings = new RosterConflictService().CheckVehicleAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.Empty(findings);
+    }
 }

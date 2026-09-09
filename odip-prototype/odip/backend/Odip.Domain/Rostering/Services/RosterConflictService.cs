@@ -40,6 +40,27 @@ public sealed record RosterCheckContext(
     CompatibilityLevel Compatibility,
     decimal WeeklyHoursThreshold);
 
+/// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
+/// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
+/// lets the candidate's own prior row be excluded on an update, the same way
+/// <see cref="RosterCheckContext.TripAssignments"/> works for staff.</summary>
+public sealed record VehicleAssignmentWindow(Guid AssignmentId, DateOnly Start, DateOnly End);
+
+/// <summary>
+/// Everything <see cref="RosterConflictService.CheckVehicleAssignment"/> needs to evaluate the
+/// vehicle rules against a candidate <see cref="VehicleAssignment"/>. Callers assemble this from
+/// Infrastructure queries — the service itself does no I/O.
+/// </summary>
+/// <param name="Vehicle">The vehicle being considered for the candidate trip.</param>
+/// <param name="OtherAssignments">This vehicle's other, non-cancelled/unavailable trip windows.</param>
+/// <param name="ParticipantCount">Confirmed participants booked on the candidate's trip.</param>
+/// <param name="WheelchairCount">Confirmed participants on the candidate's trip who require a wheelchair position.</param>
+public sealed record VehicleCheckContext(
+    Vehicle Vehicle,
+    IReadOnlyList<VehicleAssignmentWindow> OtherAssignments,
+    int ParticipantCount,
+    int WheelchairCount);
+
 /// <summary>
 /// Pure domain rule engine for rostering a candidate <see cref="Shift"/>. Every finding is
 /// Warning except <see cref="WscExpired"/>, the one regulatory hard stop — a worker screening
@@ -68,6 +89,9 @@ public sealed class RosterConflictService
     public const string CompetencyMissing = "COMPETENCY_MISSING";
     public const string RatioShortfall = "RATIO_SHORTFALL";
     public const string OverHours = "OVER_HOURS";
+    public const string VehicleDoubleBooked = "VEHICLE_DOUBLE_BOOKED";
+    public const string VehicleOverSeats = "VEHICLE_OVER_SEATS";
+    public const string VehicleOverWheelchair = "VEHICLE_OVER_WHEELCHAIR";
 
     /// <summary>Runs every rule against <paramref name="candidate"/> and returns every finding that fires.</summary>
     public IReadOnlyList<RosterFinding> Check(Shift candidate, RosterCheckContext ctx)
@@ -112,6 +136,54 @@ public sealed class RosterConflictService
         CheckDoubleBookedShiftForWindow(window, Guid.Empty, ctx, findings);
         CheckDoubleBookedTripForRange(assignmentStart, assignmentEnd, excludeAssignmentId, ctx, findings);
         CheckStaffUnavailableForWindow(window, assignmentStart, ctx, findings);
+
+        return findings;
+    }
+
+    /// <summary>
+    /// Vehicle-side analogue of <see cref="Check(Shift, RosterCheckContext)"/>/
+    /// <see cref="CheckStaffAssignment"/> for a candidate <see cref="VehicleAssignment"/>. Exactly
+    /// three rules per the 2026-09-09 audit ruling — servicing windows, registration and insurance
+    /// expiry were explicitly rejected and must not be added here:
+    /// 1. The same vehicle assigned to two trips whose time windows overlap — Blocking.
+    /// 2. Participants on the trip exceed the vehicle's <see cref="Vehicle.TotalSeats"/> — RequiresReason.
+    /// 3. Wheelchair users on the trip exceed the vehicle's <see cref="Vehicle.WheelchairPositions"/> — RequiresReason.
+    /// excludeAssignmentId is the assignment's own prior Id on an update (or Guid.Empty for a
+    /// brand-new candidate / the dry-run check), so an assignment never conflicts with itself.
+    /// </summary>
+    public IReadOnlyList<RosterFinding> CheckVehicleAssignment(
+        DateOnly tripStart, DateOnly tripEnd, Guid excludeAssignmentId, VehicleCheckContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        var findings = new List<RosterFinding>();
+        var vehicle = ctx.Vehicle;
+
+        foreach (var other in ctx.OtherAssignments)
+        {
+            if (other.AssignmentId == excludeAssignmentId)
+                continue;
+
+            if (other.Start <= tripEnd && tripStart <= other.End)
+            {
+                findings.Add(new RosterFinding(VehicleDoubleBooked, RosterFindingSeverity.Blocking,
+                    $"{vehicle.VehicleName} is already assigned to a trip covering {Fmt(other.Start)}-{Fmt(other.End)}."));
+            }
+        }
+
+        if (ctx.ParticipantCount > vehicle.TotalSeats)
+        {
+            findings.Add(new RosterFinding(VehicleOverSeats, RosterFindingSeverity.Warning,
+                $"{vehicle.VehicleName} seats {vehicle.TotalSeats} but this trip has {ctx.ParticipantCount} participants.",
+                RequiresReason: true));
+        }
+
+        if (ctx.WheelchairCount > vehicle.WheelchairPositions)
+        {
+            findings.Add(new RosterFinding(VehicleOverWheelchair, RosterFindingSeverity.Warning,
+                $"{vehicle.VehicleName} has {vehicle.WheelchairPositions} wheelchair position(s) but this trip has {ctx.WheelchairCount} wheelchair users.",
+                RequiresReason: true));
+        }
 
         return findings;
     }
