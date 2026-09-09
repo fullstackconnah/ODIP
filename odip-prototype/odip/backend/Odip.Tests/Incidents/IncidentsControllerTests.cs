@@ -1041,4 +1041,48 @@ public class IncidentsControllerTests
         var closedItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(closedOk.Value);
         Assert.Contains(closedItems.Data!, i => i.Id == incident.Id);
     }
+
+    // ── Ordering: IncidentDateTime tiebreaker ────────────────────────────────
+
+    /// <summary>
+    /// Correctness fix: IncidentDateTime is user-entered and collision-prone, so two incidents can
+    /// legitimately share the exact same value. Without a unique tiebreaker, Skip/Take over ties is
+    /// non-deterministic — a tied row can land on two different pages (duplicate) or neither
+    /// (vanishes) across separate query executions. Asserts that GetAll's
+    /// `.OrderByDescending(IncidentDateTime).ThenBy(Id)` resolves ties to the same, repeatable
+    /// order (ascending Id) across two independent calls.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_TiedIncidentDateTime_OrdersStablyByIdAcrossRepeatedCalls()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var tiedDateTime = new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc);
+        var dtoA = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { IncidentDateTime = tiedDateTime };
+        var dtoB = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { IncidentDateTime = tiedDateTime };
+        await controller.Create(dtoA, CancellationToken.None);
+        await controller.Create(dtoB, CancellationToken.None);
+
+        var tiedIncidents = await db.IncidentReports.Where(i => i.IncidentDateTime == tiedDateTime).ToListAsync();
+        Assert.Equal(2, tiedIncidents.Count);
+        // The tiebreaker orders ties ascending by Id (ThenBy, not ThenByDescending) regardless of
+        // the primary OrderByDescending direction — this is the expected, documented resolution.
+        var expectedTiedOrder = tiedIncidents.OrderBy(i => i.Id).Select(i => i.Id).ToList();
+
+        var firstCall = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+        var firstItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!;
+
+        var secondCall = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+        var secondItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!;
+
+        var firstTiedOrder = firstItems.Where(i => i.IncidentDateTime == tiedDateTime).Select(i => i.Id).ToList();
+        var secondTiedOrder = secondItems.Where(i => i.IncidentDateTime == tiedDateTime).Select(i => i.Id).ToList();
+
+        Assert.Equal(expectedTiedOrder, firstTiedOrder);
+        Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
 }

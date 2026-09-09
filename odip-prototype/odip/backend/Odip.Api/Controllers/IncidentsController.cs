@@ -168,7 +168,14 @@ public class IncidentsController : ControllerBase
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
 
-        var items = await query.OrderByDescending(i => i.IncidentDateTime)
+        // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
+        // trivially collision-prone — two incidents can share the exact same value. With no
+        // tiebreaker, SQL makes no ordering guarantee among rows that tie on the only ORDER BY
+        // key, so two independent Skip/Take executions (page 1, page 2) can each resolve the tied
+        // group differently — a row can land on both pages (duplicate) or neither (vanishes).
+        // .Id is a unique Guid primary key, so ThenBy(i => i.Id) makes the total order
+        // deterministic and safe to paginate.
+        var items = await query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
             .Select(i => new IncidentListDto
             {
                 Id = i.Id,
