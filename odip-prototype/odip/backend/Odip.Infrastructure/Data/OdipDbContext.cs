@@ -404,6 +404,9 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.DriverUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.Property(e => e.OverrideReason).HasMaxLength(2000);
+            entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+
             entity.HasIndex(e => e.Status);
         });
 
