@@ -49,7 +49,7 @@ public record ShiftCompletionDto(
     int VarianceMinutesEnd,
     bool IsOutlierVariance,
     int VarianceReviewMinutes,
-    int ReturnCount);
+    int ShiftReturnCount);
 
 public record CompletionQueueItemDto(
     Guid ShiftId,
