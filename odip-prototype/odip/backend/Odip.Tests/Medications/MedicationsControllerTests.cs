@@ -903,4 +903,52 @@ public class MedicationsControllerTests
             .Single();
         Assert.Equal("Admin,Coordinator,SuperAdmin", authorizeAttr.Roles);
     }
+
+    // ── GetRegister ordering: (LastName, Name) tiebreaker ────────────────────────────
+
+    /// <summary>
+    /// Correctness fix: GetRegister orders by (Participant.LastName, Name), and both can tie —
+    /// two different participants can share a surname, or one participant can have two
+    /// medications with the same name. Without a unique tiebreaker, Skip/Take over ties is
+    /// non-deterministic. Asserts GetRegister's
+    /// `.OrderBy(LastName).ThenBy(Name).ThenBy(Id)` resolves ties to the same, repeatable order
+    /// (ascending Id) across two independent calls. Mirrors
+    /// IncidentsControllerTests.GetAll_TiedIncidentDateTime_OrdersStablyByIdAcrossRepeatedCalls.
+    /// </summary>
+    [Fact]
+    public async Task GetRegister_TiedLastNameAndMedicationName_OrdersStablyByIdAcrossRepeatedCalls()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participantA = SeedParticipant(db, "Sophie", "Brown");
+        var participantB = SeedParticipant(db, "Harrison", "Brown");
+        var medA = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantA.Id, Name = "Panadol",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        var medB = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantB.Id, Name = "Panadol",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.AddRange(medA, medB);
+        db.SaveChanges();
+
+        var expectedTiedOrder = new[] { medA, medB }.OrderBy(m => m.Id).Select(m => m.Id).ToList();
+
+        var controller = new MedicationsController(db, tenant);
+        var firstCall = await controller.GetRegister(null, null, CancellationToken.None);
+        var firstItems = Assert.IsType<ApiResponse<List<MedicationListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!;
+
+        var secondCall = await controller.GetRegister(null, null, CancellationToken.None);
+        var secondItems = Assert.IsType<ApiResponse<List<MedicationListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!;
+
+        var firstTiedOrder = firstItems.Where(m => m.Name == "Panadol").Select(m => m.Id).ToList();
+        var secondTiedOrder = secondItems.Where(m => m.Name == "Panadol").Select(m => m.Id).ToList();
+
+        Assert.Equal(expectedTiedOrder, firstTiedOrder);
+        Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
 }

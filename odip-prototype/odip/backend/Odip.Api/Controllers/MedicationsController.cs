@@ -197,7 +197,15 @@ public class MedicationsController : ControllerBase
                 || (m.Participant!.PreferredName != null && m.Participant.PreferredName.Contains(search)));
         }
 
-        var items = await query.OrderBy(m => m.Participant!.LastName).ThenBy(m => m.Name).ToListAsync(ct);
+        // Correctness fix: (Participant.LastName, Name) ties trivially — two different
+        // participants can share a surname, or one participant can have two medications with the
+        // same name. With no unique tiebreaker, SQL makes no ordering guarantee among rows that
+        // tie on the ORDER BY key, so two independent Skip/Take executions (once this endpoint is
+        // paginated) can resolve a tied group differently — a row can land on both pages
+        // (duplicate) or neither (vanishes). .Id is a unique Guid primary key, so ThenBy(m => m.Id)
+        // makes the total order deterministic and safe to paginate. Mirrors
+        // IncidentsController.GetAll's identical fix.
+        var items = await query.OrderBy(m => m.Participant!.LastName).ThenBy(m => m.Name).ThenBy(m => m.Id).ToListAsync(ct);
         var result = items.Select(m => ToListDto(m, FullName(m.Participant))).ToList();
         return Ok(ApiResponse<List<MedicationListDto>>.Ok(result));
     }
