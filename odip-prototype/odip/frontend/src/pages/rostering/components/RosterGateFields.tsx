@@ -55,6 +55,22 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
 
   return (
     <>
+      {/* Findings arrive from an async server-side conflict check (POST /shifts/check and
+          equivalents), which otherwise gives a screen-reader user no signal that a check ran or
+          that conflicts appeared/cleared. This sr-only live region announces just that change —
+          a count/severity summary, not the finding text itself (that's already reachable via the
+          visible FindingsList right below, in normal reading order) — whenever the findings
+          count actually updates. Polite, not assertive: a conflict finding here is something to
+          review, not an emergency interrupt. No role="status" here deliberately — callers (e.g.
+          ShiftSlideOver's staff-compatibility notice) already use role="status" for their own
+          single non-blocking notice and assert on there being exactly one/zero status elements. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {findings.length === 0
+          ? 'Roster check complete: no conflicts found.'
+          : `Roster check complete: ${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}` +
+            (blockingFindings.length > 0 ? `, ${blockingFindings.length} blocking` : '') + '.'}
+      </div>
+
       {findings.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Findings</p>
