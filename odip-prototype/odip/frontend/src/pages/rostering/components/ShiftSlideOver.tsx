@@ -427,6 +427,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             onOverrideReasonChange={setOverrideReason}
             reasonRequired={reasonRequired}
             forceVisible={!!existing?.overrideReason}
+            showOnAnyWarning
             disabled={!canWrite}
           />
 

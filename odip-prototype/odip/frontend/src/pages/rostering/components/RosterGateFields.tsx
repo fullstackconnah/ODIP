@@ -15,6 +15,18 @@ export interface RosterGateFieldsProps {
    * made. Defaults to false, which preserves today's behaviour at the 3 existing call sites.
    */
   forceVisible?: boolean
+  /**
+   * Show the override-reason field (optional — `required` stays keyed to reasonRequiredFindings
+   * only) whenever ANY Warning-severity finding is present, not just a reason-required one — a
+   * Blocking-only findings set does NOT trigger this (Blocking already refuses the save outright,
+   * so there's nothing to leave a voluntary note about). The roster board (ShiftSlideOver) sets
+   * this: it has always invited a voluntary override note on any warning, and in an NDIS context
+   * that note is audit evidence, so this behaviour is deliberate there. The trip-side call sites
+   * (StaffAssignModal, StaffTab) do NOT set this — trip-side assignment only asks for a reason
+   * when a finding actually demands one. The two surfaces differ on purpose; this prop states
+   * that decision instead of leaving it as silent drift between them. Defaults to false.
+   */
+  showOnAnyWarning?: boolean
   /** Disables the override-reason textarea — mirrors the write-permission check every other field
    * in these forms gets from its caller. Defaults to false (enabled). */
   disabled?: boolean
@@ -30,14 +42,16 @@ export interface RosterGateFieldsProps {
  * aria-describedby wiring every other field in these forms gets.
  *
  * The override-reason field shows whenever a live finding actually requires a reason
- * (reasonRequiredFindings.length > 0) — a soft Warning finding alone must never summon it on its
- * own — or when forceVisible is set, for a record that already carries a persisted reason a
- * coordinator should be able to read and amend even once the finding that originally required it
- * is gone.
+ * (reasonRequiredFindings.length > 0, in which case it's required) — a soft Warning finding
+ * alone must never FORCE it on its own — or when forceVisible is set, for a record that already
+ * carries a persisted reason a coordinator should be able to read and amend even once the
+ * finding that originally required it is gone — or, when the caller opts in via
+ * showOnAnyWarning, whenever any Warning finding is present at all (still optional in that case).
  */
-export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, disabled }: RosterGateFieldsProps) {
+export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, showOnAnyWarning, disabled }: RosterGateFieldsProps) {
   const { reasonRequiredFindings, blockingFindings } = getRosterGate(findings)
-  const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible
+  const hasWarningFinding = findings.some(f => f.severity === 'Warning')
+  const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible || (!!showOnAnyWarning && hasWarningFinding)
 
   return (
     <>
