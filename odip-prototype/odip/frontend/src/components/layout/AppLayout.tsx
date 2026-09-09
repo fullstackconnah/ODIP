@@ -308,7 +308,14 @@ export default function AppLayout() {
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              <button className="p-2 rounded-full hover:bg-[#efeeea] transition-colors">
+              {/* Placeholder pending the notifications feature (next on the roadmap) — disabled
+                  rather than removed, so the control is honest about doing nothing right now
+                  instead of silently absorbing clicks. */}
+              <button
+                className="p-2 rounded-full hover:bg-[#efeeea] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                aria-label="Notifications"
+                disabled
+              >
                 <span className="material-symbols-outlined text-[#396200]" style={{ fontSize: '22px' }}>notifications</span>
               </button>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] flex items-center justify-center text-white font-bold text-sm shadow-md">
