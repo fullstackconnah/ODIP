@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
+import { toTruncatableList } from './pagedList'
 import type {
   ParticipantListDto,
   ParticipantDetailDto,
@@ -12,12 +13,25 @@ import type {
   PagedResult,
 } from '../types'
 
+/**
+ * ParticipantsController clamps `pageSize` to a ceiling of 200 (`Math.Clamp(pageSize, 1, 200)`).
+ * `useParticipants` requests that ceiling explicitly rather than accepting the server's much
+ * smaller `pageSize = 50` default — see the UX-audit-round-2 fix for PagedResult call sites that
+ * were silently dropping rows past the default page. The resolved array also carries
+ * `totalCount`/`isTruncated` (see `pagedList.ts`) so a caller like `ParticipantPicker` can tell the
+ * user when even the 200-row ceiling didn't cover every participant.
+ */
+const PARTICIPANTS_MAX_PAGE_SIZE = 200
+
 export function useParticipants(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['participants', params],
     queryFn: async () => {
-      const result = await apiGet<PagedResult<ParticipantListDto>>('/participants', params)
-      return result.items
+      const result = await apiGet<PagedResult<ParticipantListDto>>('/participants', {
+        pageSize: String(PARTICIPANTS_MAX_PAGE_SIZE),
+        ...params,
+      })
+      return toTruncatableList(result)
     },
   })
 }

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut, apiClient } from '../client'
+import { toTruncatableList } from './pagedList'
 import type {
   FundingSourceDto,
   CreateFundingSourceDto,
@@ -18,6 +19,15 @@ import type {
   PagedResult,
 } from '../types'
 
+/**
+ * BillingController clamps every list endpoint's `pageSize` to a ceiling of 200
+ * (`Math.Clamp(pageSize, 1, 200)`). The hooks below request that ceiling explicitly rather than
+ * accepting the server's much smaller `pageSize = 50` default — see the UX-audit-round-2 fix for
+ * PagedResult call sites that were silently dropping rows past the default page. Each resolved
+ * array also carries `totalCount`/`isTruncated` (see `pagedList.ts`) for any caller that needs it.
+ */
+const BILLING_MAX_PAGE_SIZE = 200
+
 // ══════════════════════════════════════════════════════════════
 // FUNDING SOURCES
 // ══════════════════════════════════════════════════════════════
@@ -26,8 +36,11 @@ export function useFundingSources(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['funding-sources', params],
     queryFn: async () => {
-      const result = await apiGet<PagedResult<FundingSourceDto>>('/billing/funding-sources', params)
-      return result.items
+      const result = await apiGet<PagedResult<FundingSourceDto>>('/billing/funding-sources', {
+        pageSize: String(BILLING_MAX_PAGE_SIZE),
+        ...params,
+      })
+      return toTruncatableList(result)
     },
   })
 }
@@ -57,8 +70,11 @@ export function useServiceBookings(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['service-bookings', params],
     queryFn: async () => {
-      const result = await apiGet<PagedResult<ServiceBookingListDto>>('/billing/service-bookings', params)
-      return result.items
+      const result = await apiGet<PagedResult<ServiceBookingListDto>>('/billing/service-bookings', {
+        pageSize: String(BILLING_MAX_PAGE_SIZE),
+        ...params,
+      })
+      return toTruncatableList(result)
     },
   })
 }
@@ -87,8 +103,11 @@ export function useBillableEvents(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['billable-events', params],
     queryFn: async () => {
-      const result = await apiGet<PagedResult<BillableEventDto>>('/billing/billable-events', params)
-      return result.items
+      const result = await apiGet<PagedResult<BillableEventDto>>('/billing/billable-events', {
+        pageSize: String(BILLING_MAX_PAGE_SIZE),
+        ...params,
+      })
+      return toTruncatableList(result)
     },
   })
 }
@@ -118,8 +137,11 @@ export function useClaimBatches(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['claim-batches', params],
     queryFn: async () => {
-      const result = await apiGet<PagedResult<ClaimBatchListDto>>('/billing/claim-batches', params)
-      return result.items
+      const result = await apiGet<PagedResult<ClaimBatchListDto>>('/billing/claim-batches', {
+        pageSize: String(BILLING_MAX_PAGE_SIZE),
+        ...params,
+      })
+      return toTruncatableList(result)
     },
   })
 }

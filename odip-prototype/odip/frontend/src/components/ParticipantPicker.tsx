@@ -1,4 +1,5 @@
 import { useParticipants } from '@/api/hooks'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { SearchableSelect, type SearchableSelectItem } from '@/components/SearchableSelect'
 import type { ParticipantListDto } from '@/api/types/participants'
 
@@ -30,6 +31,11 @@ export type ParticipantPickerProps = {
  *
  * Loading/empty states pass straight through to `SearchableSelect`'s own `loading`/`emptyMessage`,
  * driven by the query's `isLoading`/`data`.
+ *
+ * `useParticipants` requests the server's page-size ceiling (200) rather than its much smaller
+ * default, but a tenant can still exceed that ceiling — the returned array's `isTruncated`/
+ * `totalCount` (see `pagedList.ts`) surface that case as a visible notice below the field instead
+ * of silently hiding the rest of the list.
  */
 export function ParticipantPicker({
   value,
@@ -47,6 +53,9 @@ export function ParticipantPicker({
   'aria-describedby': ariaDescribedBy,
 }: ParticipantPickerProps) {
   const { data: participants = [], isLoading } = useParticipants(excludeDrafts ? { isDraft: 'false' } : undefined)
+  // `participants` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
+  // while loading is a plain array without those extra fields — read them as optional.
+  const { isTruncated = false, totalCount = 0 } = participants as Partial<TruncatableList<ParticipantListDto>>
 
   const items: SearchableSelectItem[] = [
     ...(allowNone ? [{ value: '', label: noneLabel }] : []),
@@ -54,20 +63,27 @@ export function ParticipantPicker({
   ]
 
   return (
-    <SearchableSelect
-      id={id}
-      aria-labelledby={ariaLabelledBy}
-      aria-required={ariaRequired}
-      aria-invalid={ariaInvalid}
-      aria-describedby={ariaDescribedBy}
-      value={value}
-      onChange={onChange}
-      onBlur={onBlur}
-      disabled={disabled}
-      loading={isLoading}
-      placeholder={placeholder}
-      emptyMessage="No participants available"
-      items={items}
-    />
+    <div>
+      <SearchableSelect
+        id={id}
+        aria-labelledby={ariaLabelledBy}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        value={value}
+        onChange={onChange}
+        onBlur={onBlur}
+        disabled={disabled}
+        loading={isLoading}
+        placeholder={placeholder}
+        emptyMessage="No participants available"
+        items={items}
+      />
+      {isTruncated && (
+        <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+          Showing the first {participants.length} of {totalCount} participants — refine your search to find someone else.
+        </p>
+      )}
+    </div>
   )
 }
