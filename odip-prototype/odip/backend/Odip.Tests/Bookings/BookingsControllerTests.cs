@@ -109,4 +109,44 @@ public class BookingsControllerTests
         Assert.Equal(participant.Id, body.Data!.ParticipantId);
         Assert.Single(await db.ParticipantBookings.ToListAsync());
     }
+
+    // ── GetAll ordering: BookingDate tiebreaker ────────────────────────────
+
+    /// <summary>
+    /// Correctness fix: BookingDate is a plain date (not a timestamp), so many bookings created
+    /// the same day tie on GetAll's sole OrderByDescending key. Without a unique tiebreaker,
+    /// Skip/Take over ties is non-deterministic. Asserts GetAll's
+    /// `.OrderByDescending(BookingDate).ThenBy(Id)` resolves ties to the same, repeatable order
+    /// (ascending Id) across two independent calls. Mirrors
+    /// IncidentsControllerTests.GetAll_TiedIncidentDateTime_OrdersStablyByIdAcrossRepeatedCalls.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_TiedBookingDate_OrdersStablyByIdAcrossRepeatedCalls()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var participantA = SeedParticipant(db, firstName: "Sophie", lastName: "Brown");
+        var participantB = SeedParticipant(db, firstName: "Harrison", lastName: "Lee");
+        var controller = new BookingsController(db);
+
+        var tiedDate = new DateOnly(2026, 9, 1);
+        await controller.Create(BookingDto(trip.Id, participantA.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+        await controller.Create(BookingDto(trip.Id, participantB.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+
+        var tiedBookings = await db.ParticipantBookings.Where(b => b.BookingDate == tiedDate).ToListAsync();
+        Assert.Equal(2, tiedBookings.Count);
+        var expectedTiedOrder = tiedBookings.OrderBy(b => b.Id).Select(b => b.Id).ToList();
+
+        var firstCall = await controller.GetAll(tripId: null, status: null, CancellationToken.None);
+        var firstItems = Assert.IsType<ApiResponse<List<BookingListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!;
+
+        var secondCall = await controller.GetAll(tripId: null, status: null, CancellationToken.None);
+        var secondItems = Assert.IsType<ApiResponse<List<BookingListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!;
+
+        var firstTiedOrder = firstItems.Where(b => b.BookingDate == tiedDate).Select(b => b.Id).ToList();
+        var secondTiedOrder = secondItems.Where(b => b.BookingDate == tiedDate).Select(b => b.Id).ToList();
+
+        Assert.Equal(expectedTiedOrder, firstTiedOrder);
+        Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
 }

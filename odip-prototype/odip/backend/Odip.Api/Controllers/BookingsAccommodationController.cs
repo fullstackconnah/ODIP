@@ -25,7 +25,14 @@ public class BookingsController : ControllerBase
         if (tripId.HasValue) query = query.Where(b => b.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(b => b.BookingStatus == status.Value);
 
-        var items = await query.OrderByDescending(b => b.BookingDate)
+        // Correctness fix: BookingDate is a plain date (not a timestamp) and many bookings are
+        // created on the same day, so ties on the sole OrderByDescending key are common. With no
+        // tiebreaker, SQL makes no ordering guarantee among tied rows, so two independent
+        // Skip/Take executions (page 1, page 2) can each resolve the tied group differently — a
+        // row can land on both pages (duplicate) or neither (vanishes). .Id is a unique Guid
+        // primary key, so ThenBy(b => b.Id) makes the total order deterministic and safe to
+        // paginate. Mirrors IncidentsController.GetAll's identical fix.
+        var items = await query.OrderByDescending(b => b.BookingDate).ThenBy(b => b.Id)
             .Select(b => new BookingListDto
             {
                 Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
