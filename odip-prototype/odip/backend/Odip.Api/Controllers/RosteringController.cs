@@ -663,9 +663,14 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// Approves up to 100 PendingReview shifts in one call (critique P3 — "no batch approve"; the
     /// queue previously had no way to clear a day's clean submissions at once). Each id follows
-    /// exactly the single-approve rules via ResolvePendingReviewCompletionAsync — a failure on one
-    /// id doesn't abort the batch. One SaveChangesAsync at the end; overall response is always 200
-    /// even when some items failed, since the response body itself reports per-item outcome.
+    /// exactly the single-approve rules via <see cref="ResolvePendingReviewCompletion"/> — a
+    /// failure on one id doesn't abort the batch. Two bulk queries load every shift/completion the
+    /// batch could need up front (critique M3 — this used to run
+    /// ResolvePendingReviewCompletionAsync per id, up to 2N round-trips) instead of querying per
+    /// id; the classification rules themselves are shared with the single-approve/return path via
+    /// ResolvePendingReviewCompletion, so per-item results/codes are unchanged. One
+    /// SaveChangesAsync at the end; overall response is always 200 even when some items failed,
+    /// since the response body itself reports per-item outcome.
     /// </summary>
     [HttpPost("completions/approve-batch")]
     public async Task<ActionResult<ApiResponse<List<ApproveBatchResultDto>>>> ApproveBatch(
@@ -684,9 +689,23 @@ public class RosteringController : ControllerBase
         var results = new List<ApproveBatchResultDto>();
 
         // De-dup: EF identity resolution would hand the second occurrence the already-approved tracked entity and report a false SHIFT_NOT_PENDING_REVIEW.
-        foreach (var shiftId in dto.ShiftIds.Distinct())
+        var distinctIds = dto.ShiftIds.Distinct().ToList();
+
+        // Two bulk queries instead of up to 2N round-trips (critique M3). completionsByShiftId is
+        // a superset of what every id actually needs (it doesn't pre-filter on shift status), but
+        // that's cheaper than querying per id and doesn't change the outcome below.
+        var shiftsById = await _db.Shifts
+            .Where(s => distinctIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+        var completionsByShiftId = await _db.ShiftCompletions
+            .Where(c => distinctIds.Contains(c.ShiftId) && c.IsActive)
+            .ToDictionaryAsync(c => c.ShiftId, ct);
+
+        foreach (var shiftId in distinctIds)
         {
-            var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(shiftId, ct);
+            shiftsById.TryGetValue(shiftId, out var shift);
+            completionsByShiftId.TryGetValue(shiftId, out var completion);
+            var (resolvedShift, resolvedCompletion, error) = ResolvePendingReviewCompletion(shift, completion);
             if (error is not null)
             {
                 var (code, message) = ExtractBatchFailure(error);
@@ -694,13 +713,13 @@ public class RosteringController : ControllerBase
                 continue;
             }
 
-            completion!.ReviewedByUserId = reviewerId;
-            completion.ReviewedAt = now;
-            completion.ReviewOutcome = ReviewOutcome.Approved;
-            completion.UpdatedAt = now;
+            resolvedCompletion!.ReviewedByUserId = reviewerId;
+            resolvedCompletion.ReviewedAt = now;
+            resolvedCompletion.ReviewOutcome = ReviewOutcome.Approved;
+            resolvedCompletion.UpdatedAt = now;
 
-            shift!.Status = ShiftStatus.Completed;
-            shift.UpdatedAt = now;
+            resolvedShift!.Status = ShiftStatus.Completed;
+            resolvedShift.UpdatedAt = now;
 
             results.Add(new ApproveBatchResultDto(shiftId, true, null, null));
         }
@@ -972,6 +991,20 @@ public class RosteringController : ControllerBase
     private async Task<(Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<ShiftCompletionDto>>? Error)> ResolvePendingReviewCompletionAsync(Guid shiftId, CancellationToken ct)
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == shiftId, ct);
+        var completion = shift is not null && shift.Status == ShiftStatus.PendingReview
+            ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shiftId && c.IsActive, ct)
+            : null;
+        return ResolvePendingReviewCompletion(shift, completion);
+    }
+
+    /// <summary>
+    /// The pure classification rules ResolvePendingReviewCompletionAsync applies, extracted
+    /// (critique M3) so ApproveBatch can run them in memory over shift/completion dictionaries it
+    /// loaded with two bulk queries instead of calling the async, per-id version 2N times. Same
+    /// check order as before: shift-404 -&gt; status-409 -&gt; completion-404.
+    /// </summary>
+    private (Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<ShiftCompletionDto>>? Error) ResolvePendingReviewCompletion(Shift? shift, ShiftCompletion? completion)
+    {
         if (shift is null)
             return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found.")));
 
@@ -979,7 +1012,6 @@ public class RosteringController : ControllerBase
             return (null, null, Conflict(ApiResponse<ShiftCompletionDto>.Fail(
                 "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview)));
 
-        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shiftId && c.IsActive, ct);
         if (completion is null)
             return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound)));
 
