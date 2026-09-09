@@ -56,13 +56,10 @@ export default function SchedulePage() {
     queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
   }
 
-  const handleVehicleAssign = (assignData: CreateVehicleAssignmentDto) => {
-    vehicleAssign.mutate(assignData, {
-      onSuccess: () => {
-        setAssignModal(null)
-        queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
-      },
-    })
+  const handleVehicleAssign = async (assignData: CreateVehicleAssignmentDto) => {
+    await vehicleAssign.mutateAsync(assignData)
+    setAssignModal(null)
+    queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
   }
 
   const toggleStaff = (id: string) => {

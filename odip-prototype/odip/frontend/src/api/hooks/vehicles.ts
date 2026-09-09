@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
+import { apiGet, apiPost, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type {
   VehicleListDto,
   VehicleDetailDto,
@@ -7,6 +7,8 @@ import type {
   UpdateVehicleDto,
   VehicleAssignmentDto,
   CreateVehicleAssignmentDto,
+  CheckVehicleAssignmentDto,
+  RosterFindingDto,
 } from '../types'
 
 export function useVehicles(params?: Record<string, string>) {
@@ -57,6 +59,17 @@ export function useDeleteVehicle() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/vehicles/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicles'] }),
+  })
+}
+
+/**
+ * Dry-run findings for a candidate vehicle assignment — a POST that writes nothing. Mirrors
+ * useCheckStaffAssignment (staff.ts). Used by VehicleAssignModal to preview findings for the fixed
+ * vehicle/trip pairing the modal opened with.
+ */
+export function useCheckVehicleAssignment() {
+  return useMutation({
+    mutationFn: (data: CheckVehicleAssignmentDto) => apiPost<RosterFindingDto[]>('/vehicle-assignments/check', data),
   })
 }
 

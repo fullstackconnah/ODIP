@@ -1,34 +1,77 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Truck, X } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
-import type { ScheduleVehicleDto, ScheduleTripDto, ScheduleStaffDto, CreateVehicleAssignmentDto } from '@/api/types'
+import { useCheckVehicleAssignment, getRosterFindings } from '@/api/hooks'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
+import type { ScheduleVehicleDto, ScheduleTripDto, ScheduleStaffDto, CreateVehicleAssignmentDto, RosterFindingDto } from '@/api/types'
 
 interface VehicleAssignModalProps {
   vehicle: ScheduleVehicleDto
   trip: ScheduleTripDto
   staff: ScheduleStaffDto[]
   onClose: () => void
-  onAssign: (data: CreateVehicleAssignmentDto) => void
+  onAssign: (data: CreateVehicleAssignmentDto) => Promise<void>
   isLoading: boolean
 }
 
 export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAssign, isLoading }: VehicleAssignModalProps) {
   const [driverStaffId, setDriverStaffId] = useState('')
   const [comments, setComments] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
+  const [findings, setFindings] = useState<RosterFindingDto[]>([])
+  const [reasonRequired, setReasonRequired] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const eligibleDrivers = staff?.filter((s: ScheduleStaffDto) => s.isDriverEligible) || []
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const checkAssignment = useCheckVehicleAssignment()
+
+  // Live dry-run: vehicle and trip are fixed props for this modal's whole lifetime — one
+  // un-debounced check on mount is enough, mirroring StaffAssignModal. Never writes —
+  // POST /vehicle-assignments/check is a pure preview.
+  useEffect(() => {
+    checkAssignment.mutate(
+      { vehicleId: vehicle.id, tripInstanceId: trip.id },
+      { onSuccess: setFindings },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle.id, trip.id])
+
+  const gate = getRosterGate(findings)
+  const isBusy = isLoading
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onAssign({
-      tripInstanceId: trip.id,
-      vehicleId: vehicle.id,
-      driverStaffId: driverStaffId || undefined,
-      seatRequirement: undefined,
-      wheelchairPositionRequirement: undefined,
-      comments: comments || undefined,
-    })
+    setError(null)
+    if (gate.isBlocked) return
+    if (gate.needsReason && !overrideReason.trim()) {
+      setReasonRequired(true)
+      return
+    }
+    setReasonRequired(false)
+
+    try {
+      await onAssign({
+        tripInstanceId: trip.id,
+        vehicleId: vehicle.id,
+        driverStaffId: driverStaffId || undefined,
+        seatRequirement: undefined,
+        wheelchairPositionRequirement: undefined,
+        comments: comments || undefined,
+        overrideReason: overrideReason.trim() || undefined,
+        acknowledgedFindingCodes: findings.map(f => f.code),
+      })
+    } catch (err: unknown) {
+      const serverFindings = getRosterFindings(err)
+      if (serverFindings) {
+        setFindings(serverFindings)
+        if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
+      } else {
+        setError('Something went wrong assigning this vehicle. Please try again.')
+      }
+    }
   }
 
   return (
@@ -79,14 +122,28 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
               className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
           </div>
+
+          <RosterGateFields
+            findings={findings}
+            overrideReason={overrideReason}
+            onOverrideReasonChange={setOverrideReason}
+            reasonRequired={reasonRequired}
+          />
+
+          {error && (
+            <div role="alert" className="rounded-[1rem] bg-[#ffdad6]/50 px-3 py-2 text-sm text-[#ba1a1a]">
+              {error}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 px-4 py-2.5 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-high)] transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={isLoading}
+            <button type="submit" disabled={isBusy || gate.isBlocked}
               className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#396200] to-[#4d7c0f] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-              {isLoading ? 'Assigning...' : 'Assign Vehicle'}
+              {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
             </button>
           </div>
         </form>
