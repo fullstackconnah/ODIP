@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { FormField } from '@/components/FormField'
 import { FindingsList } from './FindingsList'
 import { getRosterGate } from '../lib/rosterGate'
@@ -53,6 +54,20 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
   const hasWarningFinding = findings.some(f => f.severity === 'Warning')
   const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible || (!!showOnAnyWarning && hasWarningFinding)
 
+  const reasonTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const wasReasonRequiredRef = useRef(reasonRequired)
+  // Move focus to the reason textarea on a failed save (reasonRequired flips false -> true) so a
+  // screen-reader or keyboard user isn't left with silence and focus stuck wherever it was. Only
+  // fires on that transition — never on first render (wasReasonRequiredRef starts at the initial
+  // value, so an already-true initial state doesn't steal focus) and never again while the error
+  // stays showing, since the ref is updated every run regardless of whether focus moved.
+  useEffect(() => {
+    if (reasonRequired && !wasReasonRequiredRef.current) {
+      reasonTextareaRef.current?.focus()
+    }
+    wasReasonRequiredRef.current = reasonRequired
+  }, [reasonRequired])
+
   return (
     <>
       {/* Findings arrive from an async server-side conflict check (POST /shifts/check and
@@ -85,6 +100,7 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
           error={reasonRequired ? 'A reason is required to save over the warnings marked “Reason required”.' : undefined}
         >
           <textarea
+            ref={reasonTextareaRef}
             rows={2}
             value={overrideReason}
             disabled={disabled}
