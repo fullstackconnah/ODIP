@@ -185,9 +185,12 @@ public class MedicationsController : ControllerBase
     // ── Register (across participants) ─────────────────────────────
 
     [HttpGet("medications/register")]
-    public async Task<ActionResult<ApiResponse<List<MedicationListDto>>>> GetRegister(
-        [FromQuery] string? search, [FromQuery] MedicationStatus? status, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PagedResult<MedicationListDto>>>> GetRegister(
+        [FromQuery] string? search, [FromQuery] MedicationStatus? status,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
     {
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+
         var query = _db.ParticipantMedications.Include(m => m.Participant).AsQueryable();
         if (status.HasValue) query = query.Where(m => m.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(search))
@@ -200,14 +203,27 @@ public class MedicationsController : ControllerBase
         // Correctness fix: (Participant.LastName, Name) ties trivially — two different
         // participants can share a surname, or one participant can have two medications with the
         // same name. With no unique tiebreaker, SQL makes no ordering guarantee among rows that
-        // tie on the ORDER BY key, so two independent Skip/Take executions (once this endpoint is
-        // paginated) can resolve a tied group differently — a row can land on both pages
-        // (duplicate) or neither (vanishes). .Id is a unique Guid primary key, so ThenBy(m => m.Id)
-        // makes the total order deterministic and safe to paginate. Mirrors
-        // IncidentsController.GetAll's identical fix.
-        var items = await query.OrderBy(m => m.Participant!.LastName).ThenBy(m => m.Name).ThenBy(m => m.Id).ToListAsync(ct);
-        var result = items.Select(m => ToListDto(m, FullName(m.Participant))).ToList();
-        return Ok(ApiResponse<List<MedicationListDto>>.Ok(result));
+        // tie on the ORDER BY key, so two independent Skip/Take executions can resolve a tied
+        // group differently — a row can land on both pages (duplicate) or neither (vanishes).
+        // .Id is a unique Guid primary key, so ThenBy(m => m.Id) makes the total order
+        // deterministic and safe to paginate. Mirrors IncidentsController.GetAll's identical fix.
+        // ToListDto/FullName below are plain C# methods (not translatable to SQL), so — same as
+        // this controller's sibling GetAdministrationReport — the page is materialised first and
+        // mapped to DTOs client-side, rather than using PagedResult<T>.CreateAsync's
+        // IQueryable<T>-of-DTO idiom.
+        var ordered = query.OrderBy(m => m.Participant!.LastName).ThenBy(m => m.Name).ThenBy(m => m.Id);
+
+        var totalCount = await ordered.CountAsync(ct);
+        var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+
+        var result = new PagedResult<MedicationListDto>
+        {
+            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant))).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        };
+        return Ok(ApiResponse<PagedResult<MedicationListDto>>.Ok(result));
     }
 
     // ── MAR (Medication Administration Record) ──────────────────────
