@@ -11,7 +11,7 @@ export const statusStyles: Record<string, { bg: string; dot: string; text: strin
   Maintenance: { bg: 'bg-[var(--color-secondary-container)]/40', dot: 'bg-[var(--color-secondary)]', text: 'text-[var(--color-secondary)]', label: 'Maintenance' },
 }
 
-export default function StatusBadge({ status, role, clickable, onClick, onUnassign, assignLabel, unassignLabel }: {
+export default function ScheduleAssignmentCell({ status, role, clickable, onClick, onUnassign, assignLabel, unassignLabel }: {
   status: string
   role?: string
   clickable?: boolean
