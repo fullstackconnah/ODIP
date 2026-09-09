@@ -153,7 +153,7 @@ public class PortalController : ControllerBase
         var activeCompletion = await _db.ShiftCompletions
             .Where(c => c.ShiftId == shift.Id && c.IsActive)
             .FirstOrDefaultAsync(ct);
-        var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, ct);
+        var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, shift.ReturnCount, ct);
 
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
         // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
@@ -178,8 +178,8 @@ public class PortalController : ControllerBase
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
-    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct) =>
-        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct) =>
+        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct);
 
     /// <summary>
     /// Resolves one of the caller's own shifts (Participant included, draft-excluded — same rule

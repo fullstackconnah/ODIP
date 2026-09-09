@@ -22,13 +22,18 @@ public static class ShiftCompletionMapper
     public static bool IsOutlierVariance(int varianceMinutesStart, int varianceMinutesEnd, int thresholdMinutes) =>
         Math.Abs(varianceMinutesStart) > thresholdMinutes || Math.Abs(varianceMinutesEnd) > thresholdMinutes;
 
-    public static async Task<ShiftCompletionDto> ToDtoAsync(OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, CancellationToken ct)
+    /// <summary>
+    /// <paramref name="shiftReturnCount"/> is the owning Shift's ReturnCount, supplied by the
+    /// caller rather than queried here (critique M7 — this used to re-query Shifts per
+    /// completion, an N+1 when a caller maps many completions for the same shift). Every caller
+    /// already holds the Shift or can fetch it once.
+    /// </summary>
+    public static async Task<ShiftCompletionDto> ToDtoAsync(OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, int shiftReturnCount, CancellationToken ct)
     {
         var submittedBy = await db.Users.FirstOrDefaultAsync(u => u.Id == c.SubmittedByUserId, ct);
         User? reviewedBy = c.ReviewedByUserId.HasValue
             ? await db.Users.FirstOrDefaultAsync(u => u.Id == c.ReviewedByUserId.Value, ct)
             : null;
-        var shift = await db.Shifts.FirstOrDefaultAsync(s => s.Id == c.ShiftId, ct);
 
         return new ShiftCompletionDto(
             c.Id, c.ShiftId, c.ActualStart, c.ActualEnd, c.TimeZoneId, c.GeolocationDeclined, c.StartWasManual,
@@ -37,6 +42,6 @@ public static class ShiftCompletionMapper
             c.ReviewedByUserId, reviewedBy?.FullName, c.ReviewedAt, c.ReviewOutcome, c.ReturnReason,
             c.VarianceMinutesStart, c.VarianceMinutesEnd,
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
-            varianceReviewMinutes, shift?.ReturnCount ?? 0);
+            varianceReviewMinutes, shiftReturnCount);
     }
 }

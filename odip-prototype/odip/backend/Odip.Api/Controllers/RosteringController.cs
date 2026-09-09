@@ -554,7 +554,8 @@ public class RosteringController : ControllerBase
         if (completion is null)
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shiftReturnCount, ct)));
     }
 
     /// <summary>
@@ -577,9 +578,12 @@ public class RosteringController : ControllerBase
             return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
         var thresholdMinutes = VarianceReviewMinutes;
+        // All rows share ShiftId == id, so ReturnCount is fetched once (critique M7) instead of
+        // once per completion.
+        var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
         var dtos = new List<ShiftCompletionDto>();
         foreach (var c in completions)
-            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, ct));
+            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, shiftReturnCount, ct));
         return Ok(ApiResponse<List<ShiftCompletionDto>>.Ok(dtos));
     }
 
@@ -609,7 +613,7 @@ public class RosteringController : ControllerBase
         shift.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
     /// <summary>
@@ -653,7 +657,7 @@ public class RosteringController : ControllerBase
         shift.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
     /// <summary>
@@ -956,8 +960,8 @@ public class RosteringController : ControllerBase
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
-    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct)
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct);
 
     /// <summary>
     /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the
