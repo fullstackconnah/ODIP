@@ -27,6 +27,7 @@ import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup,
 } from '@/components/wizard'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import {
   PROFILE_STEP_SCHEMAS_BY_KEY,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -61,12 +62,15 @@ export default function CaregiverWizardPage() {
   const submit = useSubmitCaregiverForm(token)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const { control, register, getValues, setError, clearErrors, reset, formState: { errors } } = useForm<CaregiverFormData>({
+  const { control, register, getValues, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
       caregiverName: '', caregiverRelationship: '',
       consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [],
     } as unknown as CaregiverFormData,
   })
+
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
   const consentsFieldArray = useFieldArray({ control, name: 'consents' })
   const healthConditionFieldArray = useFieldArray({ control, name: 'healthConditions' })
   const adlFieldArray = useFieldArray({ control, name: 'adlAssessments' })
@@ -162,6 +166,7 @@ export default function CaregiverWizardPage() {
 
   return (
     <PublicShell>
+      {unsavedChangesDialog}
       {form.data.rejectionNote && (
         <div role="status" className="mb-4 p-3 rounded-lg bg-[var(--color-warning-container,var(--color-accent))] text-sm">
           <strong>Your previous submission was sent back with a note:</strong> {form.data.rejectionNote}
