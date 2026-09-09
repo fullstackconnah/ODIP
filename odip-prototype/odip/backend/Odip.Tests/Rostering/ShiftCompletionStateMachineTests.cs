@@ -11,6 +11,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Xunit;
 
@@ -44,6 +45,40 @@ public class ShiftCompletionStateMachineTests
     {
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, callerUserId.ToString())], "Test");
+        return new PortalController(db, tenant)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Audit coverage (critique M12) needs AuditInterceptor wired — CreateDb()/MakeController()
+    /// above don't, since most facts in this file don't need it. Same construction as
+    /// RosteringCompletionReviewTests.ApproveBatch_Approved_WritesAuditLogPerShiftCompletion.
+    /// </summary>
+    private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant, Mock<IHttpContextAccessor> Accessor) CreateAuditedDb()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+
+        var accessor = new Mock<IHttpContextAccessor>();
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object))
+            .Options;
+
+        return (new OdipDbContext(options, tenant.Object), tenant, accessor);
+    }
+
+    private static PortalController MakeAuditedController(OdipDbContext db, ICurrentTenant tenant, Mock<IHttpContextAccessor> accessor, Guid callerUserId)
+    {
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, callerUserId.ToString())], "Test");
+        accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext { User = new ClaimsPrincipal(identity) });
         return new PortalController(db, tenant)
         {
             ControllerContext = new ControllerContext
@@ -127,7 +162,7 @@ public class ShiftCompletionStateMachineTests
     [Fact]
     public async Task StartShift_AlreadyInProgress_ReturnsCurrentDetail_NoDuplicateCompletion()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant, accessor) = CreateAuditedDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.InProgress);
@@ -137,7 +172,8 @@ public class ShiftCompletionStateMachineTests
             TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
             StartedAt = DateTime.UtcNow.AddHours(-1), IsActive = true,
         });
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var controller = MakeAuditedController(db, tenant.Object, accessor, user.Id);
+        var auditCountBefore = await db.AuditLogs.CountAsync(); // seeding above already wrote Created rows (User/Shift/ShiftCompletion are all audited)
 
         var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
 
@@ -151,6 +187,7 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(existing.Id, only.Id);
         Assert.Equal(existing.ActualStart, only.ActualStart);
         Assert.Equal(existing.StartedAt, only.StartedAt); // idempotent replay must not re-stamp
+        Assert.Equal(auditCountBefore, await db.AuditLogs.CountAsync()); // idempotent replay must not write an audit row (critique M12)
     }
 
     [Theory]
@@ -411,7 +448,7 @@ public class ShiftCompletionStateMachineTests
     [Fact]
     public async Task FinishShift_PendingReview_ReturnsCurrentDetail_NoWrites()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant, accessor) = CreateAuditedDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.PendingReview);
@@ -422,7 +459,8 @@ public class ShiftCompletionStateMachineTests
             TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
             StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow.AddHours(-1), IsActive = true,
         });
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var controller = MakeAuditedController(db, tenant.Object, accessor, user.Id);
+        var auditCountBefore = await db.AuditLogs.CountAsync(); // seeding above already wrote Created rows (User/Shift/ShiftCompletion are all audited)
 
         var result = await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
 
@@ -437,6 +475,7 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(existing.SubmittedAt, only.SubmittedAt); // idempotent replay must not re-stamp
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(0, saved.ReturnCount);
+        Assert.Equal(auditCountBefore, await db.AuditLogs.CountAsync()); // idempotent replay must not write an audit row (critique M12)
     }
 
     [Theory]
