@@ -55,10 +55,10 @@ export default function CaregiverSubmissionReviewPage() {
         </div>
         {canAct && (
           <div className="flex gap-2">
-            <button type="button" onClick={() => setShowReject(true)} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm">
+            <button type="button" onClick={() => setShowReject(true)} className="min-h-[44px] px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm">
               Reject…
             </button>
-            <button type="button" onClick={() => setConfirmAccept(true)} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm">
+            <button type="button" onClick={() => setConfirmAccept(true)} className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm">
               Accept
             </button>
           </div>
@@ -116,7 +116,7 @@ export default function CaregiverSubmissionReviewPage() {
         size="sm"
         footer={
           <>
-            <button type="button" onClick={() => setShowReject(false)} className="px-3 py-2 text-sm">
+            <button type="button" onClick={() => setShowReject(false)} className="min-h-[44px] px-3 py-2 text-sm">
               Cancel
             </button>
             <button
@@ -127,7 +127,7 @@ export default function CaregiverSubmissionReviewPage() {
                 setShowReject(false)
                 navigate('/caregiver-submissions')
               }}
-              className="px-4 py-2 rounded-lg bg-[var(--color-destructive)] text-white text-sm disabled:opacity-50"
+              className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-destructive)] text-white text-sm disabled:opacity-50"
             >
               Reject and reopen link
             </button>

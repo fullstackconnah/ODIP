@@ -154,7 +154,7 @@ describe('RiskEntriesSection', () => {
     render(<RiskEntriesSection participantId="participant-1" />)
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: entry.id, participantId: 'participant-1' })

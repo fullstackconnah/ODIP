@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 export default function UserSwitcher() {
   const [open, setOpen] = useState(false)
   const [pendingUser, setPendingUser] = useState<TenantUserDto | null>(null)
+  const [confirmingExit, setConfirmingExit] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
@@ -87,7 +88,7 @@ export default function UserSwitcher() {
           <div className="p-1.5">
             {viewingUserId && (
               <button
-                onClick={clearUser}
+                onClick={() => { setOpen(false); setConfirmingExit(true) }}
                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[rgba(255,255,255,0.05)] mb-1 border-b border-[#334155] pb-2"
               >
                 <span className="text-sm text-[#64748b]">↩ Exit view</span>
@@ -121,10 +122,19 @@ export default function UserSwitcher() {
       <ConfirmDialog
         open={pendingUser !== null}
         onCancel={() => setPendingUser(null)}
-        onConfirm={() => { if (pendingUser) selectUser(pendingUser) }}
+        onConfirm={() => { if (pendingUser) selectUser(pendingUser); setPendingUser(null) }}
         title="Switch user?"
         confirmLabel="Switch user"
         message={`Switch to ${pendingUser?.fullName ?? 'this user'}? Unsaved changes on this page will be lost.`}
+      />
+
+      <ConfirmDialog
+        open={confirmingExit}
+        onCancel={() => setConfirmingExit(false)}
+        onConfirm={() => { clearUser(); setConfirmingExit(false) }}
+        title="Exit user view?"
+        confirmLabel="Exit view"
+        message="Return to your own account? Unsaved changes on this page will be lost."
       />
     </div>
   )

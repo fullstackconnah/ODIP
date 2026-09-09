@@ -117,7 +117,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
 
     // Not dirty-guarded (dirty=true would show a confirm dialog) — confirm the discard.
     await user.click(within(card).getByRole('button', { name: 'Cancel' }))
-    const dialog = screen.getByRole('dialog', { name: /discard changes/i })
+    const dialog = screen.getByRole('alertdialog', { name: /discard changes/i })
     await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
 
     expect(mockPatchMutateAsync).not.toHaveBeenCalled()

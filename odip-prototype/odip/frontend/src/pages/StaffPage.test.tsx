@@ -110,7 +110,7 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     await user.click(await screen.findByRole('option', { name: /inactive/i }))
 
     expect(mockUpdateMutate).not.toHaveBeenCalled()
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByRole('heading', { name: /mark staff member as inactive/i })).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: /mark inactive/i }))
@@ -128,11 +128,11 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     await user.click(within(row).getByRole('button', { name: /^active$/i }))
     await user.click(await screen.findByRole('option', { name: /inactive/i }))
 
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
     expect(mockUpdateMutate).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('an Inactive -> Active transition fires immediately with no confirm dialog', async () => {
@@ -147,7 +147,7 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     await user.click(within(row).getByRole('button', { name: /^inactive$/i }))
     await user.click(await screen.findByRole('option', { name: /^active$/i }))
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 's3', data: expect.objectContaining({ isActive: true }) }),
     )

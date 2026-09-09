@@ -19,11 +19,7 @@ import { UnavailabilityFormModal } from '@/pages/portal/components/Unavailabilit
 import { LEAVE_STATUS_COLORS, LEAVE_TYPE_LABELS } from '@/api/types'
 import type { LeaveRequestDto, RecurringUnavailabilityDto, LeaveStatus, RosterFindingDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
 import { formatEffectiveRange } from './lib/roster'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as { response?: { data?: { message?: string; errors?: string[] } } }
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 type ApprovalRow =
   | { rowKind: 'leave'; key: string; data: LeaveRequestDto }
@@ -248,8 +244,14 @@ export default function LeaveApprovalsPage() {
             placeholder="All staff"
           />
         </div>
-        <input type="date" value={fromFilter} onChange={e => setFromFilter(e.target.value)} aria-label="From date" />
-        <input type="date" value={toFilter} onChange={e => setToFilter(e.target.value)} aria-label="To date" />
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="leave-approvals-from-date" className="text-xs text-[var(--color-muted-foreground)]">From</label>
+          <input id="leave-approvals-from-date" type="date" value={fromFilter} onChange={e => setFromFilter(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="leave-approvals-to-date" className="text-xs text-[var(--color-muted-foreground)]">To</label>
+          <input id="leave-approvals-to-date" type="date" value={toFilter} onChange={e => setToFilter(e.target.value)} />
+        </div>
       </div>
 
       {isLoading ? (

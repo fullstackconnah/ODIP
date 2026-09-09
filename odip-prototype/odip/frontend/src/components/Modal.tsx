@@ -12,6 +12,10 @@ export type ModalProps = {
   /** Whether clicking the backdrop closes the modal. Defaults to `true`. Set to `false` for a
    * modal tracking unsaved/dirty input, so an accidental outside click doesn't discard it. */
   closeOnBackdrop?: boolean
+  /** ARIA role for the dialog element. Use `'alertdialog'` for a modal that blocks on a
+   * decision (e.g. a confirm prompt) — it gets the same labelledby/describedby wiring as the
+   * default `'dialog'` role. Defaults to `'dialog'`. */
+  role?: 'dialog' | 'alertdialog'
 }
 
 const SIZE_MAP = {
@@ -24,8 +28,9 @@ const SIZE_MAP = {
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, role = 'dialog' }: ModalProps) {
   const titleId = useId()
+  const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<Element | null>(null)
 
@@ -85,9 +90,10 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         ref={dialogRef}
-        role="dialog"
+        role={role}
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         tabIndex={-1}
         className={`bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 w-full ${SIZE_MAP[size]} max-h-[90vh] mx-2 overflow-y-auto ${className ?? ''}`}
         onClick={e => e.stopPropagation()}
@@ -98,7 +104,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
             <X className="w-5 h-5" />
           </button>
         </div>
-        {children}
+        <div id={descriptionId}>{children}</div>
         {footer && (
           <div className="flex justify-end gap-3 mt-6">
             {footer}

@@ -118,7 +118,7 @@ describe('CaregiverSubmissionReviewPage', () => {
     // The mutation must not fire on the first click alone — a confirm step sits in between.
     expect(mockAcceptMutateAsync).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/accept this submission/i)).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: /^accept$/i }))
 

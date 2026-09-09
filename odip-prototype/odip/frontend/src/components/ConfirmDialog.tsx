@@ -31,6 +31,7 @@ export function ConfirmDialog({
       onClose={onCancel}
       title={title}
       size="sm"
+      role="alertdialog"
       footer={
         footer ?? (
           <>
