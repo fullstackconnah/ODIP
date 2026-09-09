@@ -618,6 +618,27 @@ public class RosterConflictServiceTests
         Assert.Contains("Monday", finding.Message); // ServiceDate (2026-08-24) is a Monday
     }
 
+    // 2026-09-09 audit ruling: a Pending recurring rule must raise a SOFT finding — visible to the
+    // coordinator, but never Blocking and never reason-required — exactly like STAFF_LEAVE_PENDING.
+    [Fact]
+    public void Pending_recurring_window_fires_staff_recurring_pending_and_does_not_require_a_reason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var window = new UnavailabilityWindow(
+            staff.Id, ServiceDate.ToDateTime(new TimeOnly(8, 0)), ServiceDate.ToDateTime(new TimeOnly(12, 0)),
+            UnavailabilityKind.PendingRecurringRule);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, availability: new[] { window }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.StaffRecurringPending);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.False(finding.RequiresReason);
+        Assert.False(HasCode(findings, RosterConflictService.StaffRecurringUnavailable));
+        Assert.DoesNotContain(findings, f => f.Severity == RosterFindingSeverity.Blocking);
+    }
+
     [Fact]
     public void Non_overlapping_unavailability_window_fires_nothing()
     {

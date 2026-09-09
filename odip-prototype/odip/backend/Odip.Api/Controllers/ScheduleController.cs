@@ -221,13 +221,15 @@ public class ScheduleController : ControllerBase
                     };
                 }
 
-                // Pending leave is a softer signal than an approved one — the coordinator can still
-                // assign, but the cell shows Tentative rather than Available so the risk is visible
-                // up front. Pending RecurringUnavailability rules never produce a window at all
-                // (StaffUnavailabilityQuery only expands Approved rules), so there's no
-                // Tentative-via-pending-recurring case to handle here.
+                // Pending leave (and, per the 2026-09-09 audit ruling, a pending recurring rule)
+                // is a softer signal than an approved one — the coordinator can still assign, but
+                // the cell shows Tentative rather than Available so the risk is visible up front.
+                // StaffUnavailabilityQuery now expands Pending RecurringUnavailability rules too,
+                // tagged PendingRecurringRule rather than RecurringRule specifically so they land
+                // here instead of the "Unavailable" branch above.
                 var pendingLeave = myWindows.Any(w =>
-                    w.Kind == UnavailabilityKind.PendingLeave && w.Start < tripEndDt && tripStartDt < w.End);
+                    (w.Kind == UnavailabilityKind.PendingLeave || w.Kind == UnavailabilityKind.PendingRecurringRule)
+                    && w.Start < tripEndDt && tripStartDt < w.End);
                 if (pendingLeave)
                 {
                     return new ScheduleStaffTripStatusDto

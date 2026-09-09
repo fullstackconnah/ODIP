@@ -62,6 +62,7 @@ public sealed class RosterConflictService
     public const string StaffOnLeave = "STAFF_ON_LEAVE";
     public const string StaffRecurringUnavailable = "STAFF_RECURRING_UNAVAILABLE";
     public const string StaffLeavePending = "STAFF_LEAVE_PENDING";
+    public const string StaffRecurringPending = "STAFF_RECURRING_PENDING";
     public const string CompatibilityExcluded = "COMPATIBILITY_EXCLUDED";
     public const string CredentialExpired = "CREDENTIAL_EXPIRED";
     public const string CompetencyMissing = "COMPETENCY_MISSING";
@@ -195,9 +196,12 @@ public sealed class RosterConflictService
     /// One finding per overlapping <see cref="UnavailabilityWindow"/>, discriminated on
     /// <see cref="UnavailabilityKind"/>: an already-Approved leave request or recurring rule is a
     /// hard Warning that demands a reason (STAFF_ON_LEAVE / STAFF_RECURRING_UNAVAILABLE); a
-    /// merely Pending leave request is a softer signal that needs none (STAFF_LEAVE_PENDING); a
-    /// legacy StaffAvailability Unavailable/Training row keeps the original STAFF_UNAVAILABLE
-    /// code and reason-not-required behaviour, unchanged from before this feature.
+    /// merely Pending leave request or Pending recurring rule is a softer signal that needs none
+    /// (STAFF_LEAVE_PENDING / STAFF_RECURRING_PENDING — the 2026-09-09 audit ruling requires a
+    /// pending recurring rule get exactly the same treatment a pending leave request already
+    /// gets, never the Approved rule's Blocking-adjacent RequiresReason treatment); a legacy
+    /// StaffAvailability Unavailable/Training row keeps the original STAFF_UNAVAILABLE code and
+    /// reason-not-required behaviour, unchanged from before this feature.
     /// </summary>
     private static void CheckStaffUnavailable(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
@@ -235,6 +239,10 @@ public sealed class RosterConflictService
                     findings.Add(new RosterFinding(StaffRecurringUnavailable, RosterFindingSeverity.Warning,
                         $"{ctx.Staff.FullName} is recurringly unavailable {window.Start.ToString("dddd HH:mm", CultureInfo.InvariantCulture)}-{window.End.ToString("HH:mm", CultureInfo.InvariantCulture)}.",
                         RequiresReason: true));
+                    break;
+                case UnavailabilityKind.PendingRecurringRule:
+                    findings.Add(new RosterFinding(StaffRecurringPending, RosterFindingSeverity.Warning,
+                        $"{ctx.Staff.FullName} has a pending recurring unavailability request covering {window.Start.ToString("dddd HH:mm", CultureInfo.InvariantCulture)}-{window.End.ToString("HH:mm", CultureInfo.InvariantCulture)}."));
                     break;
             }
         }

@@ -61,13 +61,13 @@ public record TripBarDto
 
 /// <summary>
 /// One bar on the roster board's staff-grouped view. Sourced from IStaffUnavailabilityQuery
-/// (approved + pending leave, approved recurring occurrences, legacy StaffAvailability rows) —
-/// see UnavailabilityKind for what Kind discriminates. AvailabilityType/Notes are populated only
-/// for Kind == Legacy (the source StaffAvailability row's own values, carried through
-/// UnavailabilityWindow.LegacySourceType/LegacyNotes); StartTime/EndTime are populated only for
-/// Kind == RecurringRule (so the frontend can draw a partial-day bar instead of a full-day one).
-/// Every field not relevant to a given row's Kind is left null, never a default/zero value that
-/// could be misread as meaningful.
+/// (approved + pending leave, approved + pending recurring occurrences, legacy StaffAvailability
+/// rows) — see UnavailabilityKind for what Kind discriminates. AvailabilityType/Notes are
+/// populated only for Kind == Legacy (the source StaffAvailability row's own values, carried
+/// through UnavailabilityWindow.LegacySourceType/LegacyNotes); StartTime/EndTime are populated
+/// only for Kind == RecurringRule or PendingRecurringRule (so the frontend can draw a partial-day
+/// bar instead of a full-day one). Every field not relevant to a given row's Kind is left null,
+/// never a default/zero value that could be misread as meaningful.
 /// </summary>
 public record LeaveBarDto
 {
@@ -78,14 +78,14 @@ public record LeaveBarDto
     /// Compat fill — the current frontend labels the bar from availabilityType; PR 2 switches it to
     /// <c>Kind</c>, after which this may become null for non-legacy kinds. Legacy: the source
     /// StaffAvailability row's AvailabilityType (Unavailable or Training). ApprovedLeave/PendingLeave:
-    /// AvailabilityType.Leave. RecurringRule: AvailabilityType.Unavailable.
+    /// AvailabilityType.Leave. RecurringRule/PendingRecurringRule: AvailabilityType.Unavailable.
     /// </summary>
     public AvailabilityType? AvailabilityType { get; init; }
     /// <summary>Legacy only — the source StaffAvailability row's free-text Notes.</summary>
     public string? Notes { get; init; }
-    /// <summary>RecurringRule only — the occurrence's time-of-day start. Serialises the same way ShiftPatternDto.StartTime does (built-in System.Text.Json TimeOnly support, no custom converter).</summary>
+    /// <summary>RecurringRule/PendingRecurringRule only — the occurrence's time-of-day start. Serialises the same way ShiftPatternDto.StartTime does (built-in System.Text.Json TimeOnly support, no custom converter).</summary>
     public TimeOnly? StartTime { get; init; }
-    /// <summary>RecurringRule only — the occurrence's time-of-day end.</summary>
+    /// <summary>RecurringRule/PendingRecurringRule only — the occurrence's time-of-day end.</summary>
     public TimeOnly? EndTime { get; init; }
 }
 

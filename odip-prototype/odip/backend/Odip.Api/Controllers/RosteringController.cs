@@ -264,8 +264,12 @@ public class RosteringController : ControllerBase
                         // Legacy rows keep their source type for the bar label; leave/rule bars are labelled from Kind.
                         AvailabilityType = w.Kind == UnavailabilityKind.Legacy ? w.LegacySourceType : null,
                         Notes = w.Kind == UnavailabilityKind.Legacy ? w.LegacyNotes : null,
-                        StartTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.Start) : null,
-                        EndTime = w.Kind == UnavailabilityKind.RecurringRule ? TimeOnly.FromDateTime(w.End) : null,
+                        // Pending recurring occurrences need their time-of-day window too, exactly like
+                        // approved ones, so LeaveBar can draw the same partial-day bar (with pending styling).
+                        StartTime = w.Kind is UnavailabilityKind.RecurringRule or UnavailabilityKind.PendingRecurringRule
+                            ? TimeOnly.FromDateTime(w.Start) : null,
+                        EndTime = w.Kind is UnavailabilityKind.RecurringRule or UnavailabilityKind.PendingRecurringRule
+                            ? TimeOnly.FromDateTime(w.End) : null,
                     }).ToList();
 
                 rows.Add(new RosterStaffRowDto
