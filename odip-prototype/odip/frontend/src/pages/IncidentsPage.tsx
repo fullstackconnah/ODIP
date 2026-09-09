@@ -1,4 +1,6 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents } from '@/api/hooks'
+import type { TruncatableList } from '@/api/hooks/pagedList'
+import type { IncidentListDto } from '@/api/types'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -9,6 +11,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+
+// Matches IncidentsController.GetAll's own PagingParams.DefaultPageSize (backend house
+// convention: default 50, ceiling 200) — kept in sync manually since paging params cross the
+// API boundary as plain query strings, not a shared type.
+const INCIDENTS_PAGE_SIZE = 50
 
 const INCIDENT_STATUS_FILTER_ITEMS: DropdownItem[] = [
   { value: 'Draft', label: 'Draft' },
@@ -40,6 +47,7 @@ export default function IncidentsPage() {
   const { canWrite, canCreateIncidents } = usePermissions()
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
+  const [page, setPage] = useState(1)
   const [searchParams, setSearchParams] = useSearchParams()
   const qscOverdueOnly = searchParams.get('qsc') === 'overdue'
   const clearQscParam = () => {
@@ -64,14 +72,34 @@ export default function IncidentsPage() {
     editPath: (i) => `/incidents/${i.id}/edit`,
   })
 
-  const queryParams = { ...params }
+  const queryParams: Record<string, string> = { ...params, page: String(page), pageSize: String(INCIDENTS_PAGE_SIZE) }
   if (!showArchived && !qscOverdueOnly) {
     if (statusFilter) queryParams.status = statusFilter
     if (severityFilter) queryParams.severity = severityFilter
   }
+  // Moved server-side (IncidentsController.GetAll's isOverdueQsc param) — filtering client-side
+  // would only ever see the current page's rows once the endpoint is truly paginated, silently
+  // under-reporting overdue incidents. Applied regardless of showArchived, matching the old
+  // client-side `.filter(i => i.isOverdue24h)`, which ran unconditionally too.
+  if (qscOverdueOnly) queryParams.isOverdueQsc = 'true'
 
   const { data: incidents = [], isLoading } = useIncidents(queryParams)
-  const visibleIncidents = qscOverdueOnly ? incidents.filter((i) => i.isOverdue24h) : incidents
+  // `incidents` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
+  // while loading is a plain array without that extra field — read it as optional, same pattern
+  // as ParticipantPicker.
+  const { totalCount = incidents.length } = incidents as Partial<TruncatableList<IncidentListDto>>
+
+  // A filter/tab change can leave `page` pointing past the end of the new, smaller result set —
+  // reset to page 1 whenever the query's own filters change. Adjusted during render (React's
+  // documented pattern for "resetting state when a dependency changes",
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than in a useEffect, which would call setState synchronously in an effect body.
+  const filterResetKey = `${statusFilter}|${severityFilter}|${qscOverdueOnly}|${showArchived}`
+  const [prevFilterResetKey, setPrevFilterResetKey] = useState(filterResetKey)
+  if (filterResetKey !== prevFilterResetKey) {
+    setPrevFilterResetKey(filterResetKey)
+    setPage(1)
+  }
 
   const incidentColumns: Column<any>[] = [
     { key: 'title', header: 'Title', sortable: true, className: 'font-medium' },
@@ -101,7 +129,7 @@ export default function IncidentsPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Incident Reports"
-        subtitle={`${visibleIncidents.length} incident${visibleIncidents.length !== 1 ? 's' : ''}`}
+        subtitle={`${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
         action={!showArchived && canCreateIncidents && (
           <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
             <Plus className="w-4 h-4" /> Report Incident
@@ -160,7 +188,7 @@ export default function IncidentsPage() {
         </p>
       )}
 
-      {!isLoading && visibleIncidents.length === 0 ? (
+      {!isLoading && incidents.length === 0 ? (
         qscOverdueOnly ? (
           <EmptyState
             icon={ShieldAlert}
@@ -184,12 +212,18 @@ export default function IncidentsPage() {
         )
       ) : (
         <DataTable
-          data={visibleIncidents}
+          data={incidents}
           columns={incidentColumns}
           keyField="id"
           sortable
           loading={isLoading}
           emptyMessage="No incidents found"
+          pagination={{
+            page,
+            pageSize: INCIDENTS_PAGE_SIZE,
+            totalCount,
+            onPageChange: setPage,
+          }}
         />
       )}
       {confirmDialog}

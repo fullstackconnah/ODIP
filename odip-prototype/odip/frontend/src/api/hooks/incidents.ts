@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
+import { fetchPagedList } from './pagedList'
 import type {
   IncidentListDto,
   IncidentDetailDto,
@@ -7,10 +8,17 @@ import type {
   UpdateIncidentDto,
 } from '../types'
 
+/**
+ * IncidentsController.GetAll now returns PagedResult<IncidentListDto> (real server-side paging —
+ * see PAGINATION-PLAN-V2 §4/Wave 1). `fetchPagedList` flattens that to a `TruncatableList` whose
+ * `totalCount` drives `DataTable`'s `pagination` prop in `IncidentsPage`; callers drive `page`/
+ * `pageSize` themselves via `params` rather than this hook requesting a fixed ceiling (contrast
+ * `useParticipants`/`useTrips`, which fetch one large unpaginated page).
+ */
 export function useIncidents(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['incidents', params],
-    queryFn: () => apiGet<IncidentListDto[]>('/incidents', params),
+    queryFn: () => fetchPagedList<IncidentListDto>('/incidents', params),
   })
 }
 
