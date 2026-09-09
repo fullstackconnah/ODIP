@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw } from '../client'
+import { fetchPagedList } from './pagedList'
 import type {
   MedicationListDto,
   MedicationDetailDto,
@@ -41,10 +42,16 @@ export function useMedication(id: string | undefined) {
   })
 }
 
-export function useMedicationRegister(params?: { search?: string; status?: string }) {
+/**
+ * MedicationsController.GetRegister now returns PagedResult<MedicationListDto> (real server-side
+ * paging — see PAGINATION-PLAN-V2 §wave 2). `fetchPagedList` flattens that to a `TruncatableList`
+ * whose `totalCount` drives `DataTable`'s `pagination` prop in `RegisterTab`; callers drive
+ * `page`/`pageSize` themselves via `params`, same pattern as `useIncidents`.
+ */
+export function useMedicationRegister(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['medications', 'register', params],
-    queryFn: () => apiGet<MedicationListDto[]>('/medications/register', params),
+    queryFn: () => fetchPagedList<MedicationListDto>('/medications/register', params),
   })
 }
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Plus, PillBottle } from 'lucide-react'
 import { useMedicationRegister } from '@/api/hooks'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { DataTable, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
@@ -12,6 +13,11 @@ import { usePermissions } from '@/lib/permissions'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
+
+// Matches MedicationsController.GetRegister's own PagingParams.DefaultPageSize (backend house
+// convention: default 50, ceiling 200) — kept in sync manually since paging params cross the API
+// boundary as plain query strings, not a shared type.
+const REGISTER_PAGE_SIZE = 50
 
 const STATUS_ITEMS = [
   { value: '', label: 'All' },
@@ -31,11 +37,30 @@ export default function RegisterTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
 
-  const { data: medications = [], isLoading } = useMedicationRegister({
-    search: search || undefined,
-    status: status || undefined,
-  })
+  const queryParams: Record<string, string> = { page: String(page), pageSize: String(REGISTER_PAGE_SIZE) }
+  if (search) queryParams.search = search
+  if (status) queryParams.status = status
+
+  const { data: medications = [], isLoading } = useMedicationRegister(queryParams)
+  // `medications` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
+  // while loading is a plain array without that extra field — read it as optional, same pattern
+  // as IncidentsPage/ParticipantPicker.
+  const { totalCount = medications.length } = medications as Partial<TruncatableList<MedicationListDto>>
+
+  // A search/status change can leave `page` pointing past the end of the new, smaller result
+  // set — reset to page 1 whenever the query's own filters change. Adjusted during render
+  // (React's documented pattern for "resetting state when a dependency changes",
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than in a useEffect, which would call setState synchronously in an effect body —
+  // copies IncidentsPage's identical fix for the set-state-in-effect lint rule.
+  const filterResetKey = `${search}|${status}`
+  const [prevFilterResetKey, setPrevFilterResetKey] = useState(filterResetKey)
+  if (filterResetKey !== prevFilterResetKey) {
+    setPrevFilterResetKey(filterResetKey)
+    setPage(1)
+  }
 
   const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
 
@@ -136,6 +161,12 @@ export default function RegisterTab() {
           loading={isLoading}
           onRowClick={m => navigate(`/medications/${m.id}/edit`)}
           emptyMessage="No medications found"
+          pagination={{
+            page,
+            pageSize: REGISTER_PAGE_SIZE,
+            totalCount,
+            onPageChange: setPage,
+          }}
         />
       )}
 
