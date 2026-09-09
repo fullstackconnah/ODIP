@@ -500,8 +500,7 @@ public class RosteringController : ControllerBase
         [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
         var statusFilter = status ?? ShiftStatus.PendingReview;
         var thresholdMinutes = VarianceReviewMinutes;
 

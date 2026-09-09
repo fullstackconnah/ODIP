@@ -42,7 +42,7 @@ public class TripsController : ControllerBase
         [FromQuery] DateOnly? startFrom, [FromQuery] DateOnly? startTo,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.TripInstances.Include(t => t.LeadCoordinator).Include(t => t.Bookings).AsQueryable();
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);

@@ -525,7 +525,7 @@ public class MedicationsController : ControllerBase
         [FromQuery] Guid? participantId, [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.MedicationAdministrations
             .Include(a => a.ParticipantMedication)
