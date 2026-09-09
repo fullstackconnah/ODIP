@@ -1,7 +1,6 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
-import type { AxiosError } from 'axios'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
@@ -12,6 +11,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -60,11 +60,6 @@ const ROLE_LABELS: Record<string, string> = {
 // PP-85 — same error-extraction idiom as RecordAdministrationModal.tsx/MedicationFormPage.tsx,
 // surfacing the backend's specific validation/conflict message (e.g. "A user with this email
 // already exists.") instead of a generic banner.
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
-
 export default function StaffCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()

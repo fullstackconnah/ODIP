@@ -1,21 +1,15 @@
 import { useState } from 'react'
 import { FileCheck2 } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantConsents, useUpsertConsent } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { CONSENT_TYPES } from '@/api/types/enums'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import type { ParticipantConsentDto } from '@/api/types/consents'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 type ConsentFormState = {
   granted: 'true' | 'false' | ''

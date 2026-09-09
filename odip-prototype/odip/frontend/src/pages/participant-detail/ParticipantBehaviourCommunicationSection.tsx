@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -8,11 +7,7 @@ import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import type { MemoryLevel, RiskRatingLevel } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 const YES_NO_UNANSWERED_OPTIONS = [
   { key: 'true', label: 'Yes' },

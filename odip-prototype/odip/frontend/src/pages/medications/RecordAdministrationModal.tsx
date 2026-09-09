@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { Modal } from '@/components/Modal'
@@ -9,7 +8,7 @@ import { FormField, labelClass } from '@/components/FormField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
-import { getClientTimeZone } from '@/lib/utils'
+import { getClientTimeZone, extractErrorMessage } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { isIncidentTriggerOutcome } from '@/lib/incidentPrefill'
 import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
@@ -71,11 +70,6 @@ function AnimatedField({ show, children }: { show: boolean; children: React.Reac
       <div className="min-h-0">{children}</div>
     </div>
   )
-}
-
-function extractErrorMessage(err: unknown): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to record administration.'
 }
 
 export function RecordAdministrationModal({
@@ -305,7 +299,7 @@ export function RecordAdministrationModal({
         }
       }
     } catch (err) {
-      const message = extractErrorMessage(err)
+      const message = extractErrorMessage(err, 'Failed to record administration.')
       if (!acknowledgeLimitBreach && LIMIT_BREACH_PATTERN.test(message)) {
         setLimitBreachMessage(message)
       } else {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import AvailabilityEditor from './AvailabilityEditor'
@@ -57,5 +58,40 @@ describe('AvailabilityEditor — Leave creation removed', () => {
     renderEditor([makeAvailability()])
     expect(screen.getByText('Unavailable')).toBeInTheDocument()
     expect(screen.getByTitle('Delete')).toBeInTheDocument()
+  })
+})
+
+describe('AvailabilityEditor — invalid date range validation', () => {
+  it('surfaces a visible error and does not save when the end date is before the start date', async () => {
+    const user = userEvent.setup()
+    renderEditor([makeAvailability()])
+
+    const [startInput, endInput] = screen.getAllByDisplayValue(/2026-09-0[15]/)
+    await user.clear(endInput)
+    await user.type(endInput, '2026-08-31')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/end date must be on or after the start date/i)
+    expect(mockUpdateMutate).not.toHaveBeenCalled()
+    expect(startInput).toHaveAttribute('aria-invalid', 'true')
+    expect(endInput).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('clears the error once the range is corrected and save succeeds', async () => {
+    const user = userEvent.setup()
+    renderEditor([makeAvailability()])
+
+    const [, endInput] = screen.getAllByDisplayValue(/2026-09-0[15]/)
+    await user.clear(endInput)
+    await user.type(endInput, '2026-08-31')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.clear(endInput)
+    await user.type(endInput, '2026-09-10')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
   })
 })

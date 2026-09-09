@@ -1,19 +1,13 @@
 import { useMemo, useState } from 'react'
 import { StickyNote, Pin, ChevronDown, Plus, Sparkles, AlertTriangle } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantNotes, useCreateNote, useUpdateNote, useDismissNoteDrift, useRegenerateNote } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
-import { parseApiDate } from '@/lib/utils'
+import { parseApiDate, extractErrorMessage } from '@/lib/utils'
 import type { ParticipantNoteDto } from '@/api/types/notes'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - parseApiDate(iso).getTime()

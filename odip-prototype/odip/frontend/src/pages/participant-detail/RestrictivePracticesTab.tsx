@@ -12,16 +12,11 @@ import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import {
   RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS,
 } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {

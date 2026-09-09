@@ -1,8 +1,19 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import type { AxiosError } from 'axios'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/**
+ * Surfaces the server's ApiResponse error message (first validation error, else the top-level
+ * message, else the caller's fallback) for display in a form/banner. Shared here so the many
+ * call sites across the app use one implementation instead of copy-pasted drift.
+ */
+export function extractErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
+  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
 export function maskNdisNumber(ndis: string | null | undefined): string {

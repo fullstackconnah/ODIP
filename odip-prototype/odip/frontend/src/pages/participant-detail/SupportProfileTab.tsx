@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { ShieldAlert } from 'lucide-react'
 import { useParticipant, usePatchParticipant, useSupportProfile, useUpdateSupportProfile } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -16,11 +15,6 @@ import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CA
 import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSupportType, SupportRatio } from '@/api/types/enums'
 import type { ParticipantDetailDto, SupportProfileDto } from '@/api/types/participants'
 import type { PatchSupportNeedsMobilityDto } from '@/api/types/participant-patch'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 function Tag({ label }: { label: string }) {
   return (

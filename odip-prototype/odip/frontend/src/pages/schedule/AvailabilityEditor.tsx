@@ -10,9 +10,11 @@ import type { StaffAvailabilityDto } from '@/api/types'
 
 const availTypeColors: Record<string, string> = {
   Available:   'text-emerald-600 bg-emerald-50',
-  Unavailable: 'text-[#ba1a1a] bg-[#ffdad6]/60',
-  Leave:       'text-[#ba1a1a] bg-[#ffdad6]/60',
-  Training:    'text-[#8e337b] bg-[#ffd7ef]/60',
+  Unavailable: 'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
+  Leave:       'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
+  // #8e337b (the text color) has no token equivalent in index.css — left as a literal hex.
+  // The background half (#ffd7ef) does match --color-accessible-container exactly.
+  Training:    'text-[#8e337b] bg-[var(--color-accessible-container)]/60',
   Preferred:   'text-[var(--color-secondary)] bg-[var(--color-secondary-container)]/40',
   Tentative:   'text-amber-700 bg-amber-50',
 }
@@ -29,6 +31,7 @@ export default function AvailabilityEditor({ staffId, staffName, availability }:
 
   const [edits, setEdits] = useState<Record<string, { startDate: string; endDate: string; notes: string }>>({})
   const [deletingAvail, setDeletingAvail] = useState<StaffAvailabilityDto | null>(null)
+  const [rangeErrors, setRangeErrors] = useState<Record<string, string>>({})
 
   function getEdit(a: StaffAvailabilityDto) {
     return edits[a.id] ?? {
@@ -56,11 +59,18 @@ export default function AvailabilityEditor({ staffId, staffName, availability }:
         ...patch,
       },
     }))
+    // Clear any stale range error for this row now that its dates have changed — it's
+    // re-validated on the next Save.
+    setRangeErrors(prev => { if (!(id in prev)) return prev; const next = { ...prev }; delete next[id]; return next })
   }
 
   function handleSave(a: StaffAvailabilityDto) {
     const e = getEdit(a)
-    if (!e.startDate || !e.endDate || e.endDate < e.startDate) return
+    if (!e.startDate || !e.endDate || e.endDate < e.startDate) {
+      setRangeErrors(prev => ({ ...prev, [a.id]: 'End date must be on or after the start date.' }))
+      return
+    }
+    setRangeErrors(prev => { if (!(a.id in prev)) return prev; const next = { ...prev }; delete next[a.id]; return next })
     updateAvail.mutate({
       id: a.id,
       data: {
@@ -114,18 +124,22 @@ export default function AvailabilityEditor({ staffId, staffName, availability }:
           const e = getEdit(a)
           const dirty = isDirty(a)
           const colorClass = availTypeColors[a.availabilityType] ?? 'text-[var(--color-muted-foreground)] bg-[var(--color-surface-container)]'
+          const rangeError = rangeErrors[a.id]
           return (
-            <div key={a.id} className="flex items-center gap-2 text-xs">
+            <div key={a.id} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-xs">
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold min-w-[72px] text-center ${colorClass}`}>
                 {a.availabilityType}
               </span>
               <input type="date" value={e.startDate}
                 onChange={ev => patchEdit(a.id, { startDate: ev.target.value }, a)}
+                aria-invalid={rangeError ? 'true' : undefined}
                 className={dateInputClass}
               />
               <span className="text-[var(--color-muted-foreground)]">—</span>
               <input type="date" value={e.endDate}
                 onChange={ev => patchEdit(a.id, { endDate: ev.target.value }, a)}
+                aria-invalid={rangeError ? 'true' : undefined}
                 className={dateInputClass}
               />
               <input type="text" value={e.notes} placeholder="Notes…"
@@ -145,10 +159,16 @@ export default function AvailabilityEditor({ staffId, staffName, availability }:
                 onClick={() => handleDelete(a)}
                 disabled={deleteAvail.isPending}
                 title="Delete"
-                className="p-1 rounded-full hover:bg-[#ffdad6]/60 text-[var(--color-muted-foreground)] hover:text-[#ba1a1a] transition-colors disabled:opacity-50"
+                className="p-1 rounded-full hover:bg-[var(--color-error-container)]/60 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] transition-colors disabled:opacity-50"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
+            </div>
+            {rangeError && (
+              <p role="alert" className="pl-[80px] text-[10px] text-[var(--color-destructive)]">
+                {rangeError}
+              </p>
+            )}
             </div>
           )
         })}

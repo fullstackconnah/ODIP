@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { CalendarOff, Plus } from 'lucide-react'
 import { useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
@@ -14,11 +13,7 @@ import { UnavailabilityFormModal } from './components/UnavailabilityFormModal'
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types'
 import type { LeaveRequestDto, RecurringUnavailabilityDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
 import { formatEffectiveRange } from '@/pages/rostering/lib/roster'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 type WithdrawTarget = { kind: 'leave' | 'unavailability'; id: string }
 
