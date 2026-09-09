@@ -50,7 +50,7 @@ public class RosteringController : ControllerBase
         _config = config;
     }
 
-    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
+    private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
 
     // ══════════════════════════════════════════════════════════════
     // BOARD

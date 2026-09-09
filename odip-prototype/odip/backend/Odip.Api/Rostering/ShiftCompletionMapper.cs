@@ -16,6 +16,22 @@ namespace Odip.Api.Rostering;
 public static class ShiftCompletionMapper
 {
     /// <summary>
+    /// Clamp bounds for the "Rostering:VarianceReviewMinutes" config key (critique M6). A
+    /// configured 0 would flag every non-zero variance as an outlier, defeating the review
+    /// queue's whole signal; a negative value is nonsensical for a minutes threshold. 240 (4
+    /// hours) is the ceiling: a shift-punctuality "needs review" signal that only fires past a
+    /// 4-hour variance is no longer useful for any shift length this domain schedules, so a
+    /// configured value above it can only be a misconfiguration, never a deliberate policy
+    /// choice.
+    /// </summary>
+    public const int MinVarianceReviewMinutes = 1;
+    public const int MaxVarianceReviewMinutes = 240;
+
+    /// <summary>Clamps a configured (or default) variance-review threshold into the sane range above.</summary>
+    public static int ClampVarianceReviewMinutes(int configured) =>
+        Math.Clamp(configured, MinVarianceReviewMinutes, MaxVarianceReviewMinutes);
+
+    /// <summary>
     /// True when either variance leg exceeds the configured review threshold (critique P1 —
     /// "the coordinator's review queue has no signal for what actually needs attention").
     /// </summary>

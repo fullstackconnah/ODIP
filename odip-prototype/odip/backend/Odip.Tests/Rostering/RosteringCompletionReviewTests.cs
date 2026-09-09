@@ -270,6 +270,37 @@ public class RosteringCompletionReviewTests
         Assert.Equal(30, item.VarianceReviewMinutes);
     }
 
+    [Theory]
+    [InlineData("0", 1)]       // 0 would flag every non-zero variance as an outlier — clamped to the floor (critique M6)
+    [InlineData("-5", 1)]      // negative is nonsensical — clamped to the floor
+    [InlineData("10000", 240)] // absurdly large defeats the queue signal — clamped to the ceiling
+    public async Task GetCompletions_ThresholdFromConfig_OutOfRangeIsClamped(string configured, int expectedClamped)
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow,
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = staff.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
+            VarianceMinutesStart = 0, VarianceMinutesEnd = 0, IsActive = true,
+        });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Rostering:VarianceReviewMinutes"] = configured })
+            .Build();
+        var controller = MakeController(db, config);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(expectedClamped, item.VarianceReviewMinutes); // configured value is clamped, not honoured verbatim
+    }
+
     [Fact]
     public async Task GetCompletions_PagesResults()
     {
