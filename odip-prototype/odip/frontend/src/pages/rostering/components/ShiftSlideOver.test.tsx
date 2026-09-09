@@ -204,6 +204,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
+    // The roster board invites a voluntary override note on ANY warning (showOnAnyWarning) —
+    // deliberate, and distinct from the trip-side surfaces which only show the field when a
+    // finding actually requires a reason. See RosterGateFieldsProps.showOnAnyWarning.
     const field = screen.getByLabelText(/reason for override/i)
     expect(field).not.toHaveAttribute('aria-required', 'true')
   })

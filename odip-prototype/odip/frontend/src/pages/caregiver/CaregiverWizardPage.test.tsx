@@ -119,6 +119,21 @@ describe('CaregiverWizardPage — draft save', () => {
   })
 })
 
+describe('CaregiverWizardPage — step-change focus and announcement (a11y)', () => {
+  it('moves focus to the new step heading when advancing from About You to Key Identifiers', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('heading', { name: 'Key Identifiers' })).toHaveFocus()
+  })
+})
+
 describe('CaregiverWizardPage — hydration', () => {
   it('hydrates a saved draft value into its field on load', async () => {
     const user = userEvent.setup()

@@ -68,7 +68,7 @@ export default function PortalShiftsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="My Shifts" subtitle="Your rostered shifts and what your participants need">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/portal/leave"
             className="inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"

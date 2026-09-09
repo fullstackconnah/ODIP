@@ -1008,4 +1008,37 @@ public class IncidentsControllerTests
         var reloaded = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
         Assert.Equal(IncidentStatus.Draft, reloaded.Status);
     }
+
+    /// <summary>
+    /// A1 regression: a Closed (archived) incident must not leak into GetAll's default list —
+    /// Delete only sets Status = Closed and leaves IsActive true (see
+    /// Delete_SetsStatusClosed_AndLeavesIsActiveTrue above), so GetAll's IsActive-only default
+    /// filter used to let it through forever. The default (no explicit status filter) call must
+    /// exclude it, while an explicit ?status=Closed — what the Archived tab sends — must still
+    /// return it.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_DefaultFilter_ExcludesClosed_ButExplicitStatusFilterIncludesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        await controller.Delete(incident.Id, CancellationToken.None);
+
+        var defaultResult = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+        var defaultOk = Assert.IsType<OkObjectResult>(defaultResult.Result);
+        var defaultItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(defaultOk.Value);
+        Assert.DoesNotContain(defaultItems.Data!, i => i.Id == incident.Id);
+
+        var closedResult = await controller.GetAll(
+            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+        var closedOk = Assert.IsType<OkObjectResult>(closedResult.Result);
+        var closedItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(closedOk.Value);
+        Assert.Contains(closedItems.Data!, i => i.Id == incident.Id);
+    }
 }

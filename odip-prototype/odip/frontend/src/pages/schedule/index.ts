@@ -1,4 +1,4 @@
-export { default as StatusBadge } from './StatusBadge'
+export { default as ScheduleAssignmentCell } from './ScheduleAssignmentCell'
 export { default as QualBadge } from './QualBadge'
 export { default as TripStatusBadge } from './TripStatusBadge'
 export { default as AvailabilityEditor } from './AvailabilityEditor'

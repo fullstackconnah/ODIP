@@ -119,7 +119,7 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
       </label>
       {enhanced}
       {showHint && <p id={hintId} className="text-xs text-[var(--color-muted-foreground)] mt-1">{hint}</p>}
-      {showError && <p id={errorId} className="text-xs text-[var(--color-destructive)] mt-1">{error}</p>}
+      {showError && <p id={errorId} role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{error}</p>}
     </div>
   )
 }

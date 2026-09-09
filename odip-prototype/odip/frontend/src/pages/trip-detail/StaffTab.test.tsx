@@ -172,11 +172,11 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Leave overlap')
-    expect(screen.queryByText(/enter a reason to continue/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /save with override/i }))
 
     expect(mockUpdateMutate).not.toHaveBeenCalled()
-    expect(screen.getByText(/enter a reason to continue/i)).toBeInTheDocument()
+    expect(screen.getByText(/a reason is required to save over the warnings marked/i)).toBeInTheDocument()
   })
 
   it('submits with overrideReason and acknowledgedFindingCodes once a reason is entered', async () => {
@@ -259,7 +259,7 @@ describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
     await user.click(lastAddStaffButton())
 
     expect(mockCreateMutate).not.toHaveBeenCalled()
-    expect(screen.getByText(/enter a reason to continue/i)).toBeInTheDocument()
+    expect(screen.getByText(/a reason is required to save over the warnings marked/i)).toBeInTheDocument()
   })
 
   it('submits with overrideReason and acknowledgedFindingCodes once a reason is entered', async () => {

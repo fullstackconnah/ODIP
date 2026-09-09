@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
-  StatusBadge, QualBadge, TripStatusBadge, AvailabilityEditor,
+  ScheduleAssignmentCell, QualBadge, TripStatusBadge, AvailabilityEditor,
   StaffAssignModal, VehicleAssignModal,
   formatDate, tripAccentText,
 } from './schedule'
@@ -300,7 +300,7 @@ export default function SchedulePage() {
                         return (
                           <td key={ts.tripId} className="px-3 py-2.5">
                             <div className="relative inline-block">
-                              <StatusBadge
+                              <ScheduleAssignmentCell
                                 status={ts.status}
                                 role={ts.assignmentRole ?? undefined}
                                 clickable={isAvailable && canWrite}
@@ -390,7 +390,7 @@ export default function SchedulePage() {
                       const isAvailable = ts.status === 'Available'
                       return (
                         <td key={ts.tripId} className="px-3 py-2.5">
-                          <StatusBadge
+                          <ScheduleAssignmentCell
                             status={ts.status}
                             clickable={isAvailable && canWrite}
                             onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}

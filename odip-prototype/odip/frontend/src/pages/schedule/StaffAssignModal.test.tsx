@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import StaffAssignModal from './StaffAssignModal'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import { makeFinding } from '@/pages/rostering/test-fixtures'
 import type { ScheduleStaffDto, ScheduleTripDto } from '@/api/types'
 
 const { mockCheckMutate, mockGetRosterFindings } = vi.hoisted(() => ({
@@ -43,11 +45,11 @@ describe('StaffAssignModal — live conflict check (trip-side parity)', () => {
     render(<StaffAssignModal staff={staff} trip={trip} onClose={vi.fn()} onAssign={onAssign} isLoading={false} />)
 
     await screen.findByText('Leave overlap')
-    expect(screen.queryByText(/enter a reason to continue/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /assign with override/i }))
 
     expect(onAssign).not.toHaveBeenCalled()
-    expect(screen.getByText(/enter a reason to continue/i)).toBeInTheDocument()
+    expect(screen.getByText(/a reason is required to save over the warnings marked/i)).toBeInTheDocument()
   })
 
   it('submits with overrideReason and acknowledgedFindingCodes once a reason is entered', async () => {
@@ -89,5 +91,20 @@ describe('StaffAssignModal — live conflict check (trip-side parity)', () => {
     await user.click(screen.getByRole('button', { name: /assign staff/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
+  })
+})
+
+describe('RosterGateFields — trip-side call sites (no showOnAnyWarning)', () => {
+  it('renders no reason field for a soft-Warning-only finding set, unlike the roster board which opts into showOnAnyWarning', () => {
+    render(
+      <RosterGateFields
+        findings={[makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })]}
+        overrideReason=""
+        onOverrideReasonChange={vi.fn()}
+        reasonRequired={false}
+      />,
+    )
+
+    expect(screen.queryByLabelText(/reason for override/i)).not.toBeInTheDocument()
   })
 })

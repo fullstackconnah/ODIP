@@ -156,6 +156,13 @@ public class IncidentsController : ControllerBase
         else if (isActive == false)
             query = query.Where(i => !i.IsActive);
 
+        // PP-2 follow-up: archiving sets Status = Closed without touching IsActive (see Delete
+        // below), so the IsActive filter above no longer keeps archived incidents out of the
+        // default list. Exclude Closed by default unless the caller explicitly filters by
+        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged.
+        if (!status.HasValue)
+            query = query.Where(i => i.Status != IncidentStatus.Closed);
+
         if (tripId.HasValue) query = query.Where(i => i.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(i => i.Status == status.Value);
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);

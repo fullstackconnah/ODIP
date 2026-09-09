@@ -13,7 +13,7 @@ import {
 } from '@/api/hooks'
 import { formatWithTimeZone } from '@/lib/utils'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { FindingsList } from './FindingsList'
+import { RosterGateFields } from './RosterGateFields'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
@@ -421,35 +421,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             </div>
           )}
 
-          {findings.length > 0 && (
-            <div>
-              <p className="mb-2 text-sm font-medium text-foreground">Findings</p>
-              <FindingsList findings={findings} />
-            </div>
-          )}
-
-          {(warningFindings.length > 0 || !!existing?.overrideReason) && (
-            <FormField
-              label="Reason for override"
-              required={reasonRequiredFindings.length > 0}
-              error={reasonRequired ? 'A reason is required to save over the warnings marked “Reason required”.' : undefined}
-              hint="Stored on the shift and shown here whenever it's reopened."
-            >
-              <textarea
-                rows={2}
-                value={overrideReason}
-                disabled={!canWrite}
-                onChange={e => setOverrideReason(e.target.value)}
-                placeholder="Why this shift should be rostered despite the warnings above"
-              />
-            </FormField>
-          )}
-
-          {blockingFindings.length > 0 && (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              This shift can't be saved while a blocking finding is open.
-            </p>
-          )}
+          <RosterGateFields
+            findings={findings}
+            overrideReason={overrideReason}
+            onOverrideReasonChange={setOverrideReason}
+            reasonRequired={reasonRequired}
+            forceVisible={!!existing?.overrideReason}
+            showOnAnyWarning
+            disabled={!canWrite}
+          />
 
           {error && (
             <div role="alert" className="rounded-sm bg-error-container px-3 py-2 text-sm text-destructive">

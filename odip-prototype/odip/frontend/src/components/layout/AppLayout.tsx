@@ -281,7 +281,13 @@ export default function AppLayout() {
         <header className="sticky top-0 z-30 bg-[#fbf9f5]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
           <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
             <div className="flex items-center gap-4">
-              <button className="lg:hidden p-2 rounded-xl hover:bg-[#efeeea] transition-colors" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              <button
+                className="lg:hidden p-2 rounded-xl hover:bg-[#efeeea] transition-colors"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                title={sidebarOpen ? 'Close menu' : 'Open menu'}
+                aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={sidebarOpen}
+              >
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
@@ -302,7 +308,14 @@ export default function AppLayout() {
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              <button className="p-2 rounded-full hover:bg-[#efeeea] transition-colors">
+              {/* Placeholder pending the notifications feature (next on the roadmap) — disabled
+                  rather than removed, so the control is honest about doing nothing right now
+                  instead of silently absorbing clicks. */}
+              <button
+                className="p-2 rounded-full hover:bg-[#efeeea] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                aria-label="Notifications"
+                disabled
+              >
                 <span className="material-symbols-outlined text-[#396200]" style={{ fontSize: '22px' }}>notifications</span>
               </button>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] flex items-center justify-center text-white font-bold text-sm shadow-md">

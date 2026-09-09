@@ -33,7 +33,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useParticipant, usePatchParticipant, useUpdateParticipant, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, REVIEW_STEP_KEY,
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import {
@@ -418,6 +418,10 @@ export default function ProfileWizardPage() {
       />
 
       <form onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)} noValidate>
+        <WizardStepHeading
+          stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+          label={isReviewStep ? 'Review' : currentStep.label}
+        />
         {!isReviewStep && currentStep.key === 'keyIdentifiers' && (
           <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} />
         )}
