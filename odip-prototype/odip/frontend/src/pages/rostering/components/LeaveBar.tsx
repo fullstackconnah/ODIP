@@ -33,13 +33,19 @@ function timeOfDayPercent(time: string): number {
  * single-weekday occurrence for the visible week arrives here as its own startDate === endDate
  * row — clampedDayIndex already clips that to exactly one grid column with no extra logic;
  * timeOfDayPercent (above) is new, since no hour-proportional positioning helper exists anywhere
- * in the roster board to reuse.
+ * in the roster board to reuse. PendingRecurringRule (2026-09-09 audit ruling — a pending
+ * recurring request must be as visible as pending one-off leave) shares RecurringRule's
+ * partial-day geometry exactly, but gets the same dashed/pending treatment PendingLeave gets
+ * relative to ApprovedLeave, plus a "(pending)" suffix on its time-window label, since a shift
+ * over it only raises the soft, no-reason-required STAFF_RECURRING_PENDING warning.
  */
 export function LeaveBar({ leave, days }: LeaveBarProps) {
   const startCol = clampedDayIndex(leave.startDate, days) + 1
   const endCol = clampedDayIndex(leave.endDate, days) + 2
 
-  if (leave.kind === 'RecurringRule' && leave.startTime && leave.endTime) {
+  const isRecurring = leave.kind === 'RecurringRule' || leave.kind === 'PendingRecurringRule'
+  if (isRecurring && leave.startTime && leave.endTime) {
+    const pendingRecurring = leave.kind === 'PendingRecurringRule'
     const rawLeft = timeOfDayPercent(leave.startTime)
     // Floors the visible width so a very short window (e.g. 30 minutes, ~2% of a day) still
     // renders as a clickable/legible sliver instead of collapsing to near-nothing, then clamps
@@ -47,14 +53,16 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
     // left + width past 100% and overflows the day cell.
     const widthPct = Math.min(100, Math.max(timeOfDayPercent(leave.endTime) - rawLeft, 4))
     const leftPct = Math.min(rawLeft, 100 - widthPct)
-    const windowLabel = `${leave.startTime.slice(0, 5)}–${leave.endTime.slice(0, 5)}`
+    const windowLabel = `${leave.startTime.slice(0, 5)}–${leave.endTime.slice(0, 5)}${pendingRecurring ? ' (pending)' : ''}`
     const title = leave.notes ?? `Unavailable ${windowLabel}`
 
     return (
       <div style={{ gridColumn: `${startCol} / ${endCol}` }} className="relative min-h-[1.75rem]">
         <div
           style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-          className="absolute inset-y-0 flex items-center gap-1 overflow-hidden rounded-sm bg-muted px-1 text-[11px] italic text-muted-foreground"
+          className={`absolute inset-y-0 flex items-center gap-1 overflow-hidden rounded-sm px-1 text-[11px] italic text-muted-foreground ${
+            pendingRecurring ? 'border border-dashed border-muted-foreground bg-muted/40' : 'bg-muted'
+          }`}
           title={title}
         >
           <span className="min-w-0 flex-1 truncate">{windowLabel}</span>

@@ -63,6 +63,18 @@ describe('LeaveBar kind handling', () => {
     expect(screen.getByText('13:00–17:00').closest('[style*="grid-column"]')).toHaveStyle({ gridColumn: '3 / 4' })
   })
 
+  it('renders a pending recurring-rule bar with the same partial-day geometry, but dashed and suffixed "(pending)"', () => {
+    const leave = makeLeaveBar({
+      kind: 'PendingRecurringRule', availabilityType: 'Unavailable',
+      startDate: '2026-09-08', endDate: '2026-09-08', startTime: '09:00:00', endTime: '12:00:00',
+    })
+    render(<LeaveBar leave={leave} days={DAYS} />)
+    const block = screen.getByText('09:00–12:00 (pending)')
+    expect(block.parentElement).toHaveStyle({ left: '37.5%', width: '12.5%' })
+    expect(block.parentElement).toHaveClass('border-dashed')
+    expect(block.parentElement).toHaveClass('bg-muted/40')
+  })
+
   it('clamps a recurring-rule window ending near midnight so the block never overflows its day cell', () => {
     const leave = makeLeaveBar({
       kind: 'RecurringRule', startDate: '2026-09-10', endDate: '2026-09-10', startTime: '23:58:00', endTime: '23:59:59',

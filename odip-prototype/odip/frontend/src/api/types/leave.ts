@@ -42,8 +42,11 @@ export const LEAVE_STATUS_COLORS: Record<string, string> = {
 }
 
 /** Mirrors StaffUnavailabilityQuery.UnavailabilityKind — which of the three sources (plus the
- * legacy StaffAvailability table) a LeaveBarDto/roster-conflict window came from. */
-export const UNAVAILABILITY_KINDS = ['ApprovedLeave', 'PendingLeave', 'RecurringRule', 'Legacy'] as const
+ * legacy StaffAvailability table) a LeaveBarDto/roster-conflict window came from.
+ * PendingRecurringRule (2026-09-09 audit ruling) is RecurringRule's pending counterpart, exactly
+ * as PendingLeave is to ApprovedLeave — a Pending RecurringUnavailability rule now surfaces on
+ * the board/gate instead of being invisible until approved. */
+export const UNAVAILABILITY_KINDS = ['ApprovedLeave', 'PendingLeave', 'RecurringRule', 'PendingRecurringRule', 'Legacy'] as const
 export type UnavailabilityKind = typeof UNAVAILABILITY_KINDS[number]
 
 // ── Leave request (date-range) ────────────────────────────
