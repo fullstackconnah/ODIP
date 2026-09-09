@@ -127,6 +127,31 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task GetCompletions_NoActiveCompletion_ShiftExcluded()
+    {
+        // Locks in the join's behaviour (critique I2 rewrote the dictionary-lookup-after-the-fact
+        // as an inner join): a PendingReview shift with no completion row at all, and one whose
+        // only completion is inactive (e.g. a prior Return), must both stay out of the queue.
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var noCompletion = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var inactiveOnly = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, inactiveOnly.Id, staff.Id, isActive: false);
+        var withActive = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, withActive.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
+        var item = Assert.Single(body.Data!.Items);
+        Assert.Equal(withActive.Id, item.ShiftId);
+        Assert.Equal(1, body.Data.TotalCount);
+    }
+
+    [Fact]
     public async Task GetCompletions_StatusFilter_ExcludesOtherStatuses()
     {
         using var db = CreateDb();
