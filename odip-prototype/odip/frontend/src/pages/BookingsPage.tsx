@@ -1,4 +1,5 @@
 import { useBookings, usePatchBooking } from '@/api/hooks'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
@@ -15,8 +16,18 @@ import type { BookingListDto } from '@/api/types/bookings'
 // pattern as AccommodationPage's/VehiclesPage's archive confirms.
 const CONFIRM_STATUSES: BookingStatus[] = ['Cancelled', 'NoLongerAttending']
 
+// Matches BookingsController.GetAll's own PagingParams.DefaultPageSize (backend house
+// convention: default 50, ceiling 200) — kept in sync manually since paging params cross the API
+// boundary as plain query strings, not a shared type.
+const BOOKINGS_PAGE_SIZE = 50
+
 export default function BookingsPage() {
-  const { data: bookings = [], isLoading, isError } = useBookings()
+  const [page, setPage] = useState(1)
+  const { data: bookings = [], isLoading, isError } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE) })
+  // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
+  // while loading is a plain array without that extra field — read it as optional, same pattern
+  // as IncidentsPage/RegisterTab.
+  const { totalCount = bookings.length } = bookings as Partial<TruncatableList<BookingListDto>>
   const patchBooking = usePatchBooking()
   const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
 
@@ -36,7 +47,7 @@ export default function BookingsPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Bookings"
-        subtitle={`${bookings.length} booking${bookings.length !== 1 ? 's' : ''}`}
+        subtitle={`${totalCount} booking${totalCount !== 1 ? 's' : ''}`}
       />
 
       {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : bookings.length === 0 ? (
@@ -104,6 +115,12 @@ export default function BookingsPage() {
             { key: 'highSupportRequired', header: 'High', type: 'boolean', align: 'center' as const },
             { key: 'nightSupportRequired', header: 'Night', type: 'boolean', align: 'center' as const },
           ]}
+          pagination={{
+            page,
+            pageSize: BOOKINGS_PAGE_SIZE,
+            totalCount,
+            onPageChange: setPage,
+          }}
         />
       )}
 
