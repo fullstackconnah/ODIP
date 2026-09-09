@@ -1030,16 +1030,16 @@ public class IncidentsControllerTests
         await controller.Delete(incident.Id, CancellationToken.None);
 
         var defaultResult = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
         var defaultOk = Assert.IsType<OkObjectResult>(defaultResult.Result);
-        var defaultItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(defaultOk.Value);
-        Assert.DoesNotContain(defaultItems.Data!, i => i.Id == incident.Id);
+        var defaultItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(defaultOk.Value);
+        Assert.DoesNotContain(defaultItems.Data!.Items, i => i.Id == incident.Id);
 
         var closedResult = await controller.GetAll(
-            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
         var closedOk = Assert.IsType<OkObjectResult>(closedResult.Result);
-        var closedItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(closedOk.Value);
-        Assert.Contains(closedItems.Data!, i => i.Id == incident.Id);
+        var closedItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(closedOk.Value);
+        Assert.Contains(closedItems.Data!.Items, i => i.Id == incident.Id);
     }
 
     // ── Ordering: IncidentDateTime tiebreaker ────────────────────────────────
@@ -1072,17 +1072,101 @@ public class IncidentsControllerTests
         var expectedTiedOrder = tiedIncidents.OrderBy(i => i.Id).Select(i => i.Id).ToList();
 
         var firstCall = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
-        var firstItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!;
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+        var firstItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!.Items;
 
         var secondCall = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
-        var secondItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!;
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+        var secondItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!.Items;
 
         var firstTiedOrder = firstItems.Where(i => i.IncidentDateTime == tiedDateTime).Select(i => i.Id).ToList();
         var secondTiedOrder = secondItems.Where(i => i.IncidentDateTime == tiedDateTime).Select(i => i.Id).ToList();
 
         Assert.Equal(expectedTiedOrder, firstTiedOrder);
         Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
+
+    /// <summary>
+    /// The correctness guarantee the Id tiebreaker exists for: paging over rows that tie on
+    /// IncidentDateTime must partition the result set into disjoint, exhaustive pages — no row
+    /// duplicated across pages, none silently dropped.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_PagingOverTiedIncidentDateTime_PartitionsDisjointAndExhaustive()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var tiedDateTime = new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 3; i++)
+        {
+            var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { IncidentDateTime = tiedDateTime };
+            await controller.Create(dto, CancellationToken.None);
+        }
+
+        var page1Result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            page: 1, pageSize: 2, ct: CancellationToken.None);
+        var page1 = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(page1Result.Result).Value).Data!;
+
+        var page2Result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            page: 2, pageSize: 2, ct: CancellationToken.None);
+        var page2 = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(page2Result.Result).Value).Data!;
+
+        Assert.Equal(3, page1.TotalCount);
+        Assert.Equal(2, page1.Items.Count);
+        Assert.Single(page2.Items);
+
+        var page1Ids = page1.Items.Select(i => i.Id).ToList();
+        var page2Ids = page2.Items.Select(i => i.Id).ToList();
+        Assert.Empty(page1Ids.Intersect(page2Ids)); // disjoint — no row duplicated across pages
+        Assert.Equal(3, page1Ids.Concat(page2Ids).Distinct().Count()); // exhaustive — every row appears exactly once
+    }
+
+    // ── isOverdueQsc: server-side equivalent of the deleted client-side filter ───────────────
+
+    /// <summary>
+    /// PAGINATION-PLAN-V2 §4/Wave 1: `isOverdueQsc` must select exactly the same rows the deleted
+    /// `IncidentsPage.tsx` client-side `.filter(i => i.isOverdue24h)` used to — this test builds one
+    /// incident for every way `IsOverdue24h` can resolve false (not Required, already reported,
+    /// still inside the 24h window) plus one that resolves true, and asserts the filter returns
+    /// only the true one, with every returned row's own `IsOverdue24h` flag agreeing.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_IsOverdueQscFilter_MatchesIsOverdue24hComputedFlagExactly()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        async Task<IncidentReport> CreateAndBackdate(string title, TimeSpan createdAgo, QscReportingStatus qscStatus, DateTime? qscReportedAt = null)
+        {
+            var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, severity: IncidentSeverity.Low) with { Title = title };
+            await controller.Create(dto, CancellationToken.None);
+            var saved = await db.IncidentReports.SingleAsync(i => i.Title == title);
+            saved.CreatedAt = DateTime.UtcNow - createdAgo;
+            saved.QscReportingStatus = qscStatus;
+            saved.QscReportedAt = qscReportedAt;
+            await db.SaveChangesAsync();
+            return saved;
+        }
+
+        await CreateAndBackdate("Overdue", TimeSpan.FromHours(25), QscReportingStatus.Required);
+        await CreateAndBackdate("Recent, still within window", TimeSpan.FromHours(1), QscReportingStatus.Required);
+        await CreateAndBackdate("Already reported", TimeSpan.FromHours(30), QscReportingStatus.Required, DateTime.UtcNow.AddHours(-10));
+        await CreateAndBackdate("Not QSC-required", TimeSpan.FromHours(48), QscReportingStatus.NotRequired);
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: true, ct: CancellationToken.None);
+        var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
+
+        var titles = items.Select(i => i.Title).ToList();
+        Assert.Contains("Overdue", titles);
+        Assert.DoesNotContain("Recent, still within window", titles);
+        Assert.DoesNotContain("Already reported", titles);
+        Assert.DoesNotContain("Not QSC-required", titles);
+        Assert.All(items, i => Assert.True(i.IsOverdue24h));
     }
 }
