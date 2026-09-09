@@ -75,7 +75,7 @@ describe('ParticipantRisksHazardsSummarySection — edit/save cycle', () => {
     await user.clear(screen.getByLabelText('General Notes'))
     await user.type(screen.getByLabelText('General Notes'), 'Changed')
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    const dialog = screen.getByRole('dialog', { name: /discard changes/i })
+    const dialog = screen.getByRole('alertdialog', { name: /discard changes/i })
     await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
 
     expect(mockPatchMutateAsync).not.toHaveBeenCalled()

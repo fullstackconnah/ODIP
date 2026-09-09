@@ -125,8 +125,10 @@ public class StaffUnavailabilityQueryTests
     }
 
     [Fact]
-    public async Task Pending_recurring_rule_produces_no_window()
+    public async Task Pending_recurring_rule_expands_to_a_PendingRecurringRule_window_per_occurrence()
     {
+        // 2026-09-09 audit ruling: a Pending RecurringUnavailability rule must be as visible on
+        // the board/gate as a Pending LeaveRequest — it no longer yields nothing.
         using var db = CreateDb();
         var user = SeedUser(db);
         db.RecurringUnavailabilities.Add(new RecurringUnavailability
@@ -141,7 +143,42 @@ public class StaffUnavailabilityQueryTests
         var windows = await new StaffUnavailabilityQuery(db)
             .GetWindowsAsync(new[] { user.Id }, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
-        Assert.Empty(windows);
+        Assert.All(windows, w => Assert.Equal(UnavailabilityKind.PendingRecurringRule, w.Kind));
+        Assert.Equal(5, windows.Count); // 5 Wednesdays in Sept 2026
+        var first = windows.OrderBy(w => w.Start).First();
+        Assert.Equal(new DateTime(2026, 9, 2, 9, 0, 0), first.Start);
+        Assert.Equal(new DateTime(2026, 9, 2, 12, 0, 0), first.End);
+    }
+
+    [Fact]
+    public async Task Approved_and_pending_recurring_rules_for_the_same_user_produce_distinctly_tagged_windows()
+    {
+        // An Approved rule must keep behaving exactly as before even once Pending rules also
+        // produce windows — the two kinds must never collapse into one.
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+            EffectiveFrom = new DateOnly(2026, 9, 1), EffectiveTo = new DateOnly(2026, 9, 2), Status = LeaveStatus.Approved,
+            RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, UserId = user.Id, DayOfWeek = DayOfWeek.Thursday,
+            StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(17, 0),
+            EffectiveFrom = new DateOnly(2026, 9, 3), EffectiveTo = new DateOnly(2026, 9, 3), Status = LeaveStatus.Pending,
+            RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var windows = await new StaffUnavailabilityQuery(db)
+            .GetWindowsAsync(new[] { user.Id }, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        Assert.Equal(2, windows.Count);
+        Assert.Contains(windows, w => w.Kind == UnavailabilityKind.RecurringRule);
+        Assert.Contains(windows, w => w.Kind == UnavailabilityKind.PendingRecurringRule);
     }
 
     [Theory]

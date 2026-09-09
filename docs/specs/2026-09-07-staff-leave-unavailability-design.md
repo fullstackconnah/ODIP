@@ -236,7 +236,7 @@ dashboard, computed at read time (same style as `ParticipantAlertsService`,
 `backend/Odip.Infrastructure/Rostering/StaffUnavailabilityQuery.cs`:
 
 ```csharp
-public enum UnavailabilityKind { ApprovedLeave, PendingLeave, RecurringRule, Legacy }
+public enum UnavailabilityKind { ApprovedLeave, PendingLeave, RecurringRule, PendingRecurringRule, Legacy }
 
 public record UnavailabilityWindow(Guid UserId, DateTime Start, DateTime End, UnavailabilityKind Kind);
 
@@ -263,6 +263,7 @@ constant (`RosteringController.cs:40`) and `UnavailableTypes` constant
 | `STAFF_ON_LEAVE` | Warning | true | `"{Name}'s leave ({LeaveType}) covers this window — cannot roster without a reason."` |
 | `STAFF_RECURRING_UNAVAILABLE` | Warning | true | `"{Name} is recurringly unavailable {DayOfWeek} {Start}-{End}."` |
 | `STAFF_LEAVE_PENDING` | Warning | false | `"{Name} has a pending leave request covering this window."` |
+| `STAFF_RECURRING_PENDING` | Warning | false | `"{Name} has a pending recurring unavailability request covering {DayOfWeek} {Start}-{End}."` |
 
 `RosterFinding` (`RosterConflictService.cs:8`) gains a fourth positional member:
 
@@ -276,8 +277,17 @@ any `Severity == Blocking` finding → refused regardless of override; any findi
 `AcknowledgedFindingCodes` is required to save; a write with only findings that have
 `RequiresReason == false` is allowed with no reason, but the codes are still recorded in
 `AcknowledgedFindingCodes` (so the roster board can show *why* a cell looks tentative
-without asking for input). Pending `RecurringUnavailability` rules raise nothing — only
-`Approved` recurring rules feed `STAFF_RECURRING_UNAVAILABLE`.
+without asking for input).
+
+> **2026-09-09 ruling (post-audit, supersedes the original design above):** a Pending
+> `RecurringUnavailability` rule is no longer silent. It expands to a
+> `UnavailabilityKind.PendingRecurringRule` window (`StaffUnavailabilityQuery.cs`), renders as a
+> Tentative cell on the roster board (§4), and raises a soft `STAFF_RECURRING_PENDING` Warning
+> finding — `RequiresReason: false`, mirroring how `STAFF_LEAVE_PENDING` already treats a pending
+> one-off leave request. This was a deliberate decision, not an oversight: an unapproved
+> request must never gain the `Approved` rule's Blocking-adjacent, reason-required treatment
+> (`STAFF_RECURRING_UNAVAILABLE`) — that would let staff block a roster just by filing a request
+> that hasn't been approved yet.
 
 **Trip-side parity.** `StaffAssignment`
 (`backend/Odip.Domain/Entities/StaffAssignment.cs`, currently just `HasConflict` at line

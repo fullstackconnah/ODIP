@@ -156,6 +156,15 @@ npm run lint
   AutoMapper profiles "to match the pattern," and do not assume either one is wired up just
   because the package reference exists.
 
+- BOTH Dockerfiles run their test suites inside the image build — the backend one runs
+  `dotnet test Odip.Tests/Odip.Tests.csproj -c Release --no-restore`, the frontend one runs
+  `npm test`. The deploy workflow uses `docker compose build` as its gate, so a SINGLE failing test
+  anywhere fails the "Build images" step and no deploy happens at all. The symptom is a stale server
+  (the running containers are never touched), never an outage or a rollback — so diagnose a red
+  deploy with `gh run view <id> --log-failed` before suspecting the server. Beware time-dependent
+  tests in particular: a test that only fails inside some daily window will pass on a re-run and
+  carry the fault forward.
+
 - `Program.cs` contains raw-SQL self-healing logic for `__EFMigrationsHistory` that is tied to
   specific migration IDs. Renaming or reordering existing migrations can break application
   startup silently with no obvious error pointing back to the cause, so migrations must be

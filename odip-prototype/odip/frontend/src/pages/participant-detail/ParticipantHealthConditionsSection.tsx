@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { HeartPulse } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantHealthConditions, useUpsertHealthCondition } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -11,11 +10,7 @@ import { usePermissions } from '@/lib/permissions'
 import { HEALTH_CONDITION_TYPES } from '@/api/types/enums'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantHealthConditionDto } from '@/api/types/health-conditions'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 type ConditionFormState = {
   has: 'true' | 'false' | ''

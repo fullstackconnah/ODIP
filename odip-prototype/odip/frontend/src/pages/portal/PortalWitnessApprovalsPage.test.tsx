@@ -144,7 +144,7 @@ describe('PortalWitnessApprovalsPage', () => {
     // Declining is destructive, so it's gated behind a confirm dialog rather than firing immediately.
     expect(mockDeclineMutateAsync).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
     expect(mockDeclineMutateAsync).toHaveBeenCalledWith('admin-1')
@@ -176,7 +176,7 @@ describe('PortalWitnessApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /decline/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
     expect(await screen.findByText('This request has already been responded to.')).toBeInTheDocument()
@@ -202,7 +202,7 @@ describe('PortalWitnessApprovalsPage', () => {
       await user.click(screen.getByRole('button', { name: /approve/i }))
 
       expect(mockApproveIncidentMutateAsync).not.toHaveBeenCalled()
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     })
 
     it('approves an incident witness request with an optional statement', async () => {
@@ -212,7 +212,7 @@ describe('PortalWitnessApprovalsPage', () => {
       renderPage()
 
       await user.click(screen.getByRole('button', { name: /approve/i }))
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('alertdialog')
       await user.type(within(dialog).getByLabelText(/witness statement/i), 'I saw it happen.')
       await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
@@ -226,7 +226,7 @@ describe('PortalWitnessApprovalsPage', () => {
       renderPage()
 
       await user.click(screen.getByRole('button', { name: /approve/i }))
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('alertdialog')
       await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
       expect(mockApproveIncidentMutateAsync).toHaveBeenCalledWith({ id: 'witness-1', statementText: undefined })
@@ -239,7 +239,7 @@ describe('PortalWitnessApprovalsPage', () => {
       renderPage()
 
       await user.click(screen.getByRole('button', { name: /decline/i }))
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('alertdialog')
       await user.type(within(dialog).getByLabelText(/witness statement/i), 'Was not present.')
       await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 

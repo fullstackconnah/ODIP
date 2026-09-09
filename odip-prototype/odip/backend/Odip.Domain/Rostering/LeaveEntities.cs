@@ -38,7 +38,7 @@ public class LeaveRequest : ITenantEntity
     public DateTime RequestedAt { get; set; }
     public Guid? DecidedByUserId { get; set; }
     public DateTime? DecidedAt { get; set; }
-    public string? DecisionNote { get; set; }          // required on Declined
+    public string? DecisionNote { get; set; }          // optional on Declined
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

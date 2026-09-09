@@ -52,6 +52,9 @@ export interface VehicleAssignmentDto {
   pickupTravelNotes: string | null
   comments: string | null
   hasOverlapConflict: boolean
+  hasConflict: boolean
+  overrideReason: string | null
+  acknowledgedFindingCodes: string | null
 }
 
 export interface CreateVehicleAssignmentDto {
@@ -62,9 +65,18 @@ export interface CreateVehicleAssignmentDto {
   wheelchairPositionRequirement?: number
   pickupTravelNotes?: string
   comments?: string
+  overrideReason?: string
+  acknowledgedFindingCodes?: string[]
 }
 
 export interface UpdateVehicleAssignmentDto extends CreateVehicleAssignmentDto {
   status: VehicleAssignmentStatus
   confirmedDate?: string
+}
+
+/** Dry-run input for POST /vehicle-assignments/check — mirrors CreateVehicleAssignmentDto's shape. */
+export interface CheckVehicleAssignmentDto {
+  vehicleId: string
+  tripInstanceId: string
+  excludeAssignmentId?: string
 }

@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import type { AxiosError } from 'axios'
 import { ArrowLeft, ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
 import {
   usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest,
@@ -11,15 +10,10 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { PortalWitnessRequestDto } from '@/api/types'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
-import { formatWithTimeZone } from '@/lib/utils'
+import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 
 function formatDateTime(value: string | null, timeZone: string | null) {
   return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
-}
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
 }
 
 /** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */

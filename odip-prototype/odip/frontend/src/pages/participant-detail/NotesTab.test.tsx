@@ -168,7 +168,7 @@ describe('NotesTab', () => {
     render(<NotesTab participantId="participant-1" />)
 
     await user.click(screen.getByRole('button', { name: 'Archive' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Archive' }))
 
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith({

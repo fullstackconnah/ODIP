@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, Plus } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantRiskEntries, useCreateRiskEntry, useUpdateRiskEntry, useDeleteRiskEntry } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -12,11 +11,7 @@ import { AT_RISK_PARTIES } from '@/api/types/enums'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
 import type { AtRiskParty } from '@/api/types/enums'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 type RiskEntryFormState = {
   atRiskParty: AtRiskParty

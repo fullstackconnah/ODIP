@@ -79,6 +79,15 @@ describe('LeaveApprovalsPage', () => {
     expect(mockUseRecurringUnavailabilities).toHaveBeenCalledWith(expect.objectContaining({ status: 'Pending' }))
   })
 
+  it('gives the From/To date filters a visible, associated label', () => {
+    renderPage()
+    // getByLabelText requires an actual <label for>/aria-label association, not just nearby text.
+    expect(screen.getByLabelText('From')).toHaveAttribute('type', 'date')
+    expect(screen.getByLabelText('To')).toHaveAttribute('type', 'date')
+    expect(screen.getByText('From')).toBeVisible()
+    expect(screen.getByText('To')).toBeVisible()
+  })
+
   it('renders both leave requests and recurring unavailability rows in one table', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ userFullName: 'Alex Rivera', leaveType: 'Sick' })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Tuesday' })], isLoading: false, isError: false, refetch: vi.fn() })
@@ -100,7 +109,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
-    const confirmDialog = screen.getByRole('dialog')
+    const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
     expect(mockApproveLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
@@ -115,7 +124,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
-    const confirmDialog = screen.getByRole('dialog')
+    const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
     expect(await screen.findByText(/no rostered shifts or trips overlap this window/i)).toBeInTheDocument()
@@ -128,28 +137,31 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
-    const confirmDialog = screen.getByRole('dialog')
+    const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
     expect(await within(confirmDialog).findByText(/this request has already been decided\./i)).toBeInTheDocument()
     // The approve dialog stays open (not the overlaps notice) and the row is unchanged — still
     // Pending, with its Approve/Decline actions intact — since the mutation never resolved.
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
   })
 
-  it('requires a decline reason before submitting', async () => {
+  // Product ruling (2026-09-09): a decline reason is optional, not required — levelled down to
+  // match cancel, which has never demanded one. Replaces the old "requires a decline reason
+  // before submitting" test, which encoded the now-reversed rule.
+  it('declines with a blank reason', async () => {
     const user = userEvent.setup()
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeclineLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Declined' }))
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^decline$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
-    expect(mockDeclineLeaveMutateAsync).not.toHaveBeenCalled()
-    expect(within(dialog).getByText(/a decline reason is required/i)).toBeInTheDocument()
+    expect(mockDeclineLeaveMutateAsync).toHaveBeenCalledWith({ id: 'leave-1', data: { decisionNote: '' } })
   })
 
   it('declines with a note', async () => {
@@ -159,7 +171,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^decline$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.type(within(dialog).getByRole('textbox'), 'Short-staffed that week')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
@@ -173,7 +185,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
@@ -186,13 +198,13 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(await within(dialog).findByText(/only pending requests can be withdrawn\./i)).toBeInTheDocument()
     // The cancel dialog stays open and the row is unchanged — still Approved, with its own
     // Cancel action intact — since the mutation never resolved.
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
   })
 
@@ -242,7 +254,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
     expect(mockApproveUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
@@ -256,7 +268,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^decline$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.type(within(dialog).getByRole('textbox'), 'Roster gap')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
@@ -270,7 +282,7 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^cancel rule$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
 
     expect(mockCancelUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
@@ -290,7 +302,7 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.getByText('Old Rule')).toBeInTheDocument()
     expect(screen.getByText('Ongoing Rule')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText(/from date/i), '2026-09-01')
+    await user.type(screen.getByLabelText(/^from$/i), '2026-09-01')
 
     expect(screen.queryByText('Old Rule')).not.toBeInTheDocument()
     expect(screen.getByText('Ongoing Rule')).toBeInTheDocument()

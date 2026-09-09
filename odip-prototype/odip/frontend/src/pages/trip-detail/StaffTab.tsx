@@ -176,7 +176,10 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       status: s.status ?? 'Proposed',
     })
     setEditFindings([])
-    setEditOverrideReason('')
+    // Preload the assignment's stored override reason (if any) so a coordinator can see/amend
+    // why an override was originally made, rather than it silently resetting to blank — matches
+    // ShiftSlideOver's existing/forceVisible pattern below.
+    setEditOverrideReason(s.overrideReason ?? '')
     setEditReasonRequired(false)
     setEditError(null)
   }
@@ -424,6 +427,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                 overrideReason={editOverrideReason}
                 onOverrideReasonChange={setEditOverrideReason}
                 reasonRequired={editReasonRequired}
+                forceVisible={!!editingStaff?.overrideReason}
               />
 
               {/* Error */}

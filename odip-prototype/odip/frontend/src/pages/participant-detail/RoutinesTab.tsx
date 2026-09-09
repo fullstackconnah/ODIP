@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock, CalendarDays } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
-import { formatShiftTime } from '@/lib/utils'
+import { formatShiftTime, extractErrorMessage } from '@/lib/utils'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField, labelClass } from '@/components/FormField'
@@ -13,11 +12,6 @@ import { ROUTINE_CATEGORIES } from '@/api/types/enums'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
 import type { RoutineCategory } from '@/api/types/enums'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 /** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const

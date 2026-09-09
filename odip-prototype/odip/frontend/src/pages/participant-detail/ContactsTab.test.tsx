@@ -188,7 +188,7 @@ describe('ContactsTab', () => {
 
     render(<ContactsTab participantId="participant-1" />)
     await user.click(screen.getByRole('button', { name: 'Remove' }))
-    const dialog = screen.getByRole('dialog', { name: /remove this contact role/i })
+    const dialog = screen.getByRole('alertdialog', { name: /remove this contact role/i })
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'role-1', participantId: 'participant-1' })

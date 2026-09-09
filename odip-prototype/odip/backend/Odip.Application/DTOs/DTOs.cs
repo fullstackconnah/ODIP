@@ -1268,6 +1268,9 @@ public record VehicleAssignmentDto
     public string? PickupTravelNotes { get; init; }
     public string? Comments { get; init; }
     public bool HasOverlapConflict { get; init; }
+    public bool HasConflict { get; init; }
+    public string? OverrideReason { get; init; }
+    public string? AcknowledgedFindingCodes { get; init; }
 }
 
 public record CreateVehicleAssignmentDto
@@ -1279,12 +1282,25 @@ public record CreateVehicleAssignmentDto
     public int? WheelchairPositionRequirement { get; init; }
     public string? PickupTravelNotes { get; init; }
     public string? Comments { get; init; }
+    /// <summary>Required when the candidate carries a RequiresReason finding; ignored (never enough) for a Blocking finding.</summary>
+    public string? OverrideReason { get; init; }
+    /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
+    public List<string>? AcknowledgedFindingCodes { get; init; }
 }
 
 public record UpdateVehicleAssignmentDto : CreateVehicleAssignmentDto
 {
     public VehicleAssignmentStatus Status { get; init; }
     public DateOnly? ConfirmedDate { get; init; }
+}
+
+/// <summary>Dry-run input for POST /vehicle-assignments/check — mirrors CheckStaffAssignmentDto's shape for the vehicle-assignment analogue.</summary>
+public record CheckVehicleAssignmentDto
+{
+    public Guid VehicleId { get; init; }
+    public Guid TripInstanceId { get; init; }
+    /// <summary>The existing assignment being re-checked, if any — excluded from its own conflict queries. Null for a brand-new candidate.</summary>
+    public Guid? ExcludeAssignmentId { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

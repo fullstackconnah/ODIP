@@ -897,4 +897,32 @@ public class RosteringControllerTests
         // AvailabilityType is only filled for Legacy rows (A4) — Kind is the real discriminator.
         Assert.Null(recurringBar.AvailabilityType);
     }
+
+    // 2026-09-09 audit ruling: a Pending recurring rule must be visible on the board exactly like
+    // an Approved one — including its time-of-day window, so LeaveBar can draw the same
+    // partial-day bar (with pending styling).
+    [Fact]
+    public async Task GetBoard_StaffMode_PendingRecurringRuleBarPopulatesTimeWindow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = ServiceDate.DayOfWeek,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = ServiceDate,
+            Status = LeaveStatus.Pending, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var bar = Assert.Single(body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id).Leave);
+        Assert.Equal(UnavailabilityKind.PendingRecurringRule, bar.Kind);
+        Assert.Equal(new TimeOnly(9, 0), bar.StartTime);
+        Assert.Equal(new TimeOnly(12, 0), bar.EndTime);
+        Assert.Null(bar.AvailabilityType);
+    }
 }

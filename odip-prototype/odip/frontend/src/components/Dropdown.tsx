@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
@@ -65,6 +65,7 @@ export function Dropdown({
   'aria-invalid': ariaInvalid,
   'aria-describedby': ariaDescribedBy,
 }: DropdownProps) {
+  const panelId = useId()
   const [open, setOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
@@ -288,6 +289,7 @@ export function Dropdown({
   const panel = open && createPortal(
     <div
       ref={panelRef}
+      id={panelId}
       role="listbox"
       style={panelStyle}
       className={`bg-white rounded-2xl shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
@@ -360,6 +362,7 @@ export function Dropdown({
           type="button"
           id={id}
           aria-haspopup="listbox"
+          aria-controls={panelId}
           aria-expanded={open}
           aria-labelledby={ariaLabelledBy}
           aria-required={ariaRequired}
@@ -390,6 +393,7 @@ export function Dropdown({
           type="button"
           id={id}
           aria-haspopup="listbox"
+          aria-controls={panelId}
           aria-expanded={open}
           aria-labelledby={ariaLabelledBy}
           aria-required={ariaRequired}
@@ -419,6 +423,7 @@ export function Dropdown({
           ref={triggerRef}
           type="button"
           aria-haspopup="listbox"
+          aria-controls={panelId}
           aria-expanded={open}
           aria-label={label ?? 'More actions'}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
@@ -442,6 +447,7 @@ export function Dropdown({
         type="button"
         id={id}
         aria-haspopup="listbox"
+        aria-controls={panelId}
         aria-expanded={open}
         aria-labelledby={ariaLabelledBy}
         aria-required={ariaRequired}

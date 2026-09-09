@@ -1,15 +1,10 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 /** INTAKE sub-wave B tri-state idiom, duplicated locally per this codebase's per-file-helper convention (see SupportProfileTab.tsx). */
 const YES_NO_UNANSWERED_OPTIONS = [

@@ -80,6 +80,31 @@ public class ScheduleControllerTests
         Assert.Equal("Tentative", StatusFor(body, staff.Id, trip.Id).Status);
     }
 
+    // 2026-09-09 audit ruling: a Pending recurring rule must be as visible on the board as pending
+    // one-off leave already is — it now expands to a PendingRecurringRule window and reads Tentative.
+    [Fact]
+    public async Task PendingRecurringRuleOverlappingTrip_StatusIsTentative()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10)); // Thursday, 3-day trip -> Sept 10-12
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = DayOfWeek.Thursday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+            EffectiveFrom = new DateOnly(2026, 9, 1), Status = LeaveStatus.Pending,
+            RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Equal("Tentative", StatusFor(body, staff.Id, trip.Id).Status);
+    }
+
     [Fact]
     public async Task ApprovedLeaveOverlappingTrip_StatusIsUnavailable()
     {

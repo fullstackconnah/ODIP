@@ -102,9 +102,6 @@ public class LeaveController : ControllerBase
     [HttpPost("{id:guid}/decline")]
     public async Task<ActionResult<ApiResponse<LeaveRequestDto>>> DeclineLeave(Guid id, [FromBody] LeaveDecisionDto dto, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.DecisionNote))
-            return BadRequest(ApiResponse<LeaveRequestDto>.Fail("A decline reason is required."));
-
         var leave = await _db.LeaveRequests.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (leave == null) return NotFound(ApiResponse<LeaveRequestDto>.Fail("Leave request not found."));
         if (leave.Status != LeaveStatus.Pending)
@@ -117,7 +114,11 @@ public class LeaveController : ControllerBase
         leave.DecidedByUserId = declineCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
-        leave.DecisionNote = dto.DecisionNote.Trim();
+        // Product ruling: a decline reason is optional (a coordinator may still record one), not
+        // required — cancelling an already-Approved request has never demanded one either, and
+        // refusing a still-Pending request shouldn't be held to a higher bar than reversing a
+        // "yes". Persist null rather than "" when omitted, matching every other optional-note field.
+        leave.DecisionNote = string.IsNullOrWhiteSpace(dto.DecisionNote) ? null : dto.DecisionNote.Trim();
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
@@ -215,9 +216,6 @@ public class LeaveController : ControllerBase
     public async Task<ActionResult<ApiResponse<RecurringUnavailabilityDto>>> DeclineUnavailability(
         Guid id, [FromBody] LeaveDecisionDto dto, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.DecisionNote))
-            return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail("A decline reason is required."));
-
         var rule = await _db.RecurringUnavailabilities.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (rule == null) return NotFound(ApiResponse<RecurringUnavailabilityDto>.Fail("Unavailability request not found."));
         if (rule.Status != LeaveStatus.Pending)
@@ -230,7 +228,8 @@ public class LeaveController : ControllerBase
         rule.DecidedByUserId = declineRuleCallerId.Value;
         rule.DecidedAt = DateTime.UtcNow;
         rule.UpdatedAt = DateTime.UtcNow;
-        rule.DecisionNote = dto.DecisionNote.Trim();
+        // Product ruling: mirrors DeclineLeave above — a decline reason is optional, not required.
+        rule.DecisionNote = string.IsNullOrWhiteSpace(dto.DecisionNote) ? null : dto.DecisionNote.Trim();
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<RecurringUnavailabilityDto>.Ok(await LoadUnavailabilityDtoAsync(rule.Id, ct)));
     }

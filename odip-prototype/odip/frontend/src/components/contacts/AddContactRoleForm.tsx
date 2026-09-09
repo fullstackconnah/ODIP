@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AxiosError } from 'axios'
 import { Plus } from 'lucide-react'
 import { useParticipant, usePersons, useCreateContactRole, useUpdateContactRole } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
@@ -12,11 +11,7 @@ import {
   unionRelevantFields, type ContactRoleFieldKey,
 } from '@/api/types/contacts'
 import type { ParticipantContactRoleDto, CreateParticipantContactRoleDto, UpdateParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 /** Splits a typed "First Last" (or "First Middle Last") query into first/last name parts for the
  * "create new" fallback's pre-fill — PF-6's "pre-filled from whatever was typed". */

@@ -6,7 +6,7 @@
  * that file is not modified by this branch (PF-10.7 retires it later) and none of these were
  * exported from it.
  */
-import type { AxiosError } from 'axios'
+import { extractErrorMessage } from '@/lib/utils'
 
 /** boolean|null (the wire shape) -> the wizard's tri-state string shape, for reset()'s round-trip. */
 export function boolToTriState(value: boolean | null | undefined): 'true' | 'false' | '' {
@@ -24,8 +24,6 @@ export function focusField(fieldName: string) {
 }
 
 /** Surfaces the server's ApiResponse error message for the Save-as-draft banner, same shape as
- * the retired single-step wizard's extractErrorMessage. */
-export function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+ * the retired single-step wizard's extractErrorMessage. Re-exported from the shared
+ * `@/lib/utils` implementation so this module's existing callers keep working unchanged. */
+export { extractErrorMessage }

@@ -5,15 +5,21 @@ namespace Odip.Domain.Rostering.Services;
 /// <summary>
 /// Which of the three unavailability sources <see cref="Infrastructure.Rostering.StaffUnavailabilityQuery"/>
 /// (see that type's remarks for why the interface lives in Infrastructure while this shape lives
-/// here) tagged a given <see cref="UnavailabilityWindow"/> with. Only <c>Approved</c>
-/// <see cref="RecurringUnavailability"/> rules ever produce a <see cref="RecurringRule"/> window —
-/// a Pending rule raises nothing, per docs/specs/2026-09-07-staff-leave-unavailability-design.md §3.
+/// here) tagged a given <see cref="UnavailabilityWindow"/> with. A <see cref="RecurringUnavailability"/>
+/// rule now produces a window whether it's <c>Approved</c> (<see cref="RecurringRule"/>) or
+/// <c>Pending</c> (<see cref="PendingRecurringRule"/>) — mirroring how <see cref="ApprovedLeave"/>/
+/// <see cref="PendingLeave"/> both surface, per the 2026-09-09 audit ruling that a pending recurring
+/// request must be as visible as pending one-off leave. <see cref="PendingRecurringRule"/> gets the
+/// same soft, non-reason-required treatment <see cref="PendingLeave"/> gets in
+/// <see cref="RosterConflictService"/> — never the Blocking/RequiresReason treatment an Approved
+/// rule gets.
 /// </summary>
 public enum UnavailabilityKind
 {
     ApprovedLeave,
     PendingLeave,
     RecurringRule,
+    PendingRecurringRule,
     Legacy
 }
 

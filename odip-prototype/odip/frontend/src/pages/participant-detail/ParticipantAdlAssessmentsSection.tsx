@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Activity } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantAdlAssessments, useUpsertAdlAssessment } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -12,11 +11,7 @@ import { ADL_TYPES, adlCategoryOf } from '@/api/types/enums'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import type { ParticipantAdlAssessmentDto } from '@/api/types/adl-assessments'
 import type { AdlCategory, AdlLevel } from '@/api/types/enums'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 const LEVEL_OPTIONS = [
   { key: 'Independent', label: 'I' },

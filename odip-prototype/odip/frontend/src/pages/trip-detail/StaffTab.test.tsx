@@ -203,6 +203,46 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     )
   })
 
+  it('preloads the stored override reason when reopening an assignment that already has one, and keeps the field visible once the finding that required it clears', async () => {
+    const user = userEvent.setup()
+    // No live findings on this dry-run — the finding that originally justified the override is
+    // gone, but the assignment's own record still carries the reason from when it was made.
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    const staffRowWithReason = {
+      ...editableStaffRow,
+      overrideReason: 'Covering a last-minute shortfall.',
+    } as StaffAssignmentDto
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+
+    await user.click(screen.getByTitle('Edit assignment'))
+
+    // forceVisible keeps the field showing and readable even with zero live findings, matching
+    // ShiftSlideOver's existing/forceVisible pattern.
+    expect(await screen.findByDisplayValue('Covering a last-minute shortfall.')).toBeInTheDocument()
+  })
+
+  it('does not silently blank a stored override reason on save when no live finding requires one any more', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    const staffRowWithReason = {
+      ...editableStaffRow,
+      overrideReason: 'Covering a last-minute shortfall.',
+    } as StaffAssignmentDto
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+
+    await user.click(screen.getByTitle('Edit assignment'))
+    await screen.findByDisplayValue('Covering a last-minute shortfall.')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'assign-1',
+        data: expect.objectContaining({ overrideReason: 'Covering a last-minute shortfall.' }),
+      }),
+      expect.anything(),
+    )
+  })
+
   it('surfaces server-rejected findings from a 422 on submit', async () => {
     const user = userEvent.setup()
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))

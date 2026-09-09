@@ -1,18 +1,12 @@
 import { useState } from 'react'
-import type { AxiosError } from 'axios'
 import { usePatchParticipant } from '@/api/hooks'
-import { formatDateAu, maskNdisNumber } from '@/lib/utils'
+import { formatDateAu, maskNdisNumber, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
 import { SectionEditPanel } from './SectionEditPanel'
 import { FUNDING_SOURCES } from '@/api/types/enums'
 import { FUNDING_SOURCE_LABELS } from '@/api/types/participants'
 import type { FundingSource } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
 
 /**
  * PD-7: NDIS & Funding card — CORE-02's `ndisPlan` group. This section renders every field of

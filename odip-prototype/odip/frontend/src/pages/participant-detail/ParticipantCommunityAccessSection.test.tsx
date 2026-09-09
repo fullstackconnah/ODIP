@@ -82,7 +82,7 @@ describe('ParticipantCommunityAccessSection — edit/save cycle', () => {
     await user.clear(screen.getByLabelText('Signs I Am Happy and Settled'))
     await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Changed')
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    const dialog = screen.getByRole('dialog', { name: /discard changes/i })
+    const dialog = screen.getByRole('alertdialog', { name: /discard changes/i })
     await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
 
     expect(mockPatchMutateAsync).not.toHaveBeenCalled()

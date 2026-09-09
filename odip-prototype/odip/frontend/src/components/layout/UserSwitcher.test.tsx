@@ -115,11 +115,34 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     // Reopen the dropdown (selectUser closed it) to reach "Exit view".
     await user.click(screen.getByRole('button', { name: /^usr/i }))
     await user.click(screen.getByRole('button', { name: /exit view/i }))
+    // Exiting view is confirmed the same way switching users is.
+    await user.click(screen.getByRole('button', { name: /^exit view$/i }))
 
     const restoredUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
     expect(restoredUser.id).toBe('superadmin-1')
     expect(restoredUser.role).toBe('SuperAdmin')
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
     expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    // Once for the earlier switch-user confirm, once for the exit-view confirm.
+    expect(window.location.reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancelling the exit-view confirm dialog leaves the impersonated session untouched', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /view as user/i }))
+    await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    await user.click(screen.getByRole('button', { name: /exit view/i }))
+    // The confirm dialog is now open — cancel it instead of confirming.
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('user-support-1')
+    expect(localStorage.getItem('odip_viewing_user')).toBe('user-support-1')
+    expect(window.location.reload).toHaveBeenCalledTimes(1) // only from the earlier switch, not from exit
   })
 })

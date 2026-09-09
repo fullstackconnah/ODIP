@@ -130,4 +130,30 @@ describe('ParticipantPicker', () => {
 
     expect(screen.getByLabelText('Involved Participant')).toHaveValue('Marcus Lee')
   })
+
+  it('shows no truncation notice when the list is not truncated', () => {
+    const notTruncated = Object.assign([...PARTICIPANTS], { isTruncated: false, totalCount: 2 })
+    mockUseParticipants.mockReturnValue({ data: notTruncated, isLoading: false })
+    render(<ParticipantPicker value="" onChange={vi.fn()} />)
+
+    expect(screen.queryByText(/refine your search/i)).not.toBeInTheDocument()
+  })
+
+  it('shows no truncation notice for a plain array with no isTruncated field (e.g. the loading default)', () => {
+    mockUseParticipants.mockReturnValue({ data: [], isLoading: true })
+    render(<ParticipantPicker value="" onChange={vi.fn()} />)
+
+    expect(screen.queryByText(/refine your search/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a visible notice when the participant list was truncated to the page-size ceiling', () => {
+    const truncated = Object.assign(Array.from({ length: 200 }, (_, i) => ({ id: `p${i}`, fullName: `Participant ${i}` })), {
+      isTruncated: true,
+      totalCount: 340,
+    })
+    mockUseParticipants.mockReturnValue({ data: truncated, isLoading: false })
+    render(<ParticipantPicker value="" onChange={vi.fn()} />)
+
+    expect(screen.getByText('Showing the first 200 of 340 participants — refine your search to find someone else.')).toBeInTheDocument()
+  })
 })

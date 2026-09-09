@@ -19,8 +19,10 @@ public interface IStaffUnavailabilityQuery
     /// <summary>
     /// Every unavailability window for any of <paramref name="userIds"/> overlapping
     /// [<paramref name="from"/>, <paramref name="to"/>] (inclusive both ends): Approved + Pending
-    /// LeaveRequest rows (whole-day windows), Approved RecurringUnavailability rows (expanded via
-    /// RecurringUnavailabilityExpander — a Pending rule yields nothing), and legacy
+    /// LeaveRequest rows (whole-day windows), Approved + Pending RecurringUnavailability rows
+    /// (both expanded via RecurringUnavailabilityExpander — a Pending rule is tagged
+    /// PendingRecurringRule rather than RecurringRule, per the 2026-09-09 audit ruling that a
+    /// pending recurring request must be as visible as pending one-off leave), and legacy
     /// StaffAvailability Unavailable/Training/Leave rows (the migration's data step empties
     /// existing Leave-type rows into LeaveRequest, but a new one can still be created via the
     /// existing editor until PR 2 retires that option, so it is still matched here).
@@ -64,20 +66,28 @@ public sealed class StaffUnavailabilityQuery : IStaffUnavailabilityQuery
                 l.Status == LeaveStatus.Approved ? UnavailabilityKind.ApprovedLeave : UnavailabilityKind.PendingLeave));
         }
 
-        // ── Recurring unavailability: Approved only, expanded to concrete occurrences. Effective-
-        // range predicate is pushed into SQL for the same reason as the LeaveRequests query above
-        // — so the board path doesn't scale with a user's tenure. ──
+        // ── Recurring unavailability: Approved + Pending, expanded to concrete occurrences. A
+        // Pending rule is tagged PendingRecurringRule rather than RecurringRule so it gets the
+        // same soft, non-reason-required conflict-gate treatment PendingLeave gets, and renders
+        // as a Tentative-style bar rather than a hard Unavailable one — see the 2026-09-09 audit
+        // ruling in UnavailabilityKind's doc comment. Effective-range predicate is pushed into SQL
+        // for the same reason as the LeaveRequests query above — so the board path doesn't scale
+        // with a user's tenure. ──
         var rules = await _db.RecurringUnavailabilities
-            .Where(r => userIds.Contains(r.UserId) && r.Status == LeaveStatus.Approved
+            .Where(r => userIds.Contains(r.UserId)
+                        && (r.Status == LeaveStatus.Approved || r.Status == LeaveStatus.Pending)
                         && r.EffectiveFrom <= to && (r.EffectiveTo == null || r.EffectiveTo >= from))
             .ToListAsync(ct);
         foreach (var rule in rules)
         {
+            var kind = rule.Status == LeaveStatus.Approved
+                ? UnavailabilityKind.RecurringRule
+                : UnavailabilityKind.PendingRecurringRule;
             foreach (var date in _expander.Occurrences(rule, from, to))
             {
                 windows.Add(new UnavailabilityWindow(
                     rule.UserId, date.ToDateTime(rule.StartTime), date.ToDateTime(rule.EndTime),
-                    UnavailabilityKind.RecurringRule));
+                    kind));
             }
         }
 

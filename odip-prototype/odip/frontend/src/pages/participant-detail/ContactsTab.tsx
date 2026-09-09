@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Contact2, Plus } from 'lucide-react'
-import type { AxiosError } from 'axios'
 import { useParticipantContactRoles, useDeleteContactRole } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -13,11 +12,7 @@ import {
   CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_STATUS_LABELS, NOMINEE_SCOPE_LABELS,
 } from '@/api/types/contacts'
 import type { ParticipantContactRoleDto } from '@/api/types/contacts'
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
-}
+import { extractErrorMessage } from '@/lib/utils'
 
 /** The most relevant secondary line for a role row — different role types surface a different
  * "what matters most" field (research §3.1-3.14) rather than one fixed column always showing the

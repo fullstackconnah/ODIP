@@ -129,7 +129,8 @@ public class VehiclesController : ControllerBase
                 Id = a.Id, TripInstanceId = a.TripInstanceId, VehicleId = a.VehicleId,
                 Status = a.Status, DriverStaffId = a.DriverUserId,
                 DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
-                HasOverlapConflict = a.HasOverlapConflict
+                HasOverlapConflict = a.HasOverlapConflict, HasConflict = a.HasConflict,
+                OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<VehicleAssignmentDto>>.Ok(items));
     }
@@ -141,6 +142,7 @@ public class VehiclesController : ControllerBase
 public class VehicleAssignmentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
+    private readonly RosterConflictService _conflictService = new();
     public VehicleAssignmentsController(OdipDbContext db) => _db = db;
 
     /// <summary>
@@ -153,6 +155,51 @@ public class VehicleAssignmentsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == driverUserId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// Builds the VehicleCheckContext for a candidate VehicleAssignment and runs
+    /// RosterConflictService.CheckVehicleAssignment — the vehicle-side analogue of
+    /// StaffAssignmentsController.CheckAsync. excludeAssignmentId is the assignment's own prior Id
+    /// on an update (or Guid.Empty for a brand-new candidate / the dry-run check), so an
+    /// assignment never conflicts with itself. Returns an empty list (nothing to check against) if
+    /// the vehicle or trip can't be resolved — the caller's own NotFound checks handle that case.
+    /// </summary>
+    private async Task<List<RosterFinding>> CheckAsync(
+        Guid vehicleId, Guid tripInstanceId, Guid excludeAssignmentId, CancellationToken ct)
+    {
+        var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId, ct);
+        var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == tripInstanceId, ct);
+        if (vehicle is null || trip is null)
+            return new List<RosterFinding>();
+
+        var tripStart = trip.StartDate;
+        var tripEnd = trip.StartDate.AddDays(trip.DurationDays - 1);
+
+        var otherAssignments = await _db.VehicleAssignments
+            .Include(a => a.TripInstance)
+            .Where(a => a.VehicleId == vehicleId && a.Id != excludeAssignmentId
+                && a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable)
+            .Select(a => new VehicleAssignmentWindow(a.Id, a.TripInstance.StartDate, a.TripInstance.StartDate.AddDays(a.TripInstance.DurationDays - 1)))
+            .ToListAsync(ct);
+
+        var participantCount = await _db.ParticipantBookings
+            .CountAsync(b => b.TripInstanceId == tripInstanceId && b.BookingStatus == BookingStatus.Confirmed, ct);
+        var wheelchairCount = await _db.ParticipantBookings
+            .CountAsync(b => b.TripInstanceId == tripInstanceId && b.BookingStatus == BookingStatus.Confirmed && b.WheelchairRequired, ct);
+
+        var ctx = new VehicleCheckContext(vehicle, otherAssignments, participantCount, wheelchairCount);
+
+        return _conflictService.CheckVehicleAssignment(tripStart, tripEnd, excludeAssignmentId, ctx).ToList();
+    }
+
+    /// <summary>Dry-run findings for a candidate vehicle assignment. Never writes — mirrors POST /staff-assignments/check.</summary>
+    [HttpPost("check")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> Check([FromBody] CheckVehicleAssignmentDto dto, CancellationToken ct)
+    {
+        var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, dto.ExcludeAssignmentId ?? Guid.Empty, ct);
+        return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(RosterGate.ToFindingDto).ToList()));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleAssignmentDto>>> Create([FromBody] CreateVehicleAssignmentDto dto, CancellationToken ct)
@@ -163,6 +210,10 @@ public class VehicleAssignmentsController : ControllerBase
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
+        var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, Guid.Empty, ct);
+        var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "vehicle assignment");
+        if (rejection != null) return UnprocessableEntity(rejection);
+
         var assignment = new VehicleAssignment
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, VehicleId = dto.VehicleId,
@@ -172,14 +223,14 @@ public class VehicleAssignmentsController : ControllerBase
             RequestedDate = DateOnly.FromDateTime(DateTime.UtcNow)
         };
 
-        // Check vehicle overlap conflict
-        var hasConflict = await _db.VehicleAssignments
-            .Include(a => a.TripInstance)
-            .AnyAsync(a => a.VehicleId == dto.VehicleId && a.Id != assignment.Id
-                && a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable
-                && a.TripInstance.StartDate <= trip.StartDate.AddDays(trip.DurationDays - 1)
-                && a.TripInstance.StartDate.AddDays(a.TripInstance.DurationDays - 1) >= trip.StartDate, ct);
-        assignment.HasOverlapConflict = hasConflict;
+        var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        assignment.OverrideReason = overrideReason;
+        assignment.AcknowledgedFindingCodes = codes;
+        assignment.HasConflict = overrideReason != null;
+        // VEHICLE_DOUBLE_BOOKED is Blocking, so EvaluateFindings above already rejected the write
+        // if it fired — this can only ever be false on a row that actually gets saved. Derived
+        // from the same findings the gate ran, not a second, independently-computed overlap query.
+        assignment.HasOverlapConflict = findings.Any(f => f.Code == RosterConflictService.VehicleDoubleBooked);
 
         _db.VehicleAssignments.Add(assignment);
         await _db.SaveChangesAsync(ct);
@@ -193,7 +244,9 @@ public class VehicleAssignmentsController : ControllerBase
             DriverStaffId = assignment.DriverUserId,
             DriverName = assignment.DriverUser != null ? assignment.DriverUser.FirstName + " " + assignment.DriverUser.LastName : null,
             SeatRequirement = assignment.SeatRequirement, WheelchairPositionRequirement = assignment.WheelchairPositionRequirement,
-            PickupTravelNotes = assignment.PickupTravelNotes, Comments = assignment.Comments, HasOverlapConflict = hasConflict
+            PickupTravelNotes = assignment.PickupTravelNotes, Comments = assignment.Comments,
+            HasOverlapConflict = assignment.HasOverlapConflict, HasConflict = assignment.HasConflict,
+            OverrideReason = assignment.OverrideReason, AcknowledgedFindingCodes = assignment.AcknowledgedFindingCodes
         }));
     }
 
@@ -206,6 +259,25 @@ public class VehicleAssignmentsController : ControllerBase
 
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
+
+        // Cancelling via PUT mirrors StaffAssignmentsController.Update: a Cancelled row is excluded
+        // from every conflict query (see the otherAssignments filter in CheckAsync), so demanding an
+        // override reason to cancel is a trap. Skip the gate entirely and leave OverrideReason/
+        // AcknowledgedFindingCodes/HasConflict/HasOverlapConflict untouched.
+        var isCancelling = dto.Status == VehicleAssignmentStatus.Cancelled;
+
+        if (!isCancelling)
+        {
+            var findings = await CheckAsync(dto.VehicleId, a.TripInstanceId, a.Id, ct);
+            var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "vehicle assignment");
+            if (rejection != null) return UnprocessableEntity(rejection);
+
+            var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+            a.OverrideReason = overrideReason;
+            a.AcknowledgedFindingCodes = codes;
+            a.HasConflict = overrideReason != null;
+            a.HasOverlapConflict = findings.Any(f => f.Code == RosterConflictService.VehicleDoubleBooked);
+        }
 
         a.VehicleId = dto.VehicleId; a.DriverUserId = dto.DriverStaffId;
         a.SeatRequirement = dto.SeatRequirement; a.WheelchairPositionRequirement = dto.WheelchairPositionRequirement;
@@ -223,7 +295,9 @@ public class VehicleAssignmentsController : ControllerBase
             DriverStaffId = a.DriverUserId,
             DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
             SeatRequirement = a.SeatRequirement, WheelchairPositionRequirement = a.WheelchairPositionRequirement,
-            PickupTravelNotes = a.PickupTravelNotes, Comments = a.Comments, HasOverlapConflict = a.HasOverlapConflict
+            PickupTravelNotes = a.PickupTravelNotes, Comments = a.Comments,
+            HasOverlapConflict = a.HasOverlapConflict, HasConflict = a.HasConflict,
+            OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
         }));
     }
 

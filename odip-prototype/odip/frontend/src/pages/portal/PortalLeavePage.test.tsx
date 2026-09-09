@@ -134,7 +134,7 @@ describe('PortalLeavePage', () => {
     expect(withdrawButtons).toHaveLength(1)
 
     await user.click(withdrawButtons[0])
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-pending')
@@ -152,11 +152,11 @@ describe('PortalLeavePage', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /withdraw/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not withdraw — already being processed.')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('surfaces the server error message when submitting fails', async () => {

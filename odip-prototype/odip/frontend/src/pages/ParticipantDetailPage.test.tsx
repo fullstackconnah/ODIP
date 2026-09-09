@@ -612,7 +612,7 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     await user.click(screen.getByRole('button', { name: /^revoke$/i }))
     expect(revokeMutateAsync).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/revoke caregiver link/i)).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: /^revoke$/i }))
@@ -631,11 +631,11 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     setup()
 
     await user.click(screen.getByRole('button', { name: /^revoke$/i }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
     expect(revokeMutateAsync).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
 

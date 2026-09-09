@@ -1,8 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
-import { useVehicles, useCreateVehicleAssignment, useCreateVehicle } from '@/api/hooks'
+import {
+  useVehicles, useCreateVehicleAssignment, useCreateVehicle,
+  useCheckVehicleAssignment, getRosterFindings,
+} from '@/api/hooks'
 import { Modal } from '@/components/Modal'
-import type { VehicleType } from '@/api/types'
+import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
+import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
+import type { VehicleType, RosterFindingDto } from '@/api/types'
 import { Dropdown } from './Dropdown'
 
 interface AddVehicleModalProps {
@@ -17,6 +22,10 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   // Tab 1 state
   const [search, setSearch] = useState('')
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
+  const [findings, setFindings] = useState<RosterFindingDto[]>([])
+  const [overrideReason, setOverrideReason] = useState('')
+  const [reasonRequired, setReasonRequired] = useState(false)
+  const [assignError, setAssignError] = useState<string | null>(null)
 
   // Tab 2 state
   const [vehicleName, setVehicleName] = useState('')
@@ -31,6 +40,25 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   const { data: allVehicles = [] } = useVehicles()
   const createAssignment = useCreateVehicleAssignment()
   const createVehicle = useCreateVehicle()
+  const checkAssignment = useCheckVehicleAssignment()
+
+  const gate = getRosterGate(findings)
+
+  // Live dry-run: re-checks findings whenever the selected existing vehicle changes, debounced
+  // 400ms — mirrors StaffTab's Add Staff effect. Only runs on the "existing" tab, where a
+  // vehicleId is known up front; the "new vehicle" tab has no id to check against until the
+  // vehicle is created. Never writes — POST /vehicle-assignments/check is a pure preview.
+  useEffect(() => {
+    if (activeTab !== 'existing' || !selectedVehicleId) return
+    const handle = setTimeout(() => {
+      checkAssignment.mutate(
+        { vehicleId: selectedVehicleId, tripInstanceId },
+        { onSuccess: setFindings },
+      )
+    }, 400)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedVehicleId, tripInstanceId])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filteredVehicles = (allVehicles as any[])
@@ -45,9 +73,33 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
 
   const handleAssignExisting = () => {
     if (!selectedVehicleId) return
+    if (gate.isBlocked) return
+    if (gate.needsReason && !overrideReason.trim()) {
+      setReasonRequired(true)
+      return
+    }
+    setReasonRequired(false)
+    setAssignError(null)
+
     createAssignment.mutate(
-      { tripInstanceId, vehicleId: selectedVehicleId },
-      { onSuccess: () => onClose() }
+      {
+        tripInstanceId,
+        vehicleId: selectedVehicleId,
+        overrideReason: overrideReason.trim() || undefined,
+        acknowledgedFindingCodes: findings.map(f => f.code),
+      },
+      {
+        onSuccess: () => onClose(),
+        onError: (err: unknown) => {
+          const serverFindings = getRosterFindings(err)
+          if (serverFindings) {
+            setFindings(serverFindings)
+            if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
+          } else {
+            setAssignError('Failed to assign vehicle. Please try again.')
+          }
+        },
+      }
     )
   }
 
@@ -85,7 +137,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
     }
   }
 
-  const tab1CanSubmit = !!selectedVehicleId && !createAssignment.isPending
+  const tab1CanSubmit = !!selectedVehicleId && !createAssignment.isPending && !gate.isBlocked
   const tab2CanSubmit =
     !!vehicleName && !!vehicleType && totalSeats !== '' &&
     !createVehicle.isPending && !createAssignment.isPending
@@ -106,7 +158,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
               disabled={!tab1CanSubmit}
               className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {createAssignment.isPending ? 'Assigning...' : 'Assign Vehicle'}
+              {createAssignment.isPending ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
             </button>
           </>
         ) : (
@@ -131,7 +183,16 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
           {(['existing', 'new'] as const).map(tab => (
             <button
               key={tab}
-              onClick={() => { setActiveTab(tab); createAssignment.reset(); createVehicle.reset(); setNoIdReturned(false) }}
+              onClick={() => {
+                setActiveTab(tab)
+                createAssignment.reset()
+                createVehicle.reset()
+                setNoIdReturned(false)
+                setFindings([])
+                setOverrideReason('')
+                setReasonRequired(false)
+                setAssignError(null)
+              }}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-primary)]'
@@ -184,8 +245,15 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
               ))}
             </div>
 
-            {createAssignment.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">Failed to assign vehicle. Please try again.</p>
+            <RosterGateFields
+              findings={findings}
+              overrideReason={overrideReason}
+              onOverrideReasonChange={setOverrideReason}
+              reasonRequired={reasonRequired}
+            />
+
+            {assignError && (
+              <p className="text-sm text-[var(--color-destructive)]">{assignError}</p>
             )}
           </div>
         )}

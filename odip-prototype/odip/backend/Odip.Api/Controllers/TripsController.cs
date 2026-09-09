@@ -356,7 +356,8 @@ public class TripsController : ControllerBase
                 Status = v.Status, RequestedDate = v.RequestedDate, ConfirmedDate = v.ConfirmedDate,
                 DriverStaffId = v.DriverUserId, DriverName = v.DriverUser != null ? v.DriverUser.FirstName + " " + v.DriverUser.LastName : null,
                 SeatRequirement = v.SeatRequirement, WheelchairPositionRequirement = v.WheelchairPositionRequirement,
-                PickupTravelNotes = v.PickupTravelNotes, Comments = v.Comments, HasOverlapConflict = v.HasOverlapConflict
+                PickupTravelNotes = v.PickupTravelNotes, Comments = v.Comments, HasOverlapConflict = v.HasOverlapConflict,
+                HasConflict = v.HasConflict, OverrideReason = v.OverrideReason, AcknowledgedFindingCodes = v.AcknowledgedFindingCodes
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<VehicleAssignmentDto>>.Ok(items));
     }

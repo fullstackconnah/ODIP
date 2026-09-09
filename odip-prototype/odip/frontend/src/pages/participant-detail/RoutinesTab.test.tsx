@@ -290,7 +290,7 @@ describe('RoutinesTab', () => {
     render(<RoutinesTab participantId="participant-1" />)
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'routine-1', participantId: 'participant-1' })
