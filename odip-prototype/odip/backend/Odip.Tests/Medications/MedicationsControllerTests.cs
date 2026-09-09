@@ -697,27 +697,23 @@ public class MedicationsControllerTests
     {
         var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        // Use "now minus 2 hours" as the time-of-day so today's slot is clearly in the past.
-        // Guard against the 2-hour subtraction rolling into the previous day (which would make
-        // the computed slot look like it's still in the future today) by falling back to a
-        // fixed early-morning time in that rare window.
-        var pastTime = DateTime.UtcNow.AddHours(-2);
-        if (pastTime.Date != DateTime.UtcNow.Date)
-            pastTime = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, 0, 1, 0);
-        var timeOfDay = pastTime.ToString("HH:mm");
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Fixed time-of-day on a past date, not an offset from DateTime.UtcNow: the slot must
+        // clear MedicationsController's 60-minute overdue grace (scheduledAt.AddMinutes(60) <
+        // now), and yesterday at 08:00 is always well past that grace no matter what time of
+        // day the suite happens to run at.
+        var targetDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
 
         var med = new ParticipantMedication
         {
             Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Levetiracetam", DoseDescription = "1 tablet",
-            Type = MedicationType.Regular, TimesOfDay = timeOfDay, Status = MedicationStatus.Active,
-            StartDate = today.ToDateTime(TimeOnly.MinValue).AddMonths(-1), ConsentObtained = true,
+            Type = MedicationType.Regular, TimesOfDay = "08:00", Status = MedicationStatus.Active,
+            StartDate = targetDate.ToDateTime(TimeOnly.MinValue).AddMonths(-1), ConsentObtained = true,
         };
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
         var controller = new MedicationsController(db, tenant);
-        var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
+        var result = await controller.GetMar(targetDate, participant.Id, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         var entry = Assert.Single(body.Data!.Entries);
