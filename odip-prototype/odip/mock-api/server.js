@@ -358,6 +358,32 @@ const tasks = [
     dueDate: '2026-07-20', status: 'Completed', completedDate: '2026-07-18',
     notes: 'Claims submitted via PRODA 18 Jul.',
   },
+  // Item 9 (tasks as the obligation engine) — task-0006 is trip-less: tripInstanceId/tripName are
+  // omitted entirely (not sent as null) to match the real "field omitted from JSON when absent"
+  // contract. Its linkTo/shiftId/leaveRequestId tie it to Mei Zhang's approved leave and the
+  // board-shift-0002 hole it creates (see rosterBoard() and sampleOverlapShift above).
+  {
+    id: 'task-0006',
+    participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'LeaveCoverage', title: "Find cover for Grace Palmer-Hughes' overnight shift (Mei Zhang on leave)",
+    ownerId: 's-0001', ownerName: 'Callum Radford', priority: 'Urgent',
+    dueDate: '2026-09-08', status: 'NotStarted', completedDate: null,
+    notes: "Mei Zhang's approved sick leave (8-9 Sep) covers this shift.",
+    linkTo: '/rostering/leave', leaveRequestId: 'leave-0002', shiftId: 'board-shift-0002',
+  },
+  // task-0007 keeps its trip (t-0004) — the contrasting case, showing tripInstanceId/tripName are
+  // merely optional now, not always absent for the new obligation-engine task types.
+  {
+    id: 'task-0007', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
+    participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'IncidentQscReport', title: 'File QSC report — missed evening medication dose',
+    ownerId: 's-0002', ownerName: 'Priya Nadarajah', priority: 'High',
+    dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
+    notes: 'QSC reporting window closes 72h after the incident.',
+    linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+  },
 ]
 
 // Incidents (IncidentListDto)
@@ -974,6 +1000,64 @@ const appSettings = { qualificationWarningDays: 30 }
 // portal/* routes below answer for.
 const CURRENT_STAFF_ID = 's-0003'
 
+// Item 5 (leave-approval overlaps become roster actions) — the one overlapShifts row every
+// leave/unavailability approve and edit mock response below carries, beside the existing empty
+// `overlaps` findings array. Matches board-shift-0002 in rosterBoard() below, so a coordinator
+// clicking "Unassign and mark open" here and then opening the roster board sees the same shift.
+const sampleOverlapShift = {
+  shiftId: 'board-shift-0002', serviceDate: '2026-09-08', startTime: '19:00:00', endTime: '07:00:00',
+  endsNextDay: true, participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+}
+
+// Paired finding for sampleOverlapShift — kept alongside it (rather than an empty `overlaps`
+// array) so the approve/edit dialogs actually open with something to show in this mock, matching
+// the real contract's "overlapShifts sits beside the overlaps findings" shape.
+const sampleOverlapFinding = {
+  code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning',
+  message: 'Overlaps a rostered shift for Grace Palmer-Hughes on 8 Sep.', requiresReason: false,
+}
+
+// Roster board (RosterBoardDto) — GET /rostering/board. Stateless/query-string-blind like every
+// other GET here (groupBy/weekStart aren't read); always returns the Participant-grouped shape,
+// which is RosterBoardPage's default view. board-shift-0002 is deliberately assigned to Mei
+// Zhang (s-0004) with assigneeOnApprovedLeave: true — she has an Approved Sick leave request
+// (leave-0002, 2026-09-08..09-09) that now covers this shift, so it renders as an "On leave"
+// hole rather than a normal filled chip; board-shift-0001 is a normal filled shift for contrast.
+function rosterBoard() {
+  return {
+    groupBy: 'Participant',
+    weekStart: '2026-09-07',
+    days: ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'],
+    participantRows: [
+      {
+        participantId: 'p-0001', fullName: 'Liam Okafor', supportRatio: 'OneToTwo', overnightSupport: 'None',
+        hasRestrictivePractice: false,
+        shifts: [{
+          id: 'board-shift-0001', participantId: 'p-0001', participantName: 'Liam Okafor',
+          staffId: 's-0003', staffName: "Jack O'Sullivan", serviceDate: '2026-09-08',
+          startTime: '08:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8,
+          ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false,
+        }],
+        tripBars: [], scheduledHours: 8, daysWithoutCover: 6,
+      },
+      {
+        participantId: 'p-0004', fullName: 'Grace Palmer-Hughes', supportRatio: 'TwoToOne', overnightSupport: 'ActiveNight',
+        hasRestrictivePractice: true,
+        shifts: [{
+          id: 'board-shift-0002', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+          staffId: 's-0004', staffName: 'Mei Zhang', serviceDate: '2026-09-08',
+          startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true, durationHours: 12,
+          ratio: 'OneToOne', nightType: 'ActiveNight', status: 'Published', shiftPatternId: null,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: true,
+        }],
+        tripBars: [], scheduledHours: 12, daysWithoutCover: 6,
+      },
+    ],
+    exceptions: [],
+  }
+}
+
 const leaveRequests = [
   {
     id: 'leave-0001', userId: 's-0003', userFullName: "Jack O'Sullivan",
@@ -1306,6 +1390,9 @@ const routes = [
   ['leave', () => leaveRequests],
   ['leave/unavailability', () => recurringUnavailabilities],
 
+  // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
+  ['rostering/board', () => rosterBoard()],
+
   // legacy StaffAvailability list — GET /staff-availability?userId=&from=&to= (query string isn't
   // read here, same caveat as the leave/unavailability routes above).
   ['staff-availability', () => staffAvailabilityRecords],
@@ -1349,7 +1436,8 @@ const postRoutes = [
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/:id/decline', (id, body) =>
     withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Declined', body?.decisionNote ?? null)],
@@ -1360,7 +1448,8 @@ const postRoutes = [
 
   ['leave/unavailability/:id/approve', (id) => ({
     unavailability: withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Approved', null),
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/unavailability/:id/decline', (id, body) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Declined', body?.decisionNote ?? null)],
@@ -1444,11 +1533,13 @@ const postRoutes = [
 const putRoutes = [
   ['leave/:id', (id, body) => ({
     leave: { ...(leaveRequests.find((r) => r.id === id) || leaveRequests[0]), ...body },
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/unavailability/:id', (id, body) => ({
     unavailability: { ...(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0]), ...body },
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
 
   // PUT notifications/preferences — echoes the base grid with the submitted rows' `enabled`

@@ -32,6 +32,11 @@ export interface ShiftDto {
   notes: string | null
   overrideReason: string | null
   findings: RosterFindingDto[]
+  /** True when this shift's assigned staff member has approved leave covering it — set after the
+   * fact (leave approved after the assignment was made), so it's not necessarily reflected in
+   * `findings` (those are computed at assign-time). Renders as a distinct "On leave" hole on the
+   * board rather than a normal filled chip. */
+  assigneeOnApprovedLeave: boolean
 }
 
 // ── Shift Notes (NOTES-01) — shared shape read by both the portal (own-shift

@@ -24,6 +24,7 @@ const {
   mockCreateLeaveOnBehalfMutateAsync, mockCreateUnavailabilityOnBehalfMutateAsync,
   mockUpdateLeaveMutateAsync, mockUpdateUnavailabilityMutateAsync,
   mockCreateStaffAvailabilityMutateAsync, mockUpdateStaffAvailabilityMutateAsync, mockDeleteStaffAvailabilityMutateAsync,
+  mockAssignShiftMutateAsync,
 } = vi.hoisted(() => ({
   mockUseLeaveRequests: vi.fn(),
   mockUseRecurringUnavailabilities: vi.fn(),
@@ -42,6 +43,7 @@ const {
   mockCreateStaffAvailabilityMutateAsync: vi.fn(),
   mockUpdateStaffAvailabilityMutateAsync: vi.fn(),
   mockDeleteStaffAvailabilityMutateAsync: vi.fn(),
+  mockAssignShiftMutateAsync: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -62,6 +64,7 @@ vi.mock('@/api/hooks', () => ({
   useCreateStaffAvailability: () => ({ mutateAsync: mockCreateStaffAvailabilityMutateAsync, isPending: false }),
   useUpdateStaffAvailability: () => ({ mutateAsync: mockUpdateStaffAvailabilityMutateAsync, isPending: false }),
   useDeleteStaffAvailability: () => ({ mutateAsync: mockDeleteStaffAvailabilityMutateAsync, isPending: false }),
+  useAssignShift: () => ({ mutateAsync: mockAssignShiftMutateAsync, isPending: false }),
 }))
 
 function setUserRole(role: string) {
@@ -90,6 +93,7 @@ beforeEach(() => {
   mockCreateStaffAvailabilityMutateAsync.mockReset()
   mockUpdateStaffAvailabilityMutateAsync.mockReset()
   mockDeleteStaffAvailabilityMutateAsync.mockReset()
+  mockAssignShiftMutateAsync.mockReset()
 })
 
 describe('LeaveApprovalsPage', () => {
@@ -135,6 +139,79 @@ describe('LeaveApprovalsPage', () => {
     expect(mockApproveLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
     expect(await screen.findByText(/approved — this overlaps 1 rostered shift\/trip/i)).toBeInTheDocument()
     expect(screen.getByText('Overlaps a published shift.')).toBeInTheDocument()
+  })
+
+  it('lists overlapShifts in the post-approve dialog and unassigns one with a null staffId', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', userFullName: 'Alex Rivera' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveLeaveMutateAsync.mockResolvedValue({
+      leave: makeLeaveRequest({ id: 'leave-1', status: 'Approved' }),
+      overlaps: [{ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning', message: 'Overlaps a published shift.', requiresReason: false }],
+      overlapShifts: [{
+        shiftId: 'shift-9', serviceDate: '2026-09-15', startTime: '09:00:00', endTime: '17:00:00',
+        endsNextDay: false, participantId: 'p-1', participantName: 'Mia Chen',
+      }],
+    })
+    mockAssignShiftMutateAsync.mockResolvedValue({})
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    const confirmDialog = screen.getByRole('alertdialog')
+    await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(await screen.findByText(/mia chen/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /unassign and mark open/i }))
+
+    expect(mockAssignShiftMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-9',
+      data: { staffId: null, overrideReason: null, acknowledgedFindingCodes: [] },
+    })
+    expect(await screen.findByText('Unassigned')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /unassign and mark open/i })).not.toBeInTheDocument()
+  })
+
+  it('shows an inline error on the overlap-shift row when the unassign call rejects, without closing the dialog', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', userFullName: 'Alex Rivera' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveLeaveMutateAsync.mockResolvedValue({
+      leave: makeLeaveRequest({ id: 'leave-1', status: 'Approved' }),
+      overlaps: [{ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning', message: 'Overlaps a published shift.', requiresReason: false }],
+      overlapShifts: [{
+        shiftId: 'shift-9', serviceDate: '2026-09-15', startTime: '09:00:00', endTime: '17:00:00',
+        endsNextDay: false, participantId: 'p-1', participantName: 'Mia Chen',
+      }],
+    })
+    mockAssignShiftMutateAsync.mockRejectedValue({ response: { data: { message: 'This shift has already started.' } } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    const confirmDialog = screen.getByRole('alertdialog')
+    await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
+
+    await user.click(await screen.findByRole('button', { name: /unassign and mark open/i }))
+
+    expect(await screen.findByText('This shift has already started.')).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /unassign and mark open/i })).toBeInTheDocument()
+  })
+
+  it('renders no overlap-shift rows (today\'s plain rendering) when overlapShifts is empty', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', userFullName: 'Alex Rivera' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveLeaveMutateAsync.mockResolvedValue({
+      leave: makeLeaveRequest({ id: 'leave-1', status: 'Approved' }),
+      overlaps: [{ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning', message: 'Overlaps a published shift.', requiresReason: false }],
+      overlapShifts: [],
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    const confirmDialog = screen.getByRole('alertdialog')
+    await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(await screen.findByText(/approved — this overlaps 1 rostered shift\/trip/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /unassign and mark open/i })).not.toBeInTheDocument()
   })
 
   it('approves a request with no overlaps and shows the plain success notice', async () => {
@@ -398,6 +475,33 @@ describe('LeaveApprovalsPage', () => {
 
     expect(await screen.findByText(/saved.*overlaps 1 rostered shift\/trip/i)).toBeInTheDocument()
     expect(screen.getByText('Overlaps a published shift.')).toBeInTheDocument()
+  })
+
+  it('lists overlapShifts in the post-edit dialog for an edited Approved leave request, with a working unassign action', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Approved' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUpdateLeaveMutateAsync.mockResolvedValue({
+      leave: makeLeaveRequest({ id: 'leave-1', status: 'Approved' }),
+      overlaps: [{ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning', message: 'Overlaps a published shift.', requiresReason: false }],
+      overlapShifts: [{
+        shiftId: 'shift-7', serviceDate: '2026-09-16', startTime: '08:00:00', endTime: '16:00:00',
+        endsNextDay: false, participantId: 'p-2', participantName: 'Noah Blake',
+      }],
+    })
+    mockAssignShiftMutateAsync.mockResolvedValue({})
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(await screen.findByText(/noah blake/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /unassign and mark open/i }))
+
+    expect(mockAssignShiftMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-7',
+      data: { staffId: null, overrideReason: null, acknowledgedFindingCodes: [] },
+    })
+    expect(await screen.findByText('Unassigned')).toBeInTheDocument()
   })
 
   it('edits a recurring unavailability rule: opens the modal pre-filled and submits PUT with the edited body', async () => {

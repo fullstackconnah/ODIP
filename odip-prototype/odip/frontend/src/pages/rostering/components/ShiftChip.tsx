@@ -50,6 +50,11 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
   // doesn't already show via its row context (a participant row already names the participant;
   // a staff row already names the staff member), so it's surfaced here as a second, smaller link.
   const isFilled = Boolean(shift.staffId && shift.staffName)
+  // A filled shift whose assignee's leave was approved AFTER the assignment was made — the chip
+  // still has a staffId, but that staff member won't actually be there, so this needs to read as
+  // a hole (dashed, like an unfilled chip) rather than a normal covered shift.
+  const onApprovedLeave = isFilled && shift.assigneeOnApprovedLeave
+  const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
@@ -79,7 +84,7 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
       ref={setNodeRef}
       style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
       className={`group relative flex items-stretch gap-0.5 rounded-sm border bg-surface-container-low text-xs transition-opacity duration-150 ${
-        dashed ? 'border-dashed border-border' : 'border-border'
+        dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
       } ${isDragging ? 'opacity-50' : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
@@ -242,6 +247,17 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
             >
               {shift.staffName}
             </Link>
+          )}
+          {/* On-leave mini-label — a filled chip whose assignee's leave got approved after the
+              fact. The staff link above still names them (so it's clear whose leave created the
+              hole); this line is what makes the hole itself visible at a glance. */}
+          {onApprovedLeave && (
+            <span
+              className="block truncate text-[10px] font-semibold leading-tight text-muted-foreground"
+              title={onLeaveTitle}
+            >
+              On leave
+            </span>
           )}
         </span>
       </div>

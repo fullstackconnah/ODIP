@@ -135,6 +135,39 @@ describe('ShiftChip read-only (canWrite false)', () => {
   })
 })
 
+describe('ShiftChip on-leave state', () => {
+  it('renders an "On leave" mini-label with an explanatory title for a filled shift whose assignee has approved leave', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const label = screen.getByText('On leave')
+    expect(label).toBeInTheDocument()
+    expect(label).toHaveAttribute('title', expect.stringContaining('approved leave'))
+  })
+
+  it('renders a dashed border for a filled shift whose assignee has approved leave, same as an unfilled chip', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(container.querySelector('.border-dashed')).not.toBeNull()
+  })
+
+  it('does not render the "On leave" label or a dashed border for a normal filled shift', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: false })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByText('On leave')).not.toBeInTheDocument()
+    expect(container.querySelector('.border-dashed')).toBeNull()
+  })
+
+  it('ignores assigneeOnApprovedLeave for an unfilled chip (no staffId) — it never applies to a hole that is already open', () => {
+    const shift = makeShift({ staffId: null, staffName: null, assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByText('On leave')).not.toBeInTheDocument()
+  })
+})
+
 describe('ShiftChip cross-domain links', () => {
   it('links the participant name to their participant page', () => {
     const shift = makeShift({ participantId: 'participant-9', participantName: 'Mia Chen' })

@@ -81,6 +81,22 @@ describe('RosterGrid — groupBy narrowing', () => {
   })
 })
 
+describe('RosterGrid — on-leave shift state', () => {
+  it('renders the "On leave" mini-label on a staff-row shift whose assignee has approved leave', () => {
+    const board = makeStaffBoard({
+      staffRows: [makeStaffRow({
+        staffId: 'staff-9',
+        fullName: 'Alex Rivera',
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })],
+      })],
+      unfilled: [],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    expect(screen.getByText('On leave')).toBeInTheDocument()
+  })
+})
+
 describe('RosterGrid — cross-domain links', () => {
   it('links a participant row header to their participant page', () => {
     const board = makeParticipantBoard({

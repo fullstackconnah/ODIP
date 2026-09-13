@@ -14,7 +14,7 @@ import {
   useLeaveRequests, useRecurringUnavailabilities, useApproveLeave, useDeclineLeave, useCancelLeave,
   useApproveUnavailability, useDeclineUnavailability, useCancelUnavailability,
   useCreateLeaveOnBehalf, useCreateUnavailabilityOnBehalf, useStaff,
-  useUpdateLeave, useUpdateUnavailability,
+  useUpdateLeave, useUpdateUnavailability, useAssignShift,
   useStaffAvailabilityRecords, useCreateStaffAvailability, useUpdateStaffAvailability, useDeleteStaffAvailability,
 } from '@/api/hooks'
 import { LeaveRequestFormModal } from '@/pages/portal/components/LeaveRequestFormModal'
@@ -23,10 +23,10 @@ import { AvailabilityRecordFormModal } from '@/pages/rostering/components/Availa
 import { LEAVE_STATUS_COLORS, LEAVE_TYPE_LABELS } from '@/api/types'
 import type {
   LeaveRequestDto, RecurringUnavailabilityDto, StaffAvailabilityDto, LeaveStatus, RosterFindingDto,
-  CreateLeaveRequestDto, CreateRecurringUnavailabilityDto, CreateStaffAvailabilityDto,
+  CreateLeaveRequestDto, CreateRecurringUnavailabilityDto, CreateStaffAvailabilityDto, OverlapShiftDto,
 } from '@/api/types'
-import { formatEffectiveRange } from './lib/roster'
-import { extractErrorMessage } from '@/lib/utils'
+import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 
 type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
@@ -71,6 +71,58 @@ function rowSortKey(row: ApprovalRow): string {
     return data.createdAt ?? data.startDateTime
   }
   return row.data.requestedAt
+}
+
+type OverlapShiftsListProps = {
+  shifts: OverlapShiftDto[]
+  unassigningShiftId: string | null
+  unassignedShiftIds: Set<string>
+  unassignErrors: Record<string, string>
+  onUnassign: (shiftId: string) => void
+}
+
+/**
+ * Item 5: each row an approve/edit response's `overlapShifts` returned — the shift itself
+ * (date, time, participant), plus a per-row "Unassign and mark open" action so the coordinator
+ * can immediately open up the hole the just-approved leave creates, without leaving this dialog
+ * to go find the shift on the board. Renders nothing when there are no overlap shifts — today's
+ * plain findings-only rendering is unchanged in that case.
+ */
+function OverlapShiftsList({ shifts, unassigningShiftId, unassignedShiftIds, unassignErrors, onUnassign }: OverlapShiftsListProps) {
+  if (shifts.length === 0) return null
+
+  return (
+    <ul className="space-y-2">
+      {shifts.map(shift => {
+        const done = unassignedShiftIds.has(shift.shiftId)
+        const busy = unassigningShiftId === shift.shiftId
+        const error = unassignErrors[shift.shiftId]
+        return (
+          <li key={shift.shiftId} className="rounded-sm border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-[var(--color-foreground)]">
+                {formatDateAu(shift.serviceDate)} · {formatShiftTimeRange(shift.startTime, shift.endTime)}
+                {shift.endsNextDay && <span className="sr-only"> (ends the next day)</span>} · {shift.participantName}
+              </p>
+              {done ? (
+                <span className="shrink-0 text-xs font-medium text-[var(--color-primary)]">Unassigned</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onUnassign(shift.shiftId)}
+                  disabled={busy}
+                  className="shrink-0 min-h-[36px] px-3 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50"
+                >
+                  {busy ? 'Unassigning…' : 'Unassign and mark open'}
+                </button>
+              )}
+            </div>
+            {error && <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">{error}</p>}
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 export default function LeaveApprovalsPage() {
@@ -131,6 +183,7 @@ export default function LeaveApprovalsPage() {
   const createStaffAvailability = useCreateStaffAvailability()
   const updateStaffAvailability = useUpdateStaffAvailability()
   const deleteStaffAvailability = useDeleteStaffAvailability()
+  const assignShift = useAssignShift()
 
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
   const staffNameById = useMemo(() => new Map(staff.map(s => [s.id, s.fullName])), [staff])
@@ -149,10 +202,18 @@ export default function LeaveApprovalsPage() {
   const [onBehalfError, setOnBehalfError] = useState<string | null>(null)
   const [approveTarget, setApproveTarget] = useState<ApprovalRow | null>(null)
   const [approveOverlaps, setApproveOverlaps] = useState<RosterFindingDto[] | null>(null)
+  const [approveOverlapShifts, setApproveOverlapShifts] = useState<OverlapShiftDto[]>([])
   const [approveError, setApproveError] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<ApprovalRow | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [editOverlaps, setEditOverlaps] = useState<RosterFindingDto[] | null>(null)
+  const [editOverlapShifts, setEditOverlapShifts] = useState<OverlapShiftDto[]>([])
+  // Per-shift unassign progress/outcome for the overlap-shifts lists above — shared between the
+  // approve and edit overlaps dialogs since only one is ever open at a time, and reset whenever
+  // either dialog closes (see closeApproveFlow/closeEditOverlapsFlow).
+  const [unassigningShiftId, setUnassigningShiftId] = useState<string | null>(null)
+  const [unassignedShiftIds, setUnassignedShiftIds] = useState<Set<string>>(new Set())
+  const [unassignErrors, setUnassignErrors] = useState<Record<string, string>>({})
   const [deleteLegacyTarget, setDeleteLegacyTarget] = useState<{ rowKind: 'legacy'; key: string; data: LegacyRecord } | null>(null)
   const [deleteLegacyError, setDeleteLegacyError] = useState<string | null>(null)
   const [declineTarget, setDeclineTarget] = useState<ApprovalRow | null>(null)
@@ -183,19 +244,56 @@ export default function LeaveApprovalsPage() {
       if (approveTarget.rowKind === 'leave') {
         const result = await approveLeave.mutateAsync(approveTarget.data.id)
         setApproveOverlaps(result.overlaps)
+        setApproveOverlapShifts(result.overlapShifts ?? [])
       } else {
         const result = await approveUnavailability.mutateAsync(approveTarget.data.id)
         setApproveOverlaps(result.overlaps)
+        setApproveOverlapShifts(result.overlapShifts ?? [])
       }
     } catch (err) {
       setApproveError(extractErrorMessage(err, 'Could not approve this request. Please try again.'))
     }
   }
 
+  function resetUnassignState() {
+    setUnassigningShiftId(null)
+    setUnassignedShiftIds(new Set())
+    setUnassignErrors({})
+  }
+
   function closeApproveFlow() {
     setApproveTarget(null)
     setApproveOverlaps(null)
+    setApproveOverlapShifts([])
     setApproveError(null)
+    resetUnassignState()
+  }
+
+  function closeEditOverlapsFlow() {
+    setEditOverlaps(null)
+    setEditOverlapShifts([])
+    resetUnassignState()
+  }
+
+  /** Item 5: unassign a shift straight from the overlaps dialog — same endpoint/body as the
+   * roster board's own Unassign action (POST .../assign with a null staffId), just triggered
+   * from here instead of the board's chip menu. */
+  async function handleUnassignOverlapShift(shiftId: string) {
+    setUnassignErrors(prev => {
+      if (!(shiftId in prev)) return prev
+      const next = { ...prev }
+      delete next[shiftId]
+      return next
+    })
+    setUnassigningShiftId(shiftId)
+    try {
+      await assignShift.mutateAsync({ id: shiftId, data: { staffId: null, overrideReason: null, acknowledgedFindingCodes: [] } })
+      setUnassignedShiftIds(prev => new Set(prev).add(shiftId))
+    } catch (err) {
+      setUnassignErrors(prev => ({ ...prev, [shiftId]: extractErrorMessage(err, 'Could not unassign this shift. Please try again.') }))
+    } finally {
+      setUnassigningShiftId(null)
+    }
   }
 
   async function handleDeclineConfirm() {
@@ -272,7 +370,10 @@ export default function LeaveApprovalsPage() {
         data: { leaveType: payload.leaveType, startDate: payload.startDate, endDate: payload.endDate, reason: payload.reason },
       })
       closeEditFlow()
-      if (result.overlaps.length > 0) setEditOverlaps(result.overlaps)
+      if (result.overlaps.length > 0) {
+        setEditOverlaps(result.overlaps)
+        setEditOverlapShifts(result.overlapShifts ?? [])
+      }
     } catch (err) {
       setEditError(extractErrorMessage(err, 'Could not save this leave request. Please try again.'))
     }
@@ -290,7 +391,10 @@ export default function LeaveApprovalsPage() {
         },
       })
       closeEditFlow()
-      if (result.overlaps.length > 0) setEditOverlaps(result.overlaps)
+      if (result.overlaps.length > 0) {
+        setEditOverlaps(result.overlaps)
+        setEditOverlapShifts(result.overlapShifts ?? [])
+      }
     } catch (err) {
       setEditError(extractErrorMessage(err, 'Could not save this unavailability rule. Please try again.'))
     }
@@ -550,8 +654,8 @@ export default function LeaveApprovalsPage() {
 
       <ConfirmDialog
         open={editOverlaps !== null}
-        onCancel={() => setEditOverlaps(null)}
-        onConfirm={() => setEditOverlaps(null)}
+        onCancel={closeEditOverlapsFlow}
+        onConfirm={closeEditOverlapsFlow}
         title="Saved"
         confirmLabel="Done"
         message={
@@ -559,6 +663,13 @@ export default function LeaveApprovalsPage() {
             <div className="space-y-2">
               <p>{`Saved — this overlaps ${editOverlaps.length} rostered shift/trip${editOverlaps.length === 1 ? '' : 's'}.`}</p>
               <FindingsList findings={editOverlaps} />
+              <OverlapShiftsList
+                shifts={editOverlapShifts}
+                unassigningShiftId={unassigningShiftId}
+                unassignedShiftIds={unassignedShiftIds}
+                unassignErrors={unassignErrors}
+                onUnassign={handleUnassignOverlapShift}
+              />
             </div>
           ) : null
         }
@@ -607,6 +718,13 @@ export default function LeaveApprovalsPage() {
             <div className="space-y-2">
               <p>{`Approved — this overlaps ${approveOverlaps.length} rostered shift/trip${approveOverlaps.length === 1 ? '' : 's'}.`}</p>
               <FindingsList findings={approveOverlaps} />
+              <OverlapShiftsList
+                shifts={approveOverlapShifts}
+                unassigningShiftId={unassigningShiftId}
+                unassignedShiftIds={unassignedShiftIds}
+                unassignErrors={unassignErrors}
+                onUnassign={handleUnassignOverlapShift}
+              />
             </div>
           ) : (
             'Approved — no rostered shifts or trips overlap this window.'
