@@ -369,6 +369,8 @@ const incidents = [
     incidentDateTime: '2026-07-11T10:45:00Z', location: 'Main Beach boardwalk, Byron Bay',
     reportedByName: "Jack O'Sullivan", involvedParticipantId: 'p-0001', involvedParticipantName: 'Liam Okafor',
     qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-07-11T11:30:00Z',
+    // Connection map: no medication/shift/shift-note link on this one.
+    medicationAdministrationId: null, shiftId: null, shiftNoteId: null,
   },
   {
     id: 'inc-0002', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
@@ -377,6 +379,9 @@ const incidents = [
     incidentDateTime: '2026-07-11T20:15:00Z', location: 'Accommodation — Byron Bay',
     reportedByName: 'Mei Zhang', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'ReportedWithin24h', isOverdue24h: false, createdAt: '2026-07-11T21:05:00Z',
+    // Connection map: this is the one incident fixture carrying a medication context, so the
+    // Context panel has something real to show in the offline preview.
+    medicationAdministrationId: 'admin-0001', shiftId: null, shiftNoteId: null,
   },
   {
     id: 'inc-0003', tripInstanceId: 't-0001', tripName: 'Sunshine Coast Beach Escape',
@@ -385,8 +390,71 @@ const incidents = [
     incidentDateTime: '2026-07-29T14:00:00Z', location: 'Head office, Brisbane',
     reportedByName: 'Callum Radford', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'Pending', isOverdue24h: true, createdAt: '2026-07-29T16:20:00Z',
+    medicationAdministrationId: null, shiftId: null, shiftNoteId: null,
   },
 ]
+
+// Medication administrations (AdministrationDto) — backs both /medications/mar (as MarEntryDto's
+// nested `administration`) and /participants/:id/administrations. 'admin-0001' is the one linked
+// to inc-0002 above (its narrative — "evening insulin dose administered late" — is the same
+// event); the rest are unrelated fixtures covering the "already has an incident" / "no incident
+// yet" / "Administered, no incident UI at all" cases the frontend's MarTab/MedicationsTab render.
+const medicationAdministrations = [
+  {
+    id: 'admin-0001', participantMedicationId: 'med-0001', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+    medicationName: 'Insulin', doseDescription: '18 units', tripInstanceId: 't-0004',
+    scheduledAt: '2026-07-11T20:00:00Z', administeredAt: '2026-07-11T20:15:00Z', administeredAtTimeZone: 'Australia/Brisbane',
+    status: 'Missed', doseGiven: null, recordedByName: 'Tom Beattie', recordedByUserId: 's-0005',
+    witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
+    reason: 'Dinner ran over schedule; dose given 90 minutes late.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
+    limitBreachAcknowledged: false, notes: null, createdAt: '2026-07-11T20:20:00Z',
+    incidentId: 'inc-0002',
+  },
+  {
+    id: 'admin-0002', participantMedicationId: 'med-0002', participantId: 'p-0001', participantName: 'Liam Okafor',
+    medicationName: 'Levetiracetam', doseDescription: '500mg', tripInstanceId: null,
+    scheduledAt: '2026-09-12T22:00:00Z', administeredAt: '2026-09-12T22:05:00Z', administeredAtTimeZone: 'Australia/Brisbane',
+    status: 'Administered', doseGiven: '500mg', recordedByName: "Jack O'Sullivan", recordedByUserId: 's-0003',
+    witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
+    reason: null, prnReason: null, prnOutcome: null, prnOutcomeAt: null, limitBreachAcknowledged: false, notes: null,
+    createdAt: '2026-09-12T22:05:00Z', incidentId: null,
+  },
+  {
+    id: 'admin-0003', participantMedicationId: 'med-0003', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+    medicationName: 'Risperidone', doseDescription: '2mg', tripInstanceId: null,
+    scheduledAt: '2026-09-12T20:00:00Z', administeredAt: null, administeredAtTimeZone: null,
+    status: 'Refused', doseGiven: null, recordedByName: 'Mei Zhang', recordedByUserId: 's-0004',
+    witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
+    reason: 'Participant declined after prompting.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
+    limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-12T20:10:00Z', incidentId: null,
+  },
+]
+
+// MarEntryDto rows built off the administrations above — see the /medications/mar route: like
+// /leave and /staff-availability, the date/participantId query string isn't read here, so this
+// always returns the same fixed day regardless of what's requested.
+const marEntries = [
+  {
+    medicationId: 'med-0002', participantId: 'p-0001', participantName: 'Liam Okafor',
+    medicationName: 'Levetiracetam', strength: '500mg', doseDescription: '1 tablet',
+    form: 'Tablet', route: 'Oral', packaging: 'WebsterPack',
+    pharmacyName: 'Riverside Pharmacy', pharmacyPhone: '07 3000 1111',
+    scheduledTime: '22:00', scheduledAt: '2026-09-12T22:00:00Z',
+    isHighRisk: false, supportLevel: 'Administer', isOverdue: false,
+    administration: medicationAdministrations[1],
+  },
+  {
+    medicationId: 'med-0003', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+    medicationName: 'Risperidone', strength: '2mg', doseDescription: '1 tablet',
+    form: 'Tablet', route: 'Oral', packaging: 'DosetteBox',
+    pharmacyName: 'Riverside Pharmacy', pharmacyPhone: '07 3000 1111',
+    scheduledTime: '20:00', scheduledAt: '2026-09-12T20:00:00Z',
+    isHighRisk: true, supportLevel: 'Administer', isOverdue: false,
+    administration: medicationAdministrations[2],
+  },
+]
+
+const marDay = { date: '2026-09-12', entries: marEntries, prnMedications: [] }
 
 const incidentDetailExtras = {
   'inc-0001': {
@@ -404,6 +472,7 @@ const incidentDetailExtras = {
     familyNotified: true, familyNotifiedAt: '2026-07-11T12:00:00Z',
     supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
     updatedAt: '2026-07-14T09:00:00Z',
+    medication: null, shift: null, shiftNote: null,
   },
   'inc-0002': {
     participantBookingId: 'b-0003', involvedParticipantId: 'p-0004',
@@ -418,6 +487,13 @@ const incidentDetailExtras = {
     familyNotified: true, familyNotifiedAt: '2026-07-12T08:30:00Z',
     supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-12T08:45:00Z',
     updatedAt: '2026-07-25T10:00:00Z',
+    // Connection map: the one incident fixture that carries a real medication context, matching
+    // medicationAdministrationId above and admin-0001's own record.
+    medication: {
+      medicationAdministrationId: 'admin-0001', medicationName: 'Insulin', status: 'Missed',
+      administeredAt: '2026-07-11T20:15:00Z', recordedByName: 'Tom Beattie',
+    },
+    shift: null, shiftNote: null,
   },
   'inc-0003': {
     participantBookingId: null, involvedParticipantId: 'p-0004',
@@ -432,8 +508,105 @@ const incidentDetailExtras = {
     familyNotified: true, familyNotifiedAt: '2026-07-29T17:00:00Z',
     supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-29T17:15:00Z',
     updatedAt: '2026-07-30T08:00:00Z',
+    medication: null, shift: null, shiftNote: null,
   },
 }
+
+// Shift notes (NOTES-01/02, ShiftNoteDto) — offline preview fixtures for the portal
+// ShiftNotesSection and the roster slide-over's read-only list. Keyed by shiftId so
+// GET /portal/shifts/:id/notes and GET /rostering/shifts/:id/notes below can share them.
+// note-0003 already carries an incidentId (connection map item 4) — the portal renders
+// "Incident filed" instead of the dismiss/file prompt for it.
+const shiftNotesByShiftId = {
+  'shift-0001': [
+    {
+      id: 'note-0001', shiftId: 'shift-0001', authorUserId: 's-0003', authorName: "Jack O'Sullivan",
+      body: 'Quiet shift, no concerns.', createdAt: '2026-09-08T09:30:00Z', updatedAt: '2026-09-08T09:30:00Z',
+      flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null,
+    },
+    {
+      id: 'note-0002', shiftId: 'shift-0001', authorUserId: 's-0003', authorName: "Jack O'Sullivan",
+      body: 'Liam had a fall near the bathroom — no injury, monitored for the rest of the shift.',
+      createdAt: '2026-09-09T14:10:00Z', updatedAt: '2026-09-09T14:10:00Z',
+      flaggedCategories: ['Falls'], flagsAcknowledgedAt: null, incidentId: null,
+    },
+  ],
+  'shift-0002': [
+    {
+      id: 'note-0003', shiftId: 'shift-0002', authorUserId: 's-0004', authorName: 'Mei Zhang',
+      body: 'Grace refused her evening medication — settled after a short break.',
+      createdAt: '2026-09-10T20:05:00Z', updatedAt: '2026-09-10T20:05:00Z',
+      flaggedCategories: ['Medication'], flagsAcknowledgedAt: '2026-09-11T08:00:00Z', incidentId: 'inc-0002',
+    },
+  ],
+  'shift-0003': [
+    {
+      id: 'note-0004', shiftId: 'shift-0003', authorUserId: 's-0005', authorName: 'Tom Beattie',
+      body: 'Sienna bumped her arm transferring into the WAV — small graze, cleaned and dressed.',
+      createdAt: '2026-09-11T11:20:00Z', updatedAt: '2026-09-11T11:20:00Z',
+      flaggedCategories: ['Injury'], flagsAcknowledgedAt: null, incidentId: null,
+    },
+  ],
+}
+
+// shiftId -> participant, for the flagged-notes projection below (a shift note fixture only
+// carries authorUserId/authorName — the participant comes from which shift it's on).
+const shiftParticipant = {
+  'shift-0001': { id: 'p-0001', name: 'Liam Okafor' },
+  'shift-0002': { id: 'p-0004', name: 'Grace Palmer-Hughes' },
+  'shift-0003': { id: 'p-0002', name: 'Sienna Whitfield' },
+}
+
+// Flagged-notes queue (connection map item 4) — GET /rostering/flagged-notes?withoutIncident=&from=&to=,
+// coordinator roles only. Oldest first. Derived from shiftNotesByShiftId's flagged notes rather
+// than duplicated by hand, so the two fixtures can't drift. Three sample rows (note-0002/3/4).
+const flaggedShiftNotes = Object.values(shiftNotesByShiftId)
+  .flat()
+  .filter((n) => n.flaggedCategories.length > 0)
+  .map((n) => ({
+    shiftNoteId: n.id,
+    shiftId: n.shiftId,
+    shiftDate: n.createdAt.slice(0, 10),
+    participantId: shiftParticipant[n.shiftId].id,
+    participantName: shiftParticipant[n.shiftId].name,
+    staffId: n.authorUserId,
+    staffName: n.authorName,
+    flaggedCategories: n.flaggedCategories,
+    excerpt: n.body,
+    createdAt: n.createdAt,
+    incidentId: n.incidentId,
+  }))
+  .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+
+// Shift completions (design spec §2, ShiftCompletionDto) — GET rostering/completions
+// (queue) and GET rostering/shifts/:id/completion (detail). No frontend review UI consumes
+// these yet (see the connection-map item 4 report); these are forward-compatible fixtures
+// only, matching the ShiftCompletionDto contract including the `incidents` field.
+const shiftCompletions = [
+  {
+    id: 'sc-0001', shiftId: 'shift-0001', actualStart: '2026-09-08T08:58:00Z', actualEnd: '2026-09-08T17:05:00Z',
+    timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: false,
+    submittedByUserId: 's-0003', submittedByName: "Jack O'Sullivan",
+    startedAt: '2026-09-08T08:58:00Z', submittedAt: '2026-09-08T17:05:00Z',
+    reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: '2026-09-08T18:00:00Z',
+    reviewOutcome: 'Approved', returnReason: null,
+    varianceMinutesStart: -2, varianceMinutesEnd: 5, isOutlierVariance: false, varianceReviewMinutes: 15,
+    returnCount: 0, incidents: [],
+  },
+  {
+    id: 'sc-0002', shiftId: 'shift-0002', actualStart: '2026-09-10T19:32:00Z', actualEnd: '2026-09-10T23:50:00Z',
+    timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: false,
+    submittedByUserId: 's-0004', submittedByName: 'Mei Zhang',
+    startedAt: '2026-09-10T19:32:00Z', submittedAt: '2026-09-10T23:50:00Z',
+    reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
+    reviewOutcome: null, returnReason: null,
+    varianceMinutesStart: 32, varianceMinutesEnd: -10, isOutlierVariance: true, varianceReviewMinutes: 15,
+    returnCount: 0,
+    incidents: [
+      { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00Z' },
+    ],
+  },
+]
 
 // Bookings (BookingListDto)
 const bookings = [
@@ -827,6 +1000,12 @@ const routes = [
     return { ...i, ...(incidentDetailExtras[i.id] || {}) }
   }],
 
+  // medications / MAR — GET /medications/mar?date=&participantId= doesn't filter by the query
+  // string here, same caveat as /leave and /staff-availability above: always returns the same
+  // fixed day's entries regardless of what's requested.
+  ['medications/mar', () => marDay],
+  ['participants/:id/administrations', (id) => medicationAdministrations.filter((a) => a.participantId === id)],
+
   // bookings
   ['bookings', () => bookings],
   ['bookings/:id', (id) => {
@@ -870,6 +1049,22 @@ const routes = [
     leave: leaveRequests.filter((r) => r.userId === CURRENT_STAFF_ID),
     unavailability: recurringUnavailabilities.filter((r) => r.userId === CURRENT_STAFF_ID),
   })],
+
+  // Shift notes (NOTES-01/02) — same underlying fixtures for the portal's own-shift view and
+  // the roster slide-over's read-only coordinator view.
+  ['portal/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
+  ['rostering/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
+
+  // Flagged-notes queue (connection map item 4) — GET /rostering/flagged-notes?withoutIncident=&from=&to=
+  // (query string isn't read here, same caveat as leave/staff-availability above; the fixture
+  // is already withoutIncident-shaped enough for preview purposes).
+  ['rostering/flagged-notes', () => flaggedShiftNotes],
+
+  // Shift completion detail (design spec §2, ShiftCompletionDto) — no frontend consumer yet
+  // (see connection-map item 4 report); fixture + route only, wired up ahead of the review UI
+  // that will use it. Deliberately no rostering/completions (queue) route here: that endpoint
+  // returns CompletionQueueItemDto, a different shape this fixture doesn't match.
+  ['rostering/shifts/:id/completion', (id) => shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0]],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback

@@ -15,6 +15,7 @@ import type {
   CompatibilityRowDto,
   UpsertCompatibilityDto,
   ShiftNoteDto,
+  FlaggedShiftNoteDto,
 } from '../types'
 
 // ══════════════════════════════════════════════════════════════
@@ -86,6 +87,32 @@ export function useRosterShiftNotes(shiftId: string | undefined) {
     queryKey: ['roster-shift-notes', shiftId],
     queryFn: () => apiGet<ShiftNoteDto[]>(`/rostering/shifts/${shiftId}/notes`),
     enabled: !!shiftId,
+  })
+}
+
+export interface FlaggedShiftNotesFilters {
+  withoutIncident?: boolean
+  from?: string
+  to?: string
+}
+
+/**
+ * Connection map item 4: coordinator-facing queue of flagged shift notes across all shifts
+ * (IncidentsPage's "Flagged notes" tab) — GET /rostering/flagged-notes?withoutIncident=&from=&to=,
+ * oldest first, coordinator roles only server-side. `options.enabled` lets a caller that isn't
+ * permitted to view this (e.g. IncidentsPage rendered for a SupportWorker) skip the request
+ * entirely rather than firing one the backend would 403 — hooks can't be called conditionally,
+ * so the gate has to live here rather than around the call site.
+ */
+export function useFlaggedShiftNotes(filters: FlaggedShiftNotesFilters = {}, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['flagged-shift-notes', filters],
+    queryFn: () => apiGet<FlaggedShiftNoteDto[]>('/rostering/flagged-notes', {
+      withoutIncident: filters.withoutIncident,
+      from: filters.from,
+      to: filters.to,
+    }),
+    enabled: options?.enabled ?? true,
   })
 }
 
