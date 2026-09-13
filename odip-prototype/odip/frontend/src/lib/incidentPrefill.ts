@@ -9,6 +9,7 @@ import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import { formatFlaggedCategoryList, incidentTypeForFlaggedCategories, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatShiftRange, formatDayAccessibleName } from '@/pages/rostering/lib/roster'
 import type { IncidentType } from '@/api/types/enums'
+import type { AdministrationDto } from '@/api/types/medications'
 
 export interface MarIncidentPrefillState {
   source: 'mar-administration'
@@ -29,6 +30,9 @@ export interface MarIncidentPrefillState {
   notes?: string | null
   /** INC-01 linkage — only ever set when the MAR context has an active trip to derive it from. */
   tripInstanceId?: string | null
+  /** Connection map: the administration record this incident is being filed for — submitted as
+   * CreateIncidentDto.medicationAdministrationId so the backend can link the two. */
+  medicationAdministrationId: string
 }
 
 /** Whether a MAR outcome is one of the auto-incident triggers (MED-03/INC-03 controller ruling:
@@ -40,6 +44,43 @@ export function isIncidentTriggerOutcome(status: MedicationAdministrationStatus)
 /** Narrows an unknown value (react-router location.state) down to a MAR incident prefill. */
 export function isMarIncidentPrefillState(state: unknown): state is MarIncidentPrefillState {
   return !!state && typeof state === 'object' && (state as { source?: unknown }).source === 'mar-administration'
+}
+
+/**
+ * Connection map: the single builder for the MAR "drop into a draft incident" hand-off —
+ * RecordAdministrationModal (after recording a Refused/Withheld/Missed/WrongMedication
+ * outcome), MarTab's scheduled-slot rows, and participant-detail/MedicationsTab's administration
+ * history rows all build the SAME shape off an AdministrationDto this way, so the prefill is
+ * constructed one way regardless of which surface offers the "File incident" action.
+ *
+ * `extras.strength` covers the one field the administration record itself doesn't carry (it's
+ * denormalised onto MarEntryDto/RecordAdministrationModal's props instead) — omit it where it
+ * isn't available (e.g. the participant-detail administration-history rows) rather than guessing.
+ */
+export function buildMarIncidentPrefill(
+  administration: AdministrationDto,
+  extras: { strength?: string | null } = {},
+): MarIncidentPrefillState {
+  return {
+    source: 'mar-administration',
+    outcome: administration.status,
+    participantId: administration.participantId,
+    participantName: administration.participantName,
+    medicationName: administration.medicationName,
+    strength: extras.strength ?? null,
+    doseDescription: administration.doseDescription,
+    scheduledAt: administration.scheduledAt,
+    administeredAt: administration.administeredAt,
+    administeredAtTimeZone: administration.administeredAtTimeZone,
+    recordedByName: administration.recordedByName,
+    recordedByUserId: administration.recordedByUserId,
+    reason: administration.reason,
+    // MED-03: only meaningful for a WrongMedication outcome — never leak an unrelated free-text
+    // note into the incident skeleton for any other outcome.
+    notes: administration.status === 'WrongMedication' ? administration.notes : null,
+    tripInstanceId: administration.tripInstanceId,
+    medicationAdministrationId: administration.id,
+  }
 }
 
 function toDatetimeLocalValue(iso: string, timeZone: string | null | undefined): string {
@@ -160,6 +201,10 @@ export interface ShiftNoteIncidentPrefillState {
   endsNextDay: boolean
   /** The signed-in worker viewing this shift — same "reportedByStaffId = staff/User id space" idiom as MarIncidentPrefillState.recordedByUserId. */
   reportedByUserId?: string | null
+  /** Connection map: the shift this note was written against — submitted as
+   * CreateIncidentDto.shiftId. Populated by the portal producer (ShiftNotesSection); this side
+   * only carries it through to the create payload. */
+  shiftId: string
 }
 
 /** Narrows an unknown value (react-router location.state) down to a shift-note incident prefill. */

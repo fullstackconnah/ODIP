@@ -234,6 +234,10 @@ public class MedicationsController : ControllerBase
                     && a.ScheduledAt != null && a.ScheduledAt >= dateStart && a.ScheduledAt < dateEndExclusive)
                 .ToListAsync(ct);
 
+        // Deliverable 2 reverse link: ONE query for every administration that could show up in
+        // today's MAR entries below, rather than one per entry.
+        var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(dayAdministrations.Select(a => a.Id).ToList(), ct);
+
         var entries = new List<MarEntryDto>();
         foreach (var m in regularMeds)
         {
@@ -249,6 +253,7 @@ public class MedicationsController : ControllerBase
                     .OrderByDescending(a => a.CreatedAt)
                     .FirstOrDefault();
                 var isOverdue = admin == null && scheduledAt.AddMinutes(60) < now;
+                var incidentId = admin == null ? null : LookupIncidentId(dayIncidentIds, admin.Id);
 
                 entries.Add(new MarEntryDto
                 {
@@ -268,7 +273,8 @@ public class MedicationsController : ControllerBase
                     IsHighRisk = m.IsHighRisk,
                     SupportLevel = m.SupportLevel,
                     IsOverdue = isOverdue,
-                    Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription),
+                    Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
+                    IncidentId = incidentId,
                 });
             }
         }
@@ -295,6 +301,15 @@ public class MedicationsController : ControllerBase
                 .OrderByDescending(a => a.AdministeredAt)
                 .ToListAsync(ct);
 
+        // Connection-map item 8 (tiny seam fix): the only administration id a MarPrnDto carries
+        // is OutcomePendingAdministrationId — batch-resolve incident ids for every candidate
+        // administration across both PRN queries in ONE call, same as dayIncidentIds above.
+        var prnAdministrationIds = recentPrnAdmins.Select(a => a.Id)
+            .Concat(pendingOutcomeAdmins.Select(a => a.Id))
+            .Distinct()
+            .ToList();
+        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(prnAdministrationIds, ct);
+
         var prnDtos = new List<MarPrnDto>();
         foreach (var m in prnMeds)
         {
@@ -318,6 +333,7 @@ public class MedicationsController : ControllerBase
                 DosesInLast24h = doses.Count,
                 LastDoseAt = doses.Count > 0 ? doses.Max(a => a.AdministeredAt) : null,
                 OutcomePendingAdministrationId = pending?.Id,
+                IncidentId = pending == null ? null : LookupIncidentId(prnIncidentIds, pending.Id),
             });
         }
 
@@ -470,7 +486,9 @@ public class MedicationsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         var med = admin.ParticipantMedication!;
-        return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(admin, FullName(med.Participant), med.Name, med.DoseDescription)));
+        var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
+            admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
 
     [HttpPost("medications/administrations/{id:guid}/outcome")]
@@ -489,7 +507,9 @@ public class MedicationsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         var med = admin.ParticipantMedication!;
-        return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(admin, FullName(med.Participant), med.Name, med.DoseDescription)));
+        var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
+            admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
 
     [HttpGet("participants/{participantId:guid}/administrations")]
@@ -505,8 +525,10 @@ public class MedicationsController : ControllerBase
         if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
 
         var items = await query.OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
+        var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(items.Select(a => a.Id).ToList(), ct);
         var result = items.Select(a => ToAdministrationDto(
-            a, FullName(a.Participant), a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.DoseDescription ?? string.Empty)).ToList();
+            a, FullName(a.Participant), a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.DoseDescription ?? string.Empty,
+            LookupIncidentId(incidentMap, a.Id))).ToList();
         return Ok(ApiResponse<List<AdministrationDto>>.Ok(result));
     }
 
@@ -540,11 +562,13 @@ public class MedicationsController : ControllerBase
 
         var totalCount = await ordered.CountAsync(ct);
         var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(pageItems.Select(a => a.Id).ToList(), ct);
 
         var result = new PagedResult<AdministrationDto>
         {
             Items = pageItems.Select(a => ToAdministrationDto(
-                a, FullName(a.Participant), a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.DoseDescription ?? string.Empty)).ToList(),
+                a, FullName(a.Participant), a.ParticipantMedication?.Name ?? string.Empty, a.ParticipantMedication?.DoseDescription ?? string.Empty,
+                LookupIncidentId(incidentMap, a.Id))).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
@@ -746,7 +770,31 @@ public class MedicationsController : ControllerBase
         };
     }
 
-    private static AdministrationDto ToAdministrationDto(MedicationAdministration a, string participantName, string medicationName, string doseDescription) => new()
+    /// <summary>
+    /// Connection-map reverse link (Deliverable 2): for the given medication-administration ids,
+    /// the newest active IncidentReport whose MedicationAdministrationId points back at each one
+    /// — ONE query for the whole batch (never per-row).
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> GetIncidentIdsByAdministrationIdsAsync(IReadOnlyCollection<Guid> administrationIds, CancellationToken ct)
+    {
+        if (administrationIds.Count == 0) return new Dictionary<Guid, Guid>();
+        var rows = await _db.IncidentReports
+            .Where(i => i.IsActive && i.MedicationAdministrationId != null && administrationIds.Contains(i.MedicationAdministrationId.Value))
+            .Select(i => new { AdminId = i.MedicationAdministrationId!.Value, i.Id, i.CreatedAt })
+            .ToListAsync(ct);
+        return rows
+            .GroupBy(r => r.AdminId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
+    }
+
+    /// <summary>Dictionary&lt;Guid, Guid&gt;.GetValueOrDefault returns Guid.Empty (not null) for a
+    /// missing key, which would wrongly stand in for "no incident" — this is the null-correct
+    /// lookup every incident-id-map read in this class uses instead.</summary>
+    private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
+        map.TryGetValue(key, out var incidentId) ? incidentId : null;
+
+    private static AdministrationDto ToAdministrationDto(
+        MedicationAdministration a, string participantName, string medicationName, string doseDescription, Guid? incidentId = null) => new()
     {
         Id = a.Id,
         ParticipantMedicationId = a.ParticipantMedicationId,
@@ -774,5 +822,6 @@ public class MedicationsController : ControllerBase
         LimitBreachAcknowledged = a.LimitBreachAcknowledged,
         Notes = a.Notes,
         CreatedAt = a.CreatedAt,
+        IncidentId = incidentId,
     };
 }

@@ -1,5 +1,6 @@
-import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel } from './enums'
+import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
+import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 // ── Roster Finding ───────────────────────────────────────
 export interface RosterFindingDto {
@@ -50,6 +51,78 @@ export interface ShiftNoteDto {
   // NOTES-02: when the author dismissed the "file an incident report?" prompt for the CURRENT
   // flaggedCategories value. Null while unflagged or not yet acknowledged.
   flagsAcknowledgedAt: string | null
+  // Connection map item 4: the incident this note led to, once one has been filed via the
+  // "File incident report" hand-off (INC-03/NOTES-02 prefill). Null until then.
+  incidentId: string | null
+}
+
+// ── Flagged shift notes queue (connection map item 4) — coordinator-facing list of flagged
+// shift notes across all shifts, used to close the "flagged note → incident" loop. Distinct
+// shape from ShiftNoteDto: this is a cross-shift projection (no full note body — an excerpt —
+// but carries participant/staff names and the shift date the roster slide-over would otherwise
+// require a join to get). ──
+export interface FlaggedShiftNoteDto {
+  shiftNoteId: string
+  shiftId: string
+  /** YYYY-MM-DD */
+  shiftDate: string
+  participantId: string
+  participantName: string
+  staffId: string | null
+  staffName: string | null
+  /** Same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto's own
+   * flaggedCategories — a real string[], not the raw [Flags] enum. */
+  flaggedCategories: ShiftNoteFlagCategory[]
+  excerpt: string
+  createdAt: string
+  incidentId: string | null
+  /** "HH:mm:ss" — the shift's own schedule, so IncidentsPage's "File incident" hand-off can
+   * carry the real time range instead of a fake 00:00–23:59 full-day placeholder (connection
+   * map seam follow-up; mirrors ShiftDto.startTime/endTime). */
+  startTime: string
+  /** "HH:mm:ss" — see startTime. */
+  endTime: string
+  /** See ShiftDto.endsNextDay — whether the shift's endTime rolls past midnight. */
+  endsNextDay: boolean
+}
+
+// ── Shift Completion (design spec §2) — Portal (start/finish) and Rostering (completions
+// list/detail/approve/return) share this shape. NOTE: as of the connection-map work, no
+// frontend consumer of this type exists yet — see the connection-map item 4 report for why;
+// this is the data contract only, added ahead of the review UI that will render `incidents`. ──
+export type ShiftCompletionReviewOutcome = 'Approved' | 'Returned'
+
+export interface ShiftCompletionDto {
+  id: string
+  shiftId: string
+  actualStart: string
+  actualEnd: string | null
+  timeZoneId: string
+  geolocationDeclined: boolean
+  startWasManual: boolean
+  submittedByUserId: string
+  submittedByName: string
+  startedAt: string
+  submittedAt: string | null
+  reviewedByUserId: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  reviewOutcome: ShiftCompletionReviewOutcome | null
+  returnReason: string | null
+  varianceMinutesStart: number
+  varianceMinutesEnd: number
+  isOutlierVariance: boolean
+  varianceReviewMinutes: number
+  returnCount: number
+  /** Connection map item 4: incidents raised during this shift, surfaced above the approve/
+   * return actions on the (not-yet-built) completion review component. */
+  incidents: {
+    id: string
+    title: string
+    severity: IncidentSeverity
+    status: IncidentStatus
+    incidentDateTime: string
+  }[]
 }
 
 // ── Trip / Leave bars (read-only board material) ─────────

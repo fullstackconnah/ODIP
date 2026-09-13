@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
 namespace Odip.Application.DTOs;
@@ -49,7 +50,16 @@ public record ShiftCompletionDto(
     int VarianceMinutesEnd,
     bool IsOutlierVariance,
     int VarianceReviewMinutes,
-    int ReturnCount);
+    int ReturnCount,
+    // Connection-map reverse link (Deliverable 2): active incidents raised against this shift —
+    // populated on the RosteringController.GetShiftCompletion DETAIL endpoint only; every other
+    // caller of ShiftCompletionMapper.ToDtoAsync gets an empty list (see the mapper's
+    // includeIncidents parameter).
+    IReadOnlyList<IncidentSummaryDto> Incidents);
+
+/// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
+/// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
+public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, DateTime IncidentDateTime);
 
 public record CompletionQueueItemDto(
     Guid ShiftId,

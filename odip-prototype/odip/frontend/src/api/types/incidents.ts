@@ -1,5 +1,6 @@
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType, WitnessStatus } from './enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType, WitnessStatus, MedicationAdministrationStatus } from './enums'
 import type { RestrictivePracticeType } from './restrictive-practices'
+import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 /** IN-5: one persisted injury row, as returned by GET /incidents/{id}. */
 export interface IncidentInjuryDto {
@@ -67,6 +68,14 @@ export interface IncidentListDto {
   qscReportingStatus: QscReportingStatus
   isOverdue24h: boolean
   createdAt: string
+  /** Connection map: set when this incident was filed from a MAR drop-into-draft hand-off
+   * (RecordAdministrationModal's "Report as incident"). */
+  medicationAdministrationId: string | null
+  /** Connection map: set when this incident is linked to a specific shift. */
+  shiftId: string | null
+  /** Connection map: set when this incident was filed from a flagged shift note's "file an
+   * incident report" hand-off (see NOTES-02/ShiftNoteIncidentPrefillState). */
+  shiftNoteId: string | null
 }
 
 export interface IncidentDetailDto extends IncidentListDto {
@@ -118,6 +127,36 @@ export interface IncidentDetailDto extends IncidentListDto {
   supportCoordinatorNotified: boolean
   supportCoordinatorNotifiedAt: string | null
   updatedAt: string
+  /** Connection map: resolved medication-administration context for the Context panel — present
+   * only when medicationAdministrationId is set. Backend field: IncidentDetailDto.MedicationContext. */
+  medicationContext: {
+    medicationAdministrationId: string
+    medicationName: string
+    status: MedicationAdministrationStatus
+    administeredAt: string | null
+    recordedByName: string | null
+  } | null
+  /** Connection map: resolved shift context for the Context panel — present only when shiftId
+   * is set. Plain display data only; there is no coordinator shift detail page to link to.
+   * Backend field: IncidentDetailDto.ShiftContext. */
+  shiftContext: {
+    shiftId: string
+    date: string
+    startTime: string
+    endTime: string
+    participantName: string
+    staffName: string | null
+  } | null
+  /** Connection map: resolved shift-note context for the Context panel — present only when
+   * shiftNoteId is set. Backend field: IncidentDetailDto.ShiftNoteContext. `flaggedCategories`
+   * is a real string[] — same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as
+   * ShiftNoteDto/FlaggedShiftNoteDto, not the raw [Flags] enum. */
+  shiftNoteContext: {
+    shiftNoteId: string
+    excerpt: string
+    flaggedCategories: ShiftNoteFlagCategory[]
+    createdAt: string
+  } | null
 }
 
 export interface CreateIncidentDto {
@@ -153,6 +192,12 @@ export interface CreateIncidentDto {
   injuries: CreateIncidentInjuryDto[]
   /** IN-7: repeatable witness rows — staff and free-text external witnesses coexist in one list. */
   witnesses: CreateIncidentWitnessDto[]
+  /** Connection map: set when filing from a MAR drop-into-draft hand-off. */
+  medicationAdministrationId?: string | null
+  /** Connection map: set when this incident is linked to a specific shift. */
+  shiftId?: string | null
+  /** Connection map: set when filing from a flagged shift note's "file an incident report" hand-off. */
+  shiftNoteId?: string | null
 }
 
 export interface UpdateIncidentDto extends CreateIncidentDto {

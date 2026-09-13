@@ -757,6 +757,10 @@ public class StaffAssignmentsController : ControllerBase
 
         var availability = await _unavailabilityQuery.GetWindowsAsync(new[] { staffId }, assignmentStart, assignmentEnd, ct);
 
+        // No PublicHolidays load here (connection-map item 8): RosterConflictService.CheckStaffAssignment
+        // never reads ctx.PublicHolidays — trips already price holidays in claims and span multiple
+        // days, so they don't get a PUBLIC_HOLIDAY finding — so loading them for a trip assignment
+        // check would be a pure-waste DB round trip. Leaving the parameter unset defaults it to null.
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
             otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
 

@@ -756,6 +756,212 @@ public class RosteringControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    /// <summary>Connection-map reverse link (Deliverable 2): an active IncidentReport whose ShiftNoteId points at <paramref name="shiftNoteId"/>.</summary>
+    private static IncidentReport SeedIncidentForShiftNote(OdipDbContext db, Guid shiftNoteId, bool isActive = true, DateTime? createdAt = null)
+    {
+        var incident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftNoteId = shiftNoteId, ReportedByUserId = Guid.NewGuid(),
+            Title = "Reported from a shift note", Description = "Auto-generated for test.", IncidentDateTime = DateTime.UtcNow,
+            Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft, IsActive = isActive,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
+        };
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+        return incident;
+    }
+
+    [Fact]
+    public async Task GetShiftNotes_IncidentId_PopulatedWhenActiveIncidentReferencesNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        var referencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Fell during transfer.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        var unreferencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Uneventful shift." };
+        db.ShiftNotes.AddRange(referencedNote, unreferencedNote);
+        db.SaveChanges();
+        var incident = SeedIncidentForShiftNote(db, referencedNote.Id);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(incident.Id, body.Data!.Single(n => n.Id == referencedNote.Id).IncidentId);
+        Assert.Null(body.Data.Single(n => n.Id == unreferencedNote.Id).IncidentId);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // FLAGGED SHIFT NOTES (connection-map Deliverable 3) — GetFlaggedShiftNotes
+    // ══════════════════════════════════════════════════════════════
+
+    private static Shift SeedFlaggedNotesShift(OdipDbContext db, Guid participantId, Guid? staffId, DateOnly serviceDate) => new()
+    {
+        Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId, ServiceDate = serviceDate,
+        StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published,
+    };
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_OnlyReturnsNotesWithFlaggedCategories()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        db.Shifts.Add(shift);
+        var flagged = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Participant fell in the bathroom.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        var unflagged = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Quiet shift, nothing to report." };
+        db.ShiftNotes.AddRange(flagged, unflagged);
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!);
+        Assert.Equal(flagged.Id, item.ShiftNoteId);
+        Assert.Equal(new[] { "Falls" }, item.FlaggedCategories);
+    }
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_ReturnsTheThreeNewShiftTimeFields()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        shift.StartTime = new TimeOnly(22, 0);
+        shift.EndTime = new TimeOnly(6, 0);
+        shift.EndsNextDay = true;
+        db.Shifts.Add(shift);
+        db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Bruising noted on arrival.", FlaggedCategories = ShiftNoteFlagCategory.Injury });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!);
+        Assert.Equal(shift.Id, item.ShiftId);
+        Assert.Equal(new TimeOnly(22, 0), item.StartTime);
+        Assert.Equal(new TimeOnly(6, 0), item.EndTime);
+        Assert.True(item.EndsNextDay);
+        Assert.Equal(participant.Id, item.ParticipantId);
+        Assert.Equal(staff.Id, item.StaffId);
+    }
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_WithoutIncidentTrue_ExcludesNotesWithAnActiveIncident()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        db.Shifts.Add(shift);
+        var withIncident = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Fell near the kitchen.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        var withoutIncident = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Medication refused.", FlaggedCategories = ShiftNoteFlagCategory.Medication };
+        db.ShiftNotes.AddRange(withIncident, withoutIncident);
+        db.SaveChanges();
+        SeedIncidentForShiftNote(db, withIncident.Id);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var withFilter = await controller.GetFlaggedShiftNotes(true, null, null, CancellationToken.None);
+        var filteredBody = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(withFilter.Result).Value);
+        var filteredItem = Assert.Single(filteredBody.Data!);
+        Assert.Equal(withoutIncident.Id, filteredItem.ShiftNoteId);
+
+        var withoutFilter = await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None);
+        var unfilteredBody = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(withoutFilter.Result).Value);
+        Assert.Equal(2, unfilteredBody.Data!.Count);
+    }
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_FromToFilters_ScopeByShiftServiceDate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var inRangeShift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        var outOfRangeShift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate.AddDays(30));
+        db.Shifts.AddRange(inRangeShift, outOfRangeShift);
+        var inRangeNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = inRangeShift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Injury noted.", FlaggedCategories = ShiftNoteFlagCategory.Injury };
+        var outOfRangeNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = outOfRangeShift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Agitated behaviour.", FlaggedCategories = ShiftNoteFlagCategory.BehaviourOfConcern };
+        db.ShiftNotes.AddRange(inRangeNote, outOfRangeNote);
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetFlaggedShiftNotes(null, ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!);
+        Assert.Equal(inRangeNote.Id, item.ShiftNoteId);
+    }
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_OrdersByCreatedAtAscending()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        db.Shifts.Add(shift);
+        var newer = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Fell again.", FlaggedCategories = ShiftNoteFlagCategory.Falls, CreatedAt = DateTime.UtcNow.AddHours(-1) };
+        var older = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Bruised elbow.", FlaggedCategories = ShiftNoteFlagCategory.Injury, CreatedAt = DateTime.UtcNow.AddHours(-2) };
+        db.ShiftNotes.AddRange(newer, older);
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(new[] { older.Id, newer.Id }, body.Data!.Select(n => n.ShiftNoteId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetFlaggedShiftNotes_OtherTenantsFlaggedNote_IsExcluded()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+
+        // Seed tenant B's flagged note under a real (non-super-admin) tenant context so
+        // SaveChangesAsync auto-stamps TenantId on every ITenantEntity row — same idiom as
+        // RosteringCompletionReviewTests.GetShiftCompletions_OtherTenant_Returns404.
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using (var seedDb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            var staff = SeedStaff(seedDb);
+            var participant = SeedParticipant(seedDb);
+            var shift = SeedFlaggedNotesShift(seedDb, participant.Id, staff.Id, ServiceDate);
+            seedDb.Shifts.Add(shift);
+            seedDb.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Fell in tenant B.", FlaggedCategories = ShiftNoteFlagCategory.Falls });
+            seedDb.SaveChanges();
+        }
+
+        // Query as tenant A — the ambient ShiftNote/Shift query filters must hide tenant B's row.
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(options, tenantAContext.Object);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // STAFF LEAVE / RECURRING UNAVAILABILITY (Task 5) — IStaffUnavailabilityQuery wiring
     // ══════════════════════════════════════════════════════════════
@@ -925,4 +1131,84 @@ public class RosteringControllerTests
         Assert.Equal(new TimeOnly(12, 0), bar.EndTime);
         Assert.Null(bar.AvailabilityType);
     }
+
+    // ── PUBLIC_HOLIDAY (connection-map item 8) ────────────────
+
+    [Fact]
+    public async Task CheckShift_ServiceDateIsSeededPublicHoliday_ReturnsPublicHolidayFinding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = ServiceDate, Name = "Test Holiday", State = null });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var dto = new CheckShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        };
+
+        var result = await controller.CheckShift(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        var finding = Assert.Single(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+        Assert.False(finding.RequiresReason);
+        Assert.Contains("Test Holiday", finding.Message);
+    }
+
+    [Fact]
+    public async Task CheckShift_NoPublicHolidaySeeded_DoesNotReturnPublicHolidayFinding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var dto = new CheckShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        };
+
+        var result = await controller.CheckShift(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+    }
+
+    [Fact]
+    public async Task GetBoard_ShiftOnSeededPublicHoliday_IncludedInExceptions()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
+            ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            EndsNextDay = false, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        });
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = ServiceDate, Name = "Test Holiday", State = null });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        Assert.Contains(body.Data!.Exceptions, f => f.Finding.Code == RosterConflictService.PublicHoliday);
+    }
+
+    // StaffAssignmentsController's Check never fires PUBLIC_HOLIDAY even when a holiday sits
+    // inside the assignment window — see StaffAssignmentGateTests / RosterConflictServiceTests
+    // for the trip-assignment-side coverage (RosterConflictService.CheckStaffAssignment never
+    // calls CheckPublicHoliday; VehiclesStaffController.StaffAssignmentsController still loads
+    // PublicHolidays for context-shape consistency but nothing consumes it there).
 }

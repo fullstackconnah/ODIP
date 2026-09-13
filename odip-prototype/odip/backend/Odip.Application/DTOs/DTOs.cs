@@ -2000,6 +2000,12 @@ public record IncidentListDto
     public QscReportingStatus QscReportingStatus { get; init; }
     public bool IsOverdue24h { get; init; }
     public DateTime CreatedAt { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the medication administration this incident was filed from, if any.</summary>
+    public Guid? MedicationAdministrationId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the shift this incident was filed from, if any.</summary>
+    public Guid? ShiftId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the shift note this incident was filed from, if any.</summary>
+    public Guid? ShiftNoteId { get; init; }
 }
 
 public record IncidentDetailDto : IncidentListDto
@@ -2047,6 +2053,45 @@ public record IncidentDetailDto : IncidentListDto
     public bool SupportCoordinatorNotified { get; init; }
     public DateTime? SupportCoordinatorNotifiedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+
+    /// <summary>Populated only when <see cref="IncidentListDto.MedicationAdministrationId"/> is set.</summary>
+    public IncidentMedicationContextDto? MedicationContext { get; init; }
+    /// <summary>Populated only when <see cref="IncidentListDto.ShiftId"/> is set.</summary>
+    public IncidentShiftContextDto? ShiftContext { get; init; }
+    /// <summary>Populated only when <see cref="IncidentListDto.ShiftNoteId"/> is set.</summary>
+    public IncidentShiftNoteContextDto? ShiftNoteContext { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the medication administration an incident was filed from, for <see cref="IncidentDetailDto.MedicationContext"/>.</summary>
+public record IncidentMedicationContextDto
+{
+    public Guid MedicationAdministrationId { get; init; }
+    public string MedicationName { get; init; } = string.Empty;
+    public MedicationAdministrationStatus Status { get; init; }
+    public DateTime? AdministeredAt { get; init; }
+    public string? RecordedByName { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the shift an incident was filed from, for <see cref="IncidentDetailDto.ShiftContext"/>.</summary>
+public record IncidentShiftContextDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly Date { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string? StaffName { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the shift note an incident was filed from, for <see cref="IncidentDetailDto.ShiftNoteContext"/>.</summary>
+public record IncidentShiftNoteContextDto
+{
+    public Guid ShiftNoteId { get; init; }
+    public string Excerpt { get; init; } = string.Empty;
+    // NOTES-02/connection-map: category names, same ShiftNoteKeywordVocabulary.ToCategoryNames-
+    // produced shape as ShiftNoteDto.FlaggedCategories — not the raw [Flags] enum.
+    public IReadOnlyList<string> FlaggedCategories { get; init; } = Array.Empty<string>();
+    public DateTime CreatedAt { get; init; }
 }
 
 public record CreateIncidentDto
@@ -2113,6 +2158,13 @@ public record CreateIncidentDto
     /// is treated as newly added.
     /// </summary>
     public List<CreateIncidentWitnessDto> Witnesses { get; init; } = new();
+
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific medication administration. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? MedicationAdministrationId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific shift. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? ShiftId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific shift note. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? ShiftNoteId { get; init; }
 }
 
 /// <summary>IN-5: one submitted injury row — see <see cref="Entities.IncidentInjury"/>.</summary>

@@ -579,11 +579,21 @@ public class OdipDbContext : DbContext
             // cascade into, an incident that once linked to it; the incident just loses the link.
             e.HasOne(i => i.RestrictivePractice).WithMany().HasForeignKey(i => i.RestrictivePracticeId).OnDelete(DeleteBehavior.SetNull);
 
+            // Connection-map source links (Deliverable 1): same SetNull idiom as
+            // RestrictivePractice above — no back-nav collection on the source entity (out of
+            // scope; later deliverables add their own reverse-link queries).
+            e.HasOne(i => i.MedicationAdministration).WithMany().HasForeignKey(i => i.MedicationAdministrationId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(i => i.Shift).WithMany().HasForeignKey(i => i.ShiftId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(i => i.ShiftNote).WithMany().HasForeignKey(i => i.ShiftNoteId).OnDelete(DeleteBehavior.SetNull);
+
             e.HasIndex(i => i.Status);
             e.HasIndex(i => i.Severity);
             e.HasIndex(i => i.QscReportingStatus);
             e.HasIndex(i => i.IsActive);
             e.HasIndex(i => i.RestrictivePracticeId);
+            e.HasIndex(i => i.MedicationAdministrationId);
+            e.HasIndex(i => i.ShiftId);
+            e.HasIndex(i => i.ShiftNoteId);
         });
 
         // ── IncidentInjury (IN-5) ────────────────────────────────

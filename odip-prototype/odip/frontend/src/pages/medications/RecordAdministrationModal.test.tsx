@@ -74,7 +74,7 @@ function makeAdministration(overrides: Partial<AdministrationDto> = {}): Adminis
     status: 'Administered', doseGiven: '18 units', recordedByName: 'Jordan Lee', recordedByUserId: 'staff-2',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null,
     witnessRespondedAt: null, reason: null, prnReason: null, prnOutcome: null, prnOutcomeAt: null,
-    limitBreachAcknowledged: false, notes: null, createdAt: '2026-08-01T01:00:00Z',
+    limitBreachAcknowledged: false, notes: null, createdAt: '2026-08-01T01:00:00Z', incidentId: null,
     ...overrides,
   }
 }
@@ -445,6 +445,8 @@ describe('RecordAdministrationModal INC-03 drop into draft incident', () => {
         notes: 'Gave Paracetamol 500mg instead',
         recordedByName: 'Jordan Lee',
         recordedByUserId: 'staff-2',
+        // Connection map: keyed by the saved administration's own id (makeAdministration's default).
+        medicationAdministrationId: 'admin-1',
       }),
     })
     expect(onClose).toHaveBeenCalledTimes(1)

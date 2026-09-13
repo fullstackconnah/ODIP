@@ -500,6 +500,34 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetShiftNotes_IncidentId_PopulatedWhenActiveIncidentReferencesNote()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var referencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Fell during transfer." };
+        var unreferencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Uneventful shift." };
+        db.ShiftNotes.AddRange(referencedNote, unreferencedNote);
+        db.SaveChanges();
+        var incident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftNoteId = referencedNote.Id, ReportedByUserId = user.Id,
+            Title = "Reported from a shift note", Description = "Details.", IncidentDateTime = DateTime.UtcNow,
+            Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft, IsActive = true,
+        };
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(incident.Id, body.Data!.Single(n => n.Id == referencedNote.Id).IncidentId);
+        Assert.Null(body.Data.Single(n => n.Id == unreferencedNote.Id).IncidentId);
+    }
+
+    [Fact]
     public async Task UpdateShiftNote_Author_UpdatesBody()
     {
         var (db, tenant) = CreateDb();

@@ -477,4 +477,31 @@ public class StaffAssignmentGateTests
         Assert.Contains(body.Data!, f => f.Code == RosterConflictService.StaffRecurringUnavailable && f.RequiresReason);
         Assert.Empty(await db.StaffAssignments.ToListAsync());
     }
+
+    // ── PUBLIC_HOLIDAY (connection-map item 8): trips already price holidays in claims and span
+    // multiple days, so RosterConflictService.CheckStaffAssignment never fires PUBLIC_HOLIDAY —
+    // even when a seeded holiday falls squarely inside the assignment window. ──
+
+    [Fact]
+    public async Task Check_HolidayInsideAssignmentWindow_NeverReturnsPublicHolidayFinding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 9, 11), Name = "Test Holiday", State = null });
+        db.SaveChanges();
+
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var dto = new CheckStaffAssignmentDto
+        {
+            StaffId = staff.Id, TripInstanceId = trip.Id,
+            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
+        };
+
+        var result = await controller.Check(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+    }
 }

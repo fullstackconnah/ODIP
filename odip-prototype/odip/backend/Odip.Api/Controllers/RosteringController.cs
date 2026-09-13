@@ -103,6 +103,11 @@ public class RosteringController : ControllerBase
 
         var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
 
+        // PUBLIC_HOLIDAY (connection-map item 8): loaded once for the whole week and reused for
+        // every shift's context below, same as weekShifts/weekTripAssignments/weekWindows — avoids
+        // one PublicHolidays query per shift on the board.
+        var weekPublicHolidays = await LoadPublicHolidaysAsync(start, end, ct);
+
         // ── Every ACTIVE participant, not just ones with shifts this week — an empty week
         // is itself the coverage gap the participant-mode board exists to surface. Shifts
         // referencing a participant outside that active set (edge case) still need a name
@@ -147,7 +152,8 @@ public class RosteringController : ControllerBase
                 ? level : CompatibilityLevel.Allowed;
 
             var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
+                weekPublicHolidays);
             return _conflictService.Check(shift, ctx).ToList();
         }
 
@@ -464,7 +470,60 @@ public class RosteringController : ControllerBase
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync(ct);
 
-        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(
+            notes.Select(n => ToShiftNoteDto(n, LookupIncidentId(incidentIds, n.Id))).ToList()));
+    }
+
+    /// <summary>
+    /// Connection-map Deliverable 3: coordinator work queue of flagged shift notes — notes whose
+    /// keyword scan (NOTES-02) matched at least one category, oldest first. <paramref
+    /// name="withoutIncident"/> = true narrows to notes with no active incident yet filed against
+    /// them (IncidentReport.ShiftNoteId), the exact set the queue exists to surface; omitted/false
+    /// returns every flagged note regardless of incident state. <paramref name="from"/>/<paramref
+    /// name="to"/> filter on the parent Shift's ServiceDate. Tenant-scoped for free — ShiftNote is
+    /// its own ITenantEntity (ambient OdipDbContext query filter), same as every other read here.
+    /// </summary>
+    [HttpGet("flagged-notes")]
+    public async Task<ActionResult<ApiResponse<List<FlaggedShiftNoteDto>>>> GetFlaggedShiftNotes(
+        [FromQuery] bool? withoutIncident, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        var query = _db.ShiftNotes
+            .Include(n => n.Shift).ThenInclude(s => s!.Participant)
+            .Include(n => n.Shift).ThenInclude(s => s!.User)
+            .Where(n => n.FlaggedCategories != ShiftNoteFlagCategory.None);
+
+        if (from.HasValue) query = query.Where(n => n.Shift!.ServiceDate >= from.Value);
+        if (to.HasValue) query = query.Where(n => n.Shift!.ServiceDate <= to.Value);
+
+        var notes = await query.OrderBy(n => n.CreatedAt).ToListAsync(ct);
+
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+
+        var items = notes.Select(n => new FlaggedShiftNoteDto
+        {
+            ShiftNoteId = n.Id,
+            ShiftId = n.ShiftId,
+            ShiftDate = n.Shift!.ServiceDate,
+            StartTime = n.Shift.StartTime,
+            EndTime = n.Shift.EndTime,
+            EndsNextDay = n.Shift.EndsNextDay,
+            ParticipantId = n.Shift.ParticipantId,
+            ParticipantName = n.Shift.Participant != null ? n.Shift.Participant.FullName : string.Empty,
+            StaffId = n.Shift.UserId,
+            StaffName = n.Shift.User != null ? n.Shift.User.FullName : null,
+            // Same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto's own
+            // FlaggedCategories, not the raw [Flags] enum.
+            FlaggedCategories = ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories),
+            Excerpt = n.Body.Length > 200 ? n.Body.Substring(0, 200) : n.Body,
+            CreatedAt = n.CreatedAt,
+            IncidentId = LookupIncidentId(incidentIds, n.Id),
+        }).ToList();
+
+        if (withoutIncident == true)
+            items = items.Where(i => i.IncidentId == null).ToList();
+
+        return Ok(ApiResponse<List<FlaggedShiftNoteDto>>.Ok(items));
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -544,7 +603,12 @@ public class RosteringController : ControllerBase
             new PagedResult<CompletionQueueItemDto> { Items = paged, Page = page, PageSize = pageSize, TotalCount = totalCount }));
     }
 
-    /// <summary>The current active ShiftCompletion for one shift, or 404 if none exists.</summary>
+    /// <summary>
+    /// The current active ShiftCompletion for one shift, or 404 if none exists. Deliverable 2
+    /// reverse link: this is the one completion surface that populates
+    /// <see cref="ShiftCompletionDto.Incidents"/> — the list endpoint below and Approve/Return
+    /// leave it empty (see <see cref="ToShiftCompletionDtoAsync"/> remarks).
+    /// </summary>
     [HttpGet("shifts/{id:guid}/completion")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> GetShiftCompletion(Guid id, CancellationToken ct)
     {
@@ -554,7 +618,7 @@ public class RosteringController : ControllerBase
         if (completion is null)
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct, includeIncidents: true)));
     }
 
     /// <summary>
@@ -934,9 +998,32 @@ public class RosteringController : ControllerBase
 
     private static RosterFindingDto ToFindingDto(RosterFinding f) => RosterGate.ToFindingDto(f);
 
-    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n, Guid? incidentId) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
-        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt, incidentId);
+
+    /// <summary>
+    /// Connection-map reverse link (Deliverable 2): for the given shift-note ids, the newest
+    /// active IncidentReport whose ShiftNoteId points back at each one — ONE query for the whole
+    /// batch (never per-row), same idiom as MedicationsController's administration-id lookup.
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> GetIncidentIdsByShiftNoteIdsAsync(IReadOnlyCollection<Guid> shiftNoteIds, CancellationToken ct)
+    {
+        if (shiftNoteIds.Count == 0) return new Dictionary<Guid, Guid>();
+        var rows = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId != null && shiftNoteIds.Contains(i.ShiftNoteId.Value))
+            .Select(i => new { NoteId = i.ShiftNoteId!.Value, i.Id, i.CreatedAt })
+            .ToListAsync(ct);
+        return rows
+            .GroupBy(r => r.NoteId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
+    }
+
+    /// <summary>Dictionary&lt;Guid, Guid&gt;.GetValueOrDefault returns Guid.Empty (not null) for a
+    /// missing key, which would wrongly stand in for "no incident" — this is the null-correct
+    /// lookup every incident-id-map read in this class uses instead.</summary>
+    private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
+        map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
     private static ShiftPatternDto ToPatternDto(ShiftPattern p) => new()
     {
@@ -955,9 +1042,11 @@ public class RosteringController : ControllerBase
     };
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
-    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
-    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
+    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.
+    /// <paramref name="includeIncidents"/> forwards to the mapper's own parameter — only
+    /// GetShiftCompletion passes true (see that method's remarks).</summary>
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct, bool includeIncidents = false)
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct, includeIncidents);
 
     /// <summary>
     /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the
@@ -1092,10 +1181,31 @@ public class RosteringController : ControllerBase
             .Select(c => (CompatibilityLevel?)c.Level)
             .FirstOrDefaultAsync(ct) ?? CompatibilityLevel.Allowed;
 
+        // PUBLIC_HOLIDAY only ever checks the candidate's ServiceDate (see RosterConflictService.
+        // CheckPublicHoliday), so that's the only date this query needs regardless of EndsNextDay.
+        var publicHolidays = await LoadPublicHolidaysAsync(candidate.ServiceDate, candidate.ServiceDate, ct);
+
         var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
+            publicHolidays);
 
         return _conflictService.Check(candidate, ctx).ToList();
+    }
+
+    /// <summary>
+    /// PUBLIC_HOLIDAY source of truth (connection-map item 8): same state-scoping as
+    /// <c>ClaimGenerationService.CalculateClaimInternalAsync</c> — a holiday row with a null
+    /// <see cref="Odip.Domain.Entities.PublicHoliday.State"/> applies everywhere, one scoped to a
+    /// state only applies there, and the provider's own state (falling back to "VIC") decides
+    /// which scoped rows count. One query per call.
+    /// </summary>
+    private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var state = (await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct)) ?? "VIC";
+        return await _db.PublicHolidays
+            .Where(h => h.Date >= start && h.Date <= end && (h.State == null || h.State == state))
+            .Select(h => new PublicHolidayRef(h.Date, h.Name))
+            .ToListAsync(ct);
     }
 
     /// <summary>

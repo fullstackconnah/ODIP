@@ -22,13 +22,31 @@ public static class ShiftCompletionMapper
     public static bool IsOutlierVariance(int varianceMinutesStart, int varianceMinutesEnd, int thresholdMinutes) =>
         Math.Abs(varianceMinutesStart) > thresholdMinutes || Math.Abs(varianceMinutesEnd) > thresholdMinutes;
 
-    public static async Task<ShiftCompletionDto> ToDtoAsync(OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, CancellationToken ct)
+    /// <param name="includeIncidents">
+    /// Deliverable 2 reverse link: when true, runs one extra query for the shift's active
+    /// incidents and populates <see cref="ShiftCompletionDto.Incidents"/>. Defaults to false —
+    /// only RosteringController's completion DETAIL endpoint (GetShiftCompletion) opts in; every
+    /// other caller (the completions list, Approve/Return, PortalController's own detail) gets an
+    /// empty list rather than paying for the extra query.
+    /// </param>
+    public static async Task<ShiftCompletionDto> ToDtoAsync(
+        OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, CancellationToken ct, bool includeIncidents = false)
     {
         var submittedBy = await db.Users.FirstOrDefaultAsync(u => u.Id == c.SubmittedByUserId, ct);
         User? reviewedBy = c.ReviewedByUserId.HasValue
             ? await db.Users.FirstOrDefaultAsync(u => u.Id == c.ReviewedByUserId.Value, ct)
             : null;
         var shift = await db.Shifts.FirstOrDefaultAsync(s => s.Id == c.ShiftId, ct);
+
+        IReadOnlyList<IncidentSummaryDto> incidents = Array.Empty<IncidentSummaryDto>();
+        if (includeIncidents)
+        {
+            incidents = await db.IncidentReports
+                .Where(i => i.ShiftId == c.ShiftId && i.IsActive)
+                .OrderByDescending(i => i.IncidentDateTime)
+                .Select(i => new IncidentSummaryDto(i.Id, i.Title, i.Severity, i.Status, i.IncidentDateTime))
+                .ToListAsync(ct);
+        }
 
         return new ShiftCompletionDto(
             c.Id, c.ShiftId, c.ActualStart, c.ActualEnd, c.TimeZoneId, c.GeolocationDeclined, c.StartWasManual,
@@ -37,6 +55,6 @@ public static class ShiftCompletionMapper
             c.ReviewedByUserId, reviewedBy?.FullName, c.ReviewedAt, c.ReviewOutcome, c.ReturnReason,
             c.VarianceMinutesStart, c.VarianceMinutesEnd,
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
-            varianceReviewMinutes, shift?.ReturnCount ?? 0);
+            varianceReviewMinutes, shift?.ReturnCount ?? 0, incidents);
     }
 }

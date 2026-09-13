@@ -292,6 +292,7 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     reason: 'Grabbed the wrong blister pack',
     notes: 'Gave Paracetamol 500mg instead',
     tripInstanceId: null,
+    medicationAdministrationId: 'admin-1',
   }
 
   it('shows the pre-fill banner and populates title/incident type/severity/participant on Basics, and description on Incident Details', async () => {
@@ -375,7 +376,14 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
       severity: 'High',
       involvedParticipantId: 'participant-1',
       reportedByStaffId: 'staff-1',
+      medicationAdministrationId: 'admin-1',
     })
+  })
+
+  it('shows a compact "Linked to" line naming the medication and outcome', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
+
+    expect(screen.getByText(/linked to: medication administration · insulin · wrong medication given/i)).toBeInTheDocument()
   })
 
   it('does not show the banner or prefill anything on a plain "Report New Incident" visit (no router state)', () => {
@@ -429,6 +437,7 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     endTime: '17:00:00',
     endsNextDay: false,
     reportedByUserId: 'staff-1',
+    shiftId: 'shift-9',
   }
 
   it('shows the pre-fill banner and populates the form from the flagged note', () => {
@@ -454,6 +463,16 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     expect(await screen.findByText('Incidents list')).toBeInTheDocument()
     expect(mockApiPost).toHaveBeenCalledTimes(1)
     expect(mockApiPost).toHaveBeenCalledWith('/portal/notes/note-9/acknowledge-flags')
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      shiftId: 'shift-9',
+      shiftNoteId: 'note-9',
+    })
+  })
+
+  it('shows a compact "Linked to" line naming the shift note\'s date', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    expect(screen.getByText(/linked to: shift note from 17\/08\/2026/i)).toBeInTheDocument()
   })
 
   it('does not call acknowledge-flags on a plain submit with no shift-note prefill', async () => {
@@ -509,6 +528,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     reason: 'Participant declined',
     notes: null,
     tripInstanceId: 'trip-1',
+    medicationAdministrationId: 'admin-2',
   }
 
   const shiftNotePrefill: ShiftNoteIncidentPrefillState = {
@@ -523,6 +543,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     endTime: '16:00:00',
     endsNextDay: false,
     reportedByUserId: 'staff-1',
+    shiftId: 'shift-42',
   }
 
   it('MAR prefill: every producer-supplied field lands on Basics or Incident Details and appears on Review; an untouched submit is a valid payload', async () => {

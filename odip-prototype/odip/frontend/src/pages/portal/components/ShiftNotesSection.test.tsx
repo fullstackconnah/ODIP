@@ -50,6 +50,7 @@ function makeNote(overrides: Partial<ShiftNoteDto> = {}): ShiftNoteDto {
     updatedAt: '2026-08-17T09:30:00Z',
     flaggedCategories: [],
     flagsAcknowledgedAt: null,
+    incidentId: null,
     ...overrides,
   }
 }
@@ -283,8 +284,43 @@ describe('ShiftNotesSection', () => {
           endTime: '17:00:00',
           endsNextDay: false,
           reportedByUserId: 'user-42',
+          shiftId: 'shift-1',
         },
       })
+    })
+
+    it('shows an "Incident filed" link instead of the dismiss/file prompt once the note has an incidentId', () => {
+      mockUseShiftNotes.mockReturnValue({
+        data: [makeNote({ flaggedCategories: ['Falls'], incidentId: 'inc-42' })],
+        isLoading: false, isError: false, refetch: mockRefetch,
+      })
+      renderSection()
+
+      expect(screen.getByRole('status')).toHaveTextContent(/incident filed/i)
+      expect(screen.getByRole('link', { name: /view report/i })).toHaveAttribute('href', '/incidents/inc-42')
+      expect(screen.queryByRole('button', { name: /file incident report/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
+    })
+
+    it('shows the "Incident filed" link even on an already-acknowledged flagged note, since the loop is closed either way', () => {
+      mockUseShiftNotes.mockReturnValue({
+        data: [makeNote({ flaggedCategories: ['Falls'], flagsAcknowledgedAt: '2026-08-17T10:00:00Z', incidentId: 'inc-42' })],
+        isLoading: false, isError: false, refetch: mockRefetch,
+      })
+      renderSection()
+
+      expect(screen.getByRole('link', { name: /view report/i })).toHaveAttribute('href', '/incidents/inc-42')
+    })
+
+    it('does not show the "Incident filed" link when no incident has been filed for the note', () => {
+      mockUseShiftNotes.mockReturnValue({
+        data: [makeNote({ flaggedCategories: ['Falls'], incidentId: null })],
+        isLoading: false, isError: false, refetch: mockRefetch,
+      })
+      renderSection()
+
+      expect(screen.queryByRole('link', { name: /view report/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /file incident report/i })).toBeInTheDocument()
     })
   })
 })

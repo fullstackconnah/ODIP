@@ -23,6 +23,9 @@ function baseIncident(overrides: Partial<IncidentListDto> = {}): IncidentListDto
     qscReportingStatus: 'NotRequired',
     isOverdue24h: false,
     createdAt: '2026-09-01T10:00:00Z',
+    medicationAdministrationId: null,
+    shiftId: null,
+    shiftNoteId: null,
     ...overrides,
   }
 }

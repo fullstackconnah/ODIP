@@ -627,6 +627,7 @@ describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
       updatedAt: '2026-08-17T09:30:00Z',
       flaggedCategories: [],
       flagsAcknowledgedAt: null,
+      incidentId: null,
       ...overrides,
     }
   }
