@@ -162,14 +162,18 @@ export default function IncidentsPage() {
   // notes are already visible to them on the portal shift page; this queue spans every
   // participant's notes, which a support worker should not see.
   const canViewFlaggedNotes = canAccessPage('rostering')
-  const [tab, setTab] = useState<IncidentsTab>('incidents')
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Addressable via ?view=flagged-notes (e.g. a link in from the dashboard/tasks obligation
+  // queue) — read once on mount, same as qscOverdueOnly below. Default (no param) is unchanged:
+  // the Incidents tab. Only sets the initial tab — switching tabs afterwards via TabNav doesn't
+  // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
+  const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
   const { data: flaggedNotes = [], isLoading: flaggedNotesLoading } = useFlaggedShiftNotes(
     { withoutIncident: true },
     { enabled: canViewFlaggedNotes },
   )
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
-  const [searchParams, setSearchParams] = useSearchParams()
   const qscOverdueOnly = searchParams.get('qsc') === 'overdue'
   const clearQscParam = () => {
     setSearchParams((prev) => {

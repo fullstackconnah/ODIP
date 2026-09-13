@@ -259,6 +259,20 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     expect(mockUseFlaggedShiftNotes).toHaveBeenCalledWith({ withoutIncident: true }, { enabled: false })
   })
 
+  it('opens straight onto the Flagged notes tab when visiting /incidents?view=flagged-notes', () => {
+    mockUseFlaggedShiftNotes.mockReturnValue({ data: [], isLoading: false })
+    renderPage('/incidents?view=flagged-notes')
+
+    expect(screen.getByText('No flagged notes are waiting on an incident.')).toBeInTheDocument()
+  })
+
+  it('defaults to the Incidents tab when there is no view param', () => {
+    mockUseFlaggedShiftNotes.mockReturnValue({ data: [], isLoading: false })
+    renderPage()
+
+    expect(screen.queryByText('No flagged notes are waiting on an incident.')).not.toBeInTheDocument()
+  })
+
   it('renders a row per flagged note on the Flagged notes tab, with participant/staff/flags/excerpt', async () => {
     const user = userEvent.setup()
     mockUseFlaggedShiftNotes.mockReturnValue({

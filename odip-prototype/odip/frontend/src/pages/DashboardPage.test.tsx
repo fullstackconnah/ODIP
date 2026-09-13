@@ -58,6 +58,30 @@ describe('DashboardPage — Overdue Tasks link (PP-75)', () => {
     expect(link).toHaveTextContent(/view/i)
     expect(screen.queryByText(/^resolve$/i)).not.toBeInTheDocument()
   })
+
+  // Item 9: an obligation-engine task (LeaveCoverage, IncidentQscReport, …) isn't raised against
+  // a trip, so tripInstanceId/tripName are now omitted from the wire response rather than sent as
+  // null — the tile must render this without throwing, and its click-through must still work.
+  it('renders a trip-less overdue task without crashing and keeps its View link working', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue({
+      data: {
+        upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
+        overdueTaskCount: 1, conflictCount: 0, tripsMissingAccommodation: 0,
+        tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
+        qscOverdueCount: 0, upcomingTrips: [],
+        overdueTasks: [{ id: 'task-2', title: 'Find leave cover', priority: 'High', dueDate: new Date(Date.now() - 3600000).toISOString(), ownerName: 'Sam Owner' }],
+      },
+      isLoading: false, isError: false,
+    })
+
+    expect(() => renderPage()).not.toThrow()
+    expect(screen.getByText('Find leave cover')).toBeInTheDocument()
+    const link = document.querySelector('a[href="/tasks/task-2/edit"]')
+    expect(link).not.toBeNull()
+    expect(link).toHaveTextContent(/view/i)
+  })
 })
 
 describe('DashboardPage — Critical Participant Alerts card', () => {
