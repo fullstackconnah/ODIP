@@ -699,7 +699,18 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.TripInstance)
                 .WithMany(t => t.TripClaims)
                 .HasForeignKey(e => e.TripInstanceId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Shift-completion design spec §1 (PR 3) — Kind == Shift claims key off Participant
+            // + a date range instead of a TripInstance. TripClaim is deliberately NOT
+            // ITenantEntity (standing ruling); callers must scope through the tenant-filtered
+            // Participants/Shifts sets.
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.AuthorisedByUser)
                 .WithMany()
@@ -709,6 +720,7 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ClaimReference).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.TripInstanceId);
+            entity.HasIndex(e => e.ParticipantId);
         });
 
         // ── ClaimLineItem ─────────────────────────────────────────
@@ -730,10 +742,25 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.ParticipantBooking)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantBookingId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Shift-completion design spec §1 (PR 3) — the Shift-side parent for Kind == Shift
+            // claim lines, mutually exclusive with ParticipantBookingId (see check constraint
+            // below and the class doc comment).
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.ToTable(tb => tb.HasCheckConstraint(
+                "CK_ClaimLineItem_ExactlyOneParent",
+                "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1"));
 
             entity.HasIndex(e => e.TripClaimId);
             entity.HasIndex(e => e.ParticipantBookingId);
+            entity.HasIndex(e => e.ShiftId);
             entity.HasIndex(e => e.Status);
         });
 

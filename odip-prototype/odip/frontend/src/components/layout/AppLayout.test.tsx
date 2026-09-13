@@ -9,9 +9,10 @@ import AppLayout from './AppLayout'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount } = vi.hoisted(() => ({
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
+  mockUsePendingCompletionCount: vi.fn(() => 0),
 }))
 
 vi.mock('@/api/hooks', async (importOriginal) => {
@@ -20,6 +21,10 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     ...actual,
     usePendingWitnessRequests: mockUsePendingWitnessRequests,
     usePendingLeaveCount: mockUsePendingLeaveCount,
+    // Same reason as usePendingLeaveCount above — without this, AppLayout's new Completions nav
+    // entry would call the real usePendingCompletionCount, which calls useQuery and needs a
+    // QueryClientProvider this suite doesn't set up.
+    usePendingCompletionCount: mockUsePendingCompletionCount,
   }
 })
 
@@ -103,6 +108,40 @@ describe('AppLayout — Leave nav entry (leave-2)', () => {
     mockUsePendingLeaveCount.mockReturnValue(3)
     renderAt('/rostering')
     expect(screen.getByRole('link', { name: /Leave$/ })).toHaveTextContent('3')
+  })
+})
+
+describe('AppLayout — Completions nav entry', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUsePendingCompletionCount.mockReturnValue(0)
+  })
+
+  it('renders the Completions entry under Rostering, linking to /rostering/completions', () => {
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Completions$/ })).toHaveAttribute('href', '/rostering/completions')
+  })
+
+  it('shows no badge when there are no pending completions', () => {
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Completions$/ })).not.toHaveTextContent(/\d/)
+  })
+
+  it('shows a pending-count badge on the Completions entry when usePendingCompletionCount is positive', () => {
+    mockUsePendingCompletionCount.mockReturnValue(4)
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Completions$/ })).toHaveTextContent('4')
+  })
+
+  it('disables the poll for a role without canReviewCompletions (no user)', () => {
+    renderAt('/rostering')
+    expect(mockUsePendingCompletionCount).toHaveBeenCalledWith(false)
+  })
+
+  it('enables the poll for a role with canReviewCompletions (Coordinator)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderAt('/rostering')
+    expect(mockUsePendingCompletionCount).toHaveBeenCalledWith(true)
   })
 })
 

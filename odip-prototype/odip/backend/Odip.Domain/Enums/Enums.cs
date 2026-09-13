@@ -394,6 +394,16 @@ public enum TripClaimStatus
     Cancelled = 7
 }
 
+/// <summary>
+/// Discriminates a <see cref="Odip.Domain.Entities.TripClaim"/>'s origin (shift-completion
+/// design spec §1, delivery PR 3). Append-only — Trip=0 keeps every pre-existing row correct.
+/// </summary>
+public enum ClaimKind
+{
+    Trip = 0,
+    Shift = 1
+}
+
 public enum ClaimLineItemStatus
 {
     Draft = 0,
