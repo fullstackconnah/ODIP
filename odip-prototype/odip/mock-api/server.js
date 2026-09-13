@@ -442,6 +442,7 @@ const marEntries = [
     scheduledTime: '22:00', scheduledAt: '2026-09-12T22:00:00Z',
     isHighRisk: false, supportLevel: 'Administer', isOverdue: false,
     administration: medicationAdministrations[1],
+    incidentId: medicationAdministrations[1].incidentId,
   },
   {
     medicationId: 'med-0003', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
@@ -451,6 +452,7 @@ const marEntries = [
     scheduledTime: '20:00', scheduledAt: '2026-09-12T20:00:00Z',
     isHighRisk: true, supportLevel: 'Administer', isOverdue: false,
     administration: medicationAdministrations[2],
+    incidentId: medicationAdministrations[2].incidentId,
   },
 ]
 
@@ -472,7 +474,7 @@ const incidentDetailExtras = {
     familyNotified: true, familyNotifiedAt: '2026-07-11T12:00:00Z',
     supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
     updatedAt: '2026-07-14T09:00:00Z',
-    medication: null, shift: null, shiftNote: null,
+    medicationContext: null, shiftContext: null, shiftNoteContext: null,
   },
   'inc-0002': {
     participantBookingId: 'b-0003', involvedParticipantId: 'p-0004',
@@ -489,11 +491,11 @@ const incidentDetailExtras = {
     updatedAt: '2026-07-25T10:00:00Z',
     // Connection map: the one incident fixture that carries a real medication context, matching
     // medicationAdministrationId above and admin-0001's own record.
-    medication: {
+    medicationContext: {
       medicationAdministrationId: 'admin-0001', medicationName: 'Insulin', status: 'Missed',
       administeredAt: '2026-07-11T20:15:00Z', recordedByName: 'Tom Beattie',
     },
-    shift: null, shiftNote: null,
+    shiftContext: null, shiftNoteContext: null,
   },
   'inc-0003': {
     participantBookingId: null, involvedParticipantId: 'p-0004',
@@ -508,7 +510,7 @@ const incidentDetailExtras = {
     familyNotified: true, familyNotifiedAt: '2026-07-29T17:00:00Z',
     supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-29T17:15:00Z',
     updatedAt: '2026-07-30T08:00:00Z',
-    medication: null, shift: null, shiftNote: null,
+    medicationContext: null, shiftContext: null, shiftNoteContext: null,
   },
 }
 
@@ -557,6 +559,15 @@ const shiftParticipant = {
   'shift-0003': { id: 'p-0002', name: 'Sienna Whitfield' },
 }
 
+// shiftId -> schedule, for the flagged-notes projection's startTime/endTime/endsNextDay
+// (connection map seam follow-up: IncidentsPage's "File incident" hand-off carries the shift's
+// real time range instead of a fake full-day window). shift-0002 is the one overnight example.
+const shiftSchedule = {
+  'shift-0001': { startTime: '08:00:00', endTime: '17:00:00', endsNextDay: false },
+  'shift-0002': { startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true },
+  'shift-0003': { startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false },
+}
+
 // Flagged-notes queue (connection map item 4) — GET /rostering/flagged-notes?withoutIncident=&from=&to=,
 // coordinator roles only. Oldest first. Derived from shiftNotesByShiftId's flagged notes rather
 // than duplicated by hand, so the two fixtures can't drift. Three sample rows (note-0002/3/4).
@@ -571,10 +582,17 @@ const flaggedShiftNotes = Object.values(shiftNotesByShiftId)
     participantName: shiftParticipant[n.shiftId].name,
     staffId: n.authorUserId,
     staffName: n.authorName,
-    flaggedCategories: n.flaggedCategories,
+    // Wire shape: FlaggedShiftNoteDto.FlaggedCategories is the raw [Flags] enum (comma-space
+    // joined names, e.g. "Falls, Medication"), NOT a JSON array — RosteringController assigns it
+    // straight from ShiftNote.FlaggedCategories with no ToCategoryNames conversion. shiftNotesByShiftId's
+    // own flaggedCategories IS a real array (that's ShiftNoteDto's own, different, contract) — join it here.
+    flaggedCategories: n.flaggedCategories.join(', '),
     excerpt: n.body,
     createdAt: n.createdAt,
     incidentId: n.incidentId,
+    startTime: shiftSchedule[n.shiftId].startTime,
+    endTime: shiftSchedule[n.shiftId].endTime,
+    endsNextDay: shiftSchedule[n.shiftId].endsNextDay,
   }))
   .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 

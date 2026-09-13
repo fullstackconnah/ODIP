@@ -29,6 +29,21 @@ export const SHIFT_NOTE_FLAG_LABELS: Record<ShiftNoteFlagCategory, string> = {
   BehaviourOfConcern: 'behaviours',
 }
 
+/**
+ * Connection map: IncidentDetailDto.ShiftNoteContext.FlaggedCategories is NOT a JSON array — the
+ * backend assigns the raw ShiftNoteFlagCategory [Flags] enum value straight onto the DTO (see
+ * IncidentsController.GetById), so the global JsonStringEnumConverter serialises it as a
+ * comma-space-joined list of member names (e.g. "Falls, Medication") or "None" for the zero
+ * value — the exact same wire shape ServiceStreams/HidpaSupportCategories use elsewhere
+ * (see api/types/participants.ts's parseServiceStreams). This is the one place that string gets
+ * turned back into the ShiftNoteFlagCategory[] the rest of this file's helpers expect.
+ */
+export function parseFlaggedCategories(value: string | null | undefined): ShiftNoteFlagCategory[] {
+  if (!value || value === 'None') return []
+  const known: readonly string[] = SHIFT_NOTE_FLAG_CATEGORIES
+  return value.split(',').map((s) => s.trim()).filter((s): s is ShiftNoteFlagCategory => known.includes(s))
+}
+
 /** Joins flagged category labels for the banner: "falls" / "falls and medication" / "falls, medication and injury". */
 export function formatFlaggedCategoryList(categories: readonly ShiftNoteFlagCategory[]): string {
   const labels = categories.map(c => SHIFT_NOTE_FLAG_LABELS[c])
