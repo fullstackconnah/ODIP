@@ -1,4 +1,4 @@
-import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel } from './enums'
+import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, ShiftStatus, CompatibilityLevel } from './enums'
 import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
 import type { CreateParticipantRiskEntryDto } from './risk-entries'
 import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
@@ -713,4 +713,38 @@ export interface UpdateSupportProfileDto {
   emergencyConsiderations?: string
   travelSpecificNotes?: string
   reviewDate?: string
+}
+
+/** Connection map item 12 — one row of GET /participants/{id}/rostering's upcomingShifts (next 28
+ * days). staffId/staffName are omitted (never sent as null) for an unfilled shift. */
+export interface ParticipantRosteringShiftDto {
+  shiftId: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  staffId?: string
+  staffName?: string
+  status: ShiftStatus
+  /** See ShiftDto.assigneeOnApprovedLeave — true when the assigned staff member's leave was
+   * approved after the assignment was made, so this filled shift is actually a hole. */
+  assigneeOnApprovedLeave: boolean
+}
+
+/** Connection map item 12 — one row of GET /participants/{id}/rostering's assignedStaff. */
+export interface ParticipantRosteringStaffDto {
+  staffId: string
+  staffName: string
+  shiftCount: number
+  compatibility: CompatibilityLevel
+}
+
+/**
+ * Connection map item 12 — GET /participants/{id}/rostering, backing the participant hub's new
+ * Rostering tab (RosteringTab.tsx): who's rostered on for this participant and what's coming up,
+ * without sending the coordinator all the way to the full roster board.
+ */
+export interface ParticipantRosteringDto {
+  upcomingShifts: ParticipantRosteringShiftDto[]
+  assignedStaff: ParticipantRosteringStaffDto[]
 }

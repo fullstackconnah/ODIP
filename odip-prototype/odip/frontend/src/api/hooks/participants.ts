@@ -11,6 +11,7 @@ import type {
   UpdateSupportProfileDto,
   BookingListDto,
   PagedResult,
+  ParticipantRosteringDto,
 } from '../types'
 
 /**
@@ -48,6 +49,18 @@ export function useParticipantBookings(id: string | undefined) {
   return useQuery({
     queryKey: ['participant-bookings', id],
     queryFn: () => apiGet<BookingListDto[]>(`/participants/${id}/bookings`),
+    enabled: !!id,
+  })
+}
+
+/**
+ * Connection map item 12 — GET /participants/{id}/rostering, backing the participant hub's
+ * Rostering tab (RosteringTab.tsx). Mirrors useParticipantBookings's enabled-on-id gate.
+ */
+export function useParticipantRostering(id: string | undefined) {
+  return useQuery({
+    queryKey: ['participant-rostering', id],
+    queryFn: () => apiGet<ParticipantRosteringDto>(`/participants/${id}/rostering`),
     enabled: !!id,
   })
 }
