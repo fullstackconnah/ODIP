@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
-import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import { SHIFT_NOTE_FLAG_LABELS, parseFlaggedCategories } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 
 type IncidentsTab = 'incidents' | 'flagged-notes'
@@ -28,26 +28,25 @@ function formatNoteAge(createdAt: string): string {
 }
 
 /** Connection map item 4: mirrors ShiftNotesSection.goToIncident's field mapping so
- * IncidentCreatePage treats a queue-filed incident identically to a portal-filed one. Two
- * fields aren't available on the flagged-notes queue projection (FlaggedShiftNoteDto carries
- * no startTime/endTime/endsNextDay — only the shiftDate): a full business-day window
- * (00:00–23:59, not overnight) is used as a placeholder so the description skeleton's shift-
- * range text and the datetime-local default aren't garbage; the coordinator reviews/edits both
- * before submitting either way, same "skeleton, not a decision" posture as the rest of this
- * prefill mechanism. */
+ * IncidentCreatePage treats a queue-filed incident identically to a portal-filed one. Uses the
+ * flagged note's own shift schedule (FlaggedShiftNoteDto.startTime/endTime/endsNextDay) rather
+ * than a fake full-day window, so the description skeleton's shift-range text and the
+ * datetime-local default reflect the real shift; the coordinator still reviews/edits both
+ * before submitting, same "skeleton, not a decision" posture as the rest of this prefill
+ * mechanism. */
 function buildFlaggedNotePrefill(row: FlaggedShiftNoteDto, reportedByUserId: string | null): ShiftNoteIncidentPrefillState {
   return {
     source: 'shift-note',
     shiftNoteId: row.shiftNoteId,
     shiftId: row.shiftId,
-    categories: row.flaggedCategories,
+    categories: parseFlaggedCategories(row.flaggedCategories),
     participantId: row.participantId,
     participantName: row.participantName,
     noteBody: row.excerpt,
     serviceDate: row.shiftDate,
-    startTime: '00:00:00',
-    endTime: '23:59:00',
-    endsNextDay: false,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    endsNextDay: row.endsNextDay,
     reportedByUserId,
   }
 }
@@ -74,7 +73,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       header: 'Flags',
       render: row => (
         <div className="flex flex-wrap gap-1">
-          {(row.flaggedCategories as ShiftNoteFlagCategory[]).map(category => (
+          {parseFlaggedCategories(row.flaggedCategories).map(category => (
             <span
               key={category}
               className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"

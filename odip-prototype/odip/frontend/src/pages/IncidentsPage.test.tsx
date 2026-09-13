@@ -28,8 +28,8 @@ vi.mock('react-router-dom', async () => {
 
 function baseFlaggedNote(overrides: Partial<{
   shiftNoteId: string; shiftId: string; shiftDate: string; participantId: string; participantName: string
-  staffId: string | null; staffName: string | null; flaggedCategories: string[]; excerpt: string
-  createdAt: string; incidentId: string | null
+  staffId: string | null; staffName: string | null; flaggedCategories: string; excerpt: string
+  createdAt: string; incidentId: string | null; startTime: string; endTime: string; endsNextDay: boolean
 }> = {}) {
   return {
     shiftNoteId: 'note-1',
@@ -39,10 +39,13 @@ function baseFlaggedNote(overrides: Partial<{
     participantName: 'Sophie Brown',
     staffId: 's-1',
     staffName: 'Ben Turner',
-    flaggedCategories: ['Falls'],
+    flaggedCategories: 'Falls',
     excerpt: 'She had a fall near the bathroom.',
     createdAt: '2026-09-10T09:30:00Z',
     incidentId: null,
+    startTime: '08:00:00',
+    endTime: '16:00:00',
+    endsNextDay: false,
     ...overrides,
   }
 }
@@ -259,7 +262,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
   it('renders a row per flagged note on the Flagged notes tab, with participant/staff/flags/excerpt', async () => {
     const user = userEvent.setup()
     mockUseFlaggedShiftNotes.mockReturnValue({
-      data: [baseFlaggedNote({ flaggedCategories: ['Falls', 'Injury'] })],
+      data: [baseFlaggedNote({ flaggedCategories: 'Falls, Injury' })],
       isLoading: false,
     })
     renderPage()
@@ -289,7 +292,8 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
       data: [baseFlaggedNote({
         shiftNoteId: 'note-9', shiftId: 'shift-9', shiftDate: '2026-09-10',
         participantId: 'p-9', participantName: 'Sophie Brown',
-        flaggedCategories: ['Falls'], excerpt: 'She had a fall near the bathroom.',
+        flaggedCategories: 'Falls', excerpt: 'She had a fall near the bathroom.',
+        startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
       })],
       isLoading: false,
     })
@@ -308,11 +312,31 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
         participantName: 'Sophie Brown',
         noteBody: 'She had a fall near the bathroom.',
         serviceDate: '2026-09-10',
-        startTime: '00:00:00',
-        endTime: '23:59:00',
+        // Connection map seam follow-up: the row's own shift schedule, not a fake full-day window.
+        startTime: '09:00:00',
+        endTime: '17:00:00',
         endsNextDay: false,
         reportedByUserId: 'user-1',
       },
+    })
+  })
+
+  it('carries an overnight flagged note\'s endsNextDay through to the incident prefill', async () => {
+    const user = userEvent.setup()
+    mockUseFlaggedShiftNotes.mockReturnValue({
+      data: [baseFlaggedNote({
+        shiftNoteId: 'note-10', shiftId: 'shift-10',
+        startTime: '22:00:00', endTime: '06:00:00', endsNextDay: true,
+      })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /flagged notes/i }))
+    await user.click(screen.getByRole('button', { name: /file incident/i }))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
+      state: expect.objectContaining({ startTime: '22:00:00', endTime: '06:00:00', endsNextDay: true }),
     })
   })
 })

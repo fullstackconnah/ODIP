@@ -1,6 +1,5 @@
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
-import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 // ── Roster Finding ───────────────────────────────────────
 export interface RosterFindingDto {
@@ -70,10 +69,24 @@ export interface FlaggedShiftNoteDto {
   participantName: string
   staffId: string | null
   staffName: string | null
-  flaggedCategories: ShiftNoteFlagCategory[]
+  /** Wire format: comma-space-joined ShiftNoteFlagCategory [Flags] enum names (e.g.
+   * "Falls, Medication"), NOT a JSON array — RosteringController.GetFlaggedShiftNotes assigns
+   * the raw enum straight onto FlaggedShiftNoteDto.FlaggedCategories (same pattern as
+   * IncidentDetailDto.ShiftNoteContext.FlaggedCategories; contrast with ShiftNoteDto's own
+   * FlaggedCategories, which IS a real string[] via ToCategoryNames). Parse with
+   * shiftNoteKeywords.ts's parseFlaggedCategories before rendering. */
+  flaggedCategories: string
   excerpt: string
   createdAt: string
   incidentId: string | null
+  /** "HH:mm:ss" — the shift's own schedule, so IncidentsPage's "File incident" hand-off can
+   * carry the real time range instead of a fake 00:00–23:59 full-day placeholder (connection
+   * map seam follow-up; mirrors ShiftDto.startTime/endTime). */
+  startTime: string
+  /** "HH:mm:ss" — see startTime. */
+  endTime: string
+  /** See ShiftDto.endsNextDay — whether the shift's endTime rolls past midnight. */
+  endsNextDay: boolean
 }
 
 // ── Shift Completion (design spec §2) — Portal (start/finish) and Rostering (completions
