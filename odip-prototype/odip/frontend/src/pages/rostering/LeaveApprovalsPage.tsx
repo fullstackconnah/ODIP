@@ -318,6 +318,42 @@ export default function LeaveApprovalsPage() {
     }
   }
 
+  // Keyed on editTarget (state, so referentially stable across re-renders caused by unrelated
+  // state changes — e.g. setEditError after a rejected PUT, or a background refetch), not
+  // recomputed as a fresh object literal on every render. The three edit modals below reset their
+  // form whenever this identity changes, so an inline literal here would re-arm that reset on
+  // every parent re-render and wipe the coordinator's in-progress edits (see the modals'
+  // resetValues/useEffect wiring).
+  const leaveEditInitialValues = useMemo(() => (
+    editTarget?.rowKind === 'leave' ? {
+      leaveType: editTarget.data.leaveType,
+      startDate: editTarget.data.startDate,
+      endDate: editTarget.data.endDate,
+      reason: editTarget.data.reason ?? '',
+    } : undefined
+  ), [editTarget])
+
+  const unavailabilityEditInitialValues = useMemo(() => (
+    editTarget?.rowKind === 'unavailability' ? {
+      dayOfWeek: editTarget.data.dayOfWeek,
+      startTime: editTarget.data.startTime.slice(0, 5),
+      endTime: editTarget.data.endTime.slice(0, 5),
+      effectiveFrom: editTarget.data.effectiveFrom,
+      effectiveTo: editTarget.data.effectiveTo ?? '',
+      notes: editTarget.data.notes ?? '',
+    } : undefined
+  ), [editTarget])
+
+  const legacyEditInitialValues = useMemo(() => (
+    editTarget?.rowKind === 'legacy' ? {
+      staffId: editTarget.data.staffId,
+      availabilityType: editTarget.data.availabilityType as 'Available' | 'Unavailable' | 'Training' | 'Preferred' | 'Tentative',
+      startDate: editTarget.data.startDateTime.slice(0, 10),
+      endDate: editTarget.data.endDateTime.slice(0, 10),
+      notes: editTarget.data.notes ?? '',
+    } : undefined
+  ), [editTarget])
+
   function rowRequestedBy(row: ApprovalRow) {
     if (row.rowKind === 'legacy') return '—'
     const { requestedByUserId, userId, requestedAt } = row.data
@@ -486,12 +522,7 @@ export default function LeaveApprovalsPage() {
           onSubmit={handleEditLeaveSubmit}
           submitting={updateLeave.isPending}
           errorMessage={editError}
-          initialValues={{
-            leaveType: editTarget.data.leaveType,
-            startDate: editTarget.data.startDate,
-            endDate: editTarget.data.endDate,
-            reason: editTarget.data.reason ?? '',
-          }}
+          initialValues={leaveEditInitialValues}
         />
       )}
       {editTarget?.rowKind === 'unavailability' && (
@@ -502,14 +533,7 @@ export default function LeaveApprovalsPage() {
           onSubmit={handleEditUnavailabilitySubmit}
           submitting={updateUnavailability.isPending}
           errorMessage={editError}
-          initialValues={{
-            dayOfWeek: editTarget.data.dayOfWeek,
-            startTime: editTarget.data.startTime.slice(0, 5),
-            endTime: editTarget.data.endTime.slice(0, 5),
-            effectiveFrom: editTarget.data.effectiveFrom,
-            effectiveTo: editTarget.data.effectiveTo ?? '',
-            notes: editTarget.data.notes ?? '',
-          }}
+          initialValues={unavailabilityEditInitialValues}
         />
       )}
       {editTarget?.rowKind === 'legacy' && (
@@ -520,13 +544,7 @@ export default function LeaveApprovalsPage() {
           onSubmit={handleEditLegacySubmit}
           submitting={updateStaffAvailability.isPending}
           errorMessage={editError}
-          initialValues={{
-            staffId: editTarget.data.staffId,
-            availabilityType: editTarget.data.availabilityType as 'Available' | 'Unavailable' | 'Training' | 'Preferred' | 'Tentative',
-            startDate: editTarget.data.startDateTime.slice(0, 10),
-            endDate: editTarget.data.endDateTime.slice(0, 10),
-            notes: editTarget.data.notes ?? '',
-          }}
+          initialValues={legacyEditInitialValues}
         />
       )}
 

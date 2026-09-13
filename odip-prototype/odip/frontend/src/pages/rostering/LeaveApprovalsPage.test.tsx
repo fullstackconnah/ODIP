@@ -421,6 +421,56 @@ describe('LeaveApprovalsPage', () => {
     })
   })
 
+  // Regression: the edit modals' initialValues used to be a fresh inline object literal on every
+  // LeaveApprovalsPage render, so setEditError (fired from the PUT rejection handler itself) gave
+  // the still-open modal a new-identity initialValues prop, re-ran its reset effect, and wiped
+  // the coordinator's in-progress edit back to the original values — while showing them an error
+  // telling them to fix those very values. See LeaveApprovalsPage.tsx's editTarget-keyed useMemo.
+  it('keeps the edited end date and shows the error when the leave-edit PUT rejects, instead of resetting the form', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({
+      data: [makeLeaveRequest({ id: 'leave-1', leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    mockUpdateLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'This overlaps another approved request.' } } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    const endDateInput = screen.getByLabelText(/end date/i)
+    await user.clear(endDateInput)
+    await user.type(endDateInput, '2026-09-20')
+
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(await screen.findByText(/this overlaps another approved request\./i)).toBeInTheDocument()
+    expect(screen.getByText('Edit leave request')).toBeInTheDocument()
+    expect(screen.getByLabelText(/end date/i)).toHaveValue('2026-09-20')
+  })
+
+  it('keeps the edited end date and shows the error when the legacy-record-edit PUT rejects, instead of resetting the form', async () => {
+    const user = userEvent.setup()
+    mockUseStaffAvailabilityRecords.mockReturnValue({
+      data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1', availabilityType: 'Training', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59' })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    mockUpdateStaffAvailabilityMutateAsync.mockRejectedValue({ response: { data: { message: 'This record could not be saved.' } } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Pending' }))
+    await user.click(screen.getByRole('option', { name: 'All statuses' }))
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    const endDateInput = screen.getByLabelText(/end date/i)
+    await user.clear(endDateInput)
+    await user.type(endDateInput, '2026-09-20')
+
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(await screen.findByText(/this record could not be saved\./i)).toBeInTheDocument()
+    expect(screen.getByText('Edit availability record')).toBeInTheDocument()
+    expect(screen.getByLabelText(/end date/i)).toHaveValue('2026-09-20')
+  })
+
   describe('legacy availability records', () => {
     it('renders under the All statuses filter with their type and Edit/Delete actions', async () => {
       const user = userEvent.setup()
