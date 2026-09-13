@@ -44,6 +44,11 @@ picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
     against source before accepting the work. Read the diff at the seams, not just the tests.
   - Never run a backend validation agent while a backend implementation agent is still building —
     they collide on `bin/`/`obj/`.
+  - Agents committing concurrently in ONE worktree share the git index. `git add` then
+    `git commit` races: another agent's commit sweeps up your staged files (happened 2026-09-13,
+    ed771eb). Concurrent agents must commit with an explicit pathspec — `git commit -- <paths>`
+    — and never `git add -A`. Run at most 2 implementation agents at once (a session rate limit
+    killed 2 of 3 mid-run; resumed agents had to finish uncommitted work).
 
 - The only things the main session may do directly are: reading files for validation/review,
   trivial single-line CLAUDE.md/config touch-ups, and answering questions from already-gathered
