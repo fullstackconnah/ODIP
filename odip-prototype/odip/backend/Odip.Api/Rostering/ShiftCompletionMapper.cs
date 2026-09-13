@@ -22,6 +22,51 @@ public static class ShiftCompletionMapper
     public static bool IsOutlierVariance(int varianceMinutesStart, int varianceMinutesEnd, int thresholdMinutes) =>
         Math.Abs(varianceMinutesStart) > thresholdMinutes || Math.Abs(varianceMinutesEnd) > thresholdMinutes;
 
+    /// <summary>
+    /// The CompletionQueueItemDto projection shared by RosteringController.GetCompletions (the
+    /// coordinator's review queue, filtered by status) and StaffController's staff-overview
+    /// endpoint (item 12 — RecentCompletions, filtered by staff and unbounded on status) — both
+    /// need the same narrow shift projection, the active-completion lookup, and the
+    /// timezone-aware ShiftVarianceCalculator/IsOutlierVariance calls EF can't translate to SQL.
+    /// Callers own their own filtering (via <paramref name="shiftQuery"/>), sort and paging —
+    /// this only builds one DTO per shift that has an active ShiftCompletion.
+    /// </summary>
+    public static async Task<List<CompletionQueueItemDto>> BuildQueueItemsAsync(
+        OdipDbContext db, IQueryable<Shift> shiftQuery, int varianceReviewMinutes, CancellationToken ct)
+    {
+        var shiftRows = await shiftQuery
+            .Select(s => new
+            {
+                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount,
+                ParticipantName = s.Participant != null ? s.Participant.FullName : string.Empty,
+                StaffName = s.User != null ? s.User.FullName : string.Empty,
+            })
+            .ToListAsync(ct);
+        var shiftIds = shiftRows.Select(s => s.Id).ToList();
+
+        var completionsByShiftId = await db.ShiftCompletions
+            .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
+            .ToDictionaryAsync(c => c.ShiftId, ct);
+
+        var items = new List<CompletionQueueItemDto>();
+        foreach (var row in shiftRows)
+        {
+            if (!completionsByShiftId.TryGetValue(row.Id, out var completion)) continue;
+            var rosteredShift = new Shift
+            {
+                ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
+            };
+            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, completion.TimeZoneId);
+            var isOutlier = IsOutlierVariance(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, varianceReviewMinutes);
+            items.Add(new CompletionQueueItemDto(
+                row.Id, completion.Id, row.ParticipantName, row.StaffName,
+                row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
+                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
+                completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount));
+        }
+        return items;
+    }
+
     /// <param name="includeIncidents">
     /// Deliverable 2 reverse link: when true, runs one extra query for the shift's active
     /// incidents and populates <see cref="ShiftCompletionDto.Incidents"/>. Defaults to false —

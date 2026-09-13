@@ -1168,6 +1168,122 @@ public class RosteringControllerTests
         Assert.Null(bar.AvailabilityType);
     }
 
+    // ── AssigneeOnApprovedLeave (connection map item 5): reuses the same weekWindows load as
+    // the Leave bars above — no per-shift query. ────────────────────────────────────────
+
+    [Fact]
+    public async Task GetBoard_ShiftDto_AssigneeOnApprovedLeave_TrueWhenStaffHasApprovedLeaveCoveringTheShift()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        SeedLeave(db, staff.Id, LeaveStatus.Approved);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var dto = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id).Shifts.Single(s => s.Id == shift.Id);
+        Assert.True(dto.AssigneeOnApprovedLeave);
+
+        var exception = Assert.Single(body.Data!.Exceptions, e => e.Finding.Code == "ASSIGNEE_ON_LEAVE");
+        Assert.Equal(shift.Id, exception.ShiftId);
+        Assert.Equal(RosterFindingSeverity.Warning, exception.Finding.Severity);
+        Assert.False(exception.Finding.RequiresReason);
+        Assert.Equal($"{staff.FullName} is on approved leave on {ServiceDate:d MMM yyyy}", exception.Finding.Message);
+    }
+
+    [Fact]
+    public async Task GetBoard_ShiftDto_AssigneeOnApprovedLeave_FalseWithNoLeave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var dto = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id).Shifts.Single(s => s.Id == shift.Id);
+        Assert.False(dto.AssigneeOnApprovedLeave);
+        Assert.DoesNotContain(body.Data!.Exceptions, e => e.Finding.Code == "ASSIGNEE_ON_LEAVE");
+    }
+
+    [Fact]
+    public async Task GetBoard_ShiftDto_AssigneeOnApprovedLeave_FalseWhenLeaveOnlyPending()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        SeedLeave(db, staff.Id, LeaveStatus.Pending);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var dto = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id).Shifts.Single(s => s.Id == shift.Id);
+        Assert.False(dto.AssigneeOnApprovedLeave);
+        Assert.DoesNotContain(body.Data!.Exceptions, e => e.Finding.Code == "ASSIGNEE_ON_LEAVE");
+    }
+
+    [Fact]
+    public async Task GetBoard_ShiftDto_AssigneeOnApprovedLeave_TrueForApprovedRecurringRuleOccurrence()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = ServiceDate.DayOfWeek,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = ServiceDate,
+            Status = LeaveStatus.Approved, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        var dto = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id).Shifts.Single(s => s.Id == shift.Id);
+        Assert.True(dto.AssigneeOnApprovedLeave);
+        Assert.Contains(body.Data!.Exceptions, e => e.Finding.Code == "ASSIGNEE_ON_LEAVE" && e.ShiftId == shift.Id);
+    }
+
     // ── PUBLIC_HOLIDAY (connection-map item 8) ────────────────
 
     [Fact]
@@ -1394,5 +1510,173 @@ public class RosteringControllerTests
 
         var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
         Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PARTICIPANT ROSTERING TAB (connection map item 12) — GET /api/v1/participants/{id}/rostering
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetParticipantRostering_ReturnsUpcomingShiftsAndAssignedStaffWithCompatibility()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var filled = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        var unfilled = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = null, ServiceDate = today.AddDays(2),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Draft,
+        };
+        db.Shifts.AddRange(filled, unfilled);
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred,
+        });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(participant.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ParticipantRosteringDto>>(ok.Value);
+
+        Assert.Equal(2, body.Data!.UpcomingShifts.Count);
+        var filledDto = Assert.Single(body.Data.UpcomingShifts, s => s.ShiftId == filled.Id);
+        Assert.Equal(staff.Id, filledDto.StaffId);
+        Assert.Equal(staff.FullName, filledDto.StaffName);
+        Assert.False(filledDto.AssigneeOnApprovedLeave);
+        var unfilledDto = Assert.Single(body.Data.UpcomingShifts, s => s.ShiftId == unfilled.Id);
+        Assert.Null(unfilledDto.StaffId);
+        Assert.Null(unfilledDto.StaffName);
+
+        var assignedStaff = Assert.Single(body.Data.AssignedStaff);
+        Assert.Equal(staff.Id, assignedStaff.StaffId);
+        Assert.Equal(1, assignedStaff.ShiftCount);
+        Assert.Equal(CompatibilityLevel.Preferred, assignedStaff.Compatibility);
+    }
+
+    [Fact]
+    public async Task GetParticipantRostering_NoCompatibilityRow_DefaultsToAllowed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantRosteringDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(CompatibilityLevel.Allowed, Assert.Single(body.Data!.AssignedStaff).Compatibility);
+    }
+
+    [Fact]
+    public async Task GetParticipantRostering_AssigneeOnApprovedLeave_TrueWhenLeaveCoversTheShift()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        db.SaveChanges();
+        SeedLeave(db, staff.Id, LeaveStatus.Approved, today.AddDays(1), today.AddDays(1));
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantRosteringDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var dto = Assert.Single(body.Data!.UpcomingShifts, s => s.ShiftId == shift.Id);
+        Assert.True(dto.AssigneeOnApprovedLeave);
+    }
+
+    [Fact]
+    public async Task GetParticipantRostering_ExcludesShiftsOutsideTheTwentyEightDayWindow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = today.AddDays(29),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = today.AddDays(-1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        db.SaveChanges();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantRosteringDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!.UpcomingShifts);
+        Assert.Empty(body.Data.AssignedStaff);
+    }
+
+    [Fact]
+    public async Task GetParticipantRostering_ParticipantNotFound_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    /// <summary>Mandatory cross-tenant negative test — fixture pattern mirrors
+    /// GetFlaggedShiftNotes_OtherTenantsFlaggedNote_IsExcluded above.</summary>
+    [Fact]
+    public async Task GetParticipantRostering_OtherTenantsParticipant_ReturnsNotFound()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        Participant participantB;
+        using (var seedDb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            participantB = SeedParticipant(seedDb);
+        }
+
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(options, tenantAContext.Object);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetParticipantRostering(participantB.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 }

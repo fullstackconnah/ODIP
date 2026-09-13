@@ -166,6 +166,21 @@ public class RosteringController : ControllerBase
             return _conflictService.Check(shift, ctx).ToList();
         }
 
+        // ── Task 5 (connection map item 5): reuses weekWindows — already loaded above for the
+        // staff-row leave bars — rather than issuing any per-shift query. Only ApprovedLeave and
+        // an approved RecurringRule occurrence count; PendingLeave/PendingRecurringRule/Legacy
+        // don't (those aren't "approved leave"). ──
+        bool IsAssigneeOnApprovedLeave(Shift shift)
+        {
+            if (shift.UserId is null) return false;
+            var shiftStart = shift.ServiceDate.ToDateTime(shift.StartTime);
+            var shiftEndDate = shift.EndsNextDay ? shift.ServiceDate.AddDays(1) : shift.ServiceDate;
+            var shiftEnd = shiftEndDate.ToDateTime(shift.EndTime);
+            return weekWindows.Any(w => w.UserId == shift.UserId.Value
+                && (w.Kind == UnavailabilityKind.ApprovedLeave || w.Kind == UnavailabilityKind.RecurringRule)
+                && w.Start < shiftEnd && shiftStart < w.End);
+        }
+
         ShiftDto ToShiftDto(Shift shift, List<RosterFinding> findings)
         {
             participantById.TryGetValue(shift.ParticipantId, out var participant);
@@ -177,7 +192,8 @@ public class RosteringController : ControllerBase
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason,
-                Findings = findings.Select(ToFindingDto).ToList()
+                Findings = findings.Select(ToFindingDto).ToList(),
+                AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift)
             };
         }
 
@@ -196,6 +212,26 @@ public class RosteringController : ControllerBase
                 {
                     ShiftId = shift.Id, ParticipantName = p?.FullName ?? string.Empty,
                     ServiceDate = shift.ServiceDate, Finding = ToFindingDto(finding)
+                });
+            }
+
+            // Task 5: surfaced independently of the RosterConflictService findings above (those
+            // require the shift's staff+participant to both be in this week's active sets;
+            // this doesn't) so the drawer sees an on-leave assignee even outside that overlap.
+            if (IsAssigneeOnApprovedLeave(shift))
+            {
+                var staffName = staffById.GetValueOrDefault(shift.UserId!.Value)?.FullName ?? "The assigned staff member";
+                exceptions.Add(new RosterExceptionDto
+                {
+                    ShiftId = shift.Id, ParticipantName = p?.FullName ?? string.Empty,
+                    ServiceDate = shift.ServiceDate,
+                    Finding = new RosterFindingDto
+                    {
+                        Code = "ASSIGNEE_ON_LEAVE",
+                        Severity = RosterFindingSeverity.Warning,
+                        Message = $"{staffName} is on approved leave on {shift.ServiceDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}",
+                        RequiresReason = false
+                    }
                 });
             }
         }
@@ -309,6 +345,82 @@ public class RosteringController : ControllerBase
         }
 
         return Ok(ApiResponse<RosterBoardDto>.Ok(board));
+    }
+
+    /// <summary>
+    /// Connection map item 12 — backs the participant hub's Rostering tab. Lives on
+    /// RosteringController rather than ParticipantsController (absolute route override, same
+    /// idiom CaregiverSubmissionsController uses for /participants/{id}/caregiver-link) so it
+    /// picks up this controller's stricter SuperAdmin/Admin/Coordinator gate — matching every
+    /// other rostering surface rather than ParticipantsController's plain [Authorize]. 404s if
+    /// <paramref name="id"/> isn't in the caller's tenant, same as every other participant read,
+    /// for free from _db.Participants' ambient tenant query filter.
+    /// </summary>
+    [HttpGet("/api/v1/participants/{id:guid}/rostering")]
+    public async Task<ActionResult<ApiResponse<ParticipantRosteringDto>>> GetParticipantRostering(Guid id, CancellationToken ct)
+    {
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (participant == null)
+            return NotFound(ApiResponse<ParticipantRosteringDto>.Fail("Participant not found."));
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var windowEnd = today.AddDays(28);
+
+        var shifts = await _db.Shifts
+            .Where(s => s.ParticipantId == id && s.ServiceDate >= today && s.ServiceDate <= windowEnd)
+            .ToListAsync(ct);
+
+        var staffIds = shifts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
+        var staffById = await _db.Users.Where(u => staffIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+        var windows = await _unavailabilityQuery.GetWindowsAsync(staffIds, today, windowEnd, ct);
+        var compatByStaff = await _db.StaffParticipantCompatibilities
+            .Where(c => c.ParticipantId == id && staffIds.Contains(c.UserId))
+            .ToDictionaryAsync(c => c.UserId, c => c.Level, ct);
+
+        // Same ApprovedLeave-or-approved-RecurringRule rule as GetBoard's AssigneeOnApprovedLeave
+        // (connection map item 5) — reuses the single windows load above, no per-shift query.
+        bool IsAssigneeOnApprovedLeave(Shift shift)
+        {
+            if (shift.UserId is null) return false;
+            var shiftStart = shift.ServiceDate.ToDateTime(shift.StartTime);
+            var shiftEndDate = shift.EndsNextDay ? shift.ServiceDate.AddDays(1) : shift.ServiceDate;
+            var shiftEnd = shiftEndDate.ToDateTime(shift.EndTime);
+            return windows.Any(w => w.UserId == shift.UserId.Value
+                && (w.Kind == UnavailabilityKind.ApprovedLeave || w.Kind == UnavailabilityKind.RecurringRule)
+                && w.Start < shiftEnd && shiftStart < w.End);
+        }
+
+        var upcomingShifts = shifts
+            .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
+            .Select(s => new ParticipantRosteringShiftDto
+            {
+                ShiftId = s.Id, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
+                EndsNextDay = s.EndsNextDay,
+                StaffId = s.UserId,
+                StaffName = s.UserId.HasValue ? staffById.GetValueOrDefault(s.UserId.Value)?.FullName : null,
+                Status = s.Status,
+                AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(s)
+            })
+            .ToList();
+
+        var assignedStaff = shifts
+            .Where(s => s.UserId.HasValue)
+            .GroupBy(s => s.UserId!.Value)
+            .Select(g => new ParticipantRosteringStaffDto
+            {
+                StaffId = g.Key,
+                StaffName = staffById.GetValueOrDefault(g.Key)?.FullName ?? string.Empty,
+                ShiftCount = g.Count(),
+                Compatibility = compatByStaff.TryGetValue(g.Key, out var level) ? level : CompatibilityLevel.Allowed
+            })
+            .OrderBy(s => s.StaffName)
+            .ToList();
+
+        return Ok(ApiResponse<ParticipantRosteringDto>.Ok(new ParticipantRosteringDto
+        {
+            UpcomingShifts = upcomingShifts,
+            AssignedStaff = assignedStaff
+        }));
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -590,45 +702,16 @@ public class RosteringController : ControllerBase
         var thresholdMinutes = VarianceReviewMinutes;
 
         // Narrow projection (critique P2 — "hydrates full graphs") instead of .Include(Participant)/
-        // .Include(User): only the fields GetCompletions actually needs, including the four the
-        // rostered-time conversion below needs (ServiceDate/StartTime/EndTime/EndsNextDay).
+        // .Include(User): only the fields the queue actually needs, including the four the
+        // rostered-time conversion needs (ServiceDate/StartTime/EndTime/EndsNextDay) — see
+        // ShiftCompletionMapper.BuildQueueItemsAsync, shared with StaffController's staff-overview
+        // endpoint (item 12 — RecentCompletions).
         var shiftQuery = _db.Shifts
             .Where(s => s.Status == statusFilter);
         if (from.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate >= from.Value);
         if (to.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate <= to.Value);
 
-        var shiftRows = await shiftQuery
-            .Select(s => new
-            {
-                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount,
-                ParticipantName = s.Participant != null ? s.Participant.FullName : string.Empty,
-                StaffName = s.User != null ? s.User.FullName : string.Empty,
-            })
-            .ToListAsync(ct);
-        var shiftIds = shiftRows.Select(s => s.Id).ToList();
-
-        // Active-completion dictionary lookup stays (Task 6 design decision) — IsOutlierVariance
-        // and the rostered-time conversion need per-row TimeZoneInfo calls EF can't translate to SQL.
-        var completionsByShiftId = await _db.ShiftCompletions
-            .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
-            .ToDictionaryAsync(c => c.ShiftId, ct);
-
-        var items = new List<CompletionQueueItemDto>();
-        foreach (var row in shiftRows)
-        {
-            if (!completionsByShiftId.TryGetValue(row.Id, out var completion)) continue;
-            var rosteredShift = new Shift
-            {
-                ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
-            };
-            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, completion.TimeZoneId);
-            var isOutlier = ShiftCompletionMapper.IsOutlierVariance(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, thresholdMinutes);
-            items.Add(new CompletionQueueItemDto(
-                row.Id, completion.Id, row.ParticipantName, row.StaffName,
-                row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
-                completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
-                completion.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount));
-        }
+        var items = await ShiftCompletionMapper.BuildQueueItemsAsync(_db, shiftQuery, thresholdMinutes, ct);
 
         // Outlier-first, then chronological — the coordinator's queue previously had "no signal
         // for what actually needs attention" (critique P1). In-memory sort: IsOutlierVariance and
