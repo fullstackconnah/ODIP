@@ -13,6 +13,7 @@ import type {
   CreateStaffAvailabilityDto,
   UpdateStaffAvailabilityDto,
   RosterFindingDto,
+  StaffOverviewDto,
 } from '../types'
 
 export function useStaff(params?: Record<string, string>) {
@@ -26,6 +27,19 @@ export function useStaffDetail(id: string | undefined) {
   return useQuery({
     queryKey: ['staff-detail', id],
     queryFn: () => apiGet<StaffDetailDto>(`/staff/${id}`),
+    enabled: !!id,
+  })
+}
+
+/**
+ * Connection map item 12 — GET /staff/{id}/overview, the single data source for StaffDetailPage's
+ * hub tabs (Availability/Credentials/Upcoming/Incidents/Completions). Mirrors useStaffDetail's
+ * enabled-on-id gate.
+ */
+export function useStaffOverview(id: string | undefined) {
+  return useQuery({
+    queryKey: ['staff-overview', id],
+    queryFn: () => apiGet<StaffOverviewDto>(`/staff/${id}/overview`),
     enabled: !!id,
   })
 }

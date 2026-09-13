@@ -176,11 +176,11 @@ describe('ShiftChip cross-domain links', () => {
     expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9')
   })
 
-  it('links the staff name to their staff edit page when the shift is filled', () => {
+  it('links the staff name to their staff detail page when the shift is filled', () => {
     const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9/edit')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
   })
 
   it('renders no staff link for an unfilled (dashed) chip', () => {

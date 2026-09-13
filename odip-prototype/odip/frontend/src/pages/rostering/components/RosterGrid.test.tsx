@@ -118,6 +118,6 @@ describe('RosterGrid — cross-domain links', () => {
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
 
     expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1')
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9/edit')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
   })
 })

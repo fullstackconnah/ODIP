@@ -240,7 +240,7 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
               as the participant Link above. */}
           {isFilled && (
             <Link
-              to={`/staff/${shift.staffId}/edit`}
+              to={`/staff/${shift.staffId}`}
               onClick={e => e.stopPropagation()}
               className="truncate text-[10px] leading-tight text-muted-foreground/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-sm"
               title={shift.staffName ?? undefined}
