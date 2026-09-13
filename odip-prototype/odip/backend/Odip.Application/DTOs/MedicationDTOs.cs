@@ -307,6 +307,12 @@ public record MarPrnDto
 
     /// <summary>Most recent Administered PRN record still missing a PrnOutcome, if any.</summary>
     public Guid? OutcomePendingAdministrationId { get; init; }
+
+    /// <summary>Connection-map reverse link (Deliverable 2/item 8's tiny seam fix): mirrors
+    /// <see cref="MarEntryDto.IncidentId"/> for the PRN row's <see cref="OutcomePendingAdministrationId"/>
+    /// administration when one exists — null when there's no pending-outcome administration to
+    /// reference, or when no active IncidentReport points back at it.</summary>
+    public Guid? IncidentId { get; init; }
 }
 
 public record MarDayDto

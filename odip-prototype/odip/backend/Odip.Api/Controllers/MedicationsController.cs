@@ -301,6 +301,15 @@ public class MedicationsController : ControllerBase
                 .OrderByDescending(a => a.AdministeredAt)
                 .ToListAsync(ct);
 
+        // Connection-map item 8 (tiny seam fix): the only administration id a MarPrnDto carries
+        // is OutcomePendingAdministrationId — batch-resolve incident ids for every candidate
+        // administration across both PRN queries in ONE call, same as dayIncidentIds above.
+        var prnAdministrationIds = recentPrnAdmins.Select(a => a.Id)
+            .Concat(pendingOutcomeAdmins.Select(a => a.Id))
+            .Distinct()
+            .ToList();
+        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(prnAdministrationIds, ct);
+
         var prnDtos = new List<MarPrnDto>();
         foreach (var m in prnMeds)
         {
@@ -324,6 +333,7 @@ public class MedicationsController : ControllerBase
                 DosesInLast24h = doses.Count,
                 LastDoseAt = doses.Count > 0 ? doses.Max(a => a.AdministeredAt) : null,
                 OutcomePendingAdministrationId = pending?.Id,
+                IncidentId = pending == null ? null : LookupIncidentId(prnIncidentIds, pending.Id),
             });
         }
 

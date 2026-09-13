@@ -1136,4 +1136,99 @@ public class MedicationsControllerTests
         Assert.Null(entry.Administration);
         Assert.Null(entry.IncidentId);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // Connection-map item 8 (tiny seam fix): MarPrnDto.IncidentId
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetMar_Prn_IncidentId_PopulatedForOutcomePendingAdministration()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Paracetamol", DoseDescription = "2 tablets",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            PrnOutcome = null, PrnReason = "Headache",
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        var incident = SeedIncidentForAdministration(db, admin.Id);
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var prn = Assert.Single(body.Data!.PrnMedications);
+        Assert.Equal(admin.Id, prn.OutcomePendingAdministrationId);
+        Assert.Equal(incident.Id, prn.IncidentId);
+    }
+
+    [Fact]
+    public async Task GetMar_Prn_IncidentId_NullWhenNoAdministrationYet()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Paracetamol", DoseDescription = "2 tablets",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var prn = Assert.Single(body.Data!.PrnMedications);
+        Assert.Null(prn.OutcomePendingAdministrationId);
+        Assert.Null(prn.IncidentId);
+    }
+
+    [Fact]
+    public async Task GetMar_Prn_IncidentId_NullWhenOutcomeAlreadyRecorded()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Paracetamol", DoseDescription = "2 tablets",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        // Administered, outcome already recorded — no longer "outcome pending", so even though an
+        // incident references it, the PRN row's IncidentId (mirroring OutcomePendingAdministrationId)
+        // must stay null rather than surfacing a stale link.
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            PrnOutcome = "Settled within 30 minutes.", PrnReason = "Headache",
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        SeedIncidentForAdministration(db, admin.Id);
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetMar(today, participant.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var prn = Assert.Single(body.Data!.PrnMedications);
+        Assert.Null(prn.OutcomePendingAdministrationId);
+        Assert.Null(prn.IncidentId);
+    }
 }
