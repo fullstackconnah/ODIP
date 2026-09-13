@@ -88,7 +88,7 @@ describe('ParticipantAlertsBanner', () => {
   it('renders a row with linkTo as a react-router Link to that path, not a tab-select button', async () => {
     const onSelectTab = vi.fn()
     const incidentAlert: ParticipantAlertDto = {
-      type: 'OpenSeriousIncident', severity: 'Warning', message: 'Open serious incident requires review', deepLinkTab: 'details', linkTo: '/incidents/inc-1',
+      type: 'open-serious-incident', severity: 'Warning', message: 'Open serious incident requires review', deepLinkTab: 'details', linkTo: '/incidents/inc-1',
     }
     renderWithRouter(<ParticipantAlertsBanner alerts={[incidentAlert]} onSelectTab={onSelectTab} />)
 
@@ -106,7 +106,7 @@ describe('ParticipantAlertsBanner', () => {
     const user = userEvent.setup()
     const onSelectTab = vi.fn()
     const incidentAlert: ParticipantAlertDto = {
-      type: 'OpenSeriousIncident', severity: 'Warning', message: 'Open serious incident requires review', deepLinkTab: 'details', linkTo: '/incidents/inc-1',
+      type: 'open-serious-incident', severity: 'Warning', message: 'Open serious incident requires review', deepLinkTab: 'details', linkTo: '/incidents/inc-1',
     }
     renderWithRouter(<ParticipantAlertsBanner alerts={[incidentAlert, criticalAlert]} onSelectTab={onSelectTab} />)
 

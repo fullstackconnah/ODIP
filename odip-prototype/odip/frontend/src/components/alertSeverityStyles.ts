@@ -19,6 +19,6 @@ export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; te
  * this only needs entries for types that are shown by type — add to it as that need grows.
  */
 export const ALERT_TYPE_LABELS: Record<string, string> = {
-  OpenSeriousIncident: 'Open serious incident',
-  QscReportOverdue: 'QSC report overdue',
+  'open-serious-incident': 'Open serious incident',
+  'qsc-report-overdue': 'QSC report overdue',
 }

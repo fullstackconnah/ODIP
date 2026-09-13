@@ -611,7 +611,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "OpenSeriousIncident");
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
         Assert.Equal(AlertSeverity.Warning, alert.Severity);
         Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
     }
@@ -627,7 +627,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "OpenSeriousIncident");
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
         Assert.Equal(AlertSeverity.Critical, alert.Severity);
         Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
     }
@@ -644,7 +644,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "OpenSeriousIncident");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
     }
 
     [Fact]
@@ -657,7 +657,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "OpenSeriousIncident");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
     }
 
     [Theory]
@@ -672,7 +672,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "OpenSeriousIncident");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
     }
 
     [Fact]
@@ -705,7 +705,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "QscReportOverdue");
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
         Assert.Equal(AlertSeverity.Critical, alert.Severity);
         Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
     }
@@ -724,7 +724,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "QscReportOverdue");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
     }
 
     [Fact]
@@ -741,7 +741,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "QscReportOverdue");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
     }
 
     [Fact]
@@ -758,7 +758,7 @@ public class ParticipantAlertsServiceTests
 
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
-        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "QscReportOverdue");
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
     }
 
     [Fact]
@@ -776,12 +776,12 @@ public class ParticipantAlertsServiceTests
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
 
         var dto = result.Single();
-        // One incident, open + High/Critical (OpenSeriousIncident) AND QSC overdue
-        // (QscReportOverdue) — both rules fire off the same row, both Critical.
+        // One incident, open + High/Critical (open-serious-incident) AND QSC overdue
+        // (qsc-report-overdue) — both rules fire off the same row, both Critical.
         Assert.Equal(2, dto.Alerts.Count);
         Assert.Equal(2, dto.CriticalCount);
-        Assert.Contains(dto.Alerts, a => a.Type == "OpenSeriousIncident");
-        Assert.Contains(dto.Alerts, a => a.Type == "QscReportOverdue");
+        Assert.Contains(dto.Alerts, a => a.Type == "open-serious-incident");
+        Assert.Contains(dto.Alerts, a => a.Type == "qsc-report-overdue");
     }
 
     // ── Cross-check: the dashboard's QscOverdueCount and the alert rule agree ──
@@ -805,7 +805,7 @@ public class ParticipantAlertsServiceTests
         db.SaveChanges();
 
         var alertResult = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
-        var qscAlertCount = alertResult.Single().Alerts.Count(a => a.Type == "QscReportOverdue");
+        var qscAlertCount = alertResult.Single().Alerts.Count(a => a.Type == "qsc-report-overdue");
 
         var dashboardResponse = await new DashboardController(db).GetSummary(CancellationToken.None);
         var dashboardOk = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(dashboardResponse.Result);

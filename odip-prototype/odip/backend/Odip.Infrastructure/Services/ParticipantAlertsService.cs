@@ -28,7 +28,7 @@ namespace Odip.Infrastructure.Services;
 ///    zero <see cref="MedicationAdministration"/> rows (any status) in the last 7 days. Deliberately
 ///    simple per the brief: only Daily-frequency Regular meds are checked (not SpecificDays/EveryNDays),
 ///    and PRN medications are skipped entirely (no fixed schedule to be "missed" against).
-/// 6. <b>OpenSeriousIncident</b> (Critical when the incident's <see cref="IncidentReport.Severity"/>
+/// 6. <b>open-serious-incident</b> (Critical when the incident's <see cref="IncidentReport.Severity"/>
 ///    is Critical, Warning when High) — an active <see cref="IncidentReport"/> naming the
 ///    participant as <see cref="IncidentReport.InvolvedParticipantId"/>, High/Critical severity,
 ///    and not yet <see cref="IncidentStatus.Resolved"/>/<see cref="IncidentStatus.Closed"/>. One
@@ -36,14 +36,12 @@ namespace Odip.Infrastructure.Services;
 ///    points at <c>/incidents/{id}</c> — there is no incidents tab on the participant page, so
 ///    <see cref="ParticipantAlertDto.DeepLinkTab"/> is set to the closest existing one ("history")
 ///    only as a fallback for a consumer that hasn't picked up <see cref="ParticipantAlertDto.LinkTo"/> yet.
-/// 7. <b>QscReportOverdue</b> (Critical) — an <see cref="IncidentReport"/> whose QSC report is
+/// 7. <b>qsc-report-overdue</b> (Critical) — an <see cref="IncidentReport"/> whose QSC report is
 ///    overdue per <see cref="QscReporting.IsOverdue"/>, the exact predicate
 ///    <c>DashboardController.GetSummary</c>'s <c>QscOverdueCount</c> and
 ///    <c>IncidentsController.GetOverdueQsc</c> both use — extracted to
 ///    <see cref="Odip.Domain.Incidents.QscReporting"/> so the three call sites cannot drift apart.
-///    Also links to <c>/incidents/{id}</c>. Named per the two rules above (PascalCase, not the
-///    kebab-case of rules 1-5) to match the machine-readable label map the frontend already keys
-///    off (<c>ALERT_TYPE_LABELS</c>).
+///    Also links to <c>/incidents/{id}</c>.
 ///
 /// Dropped: a medication/support-profile "review overdue" rule was NOT added here — it would
 /// duplicate <c>MedicationsController.ToListDto</c>'s existing per-medication
@@ -246,7 +244,7 @@ public class ParticipantAlertsService
                     && incident.Status is not (IncidentStatus.Resolved or IncidentStatus.Closed))
                 {
                     var severity = incident.Severity == IncidentSeverity.Critical ? AlertSeverity.Critical : AlertSeverity.Warning;
-                    Add(p.Id, "OpenSeriousIncident", severity,
+                    Add(p.Id, "open-serious-incident", severity,
                         $"Open {incident.Severity} incident: {incident.Title} ({incident.IncidentDateTime:d MMM})",
                         "history", $"/incidents/{incident.Id}");
                 }
@@ -255,7 +253,7 @@ public class ParticipantAlertsService
                 // incidents "overdue QSC" endpoint (already IsActive-filtered above).
                 if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.CreatedAt, DateTime.UtcNow))
                 {
-                    Add(p.Id, "QscReportOverdue", AlertSeverity.Critical,
+                    Add(p.Id, "qsc-report-overdue", AlertSeverity.Critical,
                         $"QSC report overdue: {incident.Title}",
                         "history", $"/incidents/{incident.Id}");
                 }

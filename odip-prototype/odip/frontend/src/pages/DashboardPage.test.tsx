@@ -102,14 +102,14 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
-            { type: 'OpenSeriousIncident', severity: 'Critical', message: 'Open serious incident requires review', deepLinkTab: 'incidents', linkTo: '/incidents/inc-1' },
+            { type: 'open-serious-incident', severity: 'Critical', message: 'Open serious incident requires review', deepLinkTab: 'incidents', linkTo: '/incidents/inc-1' },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
           participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [
-            { type: 'QscReportOverdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
+            { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
