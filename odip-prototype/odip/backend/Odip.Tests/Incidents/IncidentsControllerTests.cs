@@ -1135,13 +1135,13 @@ public class IncidentsControllerTests
         await controller.Delete(incident.Id, CancellationToken.None);
 
         var defaultResult = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: null, CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: null, involvedUserId: null, CancellationToken.None);
         var defaultOk = Assert.IsType<OkObjectResult>(defaultResult.Result);
         var defaultItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(defaultOk.Value);
         Assert.DoesNotContain(defaultItems.Data!, i => i.Id == incident.Id);
 
         var closedResult = await controller.GetAll(
-            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, shiftId: null, CancellationToken.None);
+            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, shiftId: null, involvedUserId: null, CancellationToken.None);
         var closedOk = Assert.IsType<OkObjectResult>(closedResult.Result);
         var closedItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(closedOk.Value);
         Assert.Contains(closedItems.Data!, i => i.Id == incident.Id);
@@ -1164,7 +1164,7 @@ public class IncidentsControllerTests
         var incident = await db.IncidentReports.SingleAsync();
 
         var result = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: null, CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: null, involvedUserId: null, CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var items = Assert.IsType<ApiResponse<List<IncidentListDto>>>(ok.Value);
         var item = Assert.Single(items.Data!, i => i.Id == incident.Id);
@@ -1426,11 +1426,36 @@ public class IncidentsControllerTests
         await controller.Create(nonMatchingDto, CancellationToken.None);
 
         var result = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: shift.Id, CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: shift.Id, involvedUserId: null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var items = Assert.IsType<ApiResponse<List<IncidentListDto>>>(ok.Value);
         Assert.All(items.Data!, i => Assert.Equal(shift.Id, i.ShiftId));
+        Assert.Single(items.Data!);
+    }
+
+    /// <summary>Staff-hub support (connection map item 12): the staff overview's RecentIncidents
+    /// panel filters on this. </summary>
+    [Fact]
+    public async Task GetAll_FiltersByInvolvedUserId()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var involvedStaff = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var otherStaff = SeedUser(db, firstName: "Sam", lastName: "Diaz");
+        var controller = new IncidentsController(db);
+
+        var matchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { InvolvedStaffId = involvedStaff.Id };
+        var nonMatchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { InvolvedStaffId = otherStaff.Id };
+        await controller.Create(matchingDto, CancellationToken.None);
+        await controller.Create(nonMatchingDto, CancellationToken.None);
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, shiftId: null,
+            involvedUserId: involvedStaff.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<List<IncidentListDto>>>(ok.Value);
         Assert.Single(items.Data!);
     }
 

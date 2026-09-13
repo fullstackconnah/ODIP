@@ -208,7 +208,7 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
-        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, CancellationToken ct)
+        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId, CancellationToken ct)
     {
         var query = _db.IncidentReports
             .Include(i => i.TripInstance)
@@ -234,6 +234,7 @@ public class IncidentsController : ControllerBase
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
         if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
+        if (involvedUserId.HasValue) query = query.Where(i => i.InvolvedUserId == involvedUserId.Value);
 
         var items = await query.OrderByDescending(i => i.IncidentDateTime)
             .Select(i => new IncidentListDto

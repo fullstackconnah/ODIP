@@ -1340,6 +1340,50 @@ public record StaffListDto
 
 public record StaffDetailDto : StaffListDto { }
 
+/// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>
+public record StaffOverviewUpcomingShiftDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public ShiftStatus Status { get; init; }
+}
+
+/// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingTripAssignments (trips ending today or later).</summary>
+public record StaffOverviewTripAssignmentDto
+{
+    public Guid AssignmentId { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+}
+
+/// <summary>
+/// Connection map item 12 — GET /staff/{id}/overview, the staff hub's single data source. Mirrors
+/// the participant hub's ParticipantDetailDto-plus-sub-resources shape, but pre-joined server-side
+/// into one call. Availability/UpcomingShifts/UpcomingTripAssignments/RecentIncidents/
+/// RecentCompletions are each built from exactly one query (plus the small internal ones
+/// IStaffAvailabilityItemsQuery and ShiftCompletionMapper.BuildQueueItemsAsync already make) —
+/// no per-row queries.
+/// </summary>
+public record StaffOverviewDto
+{
+    public StaffDetailDto Staff { get; init; } = null!;
+    /// <summary>Every Leave/RecurringUnavailability/legacy StaffAvailability row overlapping the next 90 days, all kinds.</summary>
+    public List<ScheduleAvailabilityItemDto> Availability { get; init; } = new();
+    public List<StaffOverviewUpcomingShiftDto> UpcomingShifts { get; init; } = new();
+    public List<StaffOverviewTripAssignmentDto> UpcomingTripAssignments { get; init; } = new();
+    /// <summary>Newest 10 active incidents where this staff member is the involved user (not the reporter).</summary>
+    public List<IncidentListDto> RecentIncidents { get; init; } = new();
+    /// <summary>Last 10 shift completions submitted by this staff member, newest first.</summary>
+    public List<CompletionQueueItemDto> RecentCompletions { get; init; } = new();
+}
+
 /// <summary>
 /// Create request for a Staff/User row. Username and Email are required per the staff/user
 /// unification design spec §4.1 — a staff record now IS a real login-capable account, not a
