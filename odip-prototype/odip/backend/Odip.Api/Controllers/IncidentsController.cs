@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -634,15 +635,11 @@ public class IncidentsController : ControllerBase
     [HttpGet("overdue-qsc")]
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetOverdueQsc(CancellationToken ct)
     {
-        var cutoff = DateTime.UtcNow.AddHours(-24);
         var items = await _db.IncidentReports
             .Include(i => i.TripInstance)
             .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
-            .Where(i => i.IsActive
-                && i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && i.CreatedAt < cutoff)
+            .Where(QscReporting.IsOverdueExpr(DateTime.UtcNow))
             .OrderByDescending(i => i.CreatedAt)
             .Select(i => new IncidentListDto
             {

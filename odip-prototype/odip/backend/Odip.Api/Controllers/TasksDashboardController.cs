@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -438,10 +439,7 @@ public class DashboardController : ControllerBase
         var openIncidentCount = await _db.IncidentReports.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var qscCutoff = DateTime.UtcNow.AddHours(-24);
-        var qscOverdueCount = await _db.IncidentReports.CountAsync(
-            i => i.IsActive && i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null && i.CreatedAt < qscCutoff, ct);
+        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(DateTime.UtcNow), ct);
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {
