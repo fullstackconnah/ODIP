@@ -168,6 +168,44 @@ public class ClaimsControllerTests
         return (participant, shift, claim, line);
     }
 
+    // ── Nullability audit: GetClaim/DeleteClaim against a Kind == Shift claim ─────────
+
+    [Fact]
+    public async Task GetClaim_ShiftKindClaim_DoesNotThrow_AndPopulatesLineFromShift()
+    {
+        using var db = CreateDb();
+        var (participant, shift, claim, _) = SeedShiftClaim(db, Guid.NewGuid());
+        var controller = CreateController(db);
+
+        var result = await controller.GetClaim(claim.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<TripClaimDetailDto>>(ok.Value);
+        Assert.Equal(ClaimKind.Shift, body.Data!.Kind);
+        Assert.Equal(participant.Id, body.Data.ParticipantId);
+        Assert.Null(body.Data.TripInstanceId);
+        var lineItem = Assert.Single(body.Data.LineItems);
+        Assert.Null(lineItem.ParticipantBookingId);
+        Assert.Equal(shift.Id, lineItem.ShiftId);
+        Assert.Equal(participant.Id, lineItem.ParticipantId);
+        Assert.Equal(participant.FullName, lineItem.ParticipantName);
+        Assert.Equal(participant.NdisNumber, lineItem.NdisNumber);
+    }
+
+    [Fact]
+    public async Task DeleteClaim_ShiftKindClaim_DoesNotThrow_AndRemovesClaimAndLine()
+    {
+        using var db = CreateDb();
+        var (_, _, claim, line) = SeedShiftClaim(db, Guid.NewGuid());
+        var controller = CreateController(db);
+
+        var result = await controller.DeleteClaim(claim.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.TripClaims.AnyAsync(c => c.Id == claim.Id));
+        Assert.False(await db.ClaimLineItems.AnyAsync(l => l.Id == line.Id));
+    }
+
     // ── GetClaimsForParticipant ────────────────────────────────────────
 
     [Fact]

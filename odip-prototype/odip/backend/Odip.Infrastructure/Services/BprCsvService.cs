@@ -19,8 +19,13 @@ public class BprCsvService(OdipDbContext db)
         var settings = await db.ProviderSettings.FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Provider settings not configured");
 
+        // Nullability audit (shift-completion design spec, delivery PR 3): Kind == Shift claim
+        // lines have ParticipantBooking == null — a shift-kind line is excluded here rather than
+        // NRE'd, since BPR-CSV export for shift claims is explicitly out of scope for this PR
+        // (see the design spec's Open questions).
         var items = claim.LineItems
-            .Where(l => (l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType) == PlanType.AgencyManaged)
+            .Where(l => l.ParticipantBooking != null
+                && (l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType) == PlanType.AgencyManaged)
             .ToList();
 
         var sb = new StringBuilder();
@@ -30,7 +35,7 @@ public class BprCsvService(OdipDbContext db)
 
         foreach (var item in items)
         {
-            var ndisNumber = item.ParticipantBooking.Participant?.NdisNumber ?? string.Empty;
+            var ndisNumber = item.ParticipantBooking!.Participant?.NdisNumber ?? string.Empty;
             var fromDate = item.SupportsDeliveredFrom.ToString("yyyy-MM-dd");
             var toDate = item.SupportsDeliveredTo.ToString("yyyy-MM-dd");
             var rowRef = item.Id.ToString("N")[..20];

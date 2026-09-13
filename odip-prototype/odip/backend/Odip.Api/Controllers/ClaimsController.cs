@@ -168,7 +168,10 @@ public class ClaimsController : ControllerBase
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
                 .ThenInclude(l => l.ParticipantBooking)
-                    .ThenInclude(b => b.Participant)
+                    .ThenInclude(b => b!.Participant)
+            .Include(x => x.LineItems)
+                .ThenInclude(l => l.Shift)
+                    .ThenInclude(s => s!.Participant)
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
         if (c == null) return NotFound(ApiResponse<TripClaimDetailDto>.Fail("Claim not found"));
@@ -183,18 +186,28 @@ public class ClaimsController : ControllerBase
             AuthorisedByStaffId = c.AuthorisedByUserId,
             AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
             Notes = c.Notes,
-            LineItems = c.LineItems.Select(l => new ClaimLineItemDto
+            // Nullability audit (shift-completion design spec, delivery PR 3): exactly one of
+            // ParticipantBooking/Shift is set per line item — branch on whichever is present
+            // rather than assuming ParticipantBooking, which is null for Kind == Shift lines.
+            LineItems = c.LineItems.Select(l =>
             {
-                Id = l.Id, TripClaimId = l.TripClaimId, ParticipantBookingId = l.ParticipantBookingId,
-                ParticipantId = l.ParticipantBooking.ParticipantId,
-                ParticipantName = l.ParticipantBooking.Participant?.FullName ?? string.Empty,
-                NdisNumber = l.ParticipantBooking.Participant?.NdisNumber ?? string.Empty,
-                PlanType = l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant!.PlanType,
-                SupportItemCode = l.SupportItemCode, DayType = l.DayType,
-                SupportsDeliveredFrom = l.SupportsDeliveredFrom, SupportsDeliveredTo = l.SupportsDeliveredTo,
-                Hours = l.Hours, UnitPrice = l.UnitPrice, TotalAmount = l.TotalAmount,
-                GSTCode = l.GSTCode, ClaimType = l.ClaimType, ParticipantApproved = l.ParticipantApproved,
-                Status = l.Status, RejectionReason = l.RejectionReason, PaidAmount = l.PaidAmount
+                var participant = l.ParticipantBooking?.Participant ?? l.Shift?.Participant;
+                return new ClaimLineItemDto
+                {
+                    Id = l.Id, TripClaimId = l.TripClaimId,
+                    ParticipantBookingId = l.ParticipantBookingId, ShiftId = l.ShiftId,
+                    ParticipantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId,
+                    ParticipantName = participant?.FullName ?? string.Empty,
+                    NdisNumber = participant?.NdisNumber ?? string.Empty,
+                    PlanType = l.ParticipantBooking != null
+                        ? l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType ?? default
+                        : participant?.PlanType ?? default,
+                    SupportItemCode = l.SupportItemCode, DayType = l.DayType,
+                    SupportsDeliveredFrom = l.SupportsDeliveredFrom, SupportsDeliveredTo = l.SupportsDeliveredTo,
+                    Hours = l.Hours, UnitPrice = l.UnitPrice, TotalAmount = l.TotalAmount,
+                    GSTCode = l.GSTCode, ClaimType = l.ClaimType, ParticipantApproved = l.ParticipantApproved,
+                    Status = l.Status, RejectionReason = l.RejectionReason, PaidAmount = l.PaidAmount
+                };
             }).ToList()
         }));
     }
@@ -281,8 +294,15 @@ public class ClaimsController : ControllerBase
         if (claim.Status == TripClaimStatus.Submitted || claim.Status == TripClaimStatus.Paid)
             return BadRequest(ApiResponse<bool>.Fail("Cannot delete a claim that has been submitted or paid."));
 
-        // Reset participant bookings back to unclaimed
-        var bookingIds = claim.LineItems.Select(l => l.ParticipantBookingId).Distinct().ToList();
+        // Reset participant bookings back to unclaimed. Shift-completion design spec, delivery
+        // PR 3: Kind == Shift line items have ParticipantBookingId == null — filter those out
+        // rather than passing nulls into the ParticipantBookings lookup (a shift becomes
+        // unclaimed again simply by its ClaimLineItem row being removed below).
+        var bookingIds = claim.LineItems
+            .Where(l => l.ParticipantBookingId.HasValue)
+            .Select(l => l.ParticipantBookingId!.Value)
+            .Distinct()
+            .ToList();
         var bookings = await _db.ParticipantBookings
             .Where(b => bookingIds.Contains(b.Id))
             .ToListAsync(ct);
