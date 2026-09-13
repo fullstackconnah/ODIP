@@ -757,27 +757,14 @@ public class StaffAssignmentsController : ControllerBase
 
         var availability = await _unavailabilityQuery.GetWindowsAsync(new[] { staffId }, assignmentStart, assignmentEnd, ct);
 
-        // Loaded for consistency with the other two RosterCheckContext callers (connection-map
-        // item 8), even though RosterConflictService.CheckStaffAssignment never reads
-        // ctx.PublicHolidays — see that method's summary for why trip assignments don't get the
-        // PUBLIC_HOLIDAY finding.
-        var publicHolidays = await LoadPublicHolidaysAsync(assignmentStart, assignmentEnd, ct);
-
+        // No PublicHolidays load here (connection-map item 8): RosterConflictService.CheckStaffAssignment
+        // never reads ctx.PublicHolidays — trips already price holidays in claims and span multiple
+        // days, so they don't get a PUBLIC_HOLIDAY finding — so loading them for a trip assignment
+        // check would be a pure-waste DB round trip. Leaving the parameter unset defaults it to null.
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
-            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold,
-            publicHolidays);
+            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
 
         return _conflictService.CheckStaffAssignment(assignmentStart, assignmentEnd, excludeAssignmentId, ctx).ToList();
-    }
-
-    /// <summary>Same state-scoped PublicHoliday load as RosteringController.LoadPublicHolidaysAsync — see there.</summary>
-    private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
-    {
-        var state = (await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct)) ?? "VIC";
-        return await _db.PublicHolidays
-            .Where(h => h.Date >= start && h.Date <= end && (h.State == null || h.State == state))
-            .Select(h => new PublicHolidayRef(h.Date, h.Name))
-            .ToListAsync(ct);
     }
 
     /// <summary>Dry-run findings for a candidate trip assignment. Never writes — mirrors POST /rostering/shifts/check.</summary>
