@@ -123,6 +123,45 @@ public class LeaveController : ControllerBase
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
 
+    /// <summary>
+    /// Coordinator edit: editable only while Pending or Approved (409 with the same
+    /// AlreadyClosedMessage used by cancel on Declined/Cancelled). UserId, Status, RequestedBy*,
+    /// DecidedBy* are unchanged. Overlaps are recomputed when the row is currently Approved (empty
+    /// when Pending) — same overlap helper the approve path uses.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<LeaveApprovalResultDto>>> UpdateLeave(Guid id, [FromBody] UpdateLeaveRequestDto dto, CancellationToken ct)
+    {
+        var leave = await _db.LeaveRequests.FirstOrDefaultAsync(l => l.Id == id, ct);
+        if (leave == null) return NotFound(ApiResponse<LeaveApprovalResultDto>.Fail("Leave request not found."));
+        if (leave.Status == LeaveStatus.Declined || leave.Status == LeaveStatus.Cancelled)
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail(AlreadyClosedMessage(leave.Status)));
+
+        var validationError = ValidateLeaveDates(dto.StartDate, dto.EndDate);
+        if (validationError != null) return BadRequest(ApiResponse<LeaveApprovalResultDto>.Fail(validationError));
+        if (await HasDuplicateLeaveAsync(leave.UserId, dto.LeaveType, dto.StartDate, dto.EndDate, ct, excludeId: leave.Id))
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("An identical request already exists."));
+
+        var updateCallerId = ResolveCallerId();
+        if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+
+        leave.LeaveType = dto.LeaveType;
+        leave.StartDate = dto.StartDate;
+        leave.EndDate = dto.EndDate;
+        leave.Reason = dto.Reason;
+        leave.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        var overlaps = leave.Status == LeaveStatus.Approved
+            ? await FindLeaveOverlapsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct)
+            : new List<RosterFindingDto>();
+
+        return Ok(ApiResponse<LeaveApprovalResultDto>.Ok(new LeaveApprovalResultDto
+        {
+            Leave = await LoadLeaveDtoAsync(leave.Id, ct), Overlaps = overlaps,
+        }));
+    }
+
     /// <summary>Coordinator cancel: valid from Pending OR Approved (the matrix's two "Coordinator (cancel)" cells). See this task's ruling for why this differs from the portal cancel's error wording.</summary>
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<ApiResponse<LeaveRequestDto>>> CancelLeave(Guid id, CancellationToken ct)
@@ -212,6 +251,42 @@ public class LeaveController : ControllerBase
         }));
     }
 
+    /// <summary>Coordinator edit: mirrors UpdateLeave above — editable only while Pending or Approved, UserId/Status/RequestedBy*/DecidedBy* unchanged.</summary>
+    [HttpPut("unavailability/{id:guid}")]
+    public async Task<ActionResult<ApiResponse<RecurringUnavailabilityApprovalResultDto>>> UpdateUnavailability(Guid id, [FromBody] UpdateRecurringUnavailabilityDto dto, CancellationToken ct)
+    {
+        var rule = await _db.RecurringUnavailabilities.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (rule == null) return NotFound(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Unavailability request not found."));
+        if (rule.Status == LeaveStatus.Declined || rule.Status == LeaveStatus.Cancelled)
+            return Conflict(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(AlreadyClosedMessage(rule.Status)));
+
+        var validationError = ValidateRecurringWindow(dto.StartTime, dto.EndTime, dto.EffectiveFrom, dto.EffectiveTo);
+        if (validationError != null) return BadRequest(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(validationError));
+        if (await HasDuplicateUnavailabilityAsync(rule.UserId, dto.DayOfWeek, dto.StartTime, dto.EndTime, dto.EffectiveFrom, dto.EffectiveTo, ct, excludeId: rule.Id))
+            return Conflict(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("An identical request already exists."));
+
+        var updateRuleCallerId = ResolveCallerId();
+        if (updateRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+
+        rule.DayOfWeek = dto.DayOfWeek;
+        rule.StartTime = dto.StartTime;
+        rule.EndTime = dto.EndTime;
+        rule.EffectiveFrom = dto.EffectiveFrom;
+        rule.EffectiveTo = dto.EffectiveTo;
+        rule.Notes = dto.Notes;
+        rule.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        var overlaps = rule.Status == LeaveStatus.Approved
+            ? await FindRecurringOverlapsAsync(rule, ct)
+            : new List<RosterFindingDto>();
+
+        return Ok(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Ok(new RecurringUnavailabilityApprovalResultDto
+        {
+            Unavailability = await LoadUnavailabilityDtoAsync(rule.Id, ct), Overlaps = overlaps,
+        }));
+    }
+
     [HttpPost("unavailability/{id:guid}/decline")]
     public async Task<ActionResult<ApiResponse<RecurringUnavailabilityDto>>> DeclineUnavailability(
         Guid id, [FromBody] LeaveDecisionDto dto, CancellationToken ct)
@@ -278,17 +353,19 @@ public class LeaveController : ControllerBase
         return null;
     }
 
-    private Task<bool> HasDuplicateLeaveAsync(Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct) =>
+    private Task<bool> HasDuplicateLeaveAsync(Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct, Guid? excludeId = null) =>
         _db.LeaveRequests.AnyAsync(l =>
             l.UserId == userId && l.LeaveType == leaveType && l.StartDate == start && l.EndDate == end
-            && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
+            && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined
+            && (excludeId == null || l.Id != excludeId.Value), ct);
 
     private Task<bool> HasDuplicateUnavailabilityAsync(
-        Guid userId, DayOfWeek dayOfWeek, TimeOnly start, TimeOnly end, DateOnly effectiveFrom, DateOnly? effectiveTo, CancellationToken ct) =>
+        Guid userId, DayOfWeek dayOfWeek, TimeOnly start, TimeOnly end, DateOnly effectiveFrom, DateOnly? effectiveTo, CancellationToken ct, Guid? excludeId = null) =>
         _db.RecurringUnavailabilities.AnyAsync(r =>
             r.UserId == userId && r.DayOfWeek == dayOfWeek && r.StartTime == start && r.EndTime == end
             && r.EffectiveFrom == effectiveFrom && r.EffectiveTo == effectiveTo
-            && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined, ct);
+            && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined
+            && (excludeId == null || r.Id != excludeId.Value), ct);
 
     /// <summary>Overlapping Published shifts / Confirmed trip assignments for the just-approved leave window — informational only, approval is never blocked by this. See spec §3 "Reverse direction."</summary>
     private async Task<List<RosterFindingDto>> FindLeaveOverlapsAsync(Guid userId, DateOnly startDate, DateOnly endDate, CancellationToken ct)
