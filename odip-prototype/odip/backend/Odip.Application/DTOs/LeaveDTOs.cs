@@ -43,6 +43,15 @@ public record LeaveDecisionDto
     public string? DecisionNote { get; init; }
 }
 
+/// <summary>PUT api/v1/leave/{id} body — editable only while Pending or Approved. UserId, Status, RequestedBy*, DecidedBy* are not changeable via this endpoint.</summary>
+public record UpdateLeaveRequestDto
+{
+    public LeaveType LeaveType { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    public string? Reason { get; init; }
+}
+
 public record RecurringUnavailabilityDto
 {
     public Guid Id { get; init; }
@@ -72,6 +81,17 @@ public record CreateRecurringUnavailabilityDto
     public string? Notes { get; init; }
     /// <summary>Ignored on the portal path (always the caller's own id). Required on POST /leave/unavailability — 400 if missing.</summary>
     public Guid? UserId { get; init; }
+}
+
+/// <summary>PUT api/v1/leave/unavailability/{id} body — editable only while Pending or Approved. UserId, Status, RequestedBy*, DecidedBy* are not changeable via this endpoint.</summary>
+public record UpdateRecurringUnavailabilityDto
+{
+    public DayOfWeek DayOfWeek { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public DateOnly EffectiveFrom { get; init; }
+    public DateOnly? EffectiveTo { get; init; }
+    public string? Notes { get; init; }
 }
 
 /// <summary>POST /leave/{id}/approve response — the approved row plus any overlapping Published shifts/Confirmed trip assignments the coordinator should see before confirming. Approval itself is never blocked by these.</summary>

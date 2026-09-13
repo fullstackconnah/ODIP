@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Billing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 
 namespace Odip.Application.DTOs;
 
@@ -1915,8 +1916,32 @@ public record ScheduleStaffDto
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public List<ScheduleStaffTripStatusDto> TripStatuses { get; init; } = new();
-    public List<StaffAvailabilityDto> Availability { get; init; } = new();
+    public List<ScheduleAvailabilityItemDto> Availability { get; init; } = new();
     public List<TripPreferenceDto> PreferredForTrips { get; init; } = new();
+}
+
+/// <summary>Source of a <see cref="ScheduleAvailabilityItemDto"/> row.</summary>
+public enum ScheduleAvailabilityKind { Leave, RecurringRule, Legacy }
+
+/// <summary>
+/// A single unified availability/unavailability record for a staff member on the schedule board,
+/// sourced directly from LeaveRequest, RecurringUnavailability, or the legacy StaffAvailability
+/// table (Kind says which) — not from the expanded IStaffUnavailabilityQuery windows used for the
+/// per-trip status cells. See docs/specs/2026-09-07-staff-leave-unavailability-design.md.
+/// </summary>
+public record ScheduleAvailabilityItemDto
+{
+    public Guid Id { get; init; }
+    public ScheduleAvailabilityKind Kind { get; init; }
+    public LeaveStatus? Status { get; init; }          // Leave/RecurringRule only; null for Legacy
+    public LeaveType? LeaveType { get; init; }         // Leave only
+    public AvailabilityType? AvailabilityType { get; init; } // Legacy only
+    public DateOnly StartDate { get; init; }           // Leave.StartDate | Rule.EffectiveFrom | Legacy StartDateTime.Date
+    public DateOnly? EndDate { get; init; }            // Leave.EndDate | Rule.EffectiveTo (nullable) | Legacy EndDateTime.Date
+    public DayOfWeek? DayOfWeek { get; init; }         // RecurringRule only
+    public TimeOnly? StartTime { get; init; }          // RecurringRule only
+    public TimeOnly? EndTime { get; init; }            // RecurringRule only
+    public string? Notes { get; init; }                // Leave.Reason | Rule.Notes | Legacy.Notes
 }
 
 public record ScheduleStaffTripStatusDto

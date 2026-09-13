@@ -11,7 +11,7 @@ import type { CreateRecurringUnavailabilityDto } from '@/api/types'
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
-type UnavailabilityFormValues = {
+export type UnavailabilityFormValues = {
   userId: string
   dayOfWeek: string
   startTime: string
@@ -50,17 +50,27 @@ export type UnavailabilityFormModalProps = {
   onSubmit: (data: CreateRecurringUnavailabilityDto) => Promise<void>
   submitting: boolean
   errorMessage?: string | null
+  /** Ignored (staff picker always hidden) when `mode` is `'edit'` — userId is never editable. */
   staffOptions?: { value: string; label: string }[]
+  /** `'edit'` swaps the title/submit label and hides the staff picker; `onSubmit` still receives
+   * the same Create DTO shape — the caller maps it onto the Update DTO. Defaults to `'create'`. */
+  mode?: 'create' | 'edit'
+  /** Pre-fills the form in edit mode. Applied on every open so re-opening the modal for a
+   * different row re-seeds it. */
+  initialValues?: Partial<UnavailabilityFormValues>
 }
 
 /** Weekly recurring unavailability form (§2 CreateRecurringUnavailabilityDto). See
- * LeaveRequestFormModal's doc comment for the reuse/validation-testing notes — identical here. */
-export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions }: UnavailabilityFormModalProps) {
-  const requireStaff = !!staffOptions
+ * LeaveRequestFormModal's doc comment for the reuse/validation-testing/edit-mode notes —
+ * identical here. */
+export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues }: UnavailabilityFormModalProps) {
+  const isEdit = mode === 'edit'
+  const requireStaff = !isEdit && !!staffOptions
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
+  const resetValues = useMemo<UnavailabilityFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<UnavailabilityFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: resetValues,
   })
   // Same wiring as LeaveRequestFormModal — see that component's doc comment for the quoted
   // VehicleCreatePage.tsx precedent.
@@ -68,10 +78,12 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
 
   // Resets on every open/close transition, not just open — otherwise a successful submit or a
   // Cancel leaves isDirty true on the still-mounted form, arming a spurious unsaved-changes
-  // prompt on the next navigation (see useUnsavedChangesWarning.tsx:16-24).
+  // prompt on the next navigation (see useUnsavedChangesWarning.tsx:16-24). Also resets when
+  // resetValues changes identity (edit mode re-opened against a different row) — a no-op for the
+  // create-mode callers above since initialValues is never passed there.
   useEffect(() => {
-    reset(DEFAULT_VALUES)
-  }, [open, reset])
+    reset(resetValues)
+  }, [open, reset, resetValues])
 
   const submit = handleSubmit(async values => {
     await onSubmit({
@@ -93,7 +105,7 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
       <Modal
         open={open}
         onClose={onClose}
-        title={requireStaff ? 'Enter regular unavailability on behalf of staff' : 'Add regular unavailability'}
+        title={isEdit ? 'Edit regular unavailability' : requireStaff ? 'Enter regular unavailability on behalf of staff' : 'Add regular unavailability'}
         closeOnBackdrop={false}
         footer={
           <>
@@ -106,7 +118,7 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
               disabled={submitting}
               className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
             >
-              {submitting ? 'Saving…' : requireStaff ? 'Save' : 'Submit request'}
+              {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
             </button>
           </>
         }

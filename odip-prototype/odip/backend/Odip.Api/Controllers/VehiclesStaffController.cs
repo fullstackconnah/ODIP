@@ -619,6 +619,33 @@ public class StaffAvailabilityController : ControllerBase
     private Task<bool> IsValidStaffRefAsync(Guid userId, CancellationToken ct) =>
         _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
 
+    [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAll(
+        [FromQuery] Guid? userId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        var query = _db.StaffAvailabilities.Where(a => _db.Users.Any(u => u.Id == a.UserId)).AsQueryable();
+        if (userId.HasValue) query = query.Where(a => a.UserId == userId.Value);
+        if (from.HasValue) query = query.Where(a => a.EndDateTime >= from.Value.ToDateTime(TimeOnly.MinValue));
+        if (to.HasValue) query = query.Where(a => a.StartDateTime <= to.Value.ToDateTime(TimeOnly.MaxValue));
+
+        var items = await query
+            .OrderByDescending(a => a.StartDateTime)
+            .Select(a => new StaffAvailabilityDto
+            {
+                Id = a.Id, StaffId = a.UserId, StartDateTime = a.StartDateTime,
+                EndDateTime = a.EndDateTime, AvailabilityType = a.AvailabilityType,
+                IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
+            }).ToListAsync(ct);
+        return Ok(ApiResponse<List<StaffAvailabilityDto>>.Ok(items));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAvailabilityDto>>> Create([FromBody] CreateStaffAvailabilityDto dto, CancellationToken ct)

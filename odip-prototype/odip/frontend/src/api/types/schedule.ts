@@ -1,5 +1,26 @@
-import type { TripStatus, Position, VehicleType, AssignmentStatus, VehicleAssignmentStatus } from './enums'
-import type { StaffAvailabilityDto } from './staff'
+import type { TripStatus, Position, VehicleType, AssignmentStatus, VehicleAssignmentStatus, AvailabilityType } from './enums'
+import type { LeaveStatus, LeaveType } from './leave'
+
+// ── Unified read-only availability (schedule accordion) ────────
+// Every one of a staff member's Leave/RecurringUnavailability/legacy StaffAvailability records
+// that overlaps the schedule window, already ordered by the backend — see
+// AvailabilityList.tsx, the read-only successor to the old per-row editor.
+
+export type ScheduleAvailabilityKind = 'Leave' | 'RecurringRule' | 'Legacy'
+
+export interface ScheduleAvailabilityItemDto {
+  id: string
+  kind: ScheduleAvailabilityKind
+  status: LeaveStatus | null          // 'Pending' | 'Approved' for Leave/RecurringRule; null for Legacy
+  leaveType: LeaveType | null         // Leave only
+  availabilityType: AvailabilityType | null // Legacy only
+  startDate: string                   // 'YYYY-MM-DD' — Leave start | rule effectiveFrom | legacy start date
+  endDate: string | null              // Leave end | rule effectiveTo (may be open-ended) | legacy end date
+  dayOfWeek: string | null            // RecurringRule only, e.g. 'Monday'
+  startTime: string | null            // RecurringRule only, 'HH:mm:ss'
+  endTime: string | null
+  notes: string | null
+}
 
 export interface ScheduleOverviewDto {
   trips: ScheduleTripDto[]
@@ -45,7 +66,7 @@ export interface ScheduleStaffDto {
   isManualHandlingCompetent: boolean
   isOvernightEligible: boolean
   tripStatuses: ScheduleStaffTripStatusDto[]
-  availability: StaffAvailabilityDto[]
+  availability: ScheduleAvailabilityItemDto[]
   preferredForTrips: TripPreferenceDto[]
 }
 

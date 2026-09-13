@@ -79,4 +79,38 @@ describe('UnavailabilityFormModal', () => {
     renderModal({ open: true, onClose: noop, onSubmit: vi.fn(), submitting: true })
     expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled()
   })
+
+  describe('edit mode', () => {
+    const initialValues = {
+      dayOfWeek: 'Tuesday', startTime: '10:00', endTime: '13:00',
+      effectiveFrom: '2026-09-07', effectiveTo: '2026-12-31', notes: 'Physio appointment.',
+    }
+
+    it('titles itself "Edit regular unavailability", labels the submit button "Save changes", and hides the staff picker', () => {
+      renderModal({
+        open: true, onClose: noop, onSubmit: vi.fn(), submitting: false, mode: 'edit', initialValues,
+        staffOptions: [{ value: 'staff-1', label: 'Alex Rivera' }],
+      })
+
+      expect(screen.getByText('Edit regular unavailability')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^save changes$/i })).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: /staff member/i })).not.toBeInTheDocument()
+    })
+
+    it('pre-fills the form from initialValues and submits the edited values with no userId', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn(async () => {})
+      renderModal({ open: true, onClose: noop, onSubmit, submitting: false, mode: 'edit', initialValues })
+
+      expect(screen.getByLabelText(/start time/i)).toHaveValue('10:00')
+      expect(screen.getByLabelText(/effective from/i)).toHaveValue('2026-09-07')
+
+      await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '13:00:00',
+        effectiveFrom: '2026-09-07', effectiveTo: '2026-12-31', notes: 'Physio appointment.',
+      })
+    })
+  })
 })
