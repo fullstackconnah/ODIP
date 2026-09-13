@@ -255,6 +255,132 @@ public class ClaimsControllerTests
         Assert.Empty(body.Data!);
     }
 
+    // ── Defect fix: trip-kind claims never set TripClaim.ParticipantId — they relate to a
+    // participant only through ClaimLineItem.ParticipantBooking.ParticipantId. The endpoint
+    // must also match on that path, so the participant Claims tab (which renders both kinds)
+    // sees trip claims too. ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetClaimsForParticipant_TripClaimLinkedViaLineItemBooking_IsReturned_WithNoKindFilter()
+    {
+        using var db = CreateDb();
+        var tenantId = Guid.NewGuid();
+
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Cara", LastName = "Voss",
+            NdisNumber = "43177776666", PlanType = PlanType.AgencyManaged,
+        };
+        db.Participants.Add(participant);
+
+        var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Trip A", StartDate = new DateOnly(2026, 2, 1), DurationDays = 1 };
+        db.TripInstances.Add(trip);
+        var booking = new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id, Participant = participant,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1),
+        };
+        db.ParticipantBookings.Add(booking);
+
+        var tripClaim = new TripClaim
+        {
+            Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id,
+            Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-LINKED",
+        };
+        db.TripClaims.Add(tripClaim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id,
+            SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),
+            Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
+        });
+        db.SaveChanges();
+
+        var controller = CreateController(db);
+
+        var noKindResult = await controller.GetClaimsForParticipant(participant.Id, null, CancellationToken.None);
+        var noKindBody = Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(noKindResult.Result).Value);
+        var found = Assert.Single(noKindBody.Data!);
+        Assert.Equal(tripClaim.Id, found.Id);
+        Assert.Equal(ClaimKind.Trip, found.Kind);
+
+        var tripKindResult = await controller.GetClaimsForParticipant(participant.Id, ClaimKind.Trip, CancellationToken.None);
+        var tripKindBody = Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(tripKindResult.Result).Value);
+        Assert.Equal(tripClaim.Id, Assert.Single(tripKindBody.Data!).Id);
+    }
+
+    [Fact]
+    public async Task GetClaimsForParticipant_TripClaimLinkedViaLineItemBooking_ExcludedByKindShiftFilter()
+    {
+        using var db = CreateDb();
+        var tenantId = Guid.NewGuid();
+        var (shiftParticipant, _, shiftClaim, _) = SeedShiftClaim(db, tenantId);
+
+        var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Trip B", StartDate = new DateOnly(2026, 2, 1), DurationDays = 1 };
+        db.TripInstances.Add(trip);
+        var booking = new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = shiftParticipant.Id,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1),
+        };
+        db.ParticipantBookings.Add(booking);
+        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-2" };
+        db.TripClaims.Add(tripClaim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id,
+            SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),
+            Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
+        });
+        db.SaveChanges();
+
+        var controller = CreateController(db);
+
+        var shiftKindResult = await controller.GetClaimsForParticipant(shiftParticipant.Id, ClaimKind.Shift, CancellationToken.None);
+        var shiftKindBody = Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(shiftKindResult.Result).Value);
+        Assert.Equal(shiftClaim.Id, Assert.Single(shiftKindBody.Data!).Id);
+    }
+
+    [Fact]
+    public async Task GetClaimsForParticipant_TripClaimLinkedToAnotherParticipantsBooking_IsNotReturned()
+    {
+        using var db = CreateDb();
+        var tenantId = Guid.NewGuid();
+
+        var participantA = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "A", LastName = "One", NdisNumber = "43100000001", PlanType = PlanType.AgencyManaged };
+        var participantB = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "B", LastName = "Two", NdisNumber = "43100000002", PlanType = PlanType.AgencyManaged };
+        db.Participants.AddRange(participantA, participantB);
+
+        var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Trip C", StartDate = new DateOnly(2026, 2, 1), DurationDays = 1 };
+        db.TripInstances.Add(trip);
+        var bookingForB = new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participantB.Id,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1),
+        };
+        db.ParticipantBookings.Add(bookingForB);
+        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-3" };
+        db.TripClaims.Add(tripClaim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = bookingForB.Id,
+            SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),
+            Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
+        });
+        db.SaveChanges();
+
+        var controller = CreateController(db);
+
+        // Requesting participant A's claims must not surface the trip claim, which is only
+        // linked to participant B's booking.
+        var result = await controller.GetClaimsForParticipant(participantA.Id, null, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!);
+    }
+
     // ── PreviewShiftClaim / GenerateShiftClaim ─────────────────────────
 
     private static Participant SeedParticipantWithCompletedShift(OdipDbContext db, Guid tenantId, out Shift shift)

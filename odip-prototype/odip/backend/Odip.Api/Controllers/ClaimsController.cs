@@ -101,7 +101,13 @@ public class ClaimsController : ControllerBase
         if (!participantExists)
             return Ok(ApiResponse<List<TripClaimListDto>>.Ok(new List<TripClaimListDto>()));
 
-        var query = _db.TripClaims.Where(c => c.ParticipantId == participantId);
+        // Trip-kind claims (ClaimGenerationService) never set TripClaim.ParticipantId — they
+        // relate to a participant only through ClaimLineItem.ParticipantBooking.ParticipantId.
+        // Match on either path so the participant Claims tab (which renders both kinds) sees
+        // trip claims too, then apply the optional kind filter.
+        var query = _db.TripClaims.Where(c =>
+            c.ParticipantId == participantId ||
+            c.LineItems.Any(l => l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == participantId));
         if (kind.HasValue)
             query = query.Where(c => c.Kind == kind.Value);
 
