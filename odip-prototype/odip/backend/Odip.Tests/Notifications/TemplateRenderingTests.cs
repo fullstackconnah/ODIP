@@ -1,3 +1,4 @@
+using System.Globalization;
 using Odip.Infrastructure.Notifications.Templates;
 using Xunit;
 
@@ -21,7 +22,7 @@ public class TemplateRenderingTests
         Assert.Equal("coord@example.com", message.RecipientAddress);
         Assert.Equal("Leave request from Ben Turner", message.Subject);
         Assert.Equal(
-            "Ben Turner has requested Annual leave from 10 Sept 2026 to 12 Sept 2026.\n\nReview it: https://odip.test/rostering/leave",
+            "Ben Turner has requested Annual leave from 10 Sep 2026 to 12 Sep 2026.\n\nReview it: https://odip.test/rostering/leave",
             message.PlainTextBody);
         Assert.Contains("https://odip.test/rostering/leave", message.HtmlBody);
     }
@@ -55,9 +56,38 @@ public class TemplateRenderingTests
         var payload = new ShiftAssignedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0));
         var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
 
-        Assert.Equal("New shift: Alice Participant on 15 Sept 2026", message.Subject);
+        Assert.Equal("New shift: Alice Participant on 15 Sep 2026", message.Subject);
         Assert.Contains("Alice Participant", message.PlainTextBody);
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
+    }
+
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — a
+    /// mismatch that broke the Docker build's `dotnet test` step even though the equivalent test
+    /// passed locally. Templates must format dates via <see cref="CultureInfo.InvariantCulture"/>
+    /// so rendered output is identical regardless of the host's current culture.
+    /// </summary>
+    [Fact]
+    public void ShiftAssignedTemplate_RendersInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("en-AU");
+
+            var payload = new ShiftAssignedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0));
+            var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+            Assert.Equal("New shift: Alice Participant on 15 Sep 2026", message.Subject);
+            Assert.DoesNotContain("Sept", message.Subject);
+            Assert.DoesNotContain("Sept", message.PlainTextBody);
+            Assert.DoesNotContain("Sept", message.HtmlBody);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     [Fact]
@@ -77,7 +107,7 @@ public class TemplateRenderingTests
         var payload = new ShiftCompletionReturnedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), "Missing end time");
         var message = ShiftCompletionReturnedTemplate.Render(payload, BaseUrl);
 
-        Assert.Equal("Shift returned for correction: Alice Participant on 15 Sept 2026", message.Subject);
+        Assert.Equal("Shift returned for correction: Alice Participant on 15 Sep 2026", message.Subject);
         Assert.Contains("Missing end time", message.PlainTextBody);
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
     }

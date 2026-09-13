@@ -12,8 +12,8 @@ public static class LeaveRequestSubmittedTemplate
         RecipientAddress: p.RecipientEmail,
         Subject: $"Leave request from {p.RequesterName}",
         PlainTextBody: $"{p.RequesterName} has requested {p.LeaveType} leave from " +
-                       $"{p.StartDate:d MMM yyyy} to {p.EndDate:d MMM yyyy}.\n\nReview it: {baseUrl}/rostering/leave",
+                       $"{Html.Date(p.StartDate)} to {Html.Date(p.EndDate)}.\n\nReview it: {baseUrl}/rostering/leave",
         HtmlBody: $"<p>{Html.E(p.RequesterName)} has requested {Html.E(p.LeaveType)} leave from " +
-                  $"{p.StartDate:d MMM yyyy} to {p.EndDate:d MMM yyyy}.</p>" +
+                  $"{Html.Date(p.StartDate)} to {Html.Date(p.EndDate)}.</p>" +
                   $"<p><a href=\"{Html.Attr(baseUrl)}/rostering/leave\">Review it</a></p>");
 }
