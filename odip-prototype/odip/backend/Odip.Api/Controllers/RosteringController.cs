@@ -464,7 +464,9 @@ public class RosteringController : ControllerBase
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync(ct);
 
-        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(
+            notes.Select(n => ToShiftNoteDto(n, LookupIncidentId(incidentIds, n.Id))).ToList()));
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -544,7 +546,12 @@ public class RosteringController : ControllerBase
             new PagedResult<CompletionQueueItemDto> { Items = paged, Page = page, PageSize = pageSize, TotalCount = totalCount }));
     }
 
-    /// <summary>The current active ShiftCompletion for one shift, or 404 if none exists.</summary>
+    /// <summary>
+    /// The current active ShiftCompletion for one shift, or 404 if none exists. Deliverable 2
+    /// reverse link: this is the one completion surface that populates
+    /// <see cref="ShiftCompletionDto.Incidents"/> — the list endpoint below and Approve/Return
+    /// leave it empty (see <see cref="ToShiftCompletionDtoAsync"/> remarks).
+    /// </summary>
     [HttpGet("shifts/{id:guid}/completion")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> GetShiftCompletion(Guid id, CancellationToken ct)
     {
@@ -554,7 +561,7 @@ public class RosteringController : ControllerBase
         if (completion is null)
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct, includeIncidents: true)));
     }
 
     /// <summary>
@@ -934,9 +941,32 @@ public class RosteringController : ControllerBase
 
     private static RosterFindingDto ToFindingDto(RosterFinding f) => RosterGate.ToFindingDto(f);
 
-    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n, Guid? incidentId) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
-        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt, incidentId);
+
+    /// <summary>
+    /// Connection-map reverse link (Deliverable 2): for the given shift-note ids, the newest
+    /// active IncidentReport whose ShiftNoteId points back at each one — ONE query for the whole
+    /// batch (never per-row), same idiom as MedicationsController's administration-id lookup.
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> GetIncidentIdsByShiftNoteIdsAsync(IReadOnlyCollection<Guid> shiftNoteIds, CancellationToken ct)
+    {
+        if (shiftNoteIds.Count == 0) return new Dictionary<Guid, Guid>();
+        var rows = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId != null && shiftNoteIds.Contains(i.ShiftNoteId.Value))
+            .Select(i => new { NoteId = i.ShiftNoteId!.Value, i.Id, i.CreatedAt })
+            .ToListAsync(ct);
+        return rows
+            .GroupBy(r => r.NoteId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
+    }
+
+    /// <summary>Dictionary&lt;Guid, Guid&gt;.GetValueOrDefault returns Guid.Empty (not null) for a
+    /// missing key, which would wrongly stand in for "no incident" — this is the null-correct
+    /// lookup every incident-id-map read in this class uses instead.</summary>
+    private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
+        map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
     private static ShiftPatternDto ToPatternDto(ShiftPattern p) => new()
     {
@@ -955,9 +985,11 @@ public class RosteringController : ControllerBase
     };
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's
-    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
-    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct);
+    /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.
+    /// <paramref name="includeIncidents"/> forwards to the mapper's own parameter — only
+    /// GetShiftCompletion passes true (see that method's remarks).</summary>
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct, bool includeIncidents = false)
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct, includeIncidents);
 
     /// <summary>
     /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the

@@ -399,6 +399,87 @@ public class RosteringCompletionReviewTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    // ── Connection-map reverse link (Deliverable 2): ShiftCompletionDto.Incidents ──────
+
+    [Fact]
+    public async Task GetShiftCompletion_NoIncidents_ReturnsEmptyIncidentsList()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletion(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!.Incidents);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletion_ActiveIncidentsOnShift_PopulatesIncidentsWithCorrectFields()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var incidentDateTime = new DateTime(2026, 9, 8, 10, 0, 0, DateTimeKind.Utc);
+        var activeIncident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ReportedByUserId = staff.Id,
+            Title = "Fall during transfer", Description = "Details.", IncidentDateTime = incidentDateTime,
+            Severity = IncidentSeverity.High, Status = IncidentStatus.UnderReview, IsActive = true,
+        };
+        // A closed-out (inactive) incident on the same shift must be excluded.
+        var inactiveIncident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ReportedByUserId = staff.Id,
+            Title = "Archived incident", Description = "Details.", IncidentDateTime = incidentDateTime.AddDays(-1),
+            Severity = IncidentSeverity.Low, Status = IncidentStatus.Closed, IsActive = false,
+        };
+        db.IncidentReports.AddRange(activeIncident, inactiveIncident);
+        db.SaveChanges();
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletion(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var incident = Assert.Single(body.Data!.Incidents);
+        Assert.Equal(activeIncident.Id, incident.Id);
+        Assert.Equal("Fall during transfer", incident.Title);
+        Assert.Equal(IncidentSeverity.High, incident.Severity);
+        Assert.Equal(IncidentStatus.UnderReview, incident.Status);
+        Assert.Equal(incidentDateTime, incident.IncidentDateTime);
+    }
+
+    [Fact]
+    public async Task GetShiftCompletions_List_LeavesIncidentsEmptyEvenWithAnActiveIncidentOnTheShift()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        db.IncidentReports.Add(new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ReportedByUserId = staff.Id,
+            Title = "Fall during transfer", Description = "Details.", IncidentDateTime = DateTime.UtcNow,
+            Severity = IncidentSeverity.High, Status = IncidentStatus.Draft, IsActive = true,
+        });
+        db.SaveChanges();
+        var controller = MakeController(db);
+
+        var result = await controller.GetShiftCompletions(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ShiftCompletionDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var completion = Assert.Single(body.Data!);
+        // Deliberate: the list endpoint doesn't pay for the extra incidents query — see
+        // ShiftCompletionMapper.ToDtoAsync's includeIncidents remarks.
+        Assert.Empty(completion.Incidents);
+    }
+
     // ── Authorisation posture ────────────────────────────────────────
 
     [Theory]

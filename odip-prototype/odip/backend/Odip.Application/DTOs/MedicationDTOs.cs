@@ -175,6 +175,11 @@ public record AdministrationDto
     public bool LimitBreachAcknowledged { get; init; }
     public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; }
+
+    /// <summary>Connection-map reverse link (Deliverable 2): id of the newest active
+    /// <see cref="Odip.Domain.Entities.IncidentReport"/> whose MedicationAdministrationId points
+    /// back at this administration, or null when none does.</summary>
+    public Guid? IncidentId { get; init; }
 }
 
 public record CreateAdministrationDto
@@ -274,6 +279,11 @@ public record MarEntryDto
     public MedicationSupportLevel SupportLevel { get; init; }
     public bool IsOverdue { get; init; }
     public AdministrationDto? Administration { get; init; }
+
+    /// <summary>Connection-map reverse link (Deliverable 2): mirrors <see cref="AdministrationDto.IncidentId"/>
+    /// when <see cref="Administration"/> is present, null otherwise (no administration means no
+    /// MedicationAdministrationId for an incident to reference).</summary>
+    public Guid? IncidentId { get; init; }
 }
 
 public record MarPrnDto

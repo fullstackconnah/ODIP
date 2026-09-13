@@ -756,6 +756,48 @@ public class RosteringControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    /// <summary>Connection-map reverse link (Deliverable 2): an active IncidentReport whose ShiftNoteId points at <paramref name="shiftNoteId"/>.</summary>
+    private static IncidentReport SeedIncidentForShiftNote(OdipDbContext db, Guid shiftNoteId, bool isActive = true, DateTime? createdAt = null)
+    {
+        var incident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftNoteId = shiftNoteId, ReportedByUserId = Guid.NewGuid(),
+            Title = "Reported from a shift note", Description = "Auto-generated for test.", IncidentDateTime = DateTime.UtcNow,
+            Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft, IsActive = isActive,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
+        };
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+        return incident;
+    }
+
+    [Fact]
+    public async Task GetShiftNotes_IncidentId_PopulatedWhenActiveIncidentReferencesNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        var referencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Fell during transfer.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        var unreferencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = "Uneventful shift." };
+        db.ShiftNotes.AddRange(referencedNote, unreferencedNote);
+        db.SaveChanges();
+        var incident = SeedIncidentForShiftNote(db, referencedNote.Id);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(incident.Id, body.Data!.Single(n => n.Id == referencedNote.Id).IncidentId);
+        Assert.Null(body.Data.Single(n => n.Id == unreferencedNote.Id).IncidentId);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // STAFF LEAVE / RECURRING UNAVAILABILITY (Task 5) — IStaffUnavailabilityQuery wiring
     // ══════════════════════════════════════════════════════════════

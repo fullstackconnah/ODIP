@@ -433,7 +433,9 @@ public class PortalController : ControllerBase
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync(ct);
 
-        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(
+            notes.Select(n => ToShiftNoteDto(n, LookupIncidentId(incidentIds, n.Id))).ToList()));
     }
 
     /// <summary>Creates a note on one of the caller's own shifts. Same ownership scoping as <see cref="GetShiftNotes"/>.</summary>
@@ -462,7 +464,8 @@ public class PortalController : ControllerBase
         _db.ShiftNotes.Add(note);
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        // A brand-new note can't already be referenced by an incident.
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId: null)));
     }
 
     /// <summary>
@@ -495,7 +498,12 @@ public class PortalController : ControllerBase
         note.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        var incidentId = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId == note.Id)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => (Guid?)i.Id)
+            .FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
 
     /// <summary>
@@ -520,7 +528,12 @@ public class PortalController : ControllerBase
         note.FlagsAcknowledgedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        var incidentId = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId == note.Id)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => (Guid?)i.Id)
+            .FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -858,9 +871,32 @@ public class PortalController : ControllerBase
         m.Id, m.Name, m.Strength, m.DoseDescription, m.Type, m.TimesOfDay, m.IsHighRisk, m.IsPsychotropic,
         m.IsChemicalRestraint, m.DrugSchedule, m.SupportLevel, m.PrnIndication);
 
-    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n, Guid? incidentId) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
-        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt, incidentId);
+
+    /// <summary>
+    /// Connection-map reverse link (Deliverable 2): for the given shift-note ids, the newest
+    /// active IncidentReport whose ShiftNoteId points back at each one — ONE query for the whole
+    /// batch (never per-row), same idiom as MedicationsController's administration-id lookup.
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> GetIncidentIdsByShiftNoteIdsAsync(IReadOnlyCollection<Guid> shiftNoteIds, CancellationToken ct)
+    {
+        if (shiftNoteIds.Count == 0) return new Dictionary<Guid, Guid>();
+        var rows = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId != null && shiftNoteIds.Contains(i.ShiftNoteId.Value))
+            .Select(i => new { NoteId = i.ShiftNoteId!.Value, i.Id, i.CreatedAt })
+            .ToListAsync(ct);
+        return rows
+            .GroupBy(r => r.NoteId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
+    }
+
+    /// <summary>Dictionary&lt;Guid, Guid&gt;.GetValueOrDefault returns Guid.Empty (not null) for a
+    /// missing key, which would wrongly stand in for "no incident" — this is the null-correct
+    /// lookup every incident-id-map read in this class uses instead.</summary>
+    private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
+        map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
     /// <summary>Same "fullName claim, fall back to the Name claim" idiom as ParticipantNotesController.GetCreatedByName.</summary>
     private string GetCallerName() =>

@@ -22,7 +22,10 @@ public record ShiftNoteDto(
     // NOTES-02: when the author dismissed the "file an incident report?" prompt for the CURRENT
     // FlaggedCategories value — see ShiftNote.FlagsAcknowledgedAt remarks. Null while unflagged or
     // not yet acknowledged.
-    DateTime? FlagsAcknowledgedAt);
+    DateTime? FlagsAcknowledgedAt,
+    // Connection-map reverse link (Deliverable 2): id of the newest active IncidentReport whose
+    // ShiftNoteId points back at this note, or null when none does.
+    Guid? IncidentId);
 
 public record CreateShiftNoteDto
 {
