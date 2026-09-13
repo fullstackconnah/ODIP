@@ -595,10 +595,9 @@ const flaggedShiftNotes = Object.values(shiftNotesByShiftId)
   }))
   .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
-// Shift completions (design spec §2, ShiftCompletionDto) — GET rostering/completions
-// (queue) and GET rostering/shifts/:id/completion (detail). No frontend review UI consumes
-// these yet (see the connection-map item 4 report); these are forward-compatible fixtures
-// only, matching the ShiftCompletionDto contract including the `incidents` field.
+// Shift completions (design spec §2, ShiftCompletionDto) — backs GET rostering/completions
+// (queue), GET rostering/shifts/:id/completion (detail), GET/POST portal/shifts/:id(/start|/finish)
+// and the rostering completion/approve/return/approve-batch routes below.
 const shiftCompletions = [
   {
     id: 'sc-0001', shiftId: 'shift-0001', actualStart: '2026-09-08T08:58:00Z', actualEnd: '2026-09-08T17:05:00Z',
@@ -624,6 +623,109 @@ const shiftCompletions = [
     ],
   },
 ]
+
+// Portal shift detail (design spec §2, PortalShiftDetailDto) — backs GET/POST
+// portal/shifts/:id(/start|/finish). Keyed by the same three shiftIds as shiftNotesByShiftId/
+// shiftCompletions/shiftSchedule above, one per completion-flow stage: shift-0001 already
+// Approved (Completed), shift-0002 submitted and awaiting review (PendingReview), shift-0003
+// never started (Published) — so the Start flow has something to act on. Stateless like every
+// other fixture in this file: POST start/finish return a plausible new object, they don't mutate
+// this base.
+const portalShiftBase = {
+  'shift-0001': {
+    id: 'shift-0001', participantId: shiftParticipant['shift-0001'].id, serviceDate: '2026-09-08',
+    startTime: shiftSchedule['shift-0001'].startTime, endTime: shiftSchedule['shift-0001'].endTime,
+    endsNextDay: shiftSchedule['shift-0001'].endsNextDay, durationHours: 8, ratio: 'OneToOne', nightType: 'None',
+    notes: null, status: 'Completed',
+  },
+  'shift-0002': {
+    id: 'shift-0002', participantId: shiftParticipant['shift-0002'].id, serviceDate: '2026-09-10',
+    startTime: shiftSchedule['shift-0002'].startTime, endTime: shiftSchedule['shift-0002'].endTime,
+    endsNextDay: shiftSchedule['shift-0002'].endsNextDay, durationHours: 12, ratio: 'OneToOne', nightType: 'ActiveNight',
+    notes: null, status: 'PendingReview',
+  },
+  'shift-0003': {
+    id: 'shift-0003', participantId: shiftParticipant['shift-0003'].id, serviceDate: '2026-09-13',
+    startTime: shiftSchedule['shift-0003'].startTime, endTime: shiftSchedule['shift-0003'].endTime,
+    endsNextDay: shiftSchedule['shift-0003'].endsNextDay, durationHours: 6, ratio: 'OneToOne', nightType: 'None',
+    notes: null, status: 'Published',
+  },
+}
+
+/** Maps a `participants` fixture row (+ its participantDetailExtras) onto the narrower
+ * PortalParticipantSummaryDto shape — reusing the one fixture rather than maintaining a second
+ * hand-written participant summary per shift. */
+function portalParticipantSummary(participantId) {
+  const p = participants.find((x) => x.id === participantId) || participants[0]
+  const extra = participantDetailExtras[p.id] || {}
+  return {
+    id: p.id, fullName: p.fullName,
+    isHighSupport: p.isHighSupport, isIntensiveSupport: p.isIntensiveSupport,
+    hasRestrictivePracticeFlag: p.hasRestrictivePracticeFlag, supportRatio: p.supportRatio,
+    overnightSupport: p.requiresOvernightSupport ? 'ActiveNight' : 'None',
+    mobilityAidWheelchair: p.wheelchairRequired, mobilityAidWalker: false, mobilitySupportOptions: [],
+    requiresHiLoBed: false, requiresHoist: false, requiresShowerChair: false, requiresCommode: false,
+    requiresStandingMachine: false,
+    mobilityNotes: extra.mobilityNotes ?? null, equipmentRequirements: extra.equipmentRequirements ?? null,
+    transportRequirements: extra.transportRequirements ?? null, medicalSummary: extra.medicalSummary ?? null,
+    behaviourRiskSummary: extra.behaviourRiskSummary ?? null,
+  }
+}
+
+/** Builds a PortalShiftDetailDto for one fixture shift, optionally overriding `status` and the
+ * active `completion` (used by the start/finish POST handlers below to hand back a plausible
+ * post-action shape without mutating portalShiftBase/shiftCompletions). */
+function buildPortalShiftDetail(shiftId, overrides = {}) {
+  const base = portalShiftBase[shiftId] || portalShiftBase['shift-0003']
+  const status = overrides.status ?? base.status
+  const completion = Object.prototype.hasOwnProperty.call(overrides, 'completion')
+    ? overrides.completion
+    : shiftCompletions.find((c) => c.shiftId === base.id) || null
+  return {
+    id: base.id, serviceDate: base.serviceDate, startTime: base.startTime, endTime: base.endTime,
+    endsNextDay: base.endsNextDay, durationHours: base.durationHours, ratio: base.ratio, nightType: base.nightType,
+    status, notes: base.notes,
+    participant: portalParticipantSummary(base.participantId),
+    routines: [], riskEntries: [], medications: [],
+    completion,
+    returnCount: completion ? completion.returnCount : 0,
+    lastReturnReason: null,
+  }
+}
+
+/** CompletionQueueItemDto rows (design spec §2/§4) for GET rostering/completions — derived from
+ * portalShiftBase + shiftCompletions rather than a third hand-maintained fixture. Every fixture
+ * shift with an active completion is included regardless of status (this mock's GET routes don't
+ * read the query string — see the leave/staff-availability routes above for the same caveat) —
+ * the real endpoint filters to one status at a time server-side.
+ */
+function rosteredEndDate(serviceDate, endsNextDay) {
+  if (!endsNextDay) return serviceDate
+  const d = new Date(`${serviceDate}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+const completionQueueItems = Object.values(portalShiftBase)
+  .map((base) => {
+    const completion = shiftCompletions.find((c) => c.shiftId === base.id)
+    if (!completion) return null
+    const participant = participants.find((p) => p.id === base.participantId)
+    return {
+      shiftId: base.id, completionId: completion.id,
+      participantName: participant ? participant.fullName : 'Unknown participant',
+      staffName: completion.submittedByName,
+      serviceDate: base.serviceDate,
+      rosteredStart: `${base.serviceDate}T${base.startTime}Z`,
+      rosteredEnd: `${rosteredEndDate(base.serviceDate, base.endsNextDay)}T${base.endTime}Z`,
+      actualStart: completion.actualStart, actualEnd: completion.actualEnd,
+      varianceMinutesStart: completion.varianceMinutesStart, varianceMinutesEnd: completion.varianceMinutesEnd,
+      status: base.status, timeZoneId: completion.timeZoneId,
+      isOutlierVariance: completion.isOutlierVariance, varianceReviewMinutes: completion.varianceReviewMinutes,
+      returnCount: completion.returnCount,
+    }
+  })
+  .filter(Boolean)
 
 // Bookings (BookingListDto)
 const bookings = [
@@ -1077,10 +1179,12 @@ const routes = [
   // is already withoutIncident-shaped enough for preview purposes).
   ['rostering/flagged-notes', () => flaggedShiftNotes],
 
-  // Shift completion detail (design spec §2, ShiftCompletionDto) — no frontend consumer yet
-  // (see connection-map item 4 report); fixture + route only, wired up ahead of the review UI
-  // that will use it. Deliberately no rostering/completions (queue) route here: that endpoint
-  // returns CompletionQueueItemDto, a different shape this fixture doesn't match.
+  // Shift completion (design spec §2/§4) — portal detail (PortalShiftDetailPage's Start/Finish
+  // card) and the rostering review queue/detail (CompletionReviewPage). Same "query string isn't
+  // read here" caveat as leave/staff-availability above: GetCompletions' status/from/to/page/
+  // pageSize aren't applied — paged() below just returns every fixture row as one full page.
+  ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
+  ['rostering/completions', () => paged(completionQueueItems)],
   ['rostering/shifts/:id/completion', (id) => shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0]],
 ]
 
@@ -1112,6 +1216,52 @@ const postRoutes = [
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
   ['portal/unavailability/:id/cancel', (id) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
+
+  // Shift completion (design spec §2/§3) — Start/Finish and the rostering Approve/Return/
+  // approve-batch actions. Stateless like every other POST here: each returns a plausible
+  // post-action shape without persisting it back into portalShiftBase/shiftCompletions, so a
+  // second GET for the same shift still reflects the original fixture, not this call's result.
+  ['portal/shifts/:id/start', (id, body) => {
+    const now = new Date().toISOString()
+    const completion = {
+      id: `sc-mock-${id}`, shiftId: id, actualStart: now, actualEnd: null,
+      timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: false,
+      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
+      startedAt: now, submittedAt: null,
+      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
+      varianceMinutesStart: 0, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15,
+      returnCount: 0, incidents: [],
+    }
+    return buildPortalShiftDetail(id, { status: 'InProgress', completion })
+  }],
+  ['portal/shifts/:id/finish', (id, body) => {
+    const now = new Date().toISOString()
+    const completion = {
+      id: `sc-mock-${id}`, shiftId: id, actualStart: body?.actualStart ?? now, actualEnd: now,
+      timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: !!body?.actualStart,
+      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
+      startedAt: now, submittedAt: now,
+      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
+      varianceMinutesStart: 3, varianceMinutesEnd: -2, isOutlierVariance: false, varianceReviewMinutes: 15,
+      returnCount: 0, incidents: [],
+    }
+    return buildPortalShiftDetail(id, { status: 'PendingReview', completion })
+  }],
+  ['rostering/shifts/:id/completion/approve', (id) => {
+    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
+  }],
+  ['rostering/shifts/:id/completion/return', (id, body) => {
+    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    return {
+      ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(),
+      reviewOutcome: 'Returned', returnReason: body?.reason ?? '', returnCount: c.returnCount + 1,
+    }
+  }],
+  ['rostering/completions/approve-batch', (body) => {
+    const ids = Array.isArray(body?.shiftIds) ? body.shiftIds : []
+    return ids.map((shiftId) => ({ shiftId, approved: true, code: null, message: null }))
+  }],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
