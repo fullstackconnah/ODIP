@@ -17,13 +17,14 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
       <li data-testid="can-approve-leave">{String(canApproveLeave)}</li>
       <li data-testid="can-complete-own-shifts">{String(canCompleteOwnShifts)}</li>
       <li data-testid="can-review-completions">{String(canReviewCompletions)}</li>
+      <li data-testid="can-manage-notifications">{String(canManageNotifications)}</li>
     </ul>
   )
 }
@@ -130,6 +131,27 @@ describe('usePermissions shift-completion capabilities', () => {
       setUserRole(role)
       const { unmount } = render(<CapabilityProbe />)
       expect(screen.getByTestId('can-review-completions')).toHaveTextContent('false')
+      unmount()
+    }
+  })
+})
+
+describe('usePermissions.canManageNotifications', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('is true only for Admin and SuperAdmin', () => {
+    for (const role of ['SuperAdmin', 'Admin'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-notifications')).toHaveTextContent('true')
+      unmount()
+    }
+    for (const role of ['Coordinator', 'SupportWorker', 'ReadOnly'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-notifications')).toHaveTextContent('false')
       unmount()
     }
   })

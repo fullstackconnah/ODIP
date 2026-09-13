@@ -51,6 +51,13 @@ vi.mock('@/api/hooks', () => ({
   useAdminTenantsSummary: () => ({ data: [] }),
   useCreateAdminUser: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateAdminUser: () => ({ mutate: vi.fn(), isPending: false }),
+  // NotificationPreferencesTab (mounted whenever the Notifications tab is selected) and
+  // AdminNotificationsTab (Failed Sends, canManageNotifications-gated).
+  useNotificationPreferences: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
+  useUpdateNotificationPreferences: () => ({ mutate: vi.fn(), isPending: false }),
+  useAdminNotifications: () => ({ data: [], isLoading: false, isError: false }),
+  useRetryNotification: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSendTestEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 // TenantFormPanel (also mounted unconditionally) imports its mutations from this sibling
@@ -65,7 +72,7 @@ vi.mock('@/lib/permissions', () => ({
 }))
 
 beforeEach(() => {
-  mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true })
+  mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
@@ -106,5 +113,35 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     await act(async () => { router.navigate('/elsewhere') })
 
     expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
+  })
+})
+
+describe('SettingsPage — Notifications tabs', () => {
+  it('shows the Notifications tab to every signed-in user, and hides Failed Sends without canManageNotifications', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPage()
+
+    expect(screen.getByRole('button', { name: /^notifications$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /failed sends/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the Failed Sends tab when canManageNotifications is true', async () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true })
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    const failedSendsTab = screen.getByRole('button', { name: /failed sends/i })
+    expect(failedSendsTab).toBeInTheDocument()
+
+    await user.click(failedSendsTab)
+    expect(screen.getByText(/notification outbox/i)).toBeInTheDocument()
+  })
+
+  it('renders the notification preference grid on the Notifications tab', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('button', { name: /^notifications$/i }))
+    expect(screen.getByText(/notification preferences/i)).toBeInTheDocument()
   })
 })

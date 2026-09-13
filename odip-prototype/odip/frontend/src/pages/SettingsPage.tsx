@@ -17,6 +17,8 @@ import TenantFormPanel from '@/pages/settings/TenantFormPanel'
 import UsersTab from '@/pages/settings/UsersTab'
 import UserFormPanel from '@/pages/settings/UserFormPanel'
 import TenantDetailView from '@/pages/settings/TenantDetailView'
+import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
+import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
@@ -102,13 +104,13 @@ function AppearanceSettingsTab() {
 }
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'appearance' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users'>('templates')
+  const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'appearance' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users' | 'notifications' | 'notifications-admin'>('templates')
   const { data: templates = [] } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
   const { data: activities = [] } = useActivities()
 
-  const { isSuperAdmin } = usePermissions()
+  const { isSuperAdmin, canManageNotifications } = usePermissions()
 
   const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
@@ -127,8 +129,10 @@ export default function SettingsPage() {
     { key: 'holidays' as const, label: 'Public Holidays', superAdminOnly: true },
     { key: 'tenants' as const, label: 'Tenants', superAdminOnly: true },
     { key: 'users' as const, label: 'Users', superAdminOnly: true },
+    { key: 'notifications' as const, label: 'Notifications' },
+    { key: 'notifications-admin' as const, label: 'Failed Sends', hidden: !canManageNotifications },
   ]
-  const tabs = allTabs.filter(t => !t.superAdminOnly || isSuperAdmin)
+  const tabs = allTabs.filter(t => (!t.superAdminOnly || isSuperAdmin) && !t.hidden)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -216,6 +220,8 @@ export default function SettingsPage() {
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
       {tab === 'holidays' && <PublicHolidaysTab />}
+      {tab === 'notifications' && <NotificationPreferencesTab />}
+      {tab === 'notifications-admin' && canManageNotifications && <AdminNotificationsTab />}
 
       {tab === 'tenants' && !tenantDetail && (
         <TenantsTab
