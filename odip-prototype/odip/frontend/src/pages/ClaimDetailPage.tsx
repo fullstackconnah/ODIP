@@ -210,7 +210,13 @@ export default function ClaimDetailPage() {
               sortable: true,
               render: (item: ClaimLineItemDto) => (
                 <div>
-                  <p className="font-medium text-[var(--color-foreground)]">{item.participantName}</p>
+                  {item.participantId ? (
+                    <Link to={`/participants/${item.participantId}`} className="font-medium text-[var(--color-primary)] hover:underline">
+                      {item.participantName}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-[var(--color-foreground)]">{item.participantName}</p>
+                  )}
                   <p className="text-xs text-[var(--color-muted-foreground)] font-mono">{item.ndisNumber}</p>
                   <StatusBadge status={item.planType} label={planTypeLabel(item.planType)} />
                 </div>

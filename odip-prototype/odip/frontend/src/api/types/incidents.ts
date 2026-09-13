@@ -62,6 +62,7 @@ export interface IncidentListDto {
   incidentDateTime: string
   location: string | null
   reportedByName: string | null
+  involvedParticipantId: string | null
   involvedParticipantName: string | null
   qscReportingStatus: QscReportingStatus
   isOverdue24h: boolean
@@ -70,7 +71,6 @@ export interface IncidentListDto {
 
 export interface IncidentDetailDto extends IncidentListDto {
   participantBookingId: string | null
-  involvedParticipantId: string | null
   involvedStaffId: string | null
   involvedStaffName: string | null
   reportedByStaffId: string

@@ -111,6 +111,7 @@ public class ClaimsController : ControllerBase
             LineItems = c.LineItems.Select(l => new ClaimLineItemDto
             {
                 Id = l.Id, TripClaimId = l.TripClaimId, ParticipantBookingId = l.ParticipantBookingId,
+                ParticipantId = l.ParticipantBooking.ParticipantId,
                 ParticipantName = l.ParticipantBooking.Participant?.FullName ?? string.Empty,
                 NdisNumber = l.ParticipantBooking.Participant?.NdisNumber ?? string.Empty,
                 PlanType = l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant!.PlanType,

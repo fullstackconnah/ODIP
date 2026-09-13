@@ -24,6 +24,7 @@ export interface ClaimLineItemDto {
   id: string
   tripClaimId: string
   participantBookingId: string
+  participantId: string | null
   participantName: string
   ndisNumber: string
   planType: PlanType

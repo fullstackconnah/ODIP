@@ -161,9 +161,19 @@ describe('IncidentsPage — cross-domain links', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
-  it('shows the involved participant name as plain text — IncidentListDto has no participant id to link to', () => {
+  it('links the participant cell to the participant detail page when involvedParticipantId is set', () => {
     mockUseIncidents.mockReturnValue({
-      data: [baseIncident({ involvedParticipantName: 'Priya Nair' })],
+      data: [baseIncident({ involvedParticipantId: 'p-9', involvedParticipantName: 'Priya Nair' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Priya Nair' })).toHaveAttribute('href', '/participants/p-9')
+  })
+
+  it('renders plain text (not a link) for the participant cell when involvedParticipantId is not set', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ involvedParticipantId: null, involvedParticipantName: 'Priya Nair' })],
       isLoading: false,
     })
     renderPage()
@@ -174,7 +184,7 @@ describe('IncidentsPage — cross-domain links', () => {
 
   it('shows an em dash when no participant is involved', () => {
     mockUseIncidents.mockReturnValue({
-      data: [baseIncident({ involvedParticipantName: null })],
+      data: [baseIncident({ involvedParticipantId: null, involvedParticipantName: null })],
       isLoading: false,
     })
     renderPage()

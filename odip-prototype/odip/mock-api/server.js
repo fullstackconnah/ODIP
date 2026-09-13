@@ -367,7 +367,7 @@ const incidents = [
     incidentType: 'Injury', severity: 'Low', status: 'Closed',
     title: 'Minor graze from beach walk slip',
     incidentDateTime: '2026-07-11T10:45:00Z', location: 'Main Beach boardwalk, Byron Bay',
-    reportedByName: "Jack O'Sullivan", involvedParticipantName: 'Liam Okafor',
+    reportedByName: "Jack O'Sullivan", involvedParticipantId: 'p-0001', involvedParticipantName: 'Liam Okafor',
     qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-07-11T11:30:00Z',
   },
   {
@@ -375,7 +375,7 @@ const incidents = [
     incidentType: 'MedicationError', severity: 'Medium', status: 'UnderReview',
     title: 'Missed evening medication dose',
     incidentDateTime: '2026-07-11T20:15:00Z', location: 'Accommodation — Byron Bay',
-    reportedByName: 'Mei Zhang', involvedParticipantName: 'Grace Palmer-Hughes',
+    reportedByName: 'Mei Zhang', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'ReportedWithin24h', isOverdue24h: false, createdAt: '2026-07-11T21:05:00Z',
   },
   {
@@ -383,7 +383,7 @@ const incidents = [
     incidentType: 'BehaviourOfConcern', severity: 'High', status: 'Submitted',
     title: 'Escalation during pre-trip meet and greet',
     incidentDateTime: '2026-07-29T14:00:00Z', location: 'Head office, Brisbane',
-    reportedByName: 'Callum Radford', involvedParticipantName: 'Grace Palmer-Hughes',
+    reportedByName: 'Callum Radford', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'Pending', isOverdue24h: true, createdAt: '2026-07-29T16:20:00Z',
   },
 ]

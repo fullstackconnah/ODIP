@@ -184,6 +184,7 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -223,6 +224,7 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -232,7 +234,6 @@ public class IncidentsController : ControllerBase
                 CreatedAt = i.CreatedAt,
                 // Detail fields
                 ParticipantBookingId = i.ParticipantBookingId,
-                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedStaffId = i.InvolvedUserId,
                 InvolvedStaffName = i.InvolvedUser != null
                     ? i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName : null,
@@ -411,6 +412,7 @@ public class IncidentsController : ControllerBase
             IncidentDateTime = incident.IncidentDateTime,
             Location = incident.Location,
             ReportedByName = incident.ReportedByUser != null ? incident.ReportedByUser.FirstName + " " + incident.ReportedByUser.LastName : null,
+            InvolvedParticipantId = incident.InvolvedParticipantId,
             InvolvedParticipantName = incident.InvolvedParticipant != null
                 ? incident.InvolvedParticipant.FirstName + " " + incident.InvolvedParticipant.LastName : null,
             QscReportingStatus = incident.QscReportingStatus,
@@ -571,6 +573,7 @@ public class IncidentsController : ControllerBase
             IncidentDateTime = i.IncidentDateTime,
             Location = i.Location,
             ReportedByName = i.ReportedByUser != null ? i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName : null,
+            InvolvedParticipantId = i.InvolvedParticipantId,
             InvolvedParticipantName = i.InvolvedParticipant != null
                 ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
             QscReportingStatus = i.QscReportingStatus,
@@ -620,6 +623,7 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -655,6 +659,7 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,

@@ -18,6 +18,7 @@ function baseIncident(overrides: Partial<IncidentListDto> = {}): IncidentListDto
     incidentDateTime: '2026-09-01T10:00:00Z',
     location: null,
     reportedByName: 'Alex Rivera',
+    involvedParticipantId: null,
     involvedParticipantName: null,
     qscReportingStatus: 'NotRequired',
     isOverdue24h: false,

@@ -89,10 +89,11 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
-      // IncidentListDto (what useIncidents returns) carries involvedParticipantName but not
-      // involvedParticipantId — that id only exists on IncidentDetailDto. Without it there's
-      // nothing to link to, so this column stays plain text here (see report: link skipped).
-      render: (i) => i.involvedParticipantName ?? '—',
+      render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
+        <Link to={`/participants/${i.involvedParticipantId}`} className="text-[var(--color-primary)] hover:underline">
+          {i.involvedParticipantName}
+        </Link>
+      ) : (i.involvedParticipantName ?? '—'),
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
