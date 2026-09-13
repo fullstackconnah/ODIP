@@ -10,7 +10,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { LEAVE_TYPES, LEAVE_TYPE_LABELS } from '@/api/types'
 import type { CreateLeaveRequestDto, LeaveType } from '@/api/types'
 
-type LeaveFormValues = {
+export type LeaveFormValues = {
   userId: string
   leaveType: LeaveType
   startDate: string
@@ -42,23 +42,32 @@ export type LeaveRequestFormModalProps = {
   submitting: boolean
   errorMessage?: string | null
   /** Coordinator "enter on behalf" mode — renders a required staff picker and adds userId to the
-   * submitted payload. Omit for the portal's self-service form. */
+   * submitted payload. Omit for the portal's self-service form. Ignored (staff picker always
+   * hidden) when `mode` is `'edit'` — userId is never editable. */
   staffOptions?: { value: string; label: string }[]
+  /** `'edit'` swaps the title/submit label and hides the staff picker; `onSubmit` still receives
+   * the same Create DTO shape — the caller maps it onto the Update DTO. Defaults to `'create'`. */
+  mode?: 'create' | 'edit'
+  /** Pre-fills the form in edit mode (userId is never read from this — the staff picker is
+   * hidden). Applied on every open so re-opening the modal for a different row re-seeds it. */
+  initialValues?: Partial<LeaveFormValues>
 }
 
 /**
  * Date-range leave request form (§2 CreateLeaveRequestDto). Reused unchanged by both
  * PortalLeavePage (self-service, no staffOptions) and LeaveApprovalsPage's "Enter on behalf"
- * (staffOptions supplied). The zod@4/@hookform/resolvers@3 mismatch means rendered validation
- * text can't be reliably asserted in tests — the schema still runs so a user gets inline errors;
- * tests assert submit payloads/disabled states instead.
+ * (staffOptions supplied) and "Edit" (mode="edit") flows. The zod@4/@hookform/resolvers@3
+ * mismatch means rendered validation text can't be reliably asserted in tests — the schema still
+ * runs so a user gets inline errors; tests assert submit payloads/disabled states instead.
  */
-export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions }: LeaveRequestFormModalProps) {
-  const requireStaff = !!staffOptions
+export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues }: LeaveRequestFormModalProps) {
+  const isEdit = mode === 'edit'
+  const requireStaff = !isEdit && !!staffOptions
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
+  const resetValues = useMemo<LeaveFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<LeaveFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: resetValues,
   })
   // Wired the same way VehicleCreatePage.tsx (an existing RHF+zod create form) does — see this
   // task's Interfaces section for the quoted precedent (VehicleCreatePage.tsx:49,101,106-107).
@@ -66,10 +75,13 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
 
   // Resets on every open/close transition, not just open — otherwise a successful submit or a
   // Cancel leaves isDirty true on the still-mounted form, arming a spurious unsaved-changes
-  // prompt on the next navigation (see useUnsavedChangesWarning.tsx:16-24).
+  // prompt on the next navigation (see useUnsavedChangesWarning.tsx:16-24). Also resets when
+  // resetValues changes identity (edit mode re-opened against a different row) — a no-op for the
+  // create-mode callers above since initialValues is never passed there, so resetValues stays
+  // referentially stable across renders.
   useEffect(() => {
-    reset(DEFAULT_VALUES)
-  }, [open, reset])
+    reset(resetValues)
+  }, [open, reset, resetValues])
 
   const submit = handleSubmit(async values => {
     await onSubmit({
@@ -87,7 +99,7 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
       <Modal
         open={open}
         onClose={onClose}
-        title={requireStaff ? 'Enter leave on behalf of staff' : 'Request leave'}
+        title={isEdit ? 'Edit leave request' : requireStaff ? 'Enter leave on behalf of staff' : 'Request leave'}
         closeOnBackdrop={false}
         footer={
           <>
@@ -100,7 +112,7 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
               disabled={submitting}
               className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
             >
-              {submitting ? 'Saving…' : requireStaff ? 'Save' : 'Submit request'}
+              {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
             </button>
           </>
         }

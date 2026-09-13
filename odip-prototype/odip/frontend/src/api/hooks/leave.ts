@@ -1,14 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiGetWithDefault, apiPost } from '../client'
+import { apiGet, apiGetWithDefault, apiPost, apiPut } from '../client'
 import type {
   MyLeaveResponseDto,
   LeaveRequestDto,
   CreateLeaveRequestDto,
+  UpdateLeaveRequestDto,
   LeaveDecisionDto,
   ApproveLeaveResultDto,
+  LeaveApprovalResultDto,
   RecurringUnavailabilityDto,
   CreateRecurringUnavailabilityDto,
+  UpdateRecurringUnavailabilityDto,
   ApproveRecurringUnavailabilityResultDto,
+  RecurringUnavailabilityApprovalResultDto,
   LeaveStatus,
 } from '../types'
 
@@ -138,6 +142,30 @@ export function useApproveLeave() {
   })
 }
 
+/**
+ * PUT /leave/{id} — coordinator edit of a Pending/Approved leave request. Invalidates leave,
+ * unavailability and legacy staff-availability list caches (a coordinator on this one screen
+ * shouldn't need a manual refresh to see any of the three reflect the edit) plus both schedule
+ * query-key spellings ('schedule-overview' is what schedule.ts uses today; 'schedule' covers
+ * whatever key the concurrently-developed schedule page settles on) and roster-board, mirroring
+ * useApproveLeave/useDeclineLeave.
+ */
+export function useUpdateLeave() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateLeaveRequestDto }) =>
+      apiPut<LeaveApprovalResultDto>(`/leave/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
+      qc.invalidateQueries({ queryKey: ['staff-availability'] })
+      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: ['schedule'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
+  })
+}
+
 export function useDeclineLeave() {
   const qc = useQueryClient()
   return useMutation({
@@ -180,6 +208,24 @@ export function useApproveUnavailability() {
     mutationFn: (id: string) => apiPost<ApproveRecurringUnavailabilityResultDto>(`/leave/unavailability/${id}/approve`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
+  })
+}
+
+/** PUT /leave/unavailability/{id} — coordinator edit of a Pending/Approved recurring rule. See
+ * useUpdateLeave's doc comment for the invalidation rationale — identical here. */
+export function useUpdateUnavailability() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateRecurringUnavailabilityDto }) =>
+      apiPut<RecurringUnavailabilityApprovalResultDto>(`/leave/unavailability/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      qc.invalidateQueries({ queryKey: ['staff-availability'] })
+      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: ['schedule'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })

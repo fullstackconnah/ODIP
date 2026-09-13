@@ -76,6 +76,15 @@ export interface CreateLeaveRequestDto {
   userId?: string | null
 }
 
+/** PUT /leave/{id} body. userId is never editable — a leave request stays attached to whoever
+ * it was raised for. Editable only while Pending/Approved server-side (409 otherwise). */
+export interface UpdateLeaveRequestDto {
+  leaveType: LeaveType
+  startDate: string
+  endDate: string
+  reason?: string | null
+}
+
 export interface LeaveDecisionDto {
   decisionNote: string
 }
@@ -85,6 +94,10 @@ export interface ApproveLeaveResultDto {
   leave: LeaveRequestDto
   overlaps: RosterFindingDto[]
 }
+
+/** PUT /leave/{id} response — same { leave, overlaps } shape as approve; overlaps is empty when
+ * the edited request is still Pending. */
+export type LeaveApprovalResultDto = ApproveLeaveResultDto
 
 // ── Recurring weekly unavailability ───────────────────────
 
@@ -116,10 +129,24 @@ export interface CreateRecurringUnavailabilityDto {
   userId?: string | null
 }
 
+/** PUT /leave/unavailability/{id} body. userId is never editable. Editable only while
+ * Pending/Approved server-side (409 otherwise). */
+export interface UpdateRecurringUnavailabilityDto {
+  dayOfWeek: string
+  startTime: string
+  endTime: string
+  effectiveFrom: string
+  effectiveTo?: string | null
+  notes?: string | null
+}
+
 export interface ApproveRecurringUnavailabilityResultDto {
   unavailability: RecurringUnavailabilityDto
   overlaps: RosterFindingDto[]
 }
+
+/** PUT /leave/unavailability/{id} response — same shape as approve. */
+export type RecurringUnavailabilityApprovalResultDto = ApproveRecurringUnavailabilityResultDto
 
 // ── Portal combined response ──────────────────────────────
 
