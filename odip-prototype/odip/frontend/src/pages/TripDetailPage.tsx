@@ -1,18 +1,18 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
-import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useParticipants } from '@/api/hooks'
+import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { formatDateAu, getStatusColor } from '@/lib/utils'
-import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText } from 'lucide-react'
+import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
-import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, EditTripModal } from './trip-detail'
+import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
 
-type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'history'
+type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
 
-const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'history']
+const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
 
 export default function TripDetailPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canAccessPage } = usePermissions()
   const { id } = useParams()
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
@@ -44,9 +44,11 @@ export default function TripDetailPage() {
   // nothing on this page currently uses it.
   const { data: schedule = [] } = useTripSchedule(id)
   const { data: claims = [] } = useTripClaims(id)
+  const { data: incidents = [] } = useTripIncidents(id)
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
+  const canAccessIncidents = canAccessPage('incidents')
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
   if (!id) return null
@@ -62,6 +64,7 @@ export default function TripDetailPage() {
     { key: 'tasks', label: 'Tasks', icon: ListChecks, count: tasks.length },
     { key: 'activities', label: 'Activities', icon: Calendar, count: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
     { key: 'claims', label: 'Claims', icon: FileText, count: claims.length },
+    ...(canAccessIncidents ? [{ key: 'incidents' as Tab, label: 'Incidents', icon: ShieldAlert, count: incidents.length }] : []),
     ...(isAdmin ? [{ key: 'history' as Tab, label: 'History', icon: ClockIcon }] : []),
   ]
 
@@ -258,6 +261,10 @@ export default function TripDetailPage() {
 
         {activeTab === 'claims' && trip && (
           <ClaimsTab tripId={String(trip.id)} claims={claims} trip={trip} canWrite={canWrite} />
+        )}
+
+        {activeTab === 'incidents' && canAccessIncidents && (
+          <IncidentsTab incidents={incidents} />
         )}
 
         {activeTab === 'history' && isAdmin && trip && (
