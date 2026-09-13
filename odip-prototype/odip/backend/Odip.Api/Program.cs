@@ -172,6 +172,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffUnavailabilityQuery, Odip.Infrastructure.Rostering.StaffUnavailabilityQuery>();
+builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItemsQuery, Odip.Infrastructure.Rostering.StaffAvailabilityItemsQuery>();
 
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();

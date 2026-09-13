@@ -75,7 +75,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -100,7 +100,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -122,7 +122,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -145,7 +145,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -160,7 +160,7 @@ public class ScheduleControllerTests
         var staff = SeedStaff(db);
         var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -193,7 +193,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -227,7 +227,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -278,7 +278,7 @@ public class ScheduleControllerTests
         db.StaffAvailabilities.Add(legacy);
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -335,7 +335,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -358,7 +358,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -383,7 +383,7 @@ public class ScheduleControllerTests
         db.RecurringUnavailabilities.Add(rule);
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
