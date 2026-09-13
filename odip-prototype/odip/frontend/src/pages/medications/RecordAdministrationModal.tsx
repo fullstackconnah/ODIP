@@ -10,8 +10,7 @@ import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api
 import { usePermissions } from '@/lib/permissions'
 import { getClientTimeZone, extractErrorMessage } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
-import { isIncidentTriggerOutcome } from '@/lib/incidentPrefill'
-import type { MarIncidentPrefillState } from '@/lib/incidentPrefill'
+import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
@@ -168,23 +167,7 @@ export function RecordAdministrationModal({
    * MAR flow already knows. Nothing is persisted until the coordinator submits that form. */
   function goToIncident() {
     if (!savedTriggerAdministration) return
-    const prefill: MarIncidentPrefillState = {
-      source: 'mar-administration',
-      outcome: savedTriggerAdministration.status,
-      participantId: savedTriggerAdministration.participantId,
-      participantName: savedTriggerAdministration.participantName,
-      medicationName: savedTriggerAdministration.medicationName,
-      strength,
-      doseDescription: savedTriggerAdministration.doseDescription,
-      scheduledAt: savedTriggerAdministration.scheduledAt,
-      administeredAt: savedTriggerAdministration.administeredAt,
-      administeredAtTimeZone: savedTriggerAdministration.administeredAtTimeZone,
-      recordedByName: savedTriggerAdministration.recordedByName,
-      recordedByUserId: savedTriggerAdministration.recordedByUserId,
-      reason: savedTriggerAdministration.reason,
-      notes: savedTriggerAdministration.status === 'WrongMedication' ? savedTriggerAdministration.notes : null,
-      tripInstanceId: savedTriggerAdministration.tripInstanceId,
-    }
+    const prefill = buildMarIncidentPrefill(savedTriggerAdministration, { strength })
     reset()
     onClose()
     navigate('/incidents/new', { state: prefill })

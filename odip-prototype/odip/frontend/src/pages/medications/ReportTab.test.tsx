@@ -41,6 +41,7 @@ function administration(overrides: Record<string, unknown> = {}) {
     limitBreachAcknowledged: false,
     notes: null,
     createdAt: '2026-08-20T08:00:00Z',
+    incidentId: null,
     ...overrides,
   }
 }

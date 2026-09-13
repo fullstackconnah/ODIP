@@ -247,6 +247,10 @@ export interface AdministrationDto {
   limitBreachAcknowledged: boolean
   notes: string | null
   createdAt: string
+  /** Connection map: the incident this administration was filed into, if any (set once the
+   * coordinator/support worker submits the drop-into-draft incident form — see
+   * lib/incidentPrefill.ts's buildMarIncidentPrefill). Null until then. */
+  incidentId: string | null
 }
 
 export interface CreateAdministrationDto {
@@ -302,6 +306,11 @@ export interface MarEntryDto {
   supportLevel: MedicationSupportLevel
   isOverdue: boolean
   administration: AdministrationDto | null
+  /** Connection map: mirrors administration?.incidentId when administration is present, null
+   * otherwise (no administration means no medicationAdministrationId for an incident to
+   * reference). MarTab reads administration.incidentId directly rather than this field, but the
+   * backend sends both — see AdministrationDto.incidentId and MarEntryDto.IncidentId. */
+  incidentId: string | null
 }
 
 export interface MarPrnDto {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
 import { Card } from '@/components/Card'
@@ -9,7 +9,8 @@ import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { MedicationBadges, ComplianceFlagChips } from '../medications'
 import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
-import type { MedicationListDto } from '@/api/types/medications'
+import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
+import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 
 const MED_STATUS_COLOR_MAP: Record<string, string> = {
   active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
@@ -31,6 +32,33 @@ function isoDaysAgo(days: number): string {
 }
 
 const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
+
+/** Connection map: same helper as MarTab's — link to an already-filed incident, or an action to
+ * file one now, for a Refused/Withheld/Missed/WrongMedication administration-history row. */
+function IncidentLinkOrAction({ administration, canFile }: { administration: AdministrationDto; canFile: boolean }) {
+  const navigate = useNavigate()
+  if (!isIncidentTriggerOutcome(administration.status)) return null
+  if (administration.incidentId) {
+    return (
+      <Link
+        to={`/incidents/${administration.incidentId}`}
+        className="text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded whitespace-nowrap"
+      >
+        Incident filed
+      </Link>
+    )
+  }
+  if (!canFile) return null
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration) })}
+      className="text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded whitespace-nowrap"
+    >
+      File incident
+    </button>
+  )
+}
 
 function MedicationCard({ medication }: { medication: MedicationListDto }) {
   return (
@@ -65,7 +93,7 @@ function MedicationCard({ medication }: { medication: MedicationListDto }) {
 }
 
 export default function MedicationsTab({ participantId }: { participantId: string | undefined }) {
-  const { canManageMedications } = usePermissions()
+  const { canManageMedications, canCreateIncidents } = usePermissions()
   const [showInactive, setShowInactive] = useState(false)
   const { data: medications = [], isLoading } = useParticipantMedications(participantId, true)
   const { data: administrations = [] } = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
@@ -154,7 +182,10 @@ export default function MedicationsTab({ participantId }: { participantId: strin
                     {a.recordedByName ? ` · ${a.recordedByName}` : ''}
                   </p>
                 </div>
-                <StatusBadge status={a.status} colorMap={ADMIN_STATUS_COLOR_MAP} />
+                <div className="shrink-0 flex flex-col items-end gap-1">
+                  <StatusBadge status={a.status} colorMap={ADMIN_STATUS_COLOR_MAP} />
+                  <IncidentLinkOrAction administration={a} canFile={canCreateIncidents} />
+                </div>
               </div>
             ))}
           </div>
