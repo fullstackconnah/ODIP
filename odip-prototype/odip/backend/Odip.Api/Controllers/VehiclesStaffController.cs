@@ -624,7 +624,13 @@ public class StaffAvailabilityController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAll(
         [FromQuery] Guid? userId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
-        var query = _db.StaffAvailabilities.AsQueryable();
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        var query = _db.StaffAvailabilities.Where(a => _db.Users.Any(u => u.Id == a.UserId)).AsQueryable();
         if (userId.HasValue) query = query.Where(a => a.UserId == userId.Value);
         if (from.HasValue) query = query.Where(a => a.EndDateTime >= from.Value.ToDateTime(TimeOnly.MinValue));
         if (to.HasValue) query = query.Where(a => a.StartDateTime <= to.Value.ToDateTime(TimeOnly.MaxValue));

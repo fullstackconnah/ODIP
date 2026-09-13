@@ -92,6 +92,77 @@ public class StaffAvailabilityControllerTests
         Assert.DoesNotContain(body.Data!, r => r.Id == afterWindow.Id);
     }
 
+    /// <summary>
+    /// StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter), so
+    /// GetAll must scope rows to the caller's tenant itself by joining through the filtered Users
+    /// set. Every other test in this file runs with IsSuperAdmin = true, which bypasses the tenant
+    /// filter entirely and would not catch a cross-tenant leak. This test scopes the db as a
+    /// genuine non-SuperAdmin tenant A caller and proves a Tenant B user's availability row is
+    /// invisible when no userId filter is given — the same fixture pattern LeaveControllerTests.cs
+    /// uses for ApproveLeave_RequestBelongsToAnotherTenant_ReturnsNotFound.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_NoUserIdFilter_ExcludesOtherTenantsRows()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantAId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+
+        var tenantAUser = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Ann", LastName = "Alpha",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, IsActive = true,
+        };
+        var tenantBUser = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantBId, FirstName = "Bob", LastName = "Bravo",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, IsActive = true,
+        };
+        db.Users.AddRange(tenantAUser, tenantBUser);
+        db.SaveChanges();
+
+        var ownRow = SeedAvailability(db, tenantAUser.Id, new DateTime(2026, 9, 1), new DateTime(2026, 9, 2));
+        SeedAvailability(db, tenantBUser.Id, new DateTime(2026, 9, 1), new DateTime(2026, 9, 2));
+
+        var controller = new StaffAvailabilityController(db);
+        var result = await controller.GetAll(null, null, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<StaffAvailabilityDto>>>(ok.Value);
+        var row = Assert.Single(body.Data!);
+        Assert.Equal(ownRow.Id, row.Id);
+    }
+
+    /// <summary>
+    /// Companion to GetAll_NoUserIdFilter_ExcludesOtherTenantsRows: a SuperAdmin caller (the
+    /// CreateDb() fixture used throughout this file) bypasses the tenant filter, so both tenants'
+    /// rows come back when no userId filter is given.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_NoUserIdFilter_SuperAdminSeesAllTenantsRows()
+    {
+        using var db = CreateDb();
+        var user1 = SeedUser(db);
+        var user2 = SeedUser(db);
+        SeedAvailability(db, user1.Id, new DateTime(2026, 9, 1), new DateTime(2026, 9, 2));
+        SeedAvailability(db, user2.Id, new DateTime(2026, 9, 1), new DateTime(2026, 9, 2));
+
+        var controller = new StaffAvailabilityController(db);
+        var result = await controller.GetAll(null, null, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<StaffAvailabilityDto>>>(ok.Value);
+        Assert.Equal(2, body.Data!.Count);
+    }
+
     [Fact]
     public async Task GetAll_OrdersByStartDateTimeDescending()
     {
