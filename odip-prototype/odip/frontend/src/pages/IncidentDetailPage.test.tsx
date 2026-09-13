@@ -118,9 +118,7 @@ describe('IncidentDetailPage — Context panel', () => {
       data: baseIncident({
         shiftNoteContext: {
           shiftNoteId: 'note-1', excerpt: 'She had a fall near the bathroom.',
-          // Wire format: comma-space-joined [Flags] enum names, not a JSON array — see
-          // shiftNoteKeywords.ts's parseFlaggedCategories doc.
-          flaggedCategories: 'Falls, Injury', createdAt: '2026-07-11T18:00:00Z',
+          flaggedCategories: ['Falls', 'Injury'], createdAt: '2026-07-11T18:00:00Z',
         },
       }),
       isLoading: false,
@@ -141,7 +139,7 @@ describe('IncidentDetailPage — Context panel', () => {
           administeredAt: '2026-07-11T20:15:00Z', recordedByName: 'Tom Beattie',
         },
         shiftNoteContext: {
-          shiftNoteId: 'note-1', excerpt: 'Note text.', flaggedCategories: 'Medication', createdAt: '2026-07-11T18:00:00Z',
+          shiftNoteId: 'note-1', excerpt: 'Note text.', flaggedCategories: ['Medication'], createdAt: '2026-07-11T18:00:00Z',
         },
       }),
       isLoading: false,

@@ -1472,7 +1472,7 @@ public class IncidentsControllerTests
         Assert.Equal(shiftNote.Id, data.ShiftNoteContext!.ShiftNoteId);
         Assert.Equal(200, data.ShiftNoteContext.Excerpt.Length);
         Assert.Equal(new string('x', 200), data.ShiftNoteContext.Excerpt);
-        Assert.Equal(ShiftNoteFlagCategory.Falls, data.ShiftNoteContext.FlaggedCategories);
+        Assert.Equal(new[] { "Falls" }, data.ShiftNoteContext.FlaggedCategories);
     }
 
     [Fact]

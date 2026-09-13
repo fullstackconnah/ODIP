@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
-import { SHIFT_NOTE_FLAG_LABELS, parseFlaggedCategories } from '@/lib/shiftNoteKeywords'
+import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 
 type IncidentsTab = 'incidents' | 'flagged-notes'
@@ -39,7 +39,7 @@ function buildFlaggedNotePrefill(row: FlaggedShiftNoteDto, reportedByUserId: str
     source: 'shift-note',
     shiftNoteId: row.shiftNoteId,
     shiftId: row.shiftId,
-    categories: parseFlaggedCategories(row.flaggedCategories),
+    categories: row.flaggedCategories,
     participantId: row.participantId,
     participantName: row.participantName,
     noteBody: row.excerpt,
@@ -73,7 +73,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       header: 'Flags',
       render: row => (
         <div className="flex flex-wrap gap-1">
-          {parseFlaggedCategories(row.flaggedCategories).map(category => (
+          {row.flaggedCategories.map(category => (
             <span
               key={category}
               className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"

@@ -828,7 +828,7 @@ public class RosteringControllerTests
         var body = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         var item = Assert.Single(body.Data!);
         Assert.Equal(flagged.Id, item.ShiftNoteId);
-        Assert.Equal(ShiftNoteFlagCategory.Falls, item.FlaggedCategories);
+        Assert.Equal(new[] { "Falls" }, item.FlaggedCategories);
     }
 
     [Fact]

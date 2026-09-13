@@ -5,7 +5,7 @@ import { Card } from '@/components/Card'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
-import { SHIFT_NOTE_FLAG_LABELS, parseFlaggedCategories, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
 
 /**
@@ -31,7 +31,7 @@ export default function IncidentDetailPage() {
   if (!incident) return <div className="p-8 text-[var(--color-muted-foreground)]">Incident not found</div>
 
   const hasContext = !!(incident.medicationContext || incident.shiftContext || incident.shiftNoteContext)
-  const shiftNoteFlags = incident.shiftNoteContext ? parseFlaggedCategories(incident.shiftNoteContext.flaggedCategories) : []
+  const shiftNoteFlags = incident.shiftNoteContext ? incident.shiftNoteContext.flaggedCategories : []
 
   return (
     <div className="space-y-6 animate-fade-in">

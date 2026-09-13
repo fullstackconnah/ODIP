@@ -1,5 +1,6 @@
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
+import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 // ── Roster Finding ───────────────────────────────────────
 export interface RosterFindingDto {
@@ -69,13 +70,9 @@ export interface FlaggedShiftNoteDto {
   participantName: string
   staffId: string | null
   staffName: string | null
-  /** Wire format: comma-space-joined ShiftNoteFlagCategory [Flags] enum names (e.g.
-   * "Falls, Medication"), NOT a JSON array — RosteringController.GetFlaggedShiftNotes assigns
-   * the raw enum straight onto FlaggedShiftNoteDto.FlaggedCategories (same pattern as
-   * IncidentDetailDto.ShiftNoteContext.FlaggedCategories; contrast with ShiftNoteDto's own
-   * FlaggedCategories, which IS a real string[] via ToCategoryNames). Parse with
-   * shiftNoteKeywords.ts's parseFlaggedCategories before rendering. */
-  flaggedCategories: string
+  /** Same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto's own
+   * flaggedCategories — a real string[], not the raw [Flags] enum. */
+  flaggedCategories: ShiftNoteFlagCategory[]
   excerpt: string
   createdAt: string
   incidentId: string | null

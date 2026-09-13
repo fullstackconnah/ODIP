@@ -1,5 +1,6 @@
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType, WitnessStatus, MedicationAdministrationStatus } from './enums'
 import type { RestrictivePracticeType } from './restrictive-practices'
+import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 /** IN-5: one persisted injury row, as returned by GET /incidents/{id}. */
 export interface IncidentInjuryDto {
@@ -147,19 +148,13 @@ export interface IncidentDetailDto extends IncidentListDto {
     staffName: string | null
   } | null
   /** Connection map: resolved shift-note context for the Context panel — present only when
-   * shiftNoteId is set. Backend field: IncidentDetailDto.ShiftNoteContext.
-   *
-   * `flaggedCategories` is NOT an array on the wire: IncidentsController assigns the raw
-   * ShiftNoteFlagCategory [Flags] enum value straight onto IncidentShiftNoteContextDto (unlike
-   * ShiftNoteDto/FlaggedShiftNoteDto, which convert via ShiftNoteKeywordVocabulary.ToCategoryNames
-   * into a real string[]). The global JsonStringEnumConverter serialises a combined flags value
-   * as a comma-space-joined list of member names (e.g. "Falls, Medication") or "None" for zero —
-   * same wire shape as ServiceStreams/HidpaSupportCategories elsewhere in this codebase. Parse
-   * with shiftNoteKeywords.ts's parseFlaggedCategories before rendering as chips. */
+   * shiftNoteId is set. Backend field: IncidentDetailDto.ShiftNoteContext. `flaggedCategories`
+   * is a real string[] — same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as
+   * ShiftNoteDto/FlaggedShiftNoteDto, not the raw [Flags] enum. */
   shiftNoteContext: {
     shiftNoteId: string
     excerpt: string
-    flaggedCategories: string
+    flaggedCategories: ShiftNoteFlagCategory[]
     createdAt: string
   } | null
 }

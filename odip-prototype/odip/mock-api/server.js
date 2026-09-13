@@ -582,11 +582,10 @@ const flaggedShiftNotes = Object.values(shiftNotesByShiftId)
     participantName: shiftParticipant[n.shiftId].name,
     staffId: n.authorUserId,
     staffName: n.authorName,
-    // Wire shape: FlaggedShiftNoteDto.FlaggedCategories is the raw [Flags] enum (comma-space
-    // joined names, e.g. "Falls, Medication"), NOT a JSON array — RosteringController assigns it
-    // straight from ShiftNote.FlaggedCategories with no ToCategoryNames conversion. shiftNotesByShiftId's
-    // own flaggedCategories IS a real array (that's ShiftNoteDto's own, different, contract) — join it here.
-    flaggedCategories: n.flaggedCategories.join(', '),
+    // Wire shape: FlaggedShiftNoteDto.FlaggedCategories is a real string[] — same
+    // ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto's own
+    // flaggedCategories, not the raw [Flags] enum.
+    flaggedCategories: n.flaggedCategories,
     excerpt: n.body,
     createdAt: n.createdAt,
     incidentId: n.incidentId,

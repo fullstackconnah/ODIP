@@ -512,7 +512,9 @@ public class RosteringController : ControllerBase
             ParticipantName = n.Shift.Participant != null ? n.Shift.Participant.FullName : string.Empty,
             StaffId = n.Shift.UserId,
             StaffName = n.Shift.User != null ? n.Shift.User.FullName : null,
-            FlaggedCategories = n.FlaggedCategories,
+            // Same ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto's own
+            // FlaggedCategories, not the raw [Flags] enum.
+            FlaggedCategories = ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories),
             Excerpt = n.Body.Length > 200 ? n.Body.Substring(0, 200) : n.Body,
             CreatedAt = n.CreatedAt,
             IncidentId = LookupIncidentId(incidentIds, n.Id),

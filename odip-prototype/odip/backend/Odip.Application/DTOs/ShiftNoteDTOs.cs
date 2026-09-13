@@ -60,7 +60,10 @@ public record FlaggedShiftNoteDto
     public string ParticipantName { get; init; } = string.Empty;
     public Guid? StaffId { get; init; }
     public string? StaffName { get; init; }
-    public ShiftNoteFlagCategory FlaggedCategories { get; init; }
+    // NOTES-02/connection-map: category names (e.g. "Falls", "Medication") — same
+    // ShiftNoteKeywordVocabulary.ToCategoryNames-produced shape as ShiftNoteDto.FlaggedCategories,
+    // not the raw [Flags] enum. Empty when nothing matched.
+    public IReadOnlyList<string> FlaggedCategories { get; init; } = Array.Empty<string>();
     /// <summary>First 200 characters of the note's Body.</summary>
     public string Excerpt { get; init; } = string.Empty;
     public DateTime CreatedAt { get; init; }

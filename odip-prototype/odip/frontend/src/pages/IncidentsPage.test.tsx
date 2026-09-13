@@ -28,7 +28,7 @@ vi.mock('react-router-dom', async () => {
 
 function baseFlaggedNote(overrides: Partial<{
   shiftNoteId: string; shiftId: string; shiftDate: string; participantId: string; participantName: string
-  staffId: string | null; staffName: string | null; flaggedCategories: string; excerpt: string
+  staffId: string | null; staffName: string | null; flaggedCategories: string[]; excerpt: string
   createdAt: string; incidentId: string | null; startTime: string; endTime: string; endsNextDay: boolean
 }> = {}) {
   return {
@@ -39,7 +39,7 @@ function baseFlaggedNote(overrides: Partial<{
     participantName: 'Sophie Brown',
     staffId: 's-1',
     staffName: 'Ben Turner',
-    flaggedCategories: 'Falls',
+    flaggedCategories: ['Falls'],
     excerpt: 'She had a fall near the bathroom.',
     createdAt: '2026-09-10T09:30:00Z',
     incidentId: null,
@@ -262,7 +262,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
   it('renders a row per flagged note on the Flagged notes tab, with participant/staff/flags/excerpt', async () => {
     const user = userEvent.setup()
     mockUseFlaggedShiftNotes.mockReturnValue({
-      data: [baseFlaggedNote({ flaggedCategories: 'Falls, Injury' })],
+      data: [baseFlaggedNote({ flaggedCategories: ['Falls', 'Injury'] })],
       isLoading: false,
     })
     renderPage()
@@ -292,7 +292,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
       data: [baseFlaggedNote({
         shiftNoteId: 'note-9', shiftId: 'shift-9', shiftDate: '2026-09-10',
         participantId: 'p-9', participantName: 'Sophie Brown',
-        flaggedCategories: 'Falls', excerpt: 'She had a fall near the bathroom.',
+        flaggedCategories: ['Falls'], excerpt: 'She had a fall near the bathroom.',
         startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
       })],
       isLoading: false,

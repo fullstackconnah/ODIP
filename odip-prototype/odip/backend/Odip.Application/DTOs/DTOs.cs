@@ -2088,7 +2088,9 @@ public record IncidentShiftNoteContextDto
 {
     public Guid ShiftNoteId { get; init; }
     public string Excerpt { get; init; } = string.Empty;
-    public ShiftNoteFlagCategory FlaggedCategories { get; init; }
+    // NOTES-02/connection-map: category names, same ShiftNoteKeywordVocabulary.ToCategoryNames-
+    // produced shape as ShiftNoteDto.FlaggedCategories — not the raw [Flags] enum.
+    public IReadOnlyList<string> FlaggedCategories { get; init; } = Array.Empty<string>();
     public DateTime CreatedAt { get; init; }
 }
 

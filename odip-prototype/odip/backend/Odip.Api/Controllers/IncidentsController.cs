@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -348,7 +349,10 @@ public class IncidentsController : ControllerBase
                 {
                     ShiftNoteId = i.ShiftNote.Id,
                     Excerpt = i.ShiftNote.Body.Length > 200 ? i.ShiftNote.Body.Substring(0, 200) : i.ShiftNote.Body,
-                    FlaggedCategories = i.ShiftNote.FlaggedCategories,
+                    // Top-level projection: the enum value is fetched from the DB, then this
+                    // static helper runs client-side — same "one wire shape" as ShiftNoteDto's
+                    // own FlaggedCategories (ShiftNoteKeywordVocabulary.ToCategoryNames).
+                    FlaggedCategories = ShiftNoteKeywordVocabulary.ToCategoryNames(i.ShiftNote.FlaggedCategories),
                     CreatedAt = i.ShiftNote.CreatedAt,
                 } : null
             }).FirstOrDefaultAsync(ct);

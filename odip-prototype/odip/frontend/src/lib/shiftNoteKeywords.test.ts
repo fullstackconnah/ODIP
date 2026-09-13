@@ -4,7 +4,6 @@ import {
   SHIFT_NOTE_FLAG_LABELS,
   formatFlaggedCategoryList,
   incidentTypeForFlaggedCategories,
-  parseFlaggedCategories,
 } from './shiftNoteKeywords'
 
 // NOTES-02 — partition-completeness style coverage for this file's own internal consistency
@@ -41,33 +40,6 @@ describe('formatFlaggedCategoryList', () => {
 
   it('joins three-plus labels with commas and a trailing "and"', () => {
     expect(formatFlaggedCategoryList(['Falls', 'Medication', 'Injury'])).toBe('falls, medication and injury')
-  })
-})
-
-// Connection map: IncidentDetailDto.ShiftNoteContext.FlaggedCategories wire shape — a raw
-// [Flags] enum serialised by the global JsonStringEnumConverter, NOT a JSON array (contrast
-// with ShiftNoteDto/FlaggedShiftNoteDto, which are real string[] via ToCategoryNames).
-describe('parseFlaggedCategories', () => {
-  it('returns an empty array for "None"', () => {
-    expect(parseFlaggedCategories('None')).toEqual([])
-  })
-
-  it('returns an empty array for null/undefined/empty string', () => {
-    expect(parseFlaggedCategories(null)).toEqual([])
-    expect(parseFlaggedCategories(undefined)).toEqual([])
-    expect(parseFlaggedCategories('')).toEqual([])
-  })
-
-  it('parses a single flag name', () => {
-    expect(parseFlaggedCategories('Falls')).toEqual(['Falls'])
-  })
-
-  it('parses a comma-space-joined combined value, in wire order', () => {
-    expect(parseFlaggedCategories('Falls, Medication')).toEqual(['Falls', 'Medication'])
-  })
-
-  it('trims incidental whitespace and drops unknown names', () => {
-    expect(parseFlaggedCategories('Falls,  Injury ,NotARealCategory')).toEqual(['Falls', 'Injury'])
   })
 })
 
