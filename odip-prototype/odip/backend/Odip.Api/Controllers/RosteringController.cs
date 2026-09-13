@@ -469,6 +469,55 @@ public class RosteringController : ControllerBase
             notes.Select(n => ToShiftNoteDto(n, LookupIncidentId(incidentIds, n.Id))).ToList()));
     }
 
+    /// <summary>
+    /// Connection-map Deliverable 3: coordinator work queue of flagged shift notes — notes whose
+    /// keyword scan (NOTES-02) matched at least one category, oldest first. <paramref
+    /// name="withoutIncident"/> = true narrows to notes with no active incident yet filed against
+    /// them (IncidentReport.ShiftNoteId), the exact set the queue exists to surface; omitted/false
+    /// returns every flagged note regardless of incident state. <paramref name="from"/>/<paramref
+    /// name="to"/> filter on the parent Shift's ServiceDate. Tenant-scoped for free — ShiftNote is
+    /// its own ITenantEntity (ambient OdipDbContext query filter), same as every other read here.
+    /// </summary>
+    [HttpGet("flagged-notes")]
+    public async Task<ActionResult<ApiResponse<List<FlaggedShiftNoteDto>>>> GetFlaggedShiftNotes(
+        [FromQuery] bool? withoutIncident, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        var query = _db.ShiftNotes
+            .Include(n => n.Shift).ThenInclude(s => s!.Participant)
+            .Include(n => n.Shift).ThenInclude(s => s!.User)
+            .Where(n => n.FlaggedCategories != ShiftNoteFlagCategory.None);
+
+        if (from.HasValue) query = query.Where(n => n.Shift!.ServiceDate >= from.Value);
+        if (to.HasValue) query = query.Where(n => n.Shift!.ServiceDate <= to.Value);
+
+        var notes = await query.OrderBy(n => n.CreatedAt).ToListAsync(ct);
+
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+
+        var items = notes.Select(n => new FlaggedShiftNoteDto
+        {
+            ShiftNoteId = n.Id,
+            ShiftId = n.ShiftId,
+            ShiftDate = n.Shift!.ServiceDate,
+            StartTime = n.Shift.StartTime,
+            EndTime = n.Shift.EndTime,
+            EndsNextDay = n.Shift.EndsNextDay,
+            ParticipantId = n.Shift.ParticipantId,
+            ParticipantName = n.Shift.Participant != null ? n.Shift.Participant.FullName : string.Empty,
+            StaffId = n.Shift.UserId,
+            StaffName = n.Shift.User != null ? n.Shift.User.FullName : null,
+            FlaggedCategories = n.FlaggedCategories,
+            Excerpt = n.Body.Length > 200 ? n.Body.Substring(0, 200) : n.Body,
+            CreatedAt = n.CreatedAt,
+            IncidentId = LookupIncidentId(incidentIds, n.Id),
+        }).ToList();
+
+        if (withoutIncident == true)
+            items = items.Where(i => i.IncidentId == null).ToList();
+
+        return Ok(ApiResponse<List<FlaggedShiftNoteDto>>.Ok(items));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SHIFT COMPLETION REVIEW (design spec §2/§3)
     // ══════════════════════════════════════════════════════════════
