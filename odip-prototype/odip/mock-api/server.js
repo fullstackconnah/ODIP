@@ -724,6 +724,21 @@ const recurringUnavailabilities = [
   },
 ]
 
+// Legacy StaffAvailability records (StaffAvailabilityDto) — offline preview fixtures for the
+// LeaveApprovalsPage 'legacy' row kind. Distinct from the leave/recurring-unavailability fixtures
+// above: these predate the leave/unavailability feature and never carry a status — the page shows
+// them for the All/Approved status filters only.
+const staffAvailabilityRecords = [
+  {
+    id: 'av-0001', staffId: 's-0005', startDateTime: '2026-08-10T00:00:00', endDateTime: '2026-08-21T23:59:59',
+    availabilityType: 'Unavailable', isRecurring: false, recurrenceNotes: null, notes: 'Annual leave — overseas.',
+  },
+  {
+    id: 'av-0002', staffId: 's-0003', startDateTime: '2026-09-15T00:00:00', endDateTime: '2026-09-15T23:59:59',
+    availabilityType: 'Training', isRecurring: false, recurrenceNotes: null, notes: 'First aid refresher.',
+  },
+]
+
 /** Returns a copy of a leave/unavailability fixture row with a decision applied — mirrors what
  * the real approve/decline/cancel endpoints hand back, without mutating the fixture array (this
  * file is stateless across requests, same as every other GET find-or-fallback route below). */
@@ -846,6 +861,11 @@ const routes = [
   // (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
   ['leave', () => leaveRequests],
   ['leave/unavailability', () => recurringUnavailabilities],
+
+  // legacy StaffAvailability list — GET /staff-availability?userId=&from=&to= (query string isn't
+  // read here, same caveat as the leave/unavailability routes above).
+  ['staff-availability', () => staffAvailabilityRecords],
+
   ['portal/leave', () => ({
     leave: leaveRequests.filter((r) => r.userId === CURRENT_STAFF_ID),
     unavailability: recurringUnavailabilities.filter((r) => r.userId === CURRENT_STAFF_ID),
@@ -880,6 +900,23 @@ const postRoutes = [
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
   ['portal/unavailability/:id/cancel', (id) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
+]
+
+// PUT routes needing a specific response shape rather than the generic echo-body-back fallback
+// (see the PUT/PATCH/DELETE handler below) — the two coordinator-edit endpoints, each returning
+// the same { leave|unavailability, overlaps } shape their approve counterpart does (overlaps
+// always empty here — this mock has no roster data to check for a conflict against).
+// PUT /staff-availability/:id deliberately has no entry here — it falls through to the generic
+// echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
+const putRoutes = [
+  ['leave/:id', (id, body) => ({
+    leave: { ...(leaveRequests.find((r) => r.id === id) || leaveRequests[0]), ...body },
+    overlaps: [],
+  })],
+  ['leave/unavailability/:id', (id, body) => ({
+    unavailability: { ...(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0]), ...body },
+    overlaps: [],
+  })],
 ]
 
 function matchRoute(pattern, segments) {
@@ -955,6 +992,18 @@ const server = http.createServer((req, res) => {
     // auth/exchange special-case that already existed here.
     if (req.method === 'POST') {
       for (const [pattern, handler] of postRoutes) {
+        const params = matchRoute(pattern, segments)
+        if (params) {
+          send(res, 200, ok(handler(...params, body)))
+          return
+        }
+      }
+    }
+
+    // Status-transition-shaped PUT routes (see putRoutes above) — checked before the generic
+    // fallback below, same idea as the postRoutes check above.
+    if (req.method === 'PUT') {
+      for (const [pattern, handler] of putRoutes) {
         const params = matchRoute(pattern, segments)
         if (params) {
           send(res, 200, ok(handler(...params, body)))
