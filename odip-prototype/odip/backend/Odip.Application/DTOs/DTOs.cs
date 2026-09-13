@@ -1580,12 +1580,21 @@ public record UpdateScheduledActivityDto
 public record TaskDto
 {
     public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
+    public Guid? TripInstanceId { get; init; }
     public string? TripName { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? AccommodationReservationId { get; init; }
     public Guid? VehicleAssignmentId { get; init; }
     public Guid? StaffAssignmentId { get; init; }
+    // Generic obligation source links (item 9 of the connection map) — set only on tasks raised
+    // by IObligationTaskService, never on manually-created trip/booking tasks.
+    public string? LinkTo { get; init; }
+    public string? SourceKey { get; init; }
+    public Guid? ShiftId { get; init; }
+    public Guid? IncidentReportId { get; init; }
+    public Guid? MedicationAdministrationId { get; init; }
+    public Guid? ShiftNoteId { get; init; }
+    public Guid? LeaveRequestId { get; init; }
     public TaskType TaskType { get; init; }
     public string Title { get; init; } = string.Empty;
     public Guid? OwnerId { get; init; }

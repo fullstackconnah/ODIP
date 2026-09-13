@@ -96,4 +96,85 @@ public class TasksControllerTests
         var body = Assert.IsType<ApiResponse<TaskDto>>(notFound.Value);
         Assert.False(body.Success);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // ITEM 9 — generic obligation tasks (no TripInstanceId) in the tasks list
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>A generic obligation task (e.g. raised by IObligationTaskService) has no TripInstanceId — it must still appear in GetAll, listed with a null TripName rather than being filtered out or crashing on the (now optional) TripInstance navigation.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_TripLessGenericTask_IsListedWithNullTripNameAndTripInstanceId()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), TaskType = TaskType.MedicationWitness, Title = "Witness sign-off needed",
+            SourceKey = "med-witness:x", Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+        var controller = new TasksController(db);
+
+        var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(ok.Value);
+        var task = Assert.Single(body.Data!);
+        Assert.Null(task.TripInstanceId);
+        Assert.Null(task.TripName);
+        Assert.Equal("med-witness:x", task.SourceKey);
+    }
+
+    /// <summary>A trip-linked task alongside a trip-less one — both list correctly side by side, proving the LEFT JOIN against the now-optional TripInstance FK doesn't drop or corrupt either row.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_TripLinkedAndTripLessTasksTogether_BothListedCorrectly()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        db.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), TripInstanceId = trip.Id, TaskType = TaskType.RiskReview, Title = "Trip task", Status = TaskItemStatus.NotStarted });
+        db.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), TaskType = TaskType.IncidentQscReport, Title = "Generic task", SourceKey = "incident-qsc:x", Status = TaskItemStatus.NotStarted });
+        await db.SaveChangesAsync();
+        var controller = new TasksController(db);
+
+        var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, body.Data!.Count);
+        Assert.Contains(body.Data, t => t.Title == "Trip task" && t.TripName == trip.TripName);
+        Assert.Contains(body.Data, t => t.Title == "Generic task" && t.TripName == null);
+    }
+
+    /// <summary>Mandatory cross-tenant coverage: a generic task (no TripInstance to inherit scoping from) created under tenant A must not be listed for a tenant B caller.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_GenericTaskFromAnotherTenant_IsNotListed()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        var tenantA = new Mock<ICurrentTenant>();
+        tenantA.Setup(t => t.TenantId).Returns(tenantAId);
+        tenantA.Setup(t => t.IsSuperAdmin).Returns(false);
+        var optionsA = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        using (var dbA = new OdipDbContext(optionsA, tenantA.Object))
+        {
+            dbA.BookingTasks.Add(new BookingTask
+            {
+                Id = Guid.NewGuid(), TaskType = TaskType.MedicationWitness, Title = "Tenant A witness task",
+                SourceKey = "med-witness:tenant-a", Status = TaskItemStatus.NotStarted,
+            });
+            await dbA.SaveChangesAsync();
+        }
+
+        var tenantB = new Mock<ICurrentTenant>();
+        tenantB.Setup(t => t.TenantId).Returns(tenantBId);
+        tenantB.Setup(t => t.IsSuperAdmin).Returns(false);
+        var optionsB = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        using var dbB = new OdipDbContext(optionsB, tenantB.Object);
+        var controllerB = new TasksController(dbB);
+
+        var result = await controllerB.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!);
+    }
 }

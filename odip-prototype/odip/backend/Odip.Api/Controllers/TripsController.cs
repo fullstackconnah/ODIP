@@ -388,7 +388,10 @@ public class TripsController : ControllerBase
             .Where(t => t.TripInstanceId == id)
             .Select(t => new TaskDto
             {
-                Id = t.Id, TripInstanceId = t.TripInstanceId, TaskType = t.TaskType, Title = t.Title,
+                Id = t.Id, TripInstanceId = t.TripInstanceId,
+                LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+                MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
+                TaskType = t.TaskType, Title = t.Title,
                 OwnerId = t.OwnerId, OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
                 CompletedDate = t.CompletedDate, Notes = t.Notes

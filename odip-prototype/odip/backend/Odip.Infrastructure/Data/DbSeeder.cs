@@ -923,6 +923,11 @@ public static class DbSeeder
             new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000010"), TripInstanceId = trips[5].Id, ParticipantBookingId = bookings[15].Id, TaskType = TaskType.MedicationCheck, Title = "Medication chart review — Harrison Lee pre-Cairns", OwnerId = users[5].Id, Priority = TaskPriority.High, DueDate = today.AddDays(45), Status = TaskItemStatus.NotStarted },
             new() { Id = Guid.Parse("0e000000-0000-0000-0000-000000000011"), TripInstanceId = trips[2].Id, TaskType = TaskType.AccommodationRequest, Title = "Research accessible accommodation options — Melbourne June", OwnerId = users[4].Id, Priority = TaskPriority.Low, DueDate = today.AddDays(40), Status = TaskItemStatus.NotStarted },
         };
+        // BookingTask is now ITenantEntity (item 9 of the connection map) — SaveChangesAsync's
+        // ambient auto-stamp doesn't fire during seeding (no HTTP context / ICurrentTenant is
+        // unauthenticated here, same as every other tenant-scoped seed row), so stamp explicitly.
+        // Every seeded trip above is demoTenantId, so every seeded task is too.
+        foreach (var t in tasks) t.TenantId = demoTenantId;
         context.BookingTasks.AddRange(tasks);
 
         await context.SaveChangesAsync(ct);

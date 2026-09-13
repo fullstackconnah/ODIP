@@ -210,7 +210,13 @@ public enum TaskType
     PostTrip,
     InsuranceConfirmation,
     GenerateNdisClaims,
-    Other
+    Other,
+    // Generic obligation tasks (item 9 of the connection map) — raised and auto-completed by
+    // IObligationTaskService rather than a controller's direct BookingTasks.Add.
+    LeaveCoverage,
+    IncidentQscReport,
+    MedicationWitness,
+    FlaggedNoteFollowUp
 }
 
 public enum TaskPriority
