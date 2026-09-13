@@ -6,6 +6,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -1528,5 +1529,130 @@ public class IncidentsControllerTests
         Assert.Null(body.Data!.MedicationContext);
         Assert.Null(body.Data.ShiftContext);
         Assert.Null(body.Data.ShiftNoteContext);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ITEM 9 — IncidentQscReport obligation task + FlaggedNoteFollowUp completion
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Create_CriticalIncident_RaisesIncidentQscReportTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(dto, CancellationToken.None);
+
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.Equal(QscReportingStatus.Required, incident.QscReportingStatus);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.IncidentQscReport, task.TaskType);
+        Assert.Equal($"incident-qsc:{incident.Id}", task.SourceKey);
+        Assert.Equal(incident.Id, task.IncidentReportId);
+        Assert.Equal(DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)), task.DueDate);
+        Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
+        Assert.Equal(TaskPriority.High, task.Priority);
+        Assert.Contains(incident.Title, task.Title);
+    }
+
+    [Fact]
+    public async Task Create_NonQscIncident_RaisesNoIncidentQscReportTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Medium);
+        await controller.Create(dto, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_SettingQscReportedAt_CompletesTheTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id, Severity = IncidentSeverity.Critical,
+            Status = IncidentStatus.Draft, Title = incident.Title, Description = incident.Description,
+            IncidentDateTime = incident.IncidentDateTime,
+            QscReportingStatus = QscReportingStatus.Required, QscReportedAt = DateTime.UtcNow,
+        };
+        await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+        Assert.NotNull(task.AutoCompletedAt);
+    }
+
+    [Fact]
+    public async Task Update_StatusLeavesRequired_CompletesTheTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id, Severity = IncidentSeverity.Critical,
+            Status = IncidentStatus.Draft, Title = incident.Title, Description = incident.Description,
+            IncidentDateTime = incident.IncidentDateTime,
+            QscReportingStatus = QscReportingStatus.NotRequired, QscReportedAt = null,
+        };
+        await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+    }
+
+    [Fact]
+    public async Task Create_LinkingFlaggedShiftNote_CompletesFlaggedNoteFollowUpTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id);
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id, flaggedCategories: ShiftNoteFlagCategory.Falls);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"flagged-note:{shiftNote.Id}", TaskType = TaskType.FlaggedNoteFollowUp,
+            Title = "Flagged shift note (Falls) — decide whether an incident is needed",
+            ShiftNoteId = shiftNote.Id, ShiftId = shift.Id, Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with
+        {
+            ShiftNoteId = shiftNote.Id,
+        };
+        await controller.Create(dto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.FlaggedNoteFollowUp);
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
     }
 }

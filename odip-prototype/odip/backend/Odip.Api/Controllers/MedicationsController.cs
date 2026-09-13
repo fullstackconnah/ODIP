@@ -27,12 +27,17 @@ public class MedicationsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
-    public MedicationsController(OdipDbContext db, ICurrentTenant currentTenant, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    public MedicationsController(
+        OdipDbContext db, ICurrentTenant currentTenant,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
     // ── Participant medication list / create ─────────────────────────
@@ -461,6 +466,15 @@ public class MedicationsController : ControllerBase
                 new Odip.Infrastructure.Notifications.Templates.WitnessRequestedPayload(
                     witnessStaff.Email, admin.RecordedByName, FullName(med.Participant)),
                 ct);
+
+            // Item 9 of the connection map: a staff witness was nominated and is pending sign-off.
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"med-witness:{admin.Id}",
+                Type: TaskType.MedicationWitness,
+                Title: $"Witness sign-off needed: {med.Name} for {FullName(med.Participant)}",
+                DueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                LinkTo: "/portal/witness-approvals",
+                MedicationAdministrationId: admin.Id), ct);
         }
 
         await _db.SaveChangesAsync(ct);
