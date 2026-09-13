@@ -24,7 +24,7 @@ function makeItem(overrides: Partial<ScheduleAvailabilityItemDto> = {}): Schedul
 function renderList(availability: ScheduleAvailabilityItemDto[] = []) {
   render(
     <MemoryRouter>
-      <AvailabilityList staffId="staff-1" staffName="Alex Rivera" availability={availability} />
+      <AvailabilityList staffId="staff-1" availability={availability} />
     </MemoryRouter>,
   )
 }

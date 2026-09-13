@@ -17,7 +17,6 @@ const availTypeColors: Record<string, string> = {
 
 interface AvailabilityListProps {
   staffId: string
-  staffName: string
   availability: ScheduleAvailabilityItemDto[]
 }
 
@@ -51,8 +50,6 @@ function windowForItem(item: ScheduleAvailabilityItemDto): string {
   return formatEffectiveRange(item.startDate, item.endDate)
 }
 
-// `staffName` is accepted for interface parity with the caller (kept for a future audit-trail
-// use, e.g. a delete-confirmation message) but this read-only list has no use for it today.
 export default function AvailabilityList({ staffId, availability }: AvailabilityListProps) {
   const manageLink = `/rostering/leave?userId=${staffId}`
 

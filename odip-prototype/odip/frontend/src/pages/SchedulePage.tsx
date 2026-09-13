@@ -333,7 +333,7 @@ export default function SchedulePage() {
                         className="bg-[var(--color-surface-container-low)]/40"
                       >
                         <td colSpan={tripCount + 1}>
-                          <AvailabilityList staffId={s.id} staffName={s.fullName} availability={s.availability} />
+                          <AvailabilityList staffId={s.id} availability={s.availability} />
                         </td>
                       </tr>
                     )}
