@@ -167,3 +167,21 @@ describe('StaffPage — PP-47 worker screening icon label', () => {
     expect(screen.getByLabelText('Worker screening current')).toBeInTheDocument()
   })
 })
+
+describe('StaffPage — cross-domain links', () => {
+  it('links each row to that staff member\'s leave & availability for a role with leave-approvals access', () => {
+    setUserRole('Admin')
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=s1')
+  })
+
+  it('hides the leave & availability link for a role without leave-approvals access (SupportWorker)', () => {
+    setUserRole('SupportWorker')
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).queryByRole('link', { name: /leave.*availability/i })).not.toBeInTheDocument()
+  })
+})

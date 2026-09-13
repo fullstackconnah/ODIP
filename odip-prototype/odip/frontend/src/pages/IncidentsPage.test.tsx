@@ -138,3 +138,47 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     expect(screen.getByRole('link', { name: /show all incidents/i })).toHaveAttribute('href', '/incidents')
   })
 })
+
+describe('IncidentsPage — cross-domain links', () => {
+  it('links the trip cell to the trip detail page when tripInstanceId is set', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Beach Day' })).toHaveAttribute('href', '/trips/trip-1')
+  })
+
+  it('renders plain text (not a link) for the trip cell when tripInstanceId is not set', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ tripInstanceId: null, tripName: null })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.queryByRole('link', { name: 'Beach Day' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('shows the involved participant name as plain text — IncidentListDto has no participant id to link to', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ involvedParticipantName: 'Priya Nair' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Priya Nair')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Priya Nair' })).not.toBeInTheDocument()
+  })
+
+  it('shows an em dash when no participant is involved', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ involvedParticipantName: null })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+})

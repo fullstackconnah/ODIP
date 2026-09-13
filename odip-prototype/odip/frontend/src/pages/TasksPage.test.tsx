@@ -15,7 +15,7 @@ const { mockUpdateMutate } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useTasks: () => ({
     data: [
-      { id: 't1', title: 'Confirm accommodation', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
+      { id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
     ],
     isLoading: false,
   }),
@@ -56,5 +56,12 @@ describe('TasksPage — PP-58 status change error handling', () => {
     await user.click(completedOption)
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('TasksPage — cross-domain links', () => {
+  it('links the trip cell to the trip detail page', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: 'Beach Trip' })).toHaveAttribute('href', '/trips/trip-1')
   })
 })

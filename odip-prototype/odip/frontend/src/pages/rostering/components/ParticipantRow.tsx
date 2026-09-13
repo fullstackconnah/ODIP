@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { AlertTriangle, ShieldAlert } from 'lucide-react'
 import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
@@ -31,9 +32,13 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
     <>
       <div className="sticky left-0 z-10 flex flex-col gap-1.5 border-b border-r border-border bg-card px-4 py-2.5">
         <div className="min-w-0">
-          <p className="truncate font-display text-sm font-semibold text-foreground" title={row.fullName}>
+          <Link
+            to={`/participants/${row.participantId}`}
+            className="block truncate font-display text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            title={row.fullName}
+          >
             {row.fullName}
-          </p>
+          </Link>
           <p className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
             {RATIO_LABELS[row.supportRatio] ?? row.supportRatio} support
             {row.hasRestrictivePractice && (
