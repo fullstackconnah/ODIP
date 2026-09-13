@@ -13,6 +13,7 @@ import type {
 } from './enums'
 import type { ParticipantRoutineDto } from './routines'
 import type { ParticipantRiskEntryDto } from './risk-entries'
+import type { ShiftCompletionDto } from './rostering'
 
 // ── My Shifts list ────────────────────────────────────────
 
@@ -110,6 +111,34 @@ export interface PortalShiftDetailDto {
   // since a risk applies regardless of time of day.
   riskEntries: ParticipantRiskEntryDto[]
   medications: PortalMedicationSummaryDto[]
+  // ── Shift completion (design spec §2) ──
+  /** The current active ShiftCompletion, or null before Start (or after a Return archives it
+   * and the worker hasn't tapped Start again yet). */
+  completion: ShiftCompletionDto | null
+  returnCount: number
+  /** Most recent Returned completion's reason, independent of `completion` (critique P2 — a
+   * resubmitting worker needs to see WHY the last submission bounced, not just ReturnCount). Null
+   * until the shift has been returned at least once. */
+  lastReturnReason: string | null
+}
+
+// ── Shift completion write bodies (design spec §2) ───────
+
+/** POST portal/shifts/{id}/start body. */
+export interface StartShiftDto {
+  latitude?: number | null
+  longitude?: number | null
+  geolocationDeclined: boolean
+}
+
+/** POST portal/shifts/{id}/finish body. `actualStart` is supplied only on the manual-start path
+ * (Start was skipped) — see the design spec §3; the PR2 UI never sends it (no dedicated control
+ * for that path), but the field is modelled for contract completeness. */
+export interface FinishShiftDto {
+  latitude?: number | null
+  longitude?: number | null
+  geolocationDeclined: boolean
+  actualStart?: string | null
 }
 
 // ── Witness approvals ────────────────────────────────────

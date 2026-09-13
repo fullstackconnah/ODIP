@@ -595,10 +595,9 @@ const flaggedShiftNotes = Object.values(shiftNotesByShiftId)
   }))
   .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
-// Shift completions (design spec §2, ShiftCompletionDto) — GET rostering/completions
-// (queue) and GET rostering/shifts/:id/completion (detail). No frontend review UI consumes
-// these yet (see the connection-map item 4 report); these are forward-compatible fixtures
-// only, matching the ShiftCompletionDto contract including the `incidents` field.
+// Shift completions (design spec §2, ShiftCompletionDto) — backs GET rostering/completions
+// (queue), GET rostering/shifts/:id/completion (detail), GET/POST portal/shifts/:id(/start|/finish)
+// and the rostering completion/approve/return/approve-batch routes below.
 const shiftCompletions = [
   {
     id: 'sc-0001', shiftId: 'shift-0001', actualStart: '2026-09-08T08:58:00Z', actualEnd: '2026-09-08T17:05:00Z',
@@ -624,6 +623,109 @@ const shiftCompletions = [
     ],
   },
 ]
+
+// Portal shift detail (design spec §2, PortalShiftDetailDto) — backs GET/POST
+// portal/shifts/:id(/start|/finish). Keyed by the same three shiftIds as shiftNotesByShiftId/
+// shiftCompletions/shiftSchedule above, one per completion-flow stage: shift-0001 already
+// Approved (Completed), shift-0002 submitted and awaiting review (PendingReview), shift-0003
+// never started (Published) — so the Start flow has something to act on. Stateless like every
+// other fixture in this file: POST start/finish return a plausible new object, they don't mutate
+// this base.
+const portalShiftBase = {
+  'shift-0001': {
+    id: 'shift-0001', participantId: shiftParticipant['shift-0001'].id, serviceDate: '2026-09-08',
+    startTime: shiftSchedule['shift-0001'].startTime, endTime: shiftSchedule['shift-0001'].endTime,
+    endsNextDay: shiftSchedule['shift-0001'].endsNextDay, durationHours: 8, ratio: 'OneToOne', nightType: 'None',
+    notes: null, status: 'Completed',
+  },
+  'shift-0002': {
+    id: 'shift-0002', participantId: shiftParticipant['shift-0002'].id, serviceDate: '2026-09-10',
+    startTime: shiftSchedule['shift-0002'].startTime, endTime: shiftSchedule['shift-0002'].endTime,
+    endsNextDay: shiftSchedule['shift-0002'].endsNextDay, durationHours: 12, ratio: 'OneToOne', nightType: 'ActiveNight',
+    notes: null, status: 'PendingReview',
+  },
+  'shift-0003': {
+    id: 'shift-0003', participantId: shiftParticipant['shift-0003'].id, serviceDate: '2026-09-13',
+    startTime: shiftSchedule['shift-0003'].startTime, endTime: shiftSchedule['shift-0003'].endTime,
+    endsNextDay: shiftSchedule['shift-0003'].endsNextDay, durationHours: 6, ratio: 'OneToOne', nightType: 'None',
+    notes: null, status: 'Published',
+  },
+}
+
+/** Maps a `participants` fixture row (+ its participantDetailExtras) onto the narrower
+ * PortalParticipantSummaryDto shape — reusing the one fixture rather than maintaining a second
+ * hand-written participant summary per shift. */
+function portalParticipantSummary(participantId) {
+  const p = participants.find((x) => x.id === participantId) || participants[0]
+  const extra = participantDetailExtras[p.id] || {}
+  return {
+    id: p.id, fullName: p.fullName,
+    isHighSupport: p.isHighSupport, isIntensiveSupport: p.isIntensiveSupport,
+    hasRestrictivePracticeFlag: p.hasRestrictivePracticeFlag, supportRatio: p.supportRatio,
+    overnightSupport: p.requiresOvernightSupport ? 'ActiveNight' : 'None',
+    mobilityAidWheelchair: p.wheelchairRequired, mobilityAidWalker: false, mobilitySupportOptions: [],
+    requiresHiLoBed: false, requiresHoist: false, requiresShowerChair: false, requiresCommode: false,
+    requiresStandingMachine: false,
+    mobilityNotes: extra.mobilityNotes ?? null, equipmentRequirements: extra.equipmentRequirements ?? null,
+    transportRequirements: extra.transportRequirements ?? null, medicalSummary: extra.medicalSummary ?? null,
+    behaviourRiskSummary: extra.behaviourRiskSummary ?? null,
+  }
+}
+
+/** Builds a PortalShiftDetailDto for one fixture shift, optionally overriding `status` and the
+ * active `completion` (used by the start/finish POST handlers below to hand back a plausible
+ * post-action shape without mutating portalShiftBase/shiftCompletions). */
+function buildPortalShiftDetail(shiftId, overrides = {}) {
+  const base = portalShiftBase[shiftId] || portalShiftBase['shift-0003']
+  const status = overrides.status ?? base.status
+  const completion = Object.prototype.hasOwnProperty.call(overrides, 'completion')
+    ? overrides.completion
+    : shiftCompletions.find((c) => c.shiftId === base.id) || null
+  return {
+    id: base.id, serviceDate: base.serviceDate, startTime: base.startTime, endTime: base.endTime,
+    endsNextDay: base.endsNextDay, durationHours: base.durationHours, ratio: base.ratio, nightType: base.nightType,
+    status, notes: base.notes,
+    participant: portalParticipantSummary(base.participantId),
+    routines: [], riskEntries: [], medications: [],
+    completion,
+    returnCount: completion ? completion.returnCount : 0,
+    lastReturnReason: null,
+  }
+}
+
+/** CompletionQueueItemDto rows (design spec §2/§4) for GET rostering/completions — derived from
+ * portalShiftBase + shiftCompletions rather than a third hand-maintained fixture. Every fixture
+ * shift with an active completion is included regardless of status (this mock's GET routes don't
+ * read the query string — see the leave/staff-availability routes above for the same caveat) —
+ * the real endpoint filters to one status at a time server-side.
+ */
+function rosteredEndDate(serviceDate, endsNextDay) {
+  if (!endsNextDay) return serviceDate
+  const d = new Date(`${serviceDate}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+const completionQueueItems = Object.values(portalShiftBase)
+  .map((base) => {
+    const completion = shiftCompletions.find((c) => c.shiftId === base.id)
+    if (!completion) return null
+    const participant = participants.find((p) => p.id === base.participantId)
+    return {
+      shiftId: base.id, completionId: completion.id,
+      participantName: participant ? participant.fullName : 'Unknown participant',
+      staffName: completion.submittedByName,
+      serviceDate: base.serviceDate,
+      rosteredStart: `${base.serviceDate}T${base.startTime}Z`,
+      rosteredEnd: `${rosteredEndDate(base.serviceDate, base.endsNextDay)}T${base.endTime}Z`,
+      actualStart: completion.actualStart, actualEnd: completion.actualEnd,
+      varianceMinutesStart: completion.varianceMinutesStart, varianceMinutesEnd: completion.varianceMinutesEnd,
+      status: base.status, timeZoneId: completion.timeZoneId,
+      isOutlierVariance: completion.isOutlierVariance, varianceReviewMinutes: completion.varianceReviewMinutes,
+      returnCount: completion.returnCount,
+    }
+  })
+  .filter(Boolean)
 
 // Bookings (BookingListDto)
 const bookings = [
@@ -942,6 +1044,144 @@ function withDecision(row, status, decisionNote) {
   }
 }
 
+// NDIS Claims (TripClaimListDto / TripClaimDetailDto) — shift-completion design spec §1/§2,
+// PR 3. Kind discriminates a Trip claim (generated from a TripInstance's confirmed bookings)
+// from a Shift claim (generated from a participant's completed, unclaimed Shifts). The real
+// ClaimGenerationService never sets ParticipantId on a Trip-kind claim, so
+// GET /participants/:id/claims only ever surfaces Shift-kind rows for a participant — mirrored
+// here (participants/:id/claims below filters on participantId) rather than "fixed" to also
+// return Trip claims, since that's the actual backend behaviour the frontend renders against.
+const claims = [
+  {
+    id: 'claim-0001', kind: 'Trip', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
+    status: 'Submitted', claimReference: 'TC-43000357-20260601', totalAmount: 960,
+    createdAt: '2026-06-01T09:00:00Z', submittedDate: '2026-06-02T09:00:00Z',
+  },
+  {
+    id: 'claim-0002', kind: 'Shift', participantId: 'p-0001', periodFrom: '2026-07-27', periodTo: '2026-08-09',
+    tripName: '', status: 'Draft', claimReference: 'TC-43015828-20260810', totalAmount: 640,
+    createdAt: '2026-08-10T08:00:00Z',
+  },
+]
+
+const claimLineItemsByClaimId = {
+  'claim-0001': [
+    {
+      id: 'cli-0001', tripClaimId: 'claim-0001', participantBookingId: 'b-0004', participantId: 'p-0003',
+      participantName: 'Marcus Tran', ndisNumber: '43•••••57', planType: 'SelfManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-05-30', supportsDeliveredTo: '2026-06-02',
+      hours: 32, unitPrice: 30, totalAmount: 960, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: true, status: 'Submitted',
+      rejectionReason: null, paidAmount: null,
+    },
+  ],
+  'claim-0002': [
+    {
+      id: 'cli-0002', tripClaimId: 'claim-0002', shiftId: 'sh-0001', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-07-28', supportsDeliveredTo: '2026-07-28',
+      hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+    {
+      id: 'cli-0003', tripClaimId: 'claim-0002', shiftId: 'sh-0002', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-08-04', supportsDeliveredTo: '2026-08-04',
+      hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+  ],
+}
+
+function claimDetail(c) {
+  return {
+    ...c,
+    totalApprovedAmount: 0, authorisedByStaffId: null, authorisedByStaffName: null,
+    paidDate: null, notes: null,
+    lineItems: claimLineItemsByClaimId[c.id] || [],
+  }
+}
+
+/** ShiftClaimPreviewResponseDto for POST participants/:id/claims/from-shifts/preview — stateless
+ * like every other POST here (see withDecision above): always the same plausible preview
+ * regardless of the from/to body, rather than actually filtering portalShiftBase by date range.
+ * The real endpoint 400s with a message when no completed, unclaimed shifts fall in range; this
+ * mock never does, since ClaimsTab.tsx's own 400-message-inline behaviour is covered by its
+ * vitest suite (mock-api isn't in that test's path), not by manual/dev-preview testing. */
+function shiftClaimPreview() {
+  return {
+    totalAmount: 320,
+    lineItems: [
+      {
+        shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Weekday', dayType: 'Weekday',
+        supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320,
+      },
+    ],
+  }
+}
+
+// Notifications (docs/specs/2026-09-08-notifications-design.md §6) — preference grid for
+// Settings → Notifications (every signed-in user) and the outbox for Settings → Failed Sends
+// (canManageNotifications). Event type / channel / status names copied verbatim from the
+// backend enums (NotificationEntities.cs) — same "append-only, never renumber" list.
+const NOTIFICATION_EVENT_TYPES = [
+  'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
+  'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
+  'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
+  'ServiceAgreementSigned', 'IntegrationDegraded',
+]
+
+// GET/PUT notifications/preferences fixture — every event x channel, Email defaulting ON per
+// the documented default (§1), one row (IncidentReported/Email) turned off for preview purposes
+// so the grid doesn't render as an undifferentiated wall of checked boxes.
+function notificationPreferenceGrid() {
+  return {
+    rows: NOTIFICATION_EVENT_TYPES.flatMap((eventType) => ([
+      { eventType, channel: 'Email', enabled: eventType !== 'IncidentReported' },
+      { eventType, channel: 'Sms', enabled: true },
+    ])),
+  }
+}
+
+// GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
+// caveat as leave/staff-availability above: always returns the full fixture list, any filtering
+// left to the frontend.
+const notificationOutbox = [
+  {
+    id: 'notif-0001', eventType: 'LeaveRequestSubmitted', entityType: 'LeaveRequest', entityId: 'leave-0001',
+    recipientUserId: 's-0001', recipientName: 'Callum Radford', status: 'Failed', attempts: 5,
+    nextAttemptAt: '2026-09-13T04:00:00Z', lastError: 'SmtpCommandException: 421 Service not available',
+    createdAt: '2026-09-12T09:00:05Z',
+  },
+  {
+    id: 'notif-0002', eventType: 'WitnessRequested', entityType: 'MedicationAdministration', entityId: 'ma-0002',
+    recipientUserId: 's-0002', recipientName: 'Priya Nadarajah', status: 'Sent', attempts: 1,
+    nextAttemptAt: '2026-09-12T10:05:00Z', createdAt: '2026-09-12T10:00:00Z', sentAt: '2026-09-12T10:00:12Z',
+  },
+  {
+    id: 'notif-0003', eventType: 'IncidentReported', entityType: 'Incident', entityId: 'inc-0001',
+    recipientUserId: 's-0004', recipientName: 'Mei Zhang', status: 'Skipped', attempts: 0,
+    nextAttemptAt: '2026-09-11T15:00:00Z', lastError: 'User preference disabled', createdAt: '2026-09-11T15:00:00Z',
+  },
+  {
+    id: 'notif-0004', eventType: 'ShiftAssigned', entityType: 'Shift', entityId: 'sh-0001',
+    recipientUserId: 's-0003', recipientName: "Jack O'Sullivan", status: 'Pending', attempts: 0,
+    nextAttemptAt: '2026-09-13T09:00:00Z', createdAt: '2026-09-13T08:55:00Z',
+  },
+]
+
+/** Stateless like every other POST here: resets the fixture row's shape without mutating
+ * `notificationOutbox`, so a follow-up GET admin/notifications still shows the original row. */
+function retriedNotification(id) {
+  const row = notificationOutbox.find((n) => n.id === id) || notificationOutbox[0]
+  return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
+}
+
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
@@ -951,6 +1191,13 @@ const routes = [
   // participants (paged list)
   ['participants', () => paged(participants)],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
+  // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
+  // comment for why this only ever returns Shift-kind rows, mirroring the real
+  // ClaimsController.GetClaimsForParticipant/ClaimGenerationService behaviour. The `kind` query
+  // string isn't read here, same "GET routes don't filter by query string" caveat as
+  // leave/staff-availability above — participant-detail/ClaimsTab.tsx always wants both kinds
+  // anyway, so this doesn't affect its own rendering.
+  ['participants/:id/claims', (id) => claims.filter((c) => c.participantId === id)],
   ['participants/:id/support-profile', (id) => ({
     id: `sp-${id}`, participantId: id,
     communicationNotes: 'Plain language, allow extra processing time.',
@@ -977,6 +1224,7 @@ const routes = [
   ['trips/:id/documents', () => []],
   ['trips/:id/schedule', () => []],
   ['trips/:id/claims', () => []],
+  ['claims/:id', (id) => claimDetail(claims.find((c) => c.id === id) || claims[0])],
   ['trips/:id/itinerary', () => null],
   ['trips/:id', (id) => {
     const t = trips.find((x) => x.id === id)
@@ -1077,11 +1325,19 @@ const routes = [
   // is already withoutIncident-shaped enough for preview purposes).
   ['rostering/flagged-notes', () => flaggedShiftNotes],
 
-  // Shift completion detail (design spec §2, ShiftCompletionDto) — no frontend consumer yet
-  // (see connection-map item 4 report); fixture + route only, wired up ahead of the review UI
-  // that will use it. Deliberately no rostering/completions (queue) route here: that endpoint
-  // returns CompletionQueueItemDto, a different shape this fixture doesn't match.
+  // Shift completion (design spec §2/§4) — portal detail (PortalShiftDetailPage's Start/Finish
+  // card) and the rostering review queue/detail (CompletionReviewPage). Same "query string isn't
+  // read here" caveat as leave/staff-availability above: GetCompletions' status/from/to/page/
+  // pageSize aren't applied — paged() below just returns every fixture row as one full page.
+  ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
+  ['rostering/completions', () => paged(completionQueueItems)],
   ['rostering/shifts/:id/completion', (id) => shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0]],
+
+  // Notifications (design spec §6) — GET admin/notifications joins this plain table (query
+  // string ignored, same caveat noted on notificationOutbox above); GET notifications/preferences
+  // is the self-service grid.
+  ['notifications/preferences', () => notificationPreferenceGrid()],
+  ['admin/notifications', () => notificationOutbox],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -1112,6 +1368,71 @@ const postRoutes = [
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
   ['portal/unavailability/:id/cancel', (id) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
+
+  // Shift completion (design spec §2/§3) — Start/Finish and the rostering Approve/Return/
+  // approve-batch actions. Stateless like every other POST here: each returns a plausible
+  // post-action shape without persisting it back into portalShiftBase/shiftCompletions, so a
+  // second GET for the same shift still reflects the original fixture, not this call's result.
+  ['portal/shifts/:id/start', (id, body) => {
+    const now = new Date().toISOString()
+    const completion = {
+      id: `sc-mock-${id}`, shiftId: id, actualStart: now, actualEnd: null,
+      timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: false,
+      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
+      startedAt: now, submittedAt: null,
+      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
+      varianceMinutesStart: 0, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15,
+      returnCount: 0, incidents: [],
+    }
+    return buildPortalShiftDetail(id, { status: 'InProgress', completion })
+  }],
+  ['portal/shifts/:id/finish', (id, body) => {
+    const now = new Date().toISOString()
+    const completion = {
+      id: `sc-mock-${id}`, shiftId: id, actualStart: body?.actualStart ?? now, actualEnd: now,
+      timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: !!body?.actualStart,
+      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
+      startedAt: now, submittedAt: now,
+      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
+      varianceMinutesStart: 3, varianceMinutesEnd: -2, isOutlierVariance: false, varianceReviewMinutes: 15,
+      returnCount: 0, incidents: [],
+    }
+    return buildPortalShiftDetail(id, { status: 'PendingReview', completion })
+  }],
+  ['rostering/shifts/:id/completion/approve', (id) => {
+    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
+  }],
+  ['rostering/shifts/:id/completion/return', (id, body) => {
+    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    return {
+      ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(),
+      reviewOutcome: 'Returned', returnReason: body?.reason ?? '', returnCount: c.returnCount + 1,
+    }
+  }],
+  ['rostering/completions/approve-batch', (body) => {
+    const ids = Array.isArray(body?.shiftIds) ? body.shiftIds : []
+    return ids.map((shiftId) => ({ shiftId, approved: true, code: null, message: null }))
+  }],
+
+  // Claim-from-shifts (shift-completion design spec §2/§3, PR 3) — see shiftClaimPreview's own
+  // comment for why this mock never 400s. Stateless like every other POST here: generating
+  // doesn't add the new claim to the `claims` fixture, so a follow-up GET
+  // /participants/:id/claims still returns the same fixed list.
+  ['participants/:id/claims/from-shifts/preview', () => shiftClaimPreview()],
+  ['participants/:id/claims/from-shifts', (id, body) => ({
+    id: 'claim-mock-0001', kind: 'Shift', participantId: id,
+    periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',
+    tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
+    totalAmount: 320, createdAt: new Date().toISOString(),
+  })],
+
+  // Notifications (design spec §2/§6) — stateless like every other POST here: retry doesn't
+  // mutate notificationOutbox, so a follow-up GET admin/notifications still shows the original
+  // Failed row. test-email always reports success, mirroring the real endpoint's 200-either-way
+  // contract without needing an actual SMTP config to demo against.
+  ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
+  ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -1129,6 +1450,20 @@ const putRoutes = [
     unavailability: { ...(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0]), ...body },
     overlaps: [],
   })],
+
+  // PUT notifications/preferences — echoes the base grid with the submitted rows' `enabled`
+  // values merged in (stateless: doesn't mutate any fixture, so a follow-up GET still returns
+  // the original defaults).
+  ['notifications/preferences', (body) => {
+    const updates = Array.isArray(body) ? body : []
+    const grid = notificationPreferenceGrid()
+    return {
+      rows: grid.rows.map((row) => {
+        const match = updates.find((u) => u.eventType === row.eventType && u.channel === row.channel)
+        return match ? { ...row, enabled: !!match.enabled } : row
+      }),
+    }
+  }],
 ]
 
 function matchRoute(pattern, segments) {

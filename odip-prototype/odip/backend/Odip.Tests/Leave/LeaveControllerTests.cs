@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
@@ -331,6 +332,38 @@ public class LeaveControllerTests
         var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(ok.Value);
         Assert.Equal(LeaveStatus.Declined, body.Data!.Status);
         Assert.Equal("No cover available that week.", body.Data.DecisionNote);
+    }
+
+    /// <summary>NotificationEventType.LeaveRequestDecided trigger — recipient is leave.UserId, not the coordinator caller. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task ApproveLeave_RaisesLeaveRequestDecidedForTheOwner_NotTheCaller()
+    {
+        using var db = CreateDb();
+        var owner = SeedUser(db);
+        var leave = SeedLeave(db, owner.Id);
+        var callerId = Guid.NewGuid();
+
+        await MakeController(db, callerId).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(NotificationEventType.LeaveRequestDecided, row.EventType);
+        Assert.Equal(owner.Id, row.RecipientUserId);
+        Assert.NotEqual(callerId, row.RecipientUserId);
+    }
+
+    /// <summary>Same trigger as approve above, fired exactly once per decline.</summary>
+    [Fact]
+    public async Task DeclineLeave_RaisesLeaveRequestDecidedForTheOwner()
+    {
+        using var db = CreateDb();
+        var owner = SeedUser(db);
+        var leave = SeedLeave(db, owner.Id);
+
+        await MakeController(db).DeclineLeave(leave.Id, new LeaveDecisionDto { DecisionNote = "No cover" }, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(NotificationEventType.LeaveRequestDecided, row.EventType);
+        Assert.Equal(owner.Id, row.RecipientUserId);
     }
 
     [Theory]

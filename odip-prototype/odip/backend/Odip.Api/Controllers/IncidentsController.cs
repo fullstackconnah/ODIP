@@ -17,7 +17,13 @@ namespace Odip.Api.Controllers;
 public class IncidentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public IncidentsController(OdipDbContext db) => _db = db;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+
+    public IncidentsController(OdipDbContext db, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    {
+        _db = db;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+    }
 
     private static readonly IncidentType[] QscRequiredTypes = new[]
     {
@@ -472,6 +478,24 @@ public class IncidentsController : ControllerBase
                 WitnessStatus = isStaff ? WitnessStatus.Pending : WitnessStatus.NotRequired,
                 WitnessRequestedAt = isStaff ? now : null,
             });
+        }
+
+        // NotificationEventType.IncidentReported — recipients are the tenant's Admin/
+        // Coordinator users. Ruling (design spec §4): the email carries NO participant name —
+        // see IncidentReportedTemplate's own doc comment for why.
+        var reporterName = await _db.Users.Where(u => u.Id == dto.ReportedByStaffId)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var incidentRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in incidentRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.IncidentReported, "IncidentReport", incident.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.IncidentReportedPayload(
+                    recipient.Email, reporterName, dto.IncidentType.ToString(), dto.Severity.ToString()),
+                ct);
         }
 
         await _db.SaveChangesAsync(ct);

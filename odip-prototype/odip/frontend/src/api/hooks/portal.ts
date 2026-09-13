@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut } from '../client'
-import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto } from '../types'
+import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto } from '../types'
 
 export function useMyShifts(from?: string, to?: string) {
   return useQuery({
@@ -14,6 +14,41 @@ export function usePortalShiftDetail(id: string | undefined) {
     queryKey: ['portal-shift-detail', id],
     queryFn: () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`),
     enabled: !!id,
+  })
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHIFT COMPLETION (design spec §2/§4) — Start/Finish on the worker's own shift.
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Invalidates the shift detail (status/completion flip to InProgress), the shift-notes cache
+ * (harmless no-op here, kept only for symmetry with useFinishShift) and the my-shifts list (its
+ * status chip needs to flip too) — same three-cache invalidation useFinishShift uses.
+ */
+export function useStartShift() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: StartShiftDto }) =>
+      apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/start`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+      qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
+      qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+    },
+  })
+}
+
+export function useFinishShift() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: FinishShiftDto }) =>
+      apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/finish`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+      qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
+      qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+    },
   })
 }
 

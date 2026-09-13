@@ -44,6 +44,11 @@ picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
     against source before accepting the work. Read the diff at the seams, not just the tests.
   - Never run a backend validation agent while a backend implementation agent is still building —
     they collide on `bin/`/`obj/`.
+  - Agents committing concurrently in ONE worktree share the git index. `git add` then
+    `git commit` races: another agent's commit sweeps up your staged files (happened 2026-09-13,
+    ed771eb). Concurrent agents must commit with an explicit pathspec — `git commit -- <paths>`
+    — and never `git add -A`. Run at most 2 implementation agents at once (a session rate limit
+    killed 2 of 3 mid-run; resumed agents had to finish uncommitted work).
 
 - The only things the main session may do directly are: reading files for validation/review,
   trivial single-line CLAUDE.md/config touch-ups, and answering questions from already-gathered
@@ -242,3 +247,7 @@ npm run lint
   - Every edit form: submit with the server mocked to reject, then assert the error shows AND the
     edited values survive. react-hook-form `reset()` keyed on an inline `initialValues={{}}`
     literal re-fires on every parent render — build initial values with `useMemo` on the row.
+  - Any HTML assembled by string interpolation (email templates under
+    `Odip.Infrastructure/Notifications/Templates/`, exports, PDFs) → every payload field goes
+    through `WebUtility.HtmlEncode`, and a test renders it with `<script>` / `"` in each
+    user-controlled field and asserts the encoded form (caught by automated review 2026-09-13).

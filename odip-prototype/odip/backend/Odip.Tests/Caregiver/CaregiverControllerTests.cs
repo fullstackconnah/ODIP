@@ -211,6 +211,46 @@ public class CaregiverControllerTests
         Assert.NotNull(reloaded.SubmittedAt);
     }
 
+    /// <summary>
+    /// NotificationEventType.CaregiverSubmissionReceived trigger — this action runs with NO
+    /// authenticated principal, so recipient resolution must key off sub.TenantId (not
+    /// ICurrentTenant, which is null/non-superadmin here — see CreateDb's own comment).
+    /// docs/specs/2026-09-08-notifications-design.md §5.
+    /// </summary>
+    [Fact]
+    public async Task Submit_RaisesCaregiverSubmissionReceivedForTenantAdminsAndCoordinators_NotSupportWorkers_NotOtherTenants()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var admin = new User
+        {
+            Id = Guid.NewGuid(), TenantId = s.TenantId, FirstName = "Alex", LastName = "Admin",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = UserRole.Admin, IsActive = true,
+        };
+        var supportWorker = new User
+        {
+            Id = Guid.NewGuid(), TenantId = s.TenantId, FirstName = "Sam", LastName = "Support",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = UserRole.SupportWorker, IsActive = true,
+        };
+        var otherTenantAdmin = new User
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), FirstName = "Other", LastName = "Tenant",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = UserRole.Admin, IsActive = true,
+        };
+        db.Users.AddRange(admin, supportWorker, otherTenantAdmin);
+        db.SaveChanges();
+
+        await MakeController(db).Submit(raw,
+            new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = new PatchParticipantDto() }, CancellationToken.None);
+
+        var rows = await db.NotificationOutbox.IgnoreQueryFilters().ToListAsync();
+        var recipientIds = rows.Select(r => r.RecipientUserId).ToList();
+        Assert.Contains(admin.Id, recipientIds);
+        Assert.DoesNotContain(supportWorker.Id, recipientIds);
+        Assert.DoesNotContain(otherTenantAdmin.Id, recipientIds);
+        Assert.All(rows, r => Assert.Equal(Odip.Domain.Notifications.NotificationEventType.CaregiverSubmissionReceived, r.EventType));
+    }
+
     [Fact]
     public async Task Submit_Twice_Returns409()
     {

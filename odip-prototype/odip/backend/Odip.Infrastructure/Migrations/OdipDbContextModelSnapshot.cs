@@ -888,12 +888,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("ParticipantApproved")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("ParticipantBookingId")
+                    b.Property<Guid?>("ParticipantBookingId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("ShiftId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -924,11 +927,16 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ParticipantBookingId");
 
+                    b.HasIndex("ShiftId");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("TripClaimId");
 
-                    b.ToTable("ClaimLineItems");
+                    b.ToTable("ClaimLineItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClaimLineItem_ExactlyOneParent", "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1");
+                        });
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Contact", b =>
@@ -3347,12 +3355,24 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
                     b.Property<DateTime?>("PaidDate")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("PeriodFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PeriodTo")
+                        .HasColumnType("date");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -3368,7 +3388,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<Guid>("TripInstanceId")
+                    b.Property<Guid?>("TripInstanceId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -3377,6 +3397,8 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ClaimReference")
                         .IsUnique();
+
+                    b.HasIndex("ParticipantId");
 
                     b.HasIndex("Status");
 
@@ -3827,6 +3849,131 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("VehicleId");
 
                     b.ToTable("VehicleAssignments");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.NotificationLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OutboxId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientAddress")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutboxId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("NotificationLogs");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.NotificationOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("TenantId", "EventType", "EntityId", "RecipientUserId", "CreatedAt");
+
+                    b.ToTable("NotificationOutbox");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.NotificationPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "EventType", "Channel")
+                        .IsUnique();
+
+                    b.ToTable("NotificationPreferences");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.LeaveRequest", b =>
@@ -4479,8 +4626,12 @@ namespace Odip.Infrastructure.Migrations
                     b.HasOne("Odip.Domain.Entities.ParticipantBooking", "ParticipantBooking")
                         .WithMany()
                         .HasForeignKey("ParticipantBookingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Odip.Domain.Rostering.Shift", "Shift")
+                        .WithMany()
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Odip.Domain.Entities.TripClaim", "TripClaim")
                         .WithMany("LineItems")
@@ -4489,6 +4640,8 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ParticipantBooking");
+
+                    b.Navigation("Shift");
 
                     b.Navigation("TripClaim");
                 });
@@ -5037,13 +5190,19 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("AuthorisedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.TripInstance", "TripInstance")
                         .WithMany("TripClaims")
                         .HasForeignKey("TripInstanceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("AuthorisedByUser");
+
+                    b.Navigation("Participant");
 
                     b.Navigation("TripInstance");
                 });
@@ -5155,6 +5314,28 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripInstance");
 
                     b.Navigation("Vehicle");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.NotificationLog", b =>
+                {
+                    b.HasOne("Odip.Domain.Notifications.NotificationOutbox", "Outbox")
+                        .WithMany()
+                        .HasForeignKey("OutboxId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Outbox");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.NotificationPreference", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.LeaveRequest", b =>

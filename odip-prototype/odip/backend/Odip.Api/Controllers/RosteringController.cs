@@ -42,12 +42,17 @@ public class RosteringController : ControllerBase
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly IConfiguration? _config;
 
-    public RosteringController(OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery, IConfiguration? config = null)
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+
+    public RosteringController(
+        OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
+        IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
     {
         _db = db;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _config = config;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
     }
 
     private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
@@ -450,6 +455,24 @@ public class RosteringController : ControllerBase
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
 
+        // NotificationEventType.ShiftAssigned — only when a staff member is actually being set;
+        // clearing an assignment (dto.StaffId null) has no recipient (design spec §5).
+        if (dto.StaffId.HasValue)
+        {
+            var assignedStaff = await _db.Users.FirstOrDefaultAsync(u => u.Id == dto.StaffId.Value, ct);
+            var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
+                .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+            if (assignedStaff is not null)
+            {
+                await _notificationRaiser.RaiseAsync(
+                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id,
+                    new[] { assignedStaff.Id },
+                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(
+                        assignedStaff.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime),
+                    ct);
+            }
+        }
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
@@ -700,9 +723,20 @@ public class RosteringController : ControllerBase
         if (trimmedReason.Length > 500)
             return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("Return reason must be 500 characters or fewer.", ShiftErrorCodes.ShiftReturnReasonTooLong));
 
-        // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
-        // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
-        // attach a claim to a shift, so the check is structurally unreachable until then.
+        // SHIFT_ALREADY_CLAIMED (design spec §3) — now reachable: PR 3's AddShiftClaims
+        // migration gives ClaimLineItem a ShiftId, and ShiftClaimGenerationService can attach a
+        // claim line to a Completed shift. A shift can only reach here (PendingReview) again via
+        // an un-cancel + re-Start/Finish cycle, but defend the invariant regardless.
+        var claimedLine = await _db.ClaimLineItems.FirstOrDefaultAsync(l => l.ShiftId == id, ct);
+        if (claimedLine is not null)
+        {
+            var claimReference = await _db.TripClaims
+                .Where(c => c.Id == claimedLine.TripClaimId)
+                .Select(c => c.ClaimReference)
+                .FirstOrDefaultAsync(ct);
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                $"This shift has already been claimed ({claimReference}).", ShiftErrorCodes.ShiftAlreadyClaimed));
+        }
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;
@@ -715,6 +749,22 @@ public class RosteringController : ControllerBase
         shift!.Status = ShiftStatus.Published;
         shift.ReturnCount += 1;
         shift.UpdatedAt = now;
+
+        // NotificationEventType.ShiftCompletionReturned — reserved by the notifications spec,
+        // wired here now the shift-completion feature exists (design spec §5, sibling event).
+        // Recipient is the worker (completion.SubmittedByUserId), not the reviewer.
+        var returnedWorker = await _db.Users.FirstOrDefaultAsync(u => u.Id == completion.SubmittedByUserId, ct);
+        if (returnedWorker is not null)
+        {
+            var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
+                .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftCompletionReturned, "ShiftCompletion", completion.Id,
+                new[] { returnedWorker.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftCompletionReturnedPayload(
+                    returnedWorker.Email, participantName, shift.ServiceDate, trimmedReason),
+                ct);
+        }
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));

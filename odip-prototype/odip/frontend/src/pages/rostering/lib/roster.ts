@@ -106,6 +106,31 @@ export function formatHoursMeter(rostered: number, target: number): string {
   return `${fmt(rostered)} / ${fmt(target)} h`
 }
 
+/**
+ * Signed rostered-vs-actual variance in minutes (design spec §3 — positive is late/over,
+ * negative is early/under) as short display text: "On time" at exactly 0, otherwise
+ * "+N min"/"-N min". Shared by PortalShiftDetailPage's Completed summary and
+ * CompletionReviewPage's queue table so the two surfaces read the same number the same way.
+ */
+export function formatVarianceMinutes(minutes: number): string {
+  if (minutes === 0) return 'On time'
+  return `${minutes > 0 ? '+' : ''}${minutes} min`
+}
+
+/**
+ * "Started Xh Ym ago" style elapsed-time text for an InProgress shift's Start/Finish card —
+ * floors to whole minutes, never negative (a clock-skew `actualStart` slightly in the future
+ * reads as "just now" rather than a nonsensical negative duration).
+ */
+export function formatElapsedSince(actualStartIso: string, now: Date = new Date()): string {
+  const startMs = new Date(actualStartIso).getTime()
+  const totalMinutes = Math.max(0, Math.floor((now.getTime() - startMs) / 60_000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes} min`
+  return `${hours}h ${minutes}m`
+}
+
 export const NIGHT_TYPE_LABELS: Record<string, string> = {
   None: 'None',
   ActiveNight: 'Active Night',

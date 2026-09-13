@@ -30,12 +30,14 @@ public class CaregiverController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly IHttpContextAccessor _http;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public CaregiverController(OdipDbContext db, IHttpContextAccessor http)
+    public CaregiverController(OdipDbContext db, IHttpContextAccessor http, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
     {
         _db = db;
         _http = http;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
     }
 
     private const string NotFoundMessage = "This link is not valid.";
@@ -100,7 +102,7 @@ public class CaregiverController : ControllerBase
     {
         var live = await ResolveLiveAsync(token, ct);
         if (live is null) return NotFound(ApiResponse<object>.Fail(NotFoundMessage));
-        var (sub, _) = live.Value;
+        var (sub, participant) = live.Value;
 
         if (string.IsNullOrWhiteSpace(body.CaregiverName))
             return BadRequest(ApiResponse<object>.Fail("Please enter your name before continuing."));
@@ -114,6 +116,25 @@ public class CaregiverController : ControllerBase
         {
             sub.Status = CaregiverSubmissionStatus.Submitted;
             sub.SubmittedAt = DateTime.UtcNow;
+
+            // NotificationEventType.CaregiverSubmissionReceived — this action runs with NO
+            // authenticated principal (see the audit-attribution comment below), so recipient
+            // resolution keys off sub.TenantId directly (IgnoreQueryFilters — ambient
+            // ICurrentTenant.TenantId is null here, which would otherwise filter out every
+            // tenant-scoped row). Design spec §5.
+            var caregiverRecipients = await _db.Users.IgnoreQueryFilters()
+                .Where(u => u.TenantId == sub.TenantId && u.IsActive
+                    && (u.Role == Odip.Domain.Enums.UserRole.Admin || u.Role == Odip.Domain.Enums.UserRole.Coordinator))
+                .ToListAsync(ct);
+            foreach (var recipient in caregiverRecipients)
+            {
+                await _notificationRaiser.RaiseAsync(
+                    Odip.Domain.Notifications.NotificationEventType.CaregiverSubmissionReceived, "CaregiverProfileSubmission", sub.Id,
+                    new[] { recipient.Id },
+                    new Odip.Infrastructure.Notifications.Templates.CaregiverSubmissionReceivedPayload(
+                        recipient.Email, sub.CaregiverName, participant.FullName),
+                    ct);
+            }
         }
 
         // Attribute the audit row to the caregiver — there is no authenticated principal here.

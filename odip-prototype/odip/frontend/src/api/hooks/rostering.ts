@@ -16,6 +16,12 @@ import type {
   UpsertCompatibilityDto,
   ShiftNoteDto,
   FlaggedShiftNoteDto,
+  ShiftStatus,
+  ShiftCompletionDto,
+  CompletionQueueItemDto,
+  ReturnCompletionDto,
+  ApproveBatchResultDto,
+  PagedResult,
 } from '../types'
 
 // ══════════════════════════════════════════════════════════════
@@ -114,6 +120,92 @@ export function useFlaggedShiftNotes(filters: FlaggedShiftNotesFilters = {}, opt
     }),
     enabled: options?.enabled ?? true,
   })
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHIFT COMPLETION REVIEW (design spec §2/§4)
+// ══════════════════════════════════════════════════════════════
+
+export type CompletionFilters = { status?: ShiftStatus; from?: string; to?: string }
+
+/**
+ * The review queue — GET /rostering/completions?status=&from=&to=&page=&pageSize=, defaulting
+ * to page 1/50 same as the backend's own defaults. Polled every 60s (like useLeaveRequests) so
+ * the sidebar badge and this page's default PendingReview filter both stay fresh. There is no
+ * staffId query param on this endpoint (see RosteringController.GetCompletions) — a staff filter
+ * on CompletionReviewPage is applied client-side over the fetched page, same "doesn't filter
+ * server-side" caveat useLeaveRequests documents for its own from/to.
+ */
+export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSize = 50, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['rostering-completions', filters, page, pageSize],
+    queryFn: () => apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions', { ...filters, page, pageSize }),
+    refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
+  })
+}
+
+/**
+ * Lazily-fetched completion detail (incidents included) for one shift — used on expand/before
+ * Approve/Return so the queue itself never N+1s a detail call per row.
+ */
+export function useCompletion(shiftId: string | undefined) {
+  return useQuery({
+    queryKey: ['rostering-completion', shiftId],
+    queryFn: () => apiGet<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion`),
+    enabled: !!shiftId,
+  })
+}
+
+export function useApproveCompletion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shiftId: string) => apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/approve`),
+    onSuccess: (_, shiftId) => {
+      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
+  })
+}
+
+export function useReturnCompletion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, data }: { shiftId: string; data: ReturnCompletionDto }) =>
+      apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/return`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
+  })
+}
+
+/** POST /rostering/completions/approve-batch — up to 100 ids, per-item results even on partial failure. */
+export function useApproveCompletionsBatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shiftIds: string[]) =>
+      apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', { shiftIds }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+    },
+  })
+}
+
+/**
+ * Sidebar/nav badge count — a separate ['rostering-completions', ...] cache entry from the review
+ * page's own default view (pageSize 1 here vs the page's 50): PagedResult.totalCount is a
+ * server-computed total independent of how many items the page slice returns, so a pageSize-1
+ * request is enough to read the count without pulling the full page just for a badge. `enabled`
+ * lets a caller like AppLayout gate the poll on `canReviewCompletions`, mirroring
+ * usePendingLeaveCount's gate on `canApproveLeave`.
+ */
+export function usePendingCompletionCount(enabled = true): number {
+  const { data } = useCompletions({ status: 'PendingReview' }, 1, 1, { enabled })
+  return data?.totalCount ?? 0
 }
 
 // ══════════════════════════════════════════════════════════════

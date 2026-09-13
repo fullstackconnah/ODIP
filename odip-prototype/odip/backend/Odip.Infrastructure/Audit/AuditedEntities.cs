@@ -1,4 +1,5 @@
 using Odip.Domain.Entities;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Audit;
@@ -78,6 +79,14 @@ public static class AuditedEntities
         typeof(ParticipantConsent),
         typeof(ShiftNote),
         typeof(BookingTask),
+
+        // Notifications: a user's own "stop emailing me about X" is worth a history — same
+        // reasoning as any other self-service preference change. NotificationOutbox/
+        // NotificationLog are deliberately NOT audited: outbox rows churn every dispatcher tick
+        // (Attempts/Status/NextAttemptAt update repeatedly on Pending rows) and would flood
+        // AuditLog with zero-investigative-value noise — their own Status/LastError/SentAt
+        // fields already are the purpose-built delivery trail (design spec §1).
+        typeof(NotificationPreference),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

@@ -76,6 +76,9 @@ vi.mock('./participant-detail', async () => {
     // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
     // have their own test file" approach as every other nested-CRUD section above.
     SupportProfileTab: () => <div data-testid="support-profile-tab" />,
+    // Shift-completion design spec §4 — Claims tab has its own dedicated test file
+    // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
+    ClaimsTab: () => <div data-testid="claims-tab" />,
   }
 })
 
@@ -86,6 +89,16 @@ function setUserRole(role: string) {
 function renderAt(id: string) {
   return render(
     <MemoryRouter initialEntries={[`/participants/${id}`]}>
+      <Routes>
+        <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+function renderAtTab(id: string, tab: string) {
+  return render(
+    <MemoryRouter initialEntries={[`/participants/${id}?tab=${tab}`]}>
       <Routes>
         <Route path="/participants/:id" element={<ParticipantDetailPage />} />
       </Routes>
@@ -664,5 +677,30 @@ describe('ParticipantDetailPage — PP-39 History tab permissions', () => {
     renderAt('participant-1')
 
     expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
+  })
+})
+
+// Shift-completion design spec §4 "Claims entry point" — the Claims tab is gated on
+// canAccessPage('claims'), which SupportWorker's restricted page set excludes (see
+// SUPPORT_WORKER_PAGES in lib/permissions.ts), unlike every other role.
+describe('ParticipantDetailPage — Claims tab', () => {
+  it('shows the Claims tab and deep-links to it via ?tab=claims for a Coordinator', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'claims')
+
+    expect(screen.getByRole('button', { name: 'Claims' })).toBeInTheDocument()
+    expect(screen.getByTestId('claims-tab')).toBeInTheDocument()
+  })
+
+  it('hides the Claims tab for a SupportWorker role', () => {
+    setUserRole('SupportWorker')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'claims')
+
+    expect(screen.queryByRole('button', { name: 'Claims' })).not.toBeInTheDocument()
+    // Same "deep-linked to a tab this role can't see" behaviour as the pre-existing History tab
+    // (PP-39 above): the tab content is simply not rendered, matching that established pattern.
+    expect(screen.queryByTestId('claims-tab')).not.toBeInTheDocument()
   })
 })

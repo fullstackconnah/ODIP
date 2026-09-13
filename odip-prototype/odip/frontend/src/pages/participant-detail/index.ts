@@ -8,6 +8,7 @@ export { default as ParticipantHealthConditionsSection } from './ParticipantHeal
 export { default as ParticipantAdlAssessmentsSection } from './ParticipantAdlAssessmentsSection'
 export { default as ContactsTab } from './ContactsTab'
 export { default as SupportProfileTab } from './SupportProfileTab'
+export { default as ClaimsTab } from './ClaimsTab'
 export { SectionEditPanel } from './SectionEditPanel'
 
 // PD-7 — Details tab section-edit components, one per SPEC-03 field-group row.

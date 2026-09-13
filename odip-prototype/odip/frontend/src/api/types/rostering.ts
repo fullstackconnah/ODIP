@@ -125,6 +125,46 @@ export interface ShiftCompletionDto {
   }[]
 }
 
+// ── Shift Completion review queue (design spec §2/§4) ────
+export interface CompletionQueueItemDto {
+  shiftId: string
+  completionId: string
+  participantName: string
+  staffName: string
+  serviceDate: string
+  rosteredStart: string
+  rosteredEnd: string
+  actualStart: string
+  actualEnd: string | null
+  varianceMinutesStart: number
+  varianceMinutesEnd: number
+  status: ShiftStatus
+  timeZoneId: string
+  isOutlierVariance: boolean
+  varianceReviewMinutes: number
+  returnCount: number
+}
+
+/** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400
+ * SHIFT_RETURN_REASON_REQUIRED on blank). */
+export interface ReturnCompletionDto {
+  reason: string
+}
+
+/** POST rostering/completions/approve-batch body — 1-100 shift ids (400 SHIFT_BATCH_SIZE_INVALID
+ * outside that range). */
+export interface ApproveBatchDto {
+  shiftIds: string[]
+}
+
+/** Per-item outcome from a batch approve — code/message are null on success. */
+export interface ApproveBatchResultDto {
+  shiftId: string
+  approved: boolean
+  code: string | null
+  message: string | null
+}
+
 // ── Trip / Leave bars (read-only board material) ─────────
 export interface TripBarDto {
   tripInstanceId: string

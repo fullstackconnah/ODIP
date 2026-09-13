@@ -27,7 +27,13 @@ namespace Odip.Api.Controllers;
 public class LeaveController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public LeaveController(OdipDbContext db) => _db = db;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+
+    public LeaveController(OdipDbContext db, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    {
+        _db = db;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+    }
 
     // ══════════════════════════════════════════════════════════════
     // LEAVE
@@ -90,6 +96,12 @@ public class LeaveController : ControllerBase
         leave.DecidedByUserId = approveCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
+
+        // NotificationEventType.LeaveRequestDecided — recipient is leave.UserId (the staff
+        // member whose leave it is), not RequestedByUserId (the coordinator on an on-behalf
+        // entry). Design spec §5.
+        await RaiseLeaveDecidedAsync(leave, approved: true, ct);
+
         await _db.SaveChangesAsync(ct);
 
         var overlaps = await FindLeaveOverlapsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct);
@@ -119,6 +131,10 @@ public class LeaveController : ControllerBase
         // refusing a still-Pending request shouldn't be held to a higher bar than reversing a
         // "yes". Persist null rather than "" when omitted, matching every other optional-note field.
         leave.DecisionNote = string.IsNullOrWhiteSpace(dto.DecisionNote) ? null : dto.DecisionNote.Trim();
+
+        // NotificationEventType.LeaveRequestDecided — same recipient rule as approve above.
+        await RaiseLeaveDecidedAsync(leave, approved: false, ct);
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
@@ -334,6 +350,20 @@ public class LeaveController : ControllerBase
 
     private Guid? ResolveCallerId() =>
         Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+
+    /// <summary>Shared by ApproveLeave/DeclineLeave — recipient is leave.UserId, never RequestedByUserId.</summary>
+    private async Task RaiseLeaveDecidedAsync(LeaveRequest leave, bool approved, CancellationToken ct)
+    {
+        var owner = await _db.Users.FirstOrDefaultAsync(u => u.Id == leave.UserId, ct);
+        if (owner is null) return;
+
+        await _notificationRaiser.RaiseAsync(
+            Odip.Domain.Notifications.NotificationEventType.LeaveRequestDecided, "LeaveRequest", leave.Id,
+            new[] { owner.Id },
+            new Odip.Infrastructure.Notifications.Templates.LeaveRequestDecidedPayload(
+                owner.Email, leave.LeaveType.ToString(), leave.StartDate, leave.EndDate, approved, leave.DecisionNote),
+            ct);
+    }
 
     /// <summary>Status-specific wording for a coordinator cancel attempted on an already-closed row (A2 ruling — the generic "already been decided" is correct for approve/decline, where Pending is the only valid source state, but not for cancel, which can also be attempted on a Declined row).</summary>
     private static string AlreadyClosedMessage(LeaveStatus status) => status switch

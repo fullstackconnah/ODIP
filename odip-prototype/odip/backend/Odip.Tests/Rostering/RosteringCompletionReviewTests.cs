@@ -797,6 +797,69 @@ public class RosteringCompletionReviewTests
         Assert.False(savedCompletion.IsActive);
     }
 
+    /// <summary>NotificationEventType.ShiftCompletionReturned trigger — recipient is the worker (completion.SubmittedByUserId), not the reviewer. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task ReturnCompletion_RaisesShiftCompletionReturnedForTheWorker()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "Please recheck." }, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.ShiftCompletionReturned, row.EventType);
+        Assert.Equal(staff.Id, row.RecipientUserId);
+        Assert.NotEqual(ReviewerId, row.RecipientUserId);
+    }
+
+    /// <summary>
+    /// SHIFT_ALREADY_CLAIMED (design spec §3) was unreachable before PR 3's AddShiftClaims
+    /// migration gave ClaimLineItem a ShiftId — this confirms the guard now compiles against
+    /// the new column and actually fires, rather than being dead code forever.
+    /// </summary>
+    [Fact]
+    public async Task ReturnCompletion_ShiftAlreadyClaimed_Returns409WithClaimReference_DoesNotChangeShiftOrCompletion()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+
+        var claim = new TripClaim
+        {
+            Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
+            PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate, ClaimReference = "TC-CLAIMED-20260908",
+        };
+        db.TripClaims.Add(claim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, ParticipantBookingId = null,
+            SupportItemCode = "04_SHIFT", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate,
+            Hours = 8m, UnitPrice = 40m, TotalAmount = 320m,
+        });
+        db.SaveChanges();
+
+        var controller = MakeController(db);
+        var result = await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "Times look wrong." }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftCompletionDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftAlreadyClaimed, body.Code);
+        Assert.Contains(claim.ClaimReference, body.Errors!.Single());
+
+        var savedShift = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal(ShiftStatus.PendingReview, savedShift.Status);
+        Assert.Equal(0, savedShift.ReturnCount);
+        var savedCompletion = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        Assert.True(savedCompletion.IsActive);
+    }
+
     [Fact]
     public async Task ReturnCompletion_BlankReason_Returns400_DoesNotChangeShiftOrCompletion()
     {

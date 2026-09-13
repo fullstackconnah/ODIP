@@ -1,0 +1,215 @@
+using Microsoft.EntityFrameworkCore;
+using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
+
+namespace Odip.Infrastructure.Services;
+
+/// <summary>
+/// Generates draft "Kind == Shift" <see cref="TripClaim"/>s from Completed, unclaimed
+/// <see cref="Shift"/>s for one participant over a date range (shift-completion design spec
+/// §2/§3, delivery PR 3). Deliberately a separate file from <see cref="ClaimGenerationService"/>
+/// — the trip path carries <c>ClaimPreviewRequestDto</c> overrides for departure/return/
+/// active-hours that have no shift equivalent, and mixing the two would force every trip call
+/// site to reason about shift-only parameters.
+///
+/// Billing is against ROSTERED hours (<see cref="Shift.DurationHours"/>), never
+/// <c>ShiftCompletion</c>'s clocked times — the office already accepted any variance at
+/// Approve time, so re-deriving hours here would silently relitigate that decision.
+///
+/// TripClaim/ClaimLineItem are NOT ITenantEntity (standing ruling) — every query here is scoped
+/// through the tenant-filtered Participants/Shifts sets, never queried directly by a caller-
+/// supplied id alone.
+/// </summary>
+public class ShiftClaimGenerationService
+{
+    private readonly OdipDbContext _db;
+
+    public ShiftClaimGenerationService(OdipDbContext db) => _db = db;
+
+    public async Task<ShiftClaimPreviewResponseDto> PreviewAsync(
+        Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var (lineItems, _) = await CalculateAsync(participantId, from, to, ct);
+
+        return new ShiftClaimPreviewResponseDto
+        {
+            TotalAmount = lineItems.Sum(l => l.TotalAmount),
+            LineItems = lineItems.Select(l => new ShiftClaimPreviewLineItemDto
+            {
+                ShiftId = l.Shift.Id,
+                ServiceDate = l.Shift.ServiceDate,
+                DayTypeLabel = l.DayType.ToString(),
+                DayType = l.DayType,
+                SupportItemCode = l.CatalogueItem.ItemNumber,
+                Hours = l.Hours,
+                UnitPrice = l.UnitPrice,
+                TotalAmount = l.TotalAmount
+            }).ToList()
+        };
+    }
+
+    public async Task<TripClaim> GenerateDraftClaimAsync(
+        Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var (lineItems, participant) = await CalculateAsync(participantId, from, to, ct);
+
+        var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Provider settings are not configured.");
+
+        var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
+
+        var claim = new TripClaim
+        {
+            Id = Guid.NewGuid(),
+            Kind = ClaimKind.Shift,
+            ParticipantId = participantId,
+            PeriodFrom = from,
+            PeriodTo = to,
+            Status = TripClaimStatus.Draft,
+            ClaimReference = BuildClaimReference(participant),
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.TripClaims.Add(claim);
+
+        var claimLineItems = lineItems.Select(l => new ClaimLineItem
+        {
+            Id = Guid.NewGuid(),
+            TripClaimId = claim.Id,
+            ShiftId = l.Shift.Id,
+            ParticipantBookingId = null,
+            SupportItemCode = l.CatalogueItem.ItemNumber,
+            DayType = l.DayType,
+            SupportsDeliveredFrom = l.Shift.ServiceDate,
+            SupportsDeliveredTo = l.Shift.ServiceDate,
+            Hours = l.Hours,
+            UnitPrice = l.UnitPrice,
+            TotalAmount = l.TotalAmount,
+            GSTCode = gstCode,
+            ClaimType = ClaimType.Standard,
+            Status = ClaimLineItemStatus.Draft
+        }).ToList();
+
+        _db.ClaimLineItems.AddRange(claimLineItems);
+        claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
+
+        await _db.SaveChangesAsync(ct);
+        return claim;
+    }
+
+    // ─── Shared calculation ──────────────────────────────────────────────
+
+    private async Task<(List<ShiftLineCalc> LineItems, Participant Participant)> CalculateAsync(
+        Guid participantId, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        // Participants is ITenantEntity-filtered — a participantId that doesn't resolve under
+        // the caller's tenant (including one that belongs to a different tenant entirely)
+        // surfaces identically to "no such participant", never a different code path.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct)
+            ?? throw new InvalidOperationException("Participant not found.");
+
+        // Shifts is ITenantEntity-filtered too, so this is inherently tenant-scoped. Completed +
+        // not yet claimed (no ClaimLineItem references this ShiftId), mirroring TripInstance's
+        // "no active claim already exists" check in ClaimGenerationService.GenerateDraftClaimAsync
+        // but at the line-item level, since a date range spans many independent shifts.
+        var shifts = await _db.Shifts
+            .Where(s => s.ParticipantId == participantId
+                && s.Status == ShiftStatus.Completed
+                && s.ServiceDate >= from && s.ServiceDate <= to
+                && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))
+            .OrderBy(s => s.ServiceDate)
+            .ToListAsync(ct);
+
+        if (shifts.Count == 0)
+            throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+
+        // Participant.AddressState with a fallback to ProviderSettings.State — the only
+        // geographic signal that exists on the tenant today (Region is free-text prose).
+        var state = participant.AddressState;
+        if (string.IsNullOrWhiteSpace(state))
+        {
+            var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            state = settings?.State ?? "VIC";
+        }
+
+        var publicHolidays = (await _db.PublicHolidays
+            .Where(h => h.Date >= from && h.Date <= to && (h.State == null || h.State == state))
+            .Select(h => h.Date)
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var catalogueItems = await _db.SupportCatalogueItems
+            .Where(i => i.IsActive)
+            .ToListAsync(ct);
+
+        var lineItems = new List<ShiftLineCalc>();
+        foreach (var shift in shifts)
+        {
+            var dayType = DayTypeResolver.Resolve(shift.ServiceDate, publicHolidays);
+            var catItem = FindCatalogueItem(catalogueItems, dayType, participant.IsIntensiveSupport);
+            if (catItem == null) continue;
+
+            var unitPrice = GetPriceForState(catItem, state);
+            var hours = shift.DurationHours;
+            lineItems.Add(new ShiftLineCalc
+            {
+                Shift = shift,
+                CatalogueItem = catItem,
+                DayType = dayType,
+                Hours = hours,
+                UnitPrice = unitPrice,
+                TotalAmount = hours * unitPrice
+            });
+        }
+
+        if (lineItems.Count == 0)
+            throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+
+        return (lineItems, participant);
+    }
+
+    // ─── Helpers (mirrors ClaimGenerationService's private equivalents) ─
+
+    private static SupportCatalogueItem? FindCatalogueItem(
+        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive) =>
+        items.FirstOrDefault(i => i.DayType == dayType && i.IsIntensive == isIntensive)
+            ?? items.FirstOrDefault(i => i.DayType == dayType);
+
+    private static decimal GetPriceForState(SupportCatalogueItem item, string state) =>
+        state.ToUpperInvariant() switch
+        {
+            "ACT" => item.PriceLimit_ACT,
+            "NSW" => item.PriceLimit_NSW,
+            "NT" => item.PriceLimit_NT,
+            "QLD" => item.PriceLimit_QLD,
+            "SA" => item.PriceLimit_SA,
+            "TAS" => item.PriceLimit_TAS,
+            "WA" => item.PriceLimit_WA,
+            "REMOTE" => item.PriceLimit_Remote,
+            "VERYREMOTE" or "VERY REMOTE" => item.PriceLimit_VeryRemote,
+            _ => item.PriceLimit_VIC
+        };
+
+    private static string BuildClaimReference(Participant participant)
+    {
+        var code = !string.IsNullOrWhiteSpace(participant.NdisNumber)
+            ? participant.NdisNumber
+            : participant.Id.ToString("N")[..8].ToUpper();
+        var date = DateTime.UtcNow.ToString("yyyyMMdd");
+        var raw = $"TC-{code}-{date}";
+        return raw.Length > 50 ? raw[..50] : raw;
+    }
+
+    private class ShiftLineCalc
+    {
+        public Shift Shift { get; set; } = null!;
+        public SupportCatalogueItem CatalogueItem { get; set; } = null!;
+        public ClaimDayType DayType { get; set; }
+        public decimal Hours { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalAmount { get; set; }
+    }
+}
