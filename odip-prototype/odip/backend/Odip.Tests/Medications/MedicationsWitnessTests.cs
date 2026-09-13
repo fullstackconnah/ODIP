@@ -95,6 +95,41 @@ public class MedicationsWitnessTests
         Assert.NotNull(saved.WitnessRequestedAt);
     }
 
+    /// <summary>NotificationEventType.WitnessRequested trigger — only when a staff witness was nominated. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task RecordAdministration_HighRiskWithWitnessStaffId_RaisesWitnessRequestedForTheWitness()
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var witness = SeedUser(db, "Rachel", "Thompson");
+        var controller = new MedicationsController(db, tenant.Object);
+
+        await controller.RecordAdministration(
+            med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witness.Id },
+            CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.WitnessRequested, row.EventType);
+        Assert.Equal(witness.Id, row.RecipientUserId);
+    }
+
+    /// <summary>A free-text/external witness has nothing to approve — no outbox row at all.</summary>
+    [Fact]
+    public async Task RecordAdministration_LegacyWitnessNameOnly_RaisesNoWitnessNotification()
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var controller = new MedicationsController(db, tenant.Object);
+
+        await controller.RecordAdministration(
+            med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessName = "Someone External" },
+            CancellationToken.None);
+
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
+    }
+
     [Fact]
     public async Task RecordAdministration_LegacyWitnessNameOnly_StillSatisfiesHighRiskRequirement()
     {

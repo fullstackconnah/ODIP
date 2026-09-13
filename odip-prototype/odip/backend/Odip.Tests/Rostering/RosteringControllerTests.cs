@@ -1211,4 +1211,42 @@ public class RosteringControllerTests
     // for the trip-assignment-side coverage (RosterConflictService.CheckStaffAssignment never
     // calls CheckPublicHoliday; VehiclesStaffController.StaffAssignmentsController still loads
     // PublicHolidays for context-shape consistency but nothing consumes it there).
+
+    // ══════════════════════════════════════════════════════════════
+    // NOTIFICATIONS — NotificationEventType.ShiftAssigned trigger
+    // docs/specs/2026-09-08-notifications-design.md §5
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task AssignShift_SettingStaff_RaisesShiftAssignedForTheAssignedStaffMember()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, null), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+
+        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, row.EventType);
+        Assert.Equal(staff.Id, row.RecipientUserId);
+    }
+
+    /// <summary>Clearing an assignment (StaffId null) has no recipient — no outbox row at all.</summary>
+    [Fact]
+    public async Task AssignShift_ClearingAssignment_RaisesNoNotification()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+
+        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = null }, CancellationToken.None);
+
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
+    }
 }

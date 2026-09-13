@@ -797,6 +797,25 @@ public class RosteringCompletionReviewTests
         Assert.False(savedCompletion.IsActive);
     }
 
+    /// <summary>NotificationEventType.ShiftCompletionReturned trigger — recipient is the worker (completion.SubmittedByUserId), not the reviewer. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task ReturnCompletion_RaisesShiftCompletionReturnedForTheWorker()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var controller = MakeController(db);
+
+        await controller.ReturnCompletion(shift.Id, new ReturnCompletionDto { Reason = "Please recheck." }, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.ShiftCompletionReturned, row.EventType);
+        Assert.Equal(staff.Id, row.RecipientUserId);
+        Assert.NotEqual(ReviewerId, row.RecipientUserId);
+    }
+
     /// <summary>
     /// SHIFT_ALREADY_CLAIMED (design spec §3) was unreachable before PR 3's AddShiftClaims
     /// migration gave ClaimLineItem a ShiftId — this confirms the guard now compiles against

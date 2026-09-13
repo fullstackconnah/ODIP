@@ -26,11 +26,13 @@ public class MedicationsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
 
-    public MedicationsController(OdipDbContext db, ICurrentTenant currentTenant)
+    public MedicationsController(OdipDbContext db, ICurrentTenant currentTenant, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
     }
 
     // ── Participant medication list / create ─────────────────────────
@@ -447,6 +449,20 @@ public class MedicationsController : ControllerBase
             LimitBreachAcknowledged = limitBreachAcknowledged,
         };
         _db.MedicationAdministrations.Add(admin);
+
+        // NotificationEventType.WitnessRequested — only when a staff witness was nominated
+        // (witnessStaff is null for a free-text/external witness, which has nothing to
+        // approve). Design spec §5.
+        if (witnessStaff is not null)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.WitnessRequested, "MedicationAdministration", admin.Id,
+                new[] { witnessStaff.Id },
+                new Odip.Infrastructure.Notifications.Templates.WitnessRequestedPayload(
+                    witnessStaff.Email, admin.RecordedByName, FullName(med.Participant)),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(admin, FullName(med.Participant), med.Name, med.DoseDescription)));

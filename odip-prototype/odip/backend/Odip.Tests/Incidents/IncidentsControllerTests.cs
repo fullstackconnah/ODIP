@@ -179,6 +179,41 @@ public class IncidentsControllerTests
         Assert.Contains(body.Errors!, e => e.Contains("restrictive practice type", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// NotificationEventType.IncidentReported trigger — recipients are the tenant's Admin/
+    /// Coordinator users. Ruling (design spec §4): the payload carries no participant name.
+    /// </summary>
+    [Fact]
+    public async Task Create_RaisesIncidentReportedForAdminsAndCoordinators_NotSupportWorkers()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db); // default Role = Admin (enum ordinal 0) — also a valid recipient
+        var coordinator = SeedUser(db, firstName: "Cara", lastName: "Coord");
+        coordinator.Role = UserRole.Coordinator;
+        var supportWorker = SeedUser(db, firstName: "Sam", lastName: "Support");
+        supportWorker.Role = UserRole.SupportWorker;
+        db.SaveChanges();
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(dto, CancellationToken.None);
+
+        var rows = await db.NotificationOutbox.ToListAsync();
+        var recipientIds = rows.Select(r => r.RecipientUserId).ToList();
+        Assert.Contains(reporter.Id, recipientIds);
+        Assert.Contains(coordinator.Id, recipientIds);
+        Assert.DoesNotContain(supportWorker.Id, recipientIds);
+        Assert.All(rows, r => Assert.Equal(Odip.Domain.Notifications.NotificationEventType.IncidentReported, r.EventType));
+
+        // Ruling: the raised payload must carry no participant identity at all.
+        foreach (var row in rows)
+        {
+            Assert.DoesNotContain(participant.FirstName, row.PayloadJson);
+            Assert.DoesNotContain(participant.LastName, row.PayloadJson);
+        }
+    }
+
     [Fact]
     public async Task Create_NonRpIncident_LeavesRpFieldsNull()
     {

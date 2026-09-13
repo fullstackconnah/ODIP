@@ -49,12 +49,16 @@ public class PortalController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
     private readonly IConfiguration? _config;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
 
-    public PortalController(OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null)
+    public PortalController(
+        OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _config = config;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
     }
 
     private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
@@ -398,6 +402,25 @@ public class PortalController : ControllerBase
         shift.Status = ShiftStatus.PendingReview;
         shift.UpdatedAt = now;
 
+        // NotificationEventType.ShiftCompletionPendingReview — reserved by the notifications
+        // spec, wired here now the shift-completion feature exists (design spec §5, sibling
+        // event). Recipients are the tenant's Admin/Coordinator users, same as
+        // LeaveRequestSubmitted above.
+        var workerName = await _db.Users.Where(u => u.Id == shift.UserId!.Value)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var reviewRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in reviewRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftCompletionPendingReview, "ShiftCompletion", completion.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftCompletionPendingReviewPayload(
+                    recipient.Email, workerName, shift.Participant!.FullName, shift.ServiceDate),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
@@ -708,6 +731,25 @@ public class PortalController : ControllerBase
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
         };
         _db.LeaveRequests.Add(leave);
+
+        // NotificationEventType.LeaveRequestSubmitted — recipients are the tenant's
+        // Admin/Coordinator users (design spec §5). One RaiseAsync call per recipient so each
+        // outbox row's payload carries that recipient's own email.
+        var requesterName = await _db.Users.Where(u => u.Id == staffId.Value)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var leaveRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in leaveRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.LeaveRequestSubmitted, "LeaveRequest", leave.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.LeaveRequestSubmittedPayload(
+                    recipient.Email, requesterName, dto.LeaveType.ToString(), dto.StartDate, dto.EndDate),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
         await _db.Entry(leave).Reference(l => l.User).LoadAsync(ct);
         // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:171): POST /portal/leave is 201, not 200.

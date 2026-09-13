@@ -75,6 +75,26 @@ public class PortalLeaveTests
         Assert.Null(body.Data.DecidedByUserId);
     }
 
+    /// <summary>NotificationEventType.LeaveRequestSubmitted trigger — fires exactly once per Admin/Coordinator recipient. Full recipient-resolution coverage lives in Odip.Tests.Notifications.RecipientResolutionTests. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task PostLeave_Valid_RaisesLeaveRequestSubmittedForCoordinators()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var coordinator = SeedUser(db, "Cara", "Coord");
+        coordinator.Role = Odip.Domain.Enums.UserRole.Coordinator;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        await controller.CreateMyLeaveRequest(
+            new CreateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(1) },
+            CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.LeaveRequestSubmitted, row.EventType);
+        Assert.Equal(coordinator.Id, row.RecipientUserId);
+    }
+
     [Fact]
     public async Task PostLeave_IgnoresAnySuppliedUserId_AlwaysUsesTheCaller()
     {
