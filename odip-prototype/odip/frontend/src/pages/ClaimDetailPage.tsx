@@ -8,7 +8,7 @@ import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
@@ -97,15 +97,23 @@ export default function ClaimDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Breadcrumb */}
+      {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
+          PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
         <Link to="/trips" className="hover:text-[var(--color-primary)]">Trips</Link>
         <span>/</span>
-        {claim.tripInstanceId && (
+        {claim.kind === 'Shift' ? (
           <>
-            <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[var(--color-primary)]">{claim.tripName || 'Trip'}</Link>
+            <span>{formatDateAu(claim.periodFrom)} – {formatDateAu(claim.periodTo)}</span>
             <span>/</span>
           </>
+        ) : (
+          claim.tripInstanceId && (
+            <>
+              <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[var(--color-primary)]">{claim.tripName || 'Trip'}</Link>
+              <span>/</span>
+            </>
+          )
         )}
         <span className="font-medium">Claim {claim.claimReference}</span>
       </div>
@@ -115,6 +123,9 @@ export default function ClaimDetailPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-[var(--color-foreground)]">Claim {claim.claimReference}</h1>
           <StatusBadge status={claim.status} />
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
+            {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -161,7 +172,9 @@ export default function ClaimDetailPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Amount', value: `$${totalAmount.toFixed(2)}` },
-          { label: 'Trip', value: claim.tripName || '—' },
+          claim.kind === 'Shift'
+            ? { label: 'Period', value: `${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}` }
+            : { label: 'Trip', value: claim.tripName || '—' },
           { label: 'Created', value: claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—' },
           { label: 'Submitted', value: claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—' },
         ].map(card => (
@@ -240,9 +253,12 @@ export default function ClaimDetailPage() {
               key: 'supportsDeliveredFrom',
               header: 'Dates',
               sortable: true,
+              // Shift-kind lines (design spec §1/§3, PR 3) always carry the same value in both
+              // supportsDeliveredFrom/To — a single shift's service date, not a booking window —
+              // so show it once rather than as a redundant "date – same date" range.
               render: (item: ClaimLineItemDto) => (
                 <span className="text-xs text-[var(--color-muted-foreground)] whitespace-nowrap">
-                  {item.supportsDeliveredFrom} – {item.supportsDeliveredTo}
+                  {item.shiftId ? item.supportsDeliveredFrom : `${item.supportsDeliveredFrom} – ${item.supportsDeliveredTo}`}
                 </span>
               ),
             },
@@ -278,40 +294,47 @@ export default function ClaimDetailPage() {
             {
               key: 'actions',
               header: '',
-              render: (item: ClaimLineItemDto) => (
-                <div className="flex flex-col gap-1.5 items-start">
-                  {item.claimType === 'Cancellation' ? (
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium whitespace-nowrap">
-                        No Show · {item.cancellationReason}
-                      </span>
+              // Shift-kind lines (design spec §1/§3, PR 3) have no ParticipantBookingId — No
+              // Show/Mark Confirmed toggle a booking's cancellation state, and Invoice downloads
+              // by bookingId (invoice export is explicitly out of scope for shift claims) — none
+              // of that applies here, so show a plain "Shift" label instead.
+              render: (item: ClaimLineItemDto) =>
+                item.shiftId ? (
+                  <span className="text-xs text-[var(--color-muted-foreground)]">Shift</span>
+                ) : (
+                  <div className="flex flex-col gap-1.5 items-start">
+                    {item.claimType === 'Cancellation' ? (
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium whitespace-nowrap">
+                          No Show · {item.cancellationReason}
+                        </span>
+                        <button
+                          onClick={() => handleRevertToConfirmed(item as ClaimLineItemDto)}
+                          disabled={updateLineItem.isPending}
+                          className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
+                        >
+                          Mark Confirmed
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => handleRevertToConfirmed(item as ClaimLineItemDto)}
-                        disabled={updateLineItem.isPending}
-                        className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:underline disabled:opacity-50"
+                        onClick={() => setNoShowTarget(item as ClaimLineItemDto)}
+                        className="text-xs text-[var(--color-muted-foreground)] hover:text-amber-600 hover:underline"
                       >
-                        Mark Confirmed
+                        No Show
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setNoShowTarget(item as ClaimLineItemDto)}
-                      className="text-xs text-[var(--color-muted-foreground)] hover:text-amber-600 hover:underline"
-                    >
-                      No Show
-                    </button>
-                  )}
-                  {(item.planType === 'PlanManaged' || item.planType === 'SelfManaged') && (
-                    <button
-                      onClick={() => downloadFile(`/claims/${id}/invoices/${item.participantBookingId}`, `invoice-${item.participantName.replace(/\s+/g, '-')}.pdf`)}
-                      className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-                    >
-                      <Download className="w-3 h-3" />
-                      Invoice
-                    </button>
-                  )}
-                </div>
-              ),
+                    )}
+                    {(item.planType === 'PlanManaged' || item.planType === 'SelfManaged') && (
+                      <button
+                        onClick={() => downloadFile(`/claims/${id}/invoices/${item.participantBookingId}`, `invoice-${item.participantName.replace(/\s+/g, '-')}.pdf`)}
+                        className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+                      >
+                        <Download className="w-3 h-3" />
+                        Invoice
+                      </button>
+                    )}
+                  </div>
+                ),
             },
           ]}
           footer={

@@ -1044,6 +1044,87 @@ function withDecision(row, status, decisionNote) {
   }
 }
 
+// NDIS Claims (TripClaimListDto / TripClaimDetailDto) — shift-completion design spec §1/§2,
+// PR 3. Kind discriminates a Trip claim (generated from a TripInstance's confirmed bookings)
+// from a Shift claim (generated from a participant's completed, unclaimed Shifts). The real
+// ClaimGenerationService never sets ParticipantId on a Trip-kind claim, so
+// GET /participants/:id/claims only ever surfaces Shift-kind rows for a participant — mirrored
+// here (participants/:id/claims below filters on participantId) rather than "fixed" to also
+// return Trip claims, since that's the actual backend behaviour the frontend renders against.
+const claims = [
+  {
+    id: 'claim-0001', kind: 'Trip', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
+    status: 'Submitted', claimReference: 'TC-43000357-20260601', totalAmount: 960,
+    createdAt: '2026-06-01T09:00:00Z', submittedDate: '2026-06-02T09:00:00Z',
+  },
+  {
+    id: 'claim-0002', kind: 'Shift', participantId: 'p-0001', periodFrom: '2026-07-27', periodTo: '2026-08-09',
+    tripName: '', status: 'Draft', claimReference: 'TC-43015828-20260810', totalAmount: 640,
+    createdAt: '2026-08-10T08:00:00Z',
+  },
+]
+
+const claimLineItemsByClaimId = {
+  'claim-0001': [
+    {
+      id: 'cli-0001', tripClaimId: 'claim-0001', participantBookingId: 'b-0004', participantId: 'p-0003',
+      participantName: 'Marcus Tran', ndisNumber: '43•••••57', planType: 'SelfManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-05-30', supportsDeliveredTo: '2026-06-02',
+      hours: 32, unitPrice: 30, totalAmount: 960, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: true, status: 'Submitted',
+      rejectionReason: null, paidAmount: null,
+    },
+  ],
+  'claim-0002': [
+    {
+      id: 'cli-0002', tripClaimId: 'claim-0002', shiftId: 'sh-0001', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-07-28', supportsDeliveredTo: '2026-07-28',
+      hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+    {
+      id: 'cli-0003', tripClaimId: 'claim-0002', shiftId: 'sh-0002', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-08-04', supportsDeliveredTo: '2026-08-04',
+      hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+  ],
+}
+
+function claimDetail(c) {
+  return {
+    ...c,
+    totalApprovedAmount: 0, authorisedByStaffId: null, authorisedByStaffName: null,
+    paidDate: null, notes: null,
+    lineItems: claimLineItemsByClaimId[c.id] || [],
+  }
+}
+
+/** ShiftClaimPreviewResponseDto for POST participants/:id/claims/from-shifts/preview — stateless
+ * like every other POST here (see withDecision above): always the same plausible preview
+ * regardless of the from/to body, rather than actually filtering portalShiftBase by date range.
+ * The real endpoint 400s with a message when no completed, unclaimed shifts fall in range; this
+ * mock never does, since ClaimsTab.tsx's own 400-message-inline behaviour is covered by its
+ * vitest suite (mock-api isn't in that test's path), not by manual/dev-preview testing. */
+function shiftClaimPreview() {
+  return {
+    totalAmount: 320,
+    lineItems: [
+      {
+        shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Weekday', dayType: 'Weekday',
+        supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320,
+      },
+    ],
+  }
+}
+
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
@@ -1053,6 +1134,13 @@ const routes = [
   // participants (paged list)
   ['participants', () => paged(participants)],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
+  // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
+  // comment for why this only ever returns Shift-kind rows, mirroring the real
+  // ClaimsController.GetClaimsForParticipant/ClaimGenerationService behaviour. The `kind` query
+  // string isn't read here, same "GET routes don't filter by query string" caveat as
+  // leave/staff-availability above — participant-detail/ClaimsTab.tsx always wants both kinds
+  // anyway, so this doesn't affect its own rendering.
+  ['participants/:id/claims', (id) => claims.filter((c) => c.participantId === id)],
   ['participants/:id/support-profile', (id) => ({
     id: `sp-${id}`, participantId: id,
     communicationNotes: 'Plain language, allow extra processing time.',
@@ -1079,6 +1167,7 @@ const routes = [
   ['trips/:id/documents', () => []],
   ['trips/:id/schedule', () => []],
   ['trips/:id/claims', () => []],
+  ['claims/:id', (id) => claimDetail(claims.find((c) => c.id === id) || claims[0])],
   ['trips/:id/itinerary', () => null],
   ['trips/:id', (id) => {
     const t = trips.find((x) => x.id === id)
@@ -1262,6 +1351,18 @@ const postRoutes = [
     const ids = Array.isArray(body?.shiftIds) ? body.shiftIds : []
     return ids.map((shiftId) => ({ shiftId, approved: true, code: null, message: null }))
   }],
+
+  // Claim-from-shifts (shift-completion design spec §2/§3, PR 3) — see shiftClaimPreview's own
+  // comment for why this mock never 400s. Stateless like every other POST here: generating
+  // doesn't add the new claim to the `claims` fixture, so a follow-up GET
+  // /participants/:id/claims still returns the same fixed list.
+  ['participants/:id/claims/from-shifts/preview', () => shiftClaimPreview()],
+  ['participants/:id/claims/from-shifts', (id, body) => ({
+    id: 'claim-mock-0001', kind: 'Shift', participantId: id,
+    periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',
+    tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
+    totalAmount: 320, createdAt: new Date().toISOString(),
+  })],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback

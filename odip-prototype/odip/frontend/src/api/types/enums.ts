@@ -268,12 +268,26 @@ export type OvernightSupportType = typeof OVERNIGHT_SUPPORT_TYPES[number]
 // ── Shift Status ─────────────────────────────────────────
 // InProgress/PendingReview added by the shift-completion design spec (§1/§3) — a worker's
 // Start/Finish taps flip a Published shift through these two states before Approve/Return
-// settles it back to Completed or Published. ShiftSlideOver's status dropdown still lists all
-// six (a coordinator picking one of these two there gets the backend's SHIFT_STATUS_LOCKED 409,
-// since UpdateShift only allows Draft<->Published — narrowing that dropdown is a follow-up, not
-// part of this PR).
+// settles it back to Completed or Published.
 export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled', 'InProgress', 'PendingReview'] as const
 export type ShiftStatus = typeof SHIFT_STATUSES[number]
+
+// Subset of SHIFT_STATUSES a coordinator can actually set via PUT /shifts/{id} —
+// RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever allows a
+// Draft/Published/Cancelled source AND target; InProgress/PendingReview/Completed are
+// system/worker-driven states reachable only through the completion endpoints
+// (start/finish/approve/return) and any other transition into/out of them 409s with
+// ShiftErrorCodes.ShiftStatusLocked. ShiftSlideOver's status dropdown narrows to this set,
+// showing the shift's actual status read-only when it's one of the worker-driven ones instead
+// of offering a transition the backend will always reject.
+export const COORDINATOR_SETTABLE_SHIFT_STATUSES = ['Draft', 'Published', 'Cancelled'] as const
+
+// ── Claim Kind ───────────────────────────────────────────
+// Discriminates a TripClaim's origin (shift-completion design spec §1, PR 3): Trip claims are
+// generated from a TripInstance's confirmed bookings; Shift claims are generated from a
+// participant's completed, unclaimed Shifts. Append-only, mirrors backend ClaimKind exactly.
+export const CLAIM_KINDS = ['Trip', 'Shift'] as const
+export type ClaimKind = typeof CLAIM_KINDS[number]
 
 // ── Compatibility Level ──────────────────────────────────
 export const COMPATIBILITY_LEVELS = ['Preferred', 'Allowed', 'Excluded'] as const
