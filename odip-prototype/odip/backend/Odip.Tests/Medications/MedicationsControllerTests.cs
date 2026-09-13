@@ -409,6 +409,67 @@ public class MedicationsControllerTests
         Assert.Equal(1, await db.MedicationAdministrations.CountAsync());
     }
 
+    /// <summary>Item 9 of the connection map: nominating a staff witness (not free-text) for a high-risk administration raises a MedicationWitness obligation task pending their sign-off.</summary>
+    [Fact]
+    public async Task RecordAdministration_HighRiskWithStaffWitness_RaisesMedicationWitnessTask()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var witness = new User
+        {
+            Id = Guid.NewGuid(), FirstName = "Rachel", LastName = "Thompson",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", IsActive = true,
+        };
+        db.Users.Add(witness);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Insulin", DoseDescription = "18 units",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", IsHighRisk = true, Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witness.Id };
+
+        var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var admin = await db.MedicationAdministrations.SingleAsync();
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.MedicationWitness, task.TaskType);
+        Assert.Equal($"med-witness:{admin.Id}", task.SourceKey);
+        Assert.Equal(admin.Id, task.MedicationAdministrationId);
+        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), task.DueDate);
+        Assert.Equal("/portal/witness-approvals", task.LinkTo);
+        Assert.Contains("Insulin", task.Title);
+        Assert.Contains(participant.FirstName, task.Title);
+    }
+
+    /// <summary>A free-text/external witness has nothing to approve — no MedicationWitness task.</summary>
+    [Fact]
+    public async Task RecordAdministration_HighRiskWithFreeTextWitness_RaisesNoTask()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Insulin", DoseDescription = "18 units",
+            Type = MedicationType.Regular, TimesOfDay = "08:00", IsHighRisk = true, Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessName = "External Witness" };
+
+        await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
     [Fact]
     public async Task RecordAdministration_PrnWithoutPrnReason_ReturnsBadRequest()
     {

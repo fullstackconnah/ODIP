@@ -541,6 +541,44 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.OwnerId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Generic obligation source links (item 9) — SetNull, same idiom as the other
+            // optional FKs above: losing the source row (shift deleted, etc.) should orphan the
+            // task rather than take it down with it.
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.IncidentReport)
+                .WithMany()
+                .HasForeignKey(e => e.IncidentReportId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.MedicationAdministration)
+                .WithMany()
+                .HasForeignKey(e => e.MedicationAdministrationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.ShiftNote)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftNoteId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.LeaveRequest)
+                .WithMany()
+                .HasForeignKey(e => e.LeaveRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Idempotency key for IObligationTaskService.EnsureAsync — unique where not null
+            // (manually-created trip/booking tasks leave SourceKey null and are unconstrained).
+            entity.HasIndex(e => e.SourceKey).IsUnique().HasFilter("\"SourceKey\" IS NOT NULL");
+
+            entity.HasIndex(e => e.ShiftId);
+            entity.HasIndex(e => e.IncidentReportId);
+            entity.HasIndex(e => e.MedicationAdministrationId);
+            entity.HasIndex(e => e.ShiftNoteId);
+            entity.HasIndex(e => e.LeaveRequestId);
+
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.DueDate);
             entity.HasIndex(e => e.Priority);
@@ -1582,6 +1620,15 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<TripInstance>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<TripInstance>()
+            .HasIndex(e => e.TenantId);
+
+        // BookingTask (item 9 of the connection map): was previously scoped only through its
+        // required TripInstance FK. Now that TripInstanceId is optional (generic obligation
+        // tasks have no trip), it needs its own TenantId — auto-stamped on insert by
+        // SaveChangesAsync below, same as every other row here.
+        modelBuilder.Entity<BookingTask>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<BookingTask>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<AppSettings>()

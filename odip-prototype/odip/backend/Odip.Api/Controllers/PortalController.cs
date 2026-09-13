@@ -50,15 +50,18 @@ public class PortalController : ControllerBase
     private readonly ICurrentTenant _currentTenant;
     private readonly IConfiguration? _config;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
     public PortalController(
         OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
-        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
     private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
@@ -485,6 +488,11 @@ public class PortalController : ControllerBase
         // NOTES-02: scan at save time — client-advisory + server-recorded, never blocking.
         note.FlaggedCategories = ShiftNoteKeywordScanner.Scan(note.Body);
         _db.ShiftNotes.Add(note);
+
+        // Item 9 of the connection map: a flagged note raises a FlaggedNoteFollowUp obligation
+        // task — "decide whether an incident is needed".
+        await RaiseOrCompleteFlaggedNoteTaskAsync(note, ct);
+
         await _db.SaveChangesAsync(ct);
 
         // A brand-new note can't already be referenced by an incident.
@@ -519,6 +527,12 @@ public class PortalController : ControllerBase
         note.Body = newBody;
         note.FlaggedCategories = newFlags;
         note.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: an edit may introduce or change the flagged categories — raise/refresh the
+        // FlaggedNoteFollowUp task. (If flags cleared to None, the existing task — if any — is
+        // simply left for the incident-created/acknowledge-flags completion paths.)
+        await RaiseOrCompleteFlaggedNoteTaskAsync(note, ct);
+
         await _db.SaveChangesAsync(ct);
 
         var incidentId = await _db.IncidentReports
@@ -549,6 +563,11 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
         note.FlagsAcknowledgedAt = DateTime.UtcNow;
+
+        // Item 9: acknowledging the flags closes the FlaggedNoteFollowUp task — the coordinator
+        // has now made the "does this need an incident?" call, even if the answer was no.
+        await _obligationTasks.CompleteAsync($"flagged-note:{note.Id}", ct);
+
         await _db.SaveChangesAsync(ct);
 
         var incidentId = await _db.IncidentReports
@@ -557,6 +576,28 @@ public class PortalController : ControllerBase
             .Select(i => (Guid?)i.Id)
             .FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
+    }
+
+    /// <summary>
+    /// Item 9 of the connection map: raises (or, if one already exists and is still open,
+    /// refreshes) the FlaggedNoteFollowUp task when this note is currently flagged. Deliberately
+    /// does NOT complete an existing task when the note's flags clear back to None on an edit —
+    /// per spec, only an incident being filed against this note (IncidentsController.Create) or
+    /// the coordinator acknowledging the flags closes it. Shared by CreateShiftNote/UpdateShiftNote.
+    /// </summary>
+    private async Task RaiseOrCompleteFlaggedNoteTaskAsync(ShiftNote note, CancellationToken ct)
+    {
+        if (note.FlaggedCategories != ShiftNoteFlagCategory.None)
+        {
+            var categories = string.Join(", ", ShiftNoteKeywordVocabulary.ToCategoryNames(note.FlaggedCategories));
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"flagged-note:{note.Id}",
+                Type: TaskType.FlaggedNoteFollowUp,
+                Title: $"Flagged shift note ({categories}) — decide whether an incident is needed",
+                DueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                LinkTo: "/incidents?view=flagged-notes",
+                ShiftNoteId: note.Id, ShiftId: note.ShiftId), ct);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -634,6 +675,11 @@ public class PortalController : ControllerBase
         admin.WitnessStatus = response;
         admin.WitnessRespondedAt = DateTime.UtcNow;
         admin.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: approving or declining closes the MedicationWitness obligation task either way
+        // — the sign-off has happened, whichever way it went.
+        await _obligationTasks.CompleteAsync($"med-witness:{admin.Id}", ct);
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToWitnessRequestDto(admin)));

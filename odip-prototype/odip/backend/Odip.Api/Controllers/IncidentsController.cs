@@ -18,11 +18,36 @@ public class IncidentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
-    public IncidentsController(OdipDbContext db, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    public IncidentsController(
+        OdipDbContext db,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+    }
+
+    /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
+    private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, CancellationToken ct)
+    {
+        if (incident.QscReportingStatus == QscReportingStatus.Required && incident.QscReportedAt == null)
+        {
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"incident-qsc:{incident.Id}",
+                Type: TaskType.IncidentQscReport,
+                Title: $"Report incident to the NDIS Commission: {incident.Title}",
+                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                LinkTo: $"/incidents/{incident.Id}",
+                IncidentReportId: incident.Id,
+                Priority: TaskPriority.High), ct);
+        }
+        else
+        {
+            await _obligationTasks.CompleteAsync($"incident-qsc:{incident.Id}", ct);
+        }
     }
 
     private static readonly IncidentType[] QscRequiredTypes = new[]
@@ -183,7 +208,7 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
-        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, CancellationToken ct)
+        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId, CancellationToken ct)
     {
         var query = _db.IncidentReports
             .Include(i => i.TripInstance)
@@ -209,6 +234,7 @@ public class IncidentsController : ControllerBase
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
         if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
+        if (involvedUserId.HasValue) query = query.Where(i => i.InvolvedUserId == involvedUserId.Value);
 
         var items = await query.OrderByDescending(i => i.IncidentDateTime)
             .Select(i => new IncidentListDto
@@ -446,6 +472,16 @@ public class IncidentsController : ControllerBase
 
         _db.IncidentReports.Add(incident);
 
+        // Item 9 of the connection map: raise the IncidentQscReport obligation task when this
+        // new incident is already Required-and-unreported.
+        await RaiseOrCompleteQscTaskAsync(incident, ct);
+
+        // Item 9: filing an incident against a flagged shift note satisfies the
+        // FlaggedNoteFollowUp task raised when that note was created/edited — "decide whether an
+        // incident is needed" is answered the moment one is linked.
+        if (incident.ShiftNoteId.HasValue)
+            await _obligationTasks.CompleteAsync($"flagged-note:{incident.ShiftNoteId.Value}", ct);
+
         // IN-5: injury rows submitted alongside a new incident are created in the same
         // SaveChangesAsync call as the incident insert below — transactional with it, mirrors
         // ParticipantsController.Create's RiskEntries insert loop.
@@ -672,6 +708,10 @@ public class IncidentsController : ControllerBase
                 });
             }
         }
+
+        // Item 9 of the connection map: an edit may change QscReportingStatus/QscReportedAt in
+        // either direction — raise/refresh or complete the IncidentQscReport task accordingly.
+        await RaiseOrCompleteQscTaskAsync(i, ct);
 
         await _db.SaveChangesAsync(ct);
 

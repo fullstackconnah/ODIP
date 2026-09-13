@@ -171,6 +171,52 @@ public class PortalWitnessRequestsTests
         Assert.Equal(WitnessStatus.Declined, body.Data!.WitnessStatus);
     }
 
+    /// <summary>Item 9 of the connection map: approving closes the MedicationWitness obligation task.</summary>
+    [Fact]
+    public async Task ApproveWitnessRequest_CompletesMedicationWitnessTask()
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedMedication(db, participant.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"med-witness:{admin.Id}", TaskType = TaskType.MedicationWitness,
+            Title = "Witness sign-off needed", MedicationAdministrationId = admin.Id, Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+
+        var controller = MakeController(db, tenant.Object, witnessUser.Id);
+        await controller.ApproveWitnessRequest(admin.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+    }
+
+    /// <summary>Item 9: declining ALSO closes the task — the sign-off has happened either way.</summary>
+    [Fact]
+    public async Task DeclineWitnessRequest_CompletesMedicationWitnessTask()
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedMedication(db, participant.Id);
+        var witnessUser = SeedUser(db, "Rachel", "Thompson");
+        var admin = SeedPendingWitnessRequest(db, participant.Id, med.Id, witnessUser.Id);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"med-witness:{admin.Id}", TaskType = TaskType.MedicationWitness,
+            Title = "Witness sign-off needed", MedicationAdministrationId = admin.Id, Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+
+        var controller = MakeController(db, tenant.Object, witnessUser.Id);
+        await controller.DeclineWitnessRequest(admin.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+    }
+
     [Fact]
     public async Task ApproveWitnessRequest_BelongingToAnotherStaffMember_ReturnsNotFound()
     {

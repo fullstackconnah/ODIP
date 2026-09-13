@@ -80,7 +80,17 @@ export default function StaffPage() {
   }
 
   const staffColumns: Column<any>[] = [
-    { key: 'fullName', header: 'Name', sortable: true, className: 'font-medium' },
+    {
+      key: 'fullName',
+      header: 'Name',
+      sortable: true,
+      className: 'font-medium',
+      render: (s: StaffListDto) => (
+        <Link to={`/staff/${s.id}`} className="hover:text-[var(--color-primary)] hover:underline">
+          {s.fullName}
+        </Link>
+      ),
+    },
     { key: 'position', header: 'Position', sortable: true },
     { key: 'region', header: 'Region', sortable: true },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },

@@ -89,10 +89,25 @@ export interface LeaveDecisionDto {
   decisionNote: string
 }
 
+/** A rostered shift that overlaps the leave/unavailability window just approved or edited —
+ * beside the finding-shaped `overlaps` summary, this is enough to act on directly (per-row
+ * "Unassign and mark open" in the approvals dialog) without a second fetch. Mirrors backend
+ * ShiftDto's own date/time fields (serviceDate 'yyyy-MM-dd', start/endTime 'HH:mm:ss'). */
+export interface OverlapShiftDto {
+  shiftId: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  participantId: string
+  participantName: string
+}
+
 /** POST /leave/{id}/approve response — approval is never blocked by overlaps; the UI shows them. */
 export interface ApproveLeaveResultDto {
   leave: LeaveRequestDto
   overlaps: RosterFindingDto[]
+  overlapShifts: OverlapShiftDto[]
 }
 
 /** PUT /leave/{id} response — same { leave, overlaps } shape as approve; overlaps is empty when
@@ -143,6 +158,7 @@ export interface UpdateRecurringUnavailabilityDto {
 export interface ApproveRecurringUnavailabilityResultDto {
   unavailability: RecurringUnavailabilityDto
   overlaps: RosterFindingDto[]
+  overlapShifts: OverlapShiftDto[]
 }
 
 /** PUT /leave/unavailability/{id} response — same shape as approve. */

@@ -47,6 +47,17 @@ public record ShiftDto
     public string? Notes { get; init; }
     public string? OverrideReason { get; init; }
     public List<RosterFindingDto> Findings { get; init; } = new();
+    /// <summary>
+    /// True when this shift has an assigned staff member (<see cref="StaffId"/> non-null) and
+    /// that user has an ApprovedLeave (or approved RecurringRule) <c>UnavailabilityWindow</c>
+    /// covering the shift's actual service window — computed fresh from the same
+    /// IStaffUnavailabilityQuery load the board's leave bars already use, not from
+    /// <see cref="Findings"/> (those only fire when the shift's participant/staff are both in
+    /// this week's active sets; this flag has no such restriction). Also folded into
+    /// <see cref="RosterBoardDto.Exceptions"/> as an ASSIGNEE_ON_LEAVE finding — see
+    /// RosteringController.GetBoard.
+    /// </summary>
+    public bool AssigneeOnApprovedLeave { get; init; }
 }
 
 public record TripBarDto
@@ -131,6 +142,47 @@ public record RosterExceptionDto
     public string ParticipantName { get; init; } = string.Empty;
     public DateOnly ServiceDate { get; init; }
     public RosterFindingDto Finding { get; init; } = null!;
+}
+
+/// <summary>
+/// Connection map item 12 — one row of GET /participants/{id}/rostering's upcomingShifts (next 28
+/// days). StaffId/StaffName are left null for an unfilled shift, which serialises out entirely
+/// under Program.cs's JsonIgnoreCondition.WhenWritingNull — matching the frontend's optional
+/// staffId?/staffName? fields (never sent as an explicit null).
+/// </summary>
+public record ParticipantRosteringShiftDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Guid? StaffId { get; init; }
+    public string? StaffName { get; init; }
+    public ShiftStatus Status { get; init; }
+    /// <summary>See ShiftDto.AssigneeOnApprovedLeave — true when the assigned staff member's leave was approved after the assignment was made, so this filled shift is actually a hole.</summary>
+    public bool AssigneeOnApprovedLeave { get; init; }
+}
+
+/// <summary>Connection map item 12 — one row of GET /participants/{id}/rostering's assignedStaff (distinct staff on those shifts).</summary>
+public record ParticipantRosteringStaffDto
+{
+    public Guid StaffId { get; init; }
+    public string StaffName { get; init; } = string.Empty;
+    public int ShiftCount { get; init; }
+    /// <summary>From StaffParticipantCompatibility, or Allowed when no row exists for the pair.</summary>
+    public CompatibilityLevel Compatibility { get; init; }
+}
+
+/// <summary>
+/// Connection map item 12 — GET /participants/{id}/rostering, backing the participant hub's
+/// Rostering tab: who's rostered on for this participant and what's coming up, without sending
+/// the coordinator all the way to the full roster board.
+/// </summary>
+public record ParticipantRosteringDto
+{
+    public List<ParticipantRosteringShiftDto> UpcomingShifts { get; init; } = new();
+    public List<ParticipantRosteringStaffDto> AssignedStaff { get; init; } = new();
 }
 
 /// <summary>Which axis <see cref="RosterBoardDto"/> is grouped by. Drives which of the two row shapes is populated.</summary>

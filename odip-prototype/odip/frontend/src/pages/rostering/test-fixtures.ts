@@ -26,6 +26,7 @@ export function makeShift(overrides: Partial<ShiftDto> = {}): ShiftDto {
     notes: null,
     overrideReason: null,
     findings: [],
+    assigneeOnApprovedLeave: false,
     ...overrides,
   }
 }

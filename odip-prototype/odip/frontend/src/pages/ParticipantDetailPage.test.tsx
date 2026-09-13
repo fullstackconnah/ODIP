@@ -79,6 +79,9 @@ vi.mock('./participant-detail', async () => {
     // Shift-completion design spec §4 — Claims tab has its own dedicated test file
     // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
     ClaimsTab: () => <div data-testid="claims-tab" />,
+    // Connection map item 12 — Rostering tab has its own dedicated test file
+    // (RosteringTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
+    RosteringTab: () => <div data-testid="rostering-tab" />,
   }
 })
 
@@ -702,5 +705,28 @@ describe('ParticipantDetailPage — Claims tab', () => {
     // Same "deep-linked to a tab this role can't see" behaviour as the pre-existing History tab
     // (PP-39 above): the tab content is simply not rendered, matching that established pattern.
     expect(screen.queryByTestId('claims-tab')).not.toBeInTheDocument()
+  })
+})
+
+// Connection map item 12 — the Rostering tab is gated on canAccessPage('rostering'), which
+// SupportWorker's restricted page set excludes (see SUPPORT_WORKER_PAGES in lib/permissions.ts),
+// same gating pattern as the Claims tab above.
+describe('ParticipantDetailPage — Rostering tab', () => {
+  it('shows the Rostering tab and deep-links to it via ?tab=rostering for a Coordinator', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'rostering')
+
+    expect(screen.getByRole('button', { name: 'Rostering' })).toBeInTheDocument()
+    expect(screen.getByTestId('rostering-tab')).toBeInTheDocument()
+  })
+
+  it('hides the Rostering tab for a SupportWorker role', () => {
+    setUserRole('SupportWorker')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'rostering')
+
+    expect(screen.queryByRole('button', { name: 'Rostering' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rostering-tab')).not.toBeInTheDocument()
   })
 })

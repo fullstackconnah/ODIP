@@ -358,6 +358,32 @@ const tasks = [
     dueDate: '2026-07-20', status: 'Completed', completedDate: '2026-07-18',
     notes: 'Claims submitted via PRODA 18 Jul.',
   },
+  // Item 9 (tasks as the obligation engine) — task-0006 is trip-less: tripInstanceId/tripName are
+  // omitted entirely (not sent as null) to match the real "field omitted from JSON when absent"
+  // contract. Its linkTo/shiftId/leaveRequestId tie it to Mei Zhang's approved leave and the
+  // board-shift-0002 hole it creates (see rosterBoard() and sampleOverlapShift above).
+  {
+    id: 'task-0006',
+    participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'LeaveCoverage', title: "Find cover for Grace Palmer-Hughes' overnight shift (Mei Zhang on leave)",
+    ownerId: 's-0001', ownerName: 'Callum Radford', priority: 'Urgent',
+    dueDate: '2026-09-08', status: 'NotStarted', completedDate: null,
+    notes: "Mei Zhang's approved sick leave (8-9 Sep) covers this shift.",
+    linkTo: '/rostering/leave', leaveRequestId: 'leave-0002', shiftId: 'board-shift-0002',
+  },
+  // task-0007 keeps its trip (t-0004) — the contrasting case, showing tripInstanceId/tripName are
+  // merely optional now, not always absent for the new obligation-engine task types.
+  {
+    id: 'task-0007', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
+    participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'IncidentQscReport', title: 'File QSC report — missed evening medication dose',
+    ownerId: 's-0002', ownerName: 'Priya Nadarajah', priority: 'High',
+    dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
+    notes: 'QSC reporting window closes 72h after the incident.',
+    linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+  },
 ]
 
 // Incidents (IncidentListDto)
@@ -974,6 +1000,72 @@ const appSettings = { qualificationWarningDays: 30 }
 // portal/* routes below answer for.
 const CURRENT_STAFF_ID = 's-0003'
 
+// Item 5 (leave-approval overlaps become roster actions) — the one overlapShifts row every
+// leave/unavailability approve and edit mock response below carries, beside the existing empty
+// `overlaps` findings array. Matches board-shift-0002 in rosterBoard() below, so a coordinator
+// clicking "Unassign and mark open" here and then opening the roster board sees the same shift.
+const sampleOverlapShift = {
+  shiftId: 'board-shift-0002', serviceDate: '2026-09-08', startTime: '19:00:00', endTime: '07:00:00',
+  endsNextDay: true, participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+}
+
+// Paired finding for sampleOverlapShift — kept alongside it (rather than an empty `overlaps`
+// array) so the approve/edit dialogs actually open with something to show in this mock, matching
+// the real contract's "overlapShifts sits beside the overlaps findings" shape.
+const sampleOverlapFinding = {
+  code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning',
+  message: 'Overlaps a rostered shift for Grace Palmer-Hughes on 8 Sep.', requiresReason: false,
+}
+
+// Roster board (RosterBoardDto) — GET /rostering/board. Stateless/query-string-blind like every
+// other GET here (groupBy/weekStart aren't read); always returns the Participant-grouped shape,
+// which is RosterBoardPage's default view. board-shift-0002 is deliberately assigned to Mei
+// Zhang (s-0004) with assigneeOnApprovedLeave: true — she has an Approved Sick leave request
+// (leave-0002, 2026-09-08..09-09) that now covers this shift, so it renders as an "On leave"
+// hole rather than a normal filled chip; board-shift-0001 is a normal filled shift for contrast.
+// The matching ASSIGNEE_ON_LEAVE entry in `exceptions` below is the server-side counterpart the
+// board/drawer now rely on instead of a client-synthesised one.
+function rosterBoard() {
+  return {
+    groupBy: 'Participant',
+    weekStart: '2026-09-07',
+    days: ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'],
+    participantRows: [
+      {
+        participantId: 'p-0001', fullName: 'Liam Okafor', supportRatio: 'OneToTwo', overnightSupport: 'None',
+        hasRestrictivePractice: false,
+        shifts: [{
+          id: 'board-shift-0001', participantId: 'p-0001', participantName: 'Liam Okafor',
+          staffId: 's-0003', staffName: "Jack O'Sullivan", serviceDate: '2026-09-08',
+          startTime: '08:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8,
+          ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false,
+        }],
+        tripBars: [], scheduledHours: 8, daysWithoutCover: 6,
+      },
+      {
+        participantId: 'p-0004', fullName: 'Grace Palmer-Hughes', supportRatio: 'TwoToOne', overnightSupport: 'ActiveNight',
+        hasRestrictivePractice: true,
+        shifts: [{
+          id: 'board-shift-0002', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
+          staffId: 's-0004', staffName: 'Mei Zhang', serviceDate: '2026-09-08',
+          startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true, durationHours: 12,
+          ratio: 'OneToOne', nightType: 'ActiveNight', status: 'Published', shiftPatternId: null,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: true,
+        }],
+        tripBars: [], scheduledHours: 12, daysWithoutCover: 6,
+      },
+    ],
+    exceptions: [{
+      shiftId: 'board-shift-0002', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-09-08',
+      finding: {
+        code: 'ASSIGNEE_ON_LEAVE', severity: 'Warning',
+        message: 'Mei Zhang is on approved leave on 2026-09-08', requiresReason: false,
+      },
+    }],
+  }
+}
+
 const leaveRequests = [
   {
     id: 'leave-0001', userId: 's-0003', userFullName: "Jack O'Sullivan",
@@ -1182,6 +1274,91 @@ function retriedNotification(id) {
   return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
 }
 
+// Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
+// shifts, derived from shiftCompletions.submittedByUserId where a completion exists (shift-0001/
+// 0002) and from the shift-0003 note's authorUserId otherwise (shift-0003 has no completion yet —
+// see shiftNotesByShiftId's note-0004, authored by Tom Beattie).
+const PORTAL_SHIFT_STAFF_ID = { 'shift-0001': 's-0003', 'shift-0002': 's-0004', 'shift-0003': 's-0005' }
+
+/** Connection map item 12 — one combined list of every fixture shift (rosterBoard's
+ * participant-grouped shifts plus the three portalShiftBase shifts), each carrying its own
+ * staffId/staffName/participantId/participantName, for GET staff/:id/overview and
+ * GET participants/:id/rostering to filter without maintaining a third hand-written shift
+ * fixture. Stateless like every other derived fixture in this file — rebuilt per call. */
+function allFixtureShifts() {
+  const board = rosterBoard()
+  const boardShifts = board.participantRows.flatMap((row) => row.shifts)
+  const portalShifts = Object.values(portalShiftBase).map((base) => {
+    const participant = participants.find((p) => p.id === base.participantId)
+    const staffId = PORTAL_SHIFT_STAFF_ID[base.id] || null
+    const staffMember = staffId ? staff.find((s) => s.id === staffId) : null
+    return {
+      id: base.id, participantId: base.participantId,
+      participantName: participant ? participant.fullName : 'Unknown participant',
+      staffId, staffName: staffMember ? staffMember.fullName : null,
+      serviceDate: base.serviceDate, startTime: base.startTime, endTime: base.endTime,
+      endsNextDay: base.endsNextDay, status: base.status,
+      // Only rosterBoard's own shifts ever carry a real assigneeOnApprovedLeave (board-shift-0002)
+      // — the portal fixtures below have no leave-overlap scenario of their own.
+      assigneeOnApprovedLeave: false,
+    }
+  })
+  return [...boardShifts, ...portalShifts]
+}
+
+/** Connection map item 12 — shared by GET staff/:id/overview's recentIncidents and
+ * GET incidents?involvedUserId=: newest-first incidents where `id` is the INVOLVED (not
+ * reporting) staff member, per incidentDetailExtras.involvedStaffId — IncidentListDto itself
+ * never carries this field, only IncidentDetailDto does, same as the real contract. */
+function incidentsInvolvingStaff(id) {
+  return incidents
+    .filter((i) => (incidentDetailExtras[i.id] || {}).involvedStaffId === id)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+/** Connection map item 12 — GET staff/:id/overview's recentCompletions: completionQueueItems rows
+ * whose underlying shiftCompletions.submittedByUserId matches this staff member, newest first. */
+function completionsForStaff(id) {
+  return completionQueueItems
+    .filter((item) => {
+      const completion = shiftCompletions.find((c) => c.shiftId === item.shiftId)
+      return completion && completion.submittedByUserId === id
+    })
+    .slice()
+    .sort((a, b) => (b.serviceDate || '').localeCompare(a.serviceDate || ''))
+}
+
+/** Connection map item 12 — GET staff/:id/overview's `availability`: every Leave/
+ * RecurringUnavailability/legacy StaffAvailability row for this staff member, combined into the
+ * unified ScheduleAvailabilityItemDto shape AvailabilityList.tsx already renders — generalises
+ * scheduleOverview.staff[].availability's own single hard-coded row to any staffId across all
+ * three source fixtures. */
+function scheduleAvailabilityForStaff(id) {
+  const leave = leaveRequests
+    .filter((l) => l.userId === id)
+    .map((l) => ({
+      id: l.id, kind: 'Leave', status: l.status, leaveType: l.leaveType, availabilityType: null,
+      startDate: l.startDate, endDate: l.endDate, dayOfWeek: null, startTime: null, endTime: null,
+      notes: l.reason,
+    }))
+  const rules = recurringUnavailabilities
+    .filter((r) => r.userId === id)
+    .map((r) => ({
+      id: r.id, kind: 'RecurringRule', status: r.status, leaveType: null, availabilityType: null,
+      startDate: r.effectiveFrom, endDate: r.effectiveTo, dayOfWeek: r.dayOfWeek,
+      startTime: r.startTime, endTime: r.endTime, notes: r.notes,
+    }))
+  const legacy = staffAvailabilityRecords
+    .filter((a) => a.staffId === id)
+    .map((a) => ({
+      id: a.id, kind: 'Legacy', status: null, leaveType: null, availabilityType: a.availabilityType,
+      startDate: a.startDateTime.slice(0, 10), endDate: a.endDateTime.slice(0, 10),
+      dayOfWeek: null, startTime: null, endTime: null, notes: a.notes,
+    }))
+  return [...leave, ...rules, ...legacy]
+}
+
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
@@ -1198,6 +1375,37 @@ const routes = [
   // leave/staff-availability above — participant-detail/ClaimsTab.tsx always wants both kinds
   // anyway, so this doesn't affect its own rendering.
   ['participants/:id/claims', (id) => claims.filter((c) => c.participantId === id)],
+  // Connection map item 12 — the participant hub's Rostering tab. assignedStaff.compatibility is
+  // a plausible-looking mock value (first assigned staff member "Preferred", the rest "Allowed")
+  // rather than a real preference computation — this mock has no participant/staff compatibility
+  // matrix fixture to join against.
+  ['participants/:id/rostering', (id) => {
+    const shifts = allFixtureShifts().filter((sh) => sh.participantId === id)
+    const byStaff = new Map()
+    for (const sh of shifts) {
+      if (!sh.staffId) continue
+      const existing = byStaff.get(sh.staffId) || { staffId: sh.staffId, staffName: sh.staffName, shiftCount: 0 }
+      existing.shiftCount += 1
+      byStaff.set(sh.staffId, existing)
+    }
+    const assignedStaff = Array.from(byStaff.values()).map((row, i) => ({
+      ...row,
+      compatibility: i === 0 ? 'Preferred' : 'Allowed',
+    }))
+    return {
+      upcomingShifts: shifts.map((sh) => {
+        const item = {
+          shiftId: sh.id, serviceDate: sh.serviceDate, startTime: sh.startTime, endTime: sh.endTime,
+          endsNextDay: sh.endsNextDay, status: sh.status, assigneeOnApprovedLeave: !!sh.assigneeOnApprovedLeave,
+        }
+        // staffId/staffName omitted (not sent as null) for an unfilled shift, matching the real
+        // "field omitted from JSON when absent" contract every other optional field here follows.
+        if (sh.staffId) { item.staffId = sh.staffId; item.staffName = sh.staffName }
+        return item
+      }),
+      assignedStaff,
+    }
+  }],
   ['participants/:id/support-profile', (id) => ({
     id: `sp-${id}`, participantId: id,
     communicationNotes: 'Plain language, allow extra processing time.',
@@ -1245,6 +1453,29 @@ const routes = [
         }]
       : []],
   ['staff/:id', (id) => staff.find((x) => x.id === id) || staff[0]],
+  // Connection map item 12 — the staff hub's single data source (StaffDetailPage.tsx). Every
+  // sub-collection is derived from existing fixtures (see the helpers above) rather than a fourth
+  // hand-maintained "staff overview" fixture.
+  ['staff/:id/overview', (id) => {
+    const s = staff.find((x) => x.id === id) || staff[0]
+    const shifts = allFixtureShifts().filter((sh) => sh.staffId === s.id)
+    const tripAssignments = Object.values(tripStaffAssignments).flat().filter((a) => a.staffId === s.id)
+    return {
+      staff: s,
+      availability: scheduleAvailabilityForStaff(s.id),
+      upcomingShifts: shifts.map((sh) => ({
+        shiftId: sh.id, serviceDate: sh.serviceDate, startTime: sh.startTime, endTime: sh.endTime,
+        endsNextDay: sh.endsNextDay, participantId: sh.participantId, participantName: sh.participantName,
+        status: sh.status,
+      })),
+      upcomingTripAssignments: tripAssignments.map((a) => ({
+        assignmentId: a.id, tripInstanceId: a.tripInstanceId, tripName: a.tripName,
+        startDate: a.assignmentStart, endDate: a.assignmentEnd,
+      })),
+      recentIncidents: incidentsInvolvingStaff(s.id).slice(0, 10),
+      recentCompletions: completionsForStaff(s.id).slice(0, 10),
+    }
+  }],
 
   // vehicles
   ['vehicles', () => vehicles],
@@ -1259,7 +1490,14 @@ const routes = [
   // incidents
   ['incidents/overdue-qsc', () => incidents.filter((i) => i.isOverdue24h)],
   ['incidents/trip/:id', (id) => incidents.filter((i) => i.tripInstanceId === id)],
-  ['incidents', () => incidents],
+  // Connection map item 12 — the one GET route here that DOES read the query string (see the GET
+  // dispatch loop below, which now passes url.searchParams as this handler's only argument): the
+  // staff hub's Incidents tab needs GET /incidents?involvedUserId= to actually filter, unlike
+  // every other "GET routes don't filter by query string" route noted elsewhere in this file.
+  ['incidents', (searchParams) => {
+    const involvedUserId = searchParams.get('involvedUserId')
+    return involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents
+  }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
     return { ...i, ...(incidentDetailExtras[i.id] || {}) }
@@ -1298,13 +1536,16 @@ const routes = [
   ['public-holidays', () => publicHolidays],
 
   // leave + recurring unavailability — GET /leave and /leave/unavailability don't filter by the
-  // `status`/`userId` query string here: the GET dispatch loop below never passes url.searchParams
-  // into the handler (unlike the path-segment `:id` params other routes use), so there's nothing
-  // to read a filter off without changing that dispatch loop for every other GET route too. Returns
-  // the full fixture list; the frontend pages that read it don't rely on the mock filtering
-  // (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
+  // `status`/`userId` query string here. The GET dispatch loop DOES now pass url.searchParams as
+  // every handler's trailing argument (added for GET /incidents?involvedUserId= — see the
+  // `incidents` route above), but these two simply don't declare/read it, same net effect as
+  // before. Returns the full fixture list; the frontend pages that read it don't rely on the mock
+  // filtering (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
   ['leave', () => leaveRequests],
   ['leave/unavailability', () => recurringUnavailabilities],
+
+  // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
+  ['rostering/board', () => rosterBoard()],
 
   // legacy StaffAvailability list — GET /staff-availability?userId=&from=&to= (query string isn't
   // read here, same caveat as the leave/unavailability routes above).
@@ -1349,7 +1590,8 @@ const postRoutes = [
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/:id/decline', (id, body) =>
     withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Declined', body?.decisionNote ?? null)],
@@ -1360,7 +1602,8 @@ const postRoutes = [
 
   ['leave/unavailability/:id/approve', (id) => ({
     unavailability: withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Approved', null),
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/unavailability/:id/decline', (id, body) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Declined', body?.decisionNote ?? null)],
@@ -1444,11 +1687,13 @@ const postRoutes = [
 const putRoutes = [
   ['leave/:id', (id, body) => ({
     leave: { ...(leaveRequests.find((r) => r.id === id) || leaveRequests[0]), ...body },
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
   ['leave/unavailability/:id', (id, body) => ({
     unavailability: { ...(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0]), ...body },
-    overlaps: [],
+    overlaps: [sampleOverlapFinding],
+    overlapShifts: [sampleOverlapShift],
   })],
 
   // PUT notifications/preferences — echoes the base grid with the submitted rows' `enabled`
@@ -1516,7 +1761,11 @@ const server = http.createServer((req, res) => {
     for (const [pattern, handler] of routes) {
       const params = matchRoute(pattern, segments)
       if (params) {
-        send(res, 200, ok(handler(...params)))
+        // Connection map item 12 — url.searchParams is now always passed as the trailing
+        // argument (every other route here ignores it, same as before; only the `incidents`
+        // handler above declares it) so GET /incidents?involvedUserId= can actually filter,
+        // without touching every other route's signature.
+        send(res, 200, ok(handler(...params, url.searchParams)))
         return
       }
     }

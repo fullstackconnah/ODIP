@@ -172,6 +172,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffUnavailabilityQuery, Odip.Infrastructure.Rostering.StaffUnavailabilityQuery>();
+builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItemsQuery, Odip.Infrastructure.Rostering.StaffAvailabilityItemsQuery>();
 
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
@@ -188,6 +189,9 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
+
+// ── Obligation tasks (item 9 of the connection map — generic task engine) ──
+builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, Odip.Infrastructure.Tasks.ObligationTaskService>();
 
 // ── Forwarded Headers ────────────────────────────────────────
 // The app sits behind nginx (see nginx/default.conf), which proxies /api/ to this

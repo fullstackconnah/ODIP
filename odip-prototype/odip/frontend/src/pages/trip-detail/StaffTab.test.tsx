@@ -252,6 +252,11 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
+    // Wait for the 400ms-debounced live dry-run to fire before saving — same guard the add-modal
+    // version of this test (below) already uses. Without it, the debounced check's onSuccess
+    // (setEditFindings([])) can land AFTER the save's onError sets the server findings, wiping
+    // them right back out — a real race that only showed up in a slower (deploy-image) container.
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
