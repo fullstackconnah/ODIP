@@ -34,6 +34,7 @@ public record ClaimLineItemDto
     public Guid Id { get; init; }
     public Guid TripClaimId { get; init; }
     public Guid ParticipantBookingId { get; init; }
+    public Guid? ParticipantId { get; init; }
     public string ParticipantName { get; init; } = string.Empty;
     public string NdisNumber { get; init; } = string.Empty;
     public PlanType PlanType { get; init; }

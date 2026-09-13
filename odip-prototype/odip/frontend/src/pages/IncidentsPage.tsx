@@ -75,8 +75,26 @@ export default function IncidentsPage() {
 
   const incidentColumns: Column<any>[] = [
     { key: 'title', header: 'Title', sortable: true, className: 'font-medium' },
-    { key: 'tripName', header: 'Trip', sortable: true },
     { key: 'incidentType', header: 'Type', sortable: true },
+    {
+      key: 'tripName',
+      header: 'Trip',
+      sortable: true,
+      render: (i) => i.tripInstanceId && i.tripName ? (
+        <Link to={`/trips/${i.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+          {i.tripName}
+        </Link>
+      ) : (i.tripName ?? '—'),
+    },
+    {
+      key: 'involvedParticipantName',
+      header: 'Participant',
+      render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
+        <Link to={`/participants/${i.involvedParticipantId}`} className="text-[var(--color-primary)] hover:underline">
+          {i.involvedParticipantName}
+        </Link>
+      ) : (i.involvedParticipantName ?? '—'),
+    },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
     { key: 'reportedByName', header: 'Reported By' },

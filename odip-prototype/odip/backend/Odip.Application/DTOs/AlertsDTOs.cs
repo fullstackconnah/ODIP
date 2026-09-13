@@ -10,9 +10,13 @@ namespace Odip.Application.DTOs;
 
 /// <summary>
 /// A single computed alert. <see cref="Type"/> is a stable machine-readable code (kebab-case,
-/// e.g. "plan-expired") a caller can key off; <see cref="Message"/> is the human-readable text;
-/// <see cref="DeepLinkTab"/> is the <c>ParticipantDetailPage</c> tab key
-/// (<c>?tab=&lt;DeepLinkTab&gt;</c>) that resolves the alert.
+/// e.g. "plan-expired"; the two incident-backed rules added later — "open-serious-incident" and
+/// "qsc-report-overdue" — follow the same convention, matching <c>ALERT_TYPE_LABELS</c> on the
+/// frontend) a caller can key off; <see cref="Message"/> is the
+/// human-readable text; <see cref="DeepLinkTab"/> is the <c>ParticipantDetailPage</c> tab key
+/// (<c>?tab=&lt;DeepLinkTab&gt;</c>) that resolves the alert. <see cref="LinkTo"/> is an app route
+/// path (e.g. <c>/incidents/{id}</c>) for an alert whose target is NOT a participant-page tab —
+/// null for every original rule, set alongside <see cref="DeepLinkTab"/> for the incident rules.
 /// </summary>
 public record ParticipantAlertDto
 {
@@ -20,6 +24,7 @@ public record ParticipantAlertDto
     public AlertSeverity Severity { get; init; }
     public string Message { get; init; } = string.Empty;
     public string DeepLinkTab { get; init; } = string.Empty;
+    public string? LinkTo { get; init; }
 }
 
 /// <summary>

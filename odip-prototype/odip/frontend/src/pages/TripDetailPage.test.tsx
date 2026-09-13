@@ -9,13 +9,14 @@ const trip: TripDetailDto = {
   id: 'trip-1', tripName: 'Beach Getaway 2026', status: 'Confirmed', startDate: '2026-10-01', endDate: '2026-10-05', durationDays: 5,
 } as unknown as TripDetailDto
 
-const { mockUseTripSchedule, mockUseTripClaims } = vi.hoisted(() => ({
+const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
   mockUseTripSchedule: vi.fn(() => ({ data: [] })),
   mockUseTripClaims: vi.fn(() => ({ data: [] })),
+  mockUseTripIncidents: vi.fn(() => ({ data: [] as { id: string }[] })),
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true }),
+  usePermissions: () => ({ canWrite: true, canAccessPage: () => true }),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/api/hooks', () => ({
   useTripTasks: () => ({ data: [] }),
   useTripSchedule: mockUseTripSchedule,
   useTripClaims: mockUseTripClaims,
+  useTripIncidents: mockUseTripIncidents,
   useParticipants: () => ({ data: [] }),
 }))
 
@@ -39,6 +41,7 @@ vi.mock('./trip-detail', () => ({
   TasksTab: () => <div>Tasks panel</div>,
   ActivitiesTab: () => <div>Activities panel</div>,
   ClaimsTab: () => <div>Claims panel</div>,
+  IncidentsTab: () => <div>Incidents panel</div>,
   EditTripModal: () => null,
 }))
 
@@ -54,6 +57,8 @@ beforeEach(() => {
   localStorage.clear()
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
+  mockUseTripIncidents.mockClear()
+  mockUseTripIncidents.mockReturnValue({ data: [] })
 })
 
 describe('TripDetailPage — PP-60 URL-synced tabs', () => {
@@ -97,5 +102,20 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
     expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+  })
+})
+
+describe('TripDetailPage — Incidents tab', () => {
+  it('shows an Incidents tab (gated by canAccessPage("incidents")) with a count badge and renders IncidentsTab on click', async () => {
+    const user = userEvent.setup()
+    mockUseTripIncidents.mockReturnValue({ data: [{ id: 'inc-1' }, { id: 'inc-2' }] })
+    renderPage()
+
+    const tab = screen.getByRole('tab', { name: /incidents/i })
+    expect(tab).toHaveTextContent('2')
+
+    await user.click(tab)
+    expect(screen.getByText('Incidents panel')).toBeInTheDocument()
+    expect(mockUseTripIncidents).toHaveBeenCalledWith('trip-1')
   })
 })

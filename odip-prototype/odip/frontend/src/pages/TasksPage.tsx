@@ -60,7 +60,16 @@ export default function TasksPage() {
       ) : null,
     },
     { key: 'title', header: 'Task', sortable: true, className: 'font-medium' },
-    { key: 'tripName', header: 'Trip', sortable: true },
+    {
+      key: 'tripName',
+      header: 'Trip',
+      sortable: true,
+      render: (t) => t.tripInstanceId && t.tripName ? (
+        <Link to={`/trips/${t.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+          {t.tripName}
+        </Link>
+      ) : (t.tripName ?? '—'),
+    },
     { key: 'taskType', header: 'Type', sortable: true },
     { key: 'ownerName', header: 'Owner', sortable: true },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },

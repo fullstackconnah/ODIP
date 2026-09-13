@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -179,7 +180,12 @@ export default function MarTab() {
                   >
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-[var(--color-foreground)]">{entry.participantName}</span>
+                        <Link
+                          to={`/participants/${entry.participantId}?tab=medications`}
+                          className="font-medium text-[var(--color-foreground)] hover:underline"
+                        >
+                          {entry.participantName}
+                        </Link>
                         {entry.isOverdue && (
                           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-white">Overdue</span>
                         )}
@@ -251,7 +257,12 @@ export default function MarTab() {
                 <Card key={prn.medicationId} className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="font-medium">{prn.participantName}</p>
+                      <Link
+                        to={`/participants/${prn.participantId}?tab=medications`}
+                        className="font-medium hover:underline"
+                      >
+                        {prn.participantName}
+                      </Link>
                       <p className="text-sm text-[var(--color-foreground)]">{prn.name}{prn.strength ? ` ${prn.strength}` : ''}</p>
                       {prn.doseDescription && <p className="text-xs text-[var(--color-muted-foreground)]">{prn.doseDescription}</p>}
                     </div>

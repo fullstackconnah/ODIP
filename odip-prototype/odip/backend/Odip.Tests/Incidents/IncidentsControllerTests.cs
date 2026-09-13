@@ -147,7 +147,9 @@ public class IncidentsControllerTests
         var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id);
         var result = await controller.Create(dto, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Equal(participant.Id, body.Data!.InvolvedParticipantId);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.True(saved.IsRestrictivePracticeAuthorised);
     }
@@ -390,7 +392,9 @@ public class IncidentsControllerTests
 
         var updateResult = await controller.Update(incidentId, updateDto, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var updateOk = Assert.IsType<OkObjectResult>(updateResult.Result);
+        var updateBody = Assert.IsType<ApiResponse<IncidentListDto>>(updateOk.Value);
+        Assert.Equal(participantWithoutPractice.Id, updateBody.Data!.InvolvedParticipantId);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.Equal(RestrictivePracticeType.MechanicalRestraint, saved.RestrictivePracticeType);
         Assert.Equal(participantWithoutPractice.Id, saved.InvolvedParticipantId);
@@ -1040,5 +1044,30 @@ public class IncidentsControllerTests
         var closedOk = Assert.IsType<OkObjectResult>(closedResult.Result);
         var closedItems = Assert.IsType<ApiResponse<List<IncidentListDto>>>(closedOk.Value);
         Assert.Contains(closedItems.Data!, i => i.Id == incident.Id);
+    }
+
+    /// <summary>
+    /// The list DTO must carry the involved participant's id (not just its display name) so the
+    /// frontend can link the row to the participant record.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_ReturnsInvolvedParticipantId_EqualToSourceEntity()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<List<IncidentListDto>>>(ok.Value);
+        var item = Assert.Single(items.Data!, i => i.Id == incident.Id);
+        Assert.Equal(participant.Id, item.InvolvedParticipantId);
+        Assert.Equal(incident.InvolvedParticipantId, item.InvolvedParticipantId);
     }
 }

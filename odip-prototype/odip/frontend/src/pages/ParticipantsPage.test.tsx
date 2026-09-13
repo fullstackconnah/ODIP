@@ -119,7 +119,7 @@ describe('ParticipantsPage — alerts badge column', () => {
       data: [
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
-          alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'Plan expired', deepLinkTab: 'details' }],
+          alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'Plan expired', deepLinkTab: 'details', linkTo: null }],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
@@ -157,7 +157,7 @@ describe('ParticipantsPage — alerts badge column', () => {
       data: [
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
-          alerts: [{ type: 'note-reminder', severity: 'Info', message: 'Support plan review due soon', deepLinkTab: 'support' }],
+          alerts: [{ type: 'note-reminder', severity: 'Info', message: 'Support plan review due soon', deepLinkTab: 'support', linkTo: null }],
           criticalCount: 0, warningCount: 0, infoCount: 1,
         },
       ],

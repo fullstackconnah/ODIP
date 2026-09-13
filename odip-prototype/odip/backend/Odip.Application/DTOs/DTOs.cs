@@ -1995,6 +1995,7 @@ public record IncidentListDto
     public DateTime IncidentDateTime { get; init; }
     public string? Location { get; init; }
     public string? ReportedByName { get; init; }
+    public Guid? InvolvedParticipantId { get; init; }
     public string? InvolvedParticipantName { get; init; }
     public QscReportingStatus QscReportingStatus { get; init; }
     public bool IsOverdue24h { get; init; }
@@ -2004,7 +2005,6 @@ public record IncidentListDto
 public record IncidentDetailDto : IncidentListDto
 {
     public Guid? ParticipantBookingId { get; init; }
-    public Guid? InvolvedParticipantId { get; init; }
     public Guid? InvolvedStaffId { get; init; }
     public string? InvolvedStaffName { get; init; }
     public Guid ReportedByStaffId { get; init; }

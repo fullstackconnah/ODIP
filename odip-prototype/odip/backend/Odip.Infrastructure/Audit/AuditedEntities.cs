@@ -66,6 +66,18 @@ public static class AuditedEntities
         // Shift-completion state machine: a Return's reason and every review decision must be
         // recoverable — same reasoning as Shift.OverrideReason above.
         typeof(ShiftCompletion),
+
+        // Compliance-coverage report (item 11): these six were flagged as audited-entity gaps.
+        // Restrictive practices, claims/line items, participant consent decisions, shift notes
+        // (compliance-adjacent per its own remarks — falls/medication/injury/behaviour keyword
+        // flags), and booking tasks all carry the same "who changed this, and when" requirement
+        // as the entities already listed above.
+        typeof(RestrictivePractice),
+        typeof(TripClaim),
+        typeof(ClaimLineItem),
+        typeof(ParticipantConsent),
+        typeof(ShiftNote),
+        typeof(BookingTask),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()
