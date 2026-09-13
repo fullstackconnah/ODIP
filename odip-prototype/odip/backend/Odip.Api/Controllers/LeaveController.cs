@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -28,11 +30,16 @@ public class LeaveController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly IObligationTaskService _obligationTasks;
 
-    public LeaveController(OdipDbContext db, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    public LeaveController(
+        OdipDbContext db,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -102,12 +109,19 @@ public class LeaveController : ControllerBase
         // entry). Design spec §5.
         await RaiseLeaveDecidedAsync(leave, approved: true, ct);
 
+        // Item 9 of the connection map: raise a LeaveCoverage obligation task for every
+        // Published shift this approval leaves uncovered — same shift query the Overlaps
+        // finding below is built from.
+        var overlappingShifts = await FindOverlappingPublishedShiftsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct);
+        await RaiseLeaveCoverageTasksAsync(leave, overlappingShifts, ct);
+
         await _db.SaveChangesAsync(ct);
 
-        var overlaps = await FindLeaveOverlapsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct);
+        var overlaps = await BuildOverlapFindingsAsync(overlappingShifts, leave.UserId, leave.StartDate, leave.EndDate, ct);
         return Ok(ApiResponse<LeaveApprovalResultDto>.Ok(new LeaveApprovalResultDto
         {
             Leave = await LoadLeaveDtoAsync(leave.Id, ct), Overlaps = overlaps,
+            OverlapShifts = overlappingShifts.Select(ToOverlapShiftDto).ToList(),
         }));
     }
 
@@ -166,15 +180,28 @@ public class LeaveController : ControllerBase
         leave.EndDate = dto.EndDate;
         leave.Reason = dto.Reason;
         leave.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: an edited Approved leave re-runs the same LeaveCoverage raising as ApproveLeave
+        // — EnsureAsync's idempotency means a shift still overlapping keeps its existing task
+        // (only title/due refreshed for the new dates), a newly-overlapping shift gets a new
+        // task, and a shift that no longer overlaps simply stops being passed in (its existing
+        // task, if any, is left for the shift-reassignment/cancel paths to close).
+        var overlappingShifts = leave.Status == LeaveStatus.Approved
+            ? await FindOverlappingPublishedShiftsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct)
+            : new List<Shift>();
+        if (leave.Status == LeaveStatus.Approved)
+            await RaiseLeaveCoverageTasksAsync(leave, overlappingShifts, ct);
+
         await _db.SaveChangesAsync(ct);
 
         var overlaps = leave.Status == LeaveStatus.Approved
-            ? await FindLeaveOverlapsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct)
+            ? await BuildOverlapFindingsAsync(overlappingShifts, leave.UserId, leave.StartDate, leave.EndDate, ct)
             : new List<RosterFindingDto>();
 
         return Ok(ApiResponse<LeaveApprovalResultDto>.Ok(new LeaveApprovalResultDto
         {
             Leave = await LoadLeaveDtoAsync(leave.Id, ct), Overlaps = overlaps,
+            OverlapShifts = overlappingShifts.Select(ToOverlapShiftDto).ToList(),
         }));
     }
 
@@ -194,6 +221,11 @@ public class LeaveController : ControllerBase
         leave.DecidedByUserId = cancelCallerId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: cancelling the leave removes the coverage obligation entirely, regardless of
+        // which shifts it was raised against.
+        await _obligationTasks.CompleteByLeaveAsync(leave.Id, ct);
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
@@ -260,10 +292,10 @@ public class LeaveController : ControllerBase
         rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        var overlaps = await FindRecurringOverlapsAsync(rule, ct);
+        var (overlaps, overlapShifts) = await FindRecurringOverlapsAsync(rule, ct);
         return Ok(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Ok(new RecurringUnavailabilityApprovalResultDto
         {
-            Unavailability = await LoadUnavailabilityDtoAsync(rule.Id, ct), Overlaps = overlaps,
+            Unavailability = await LoadUnavailabilityDtoAsync(rule.Id, ct), Overlaps = overlaps, OverlapShifts = overlapShifts,
         }));
     }
 
@@ -293,13 +325,13 @@ public class LeaveController : ControllerBase
         rule.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        var overlaps = rule.Status == LeaveStatus.Approved
+        var (overlaps, overlapShifts) = rule.Status == LeaveStatus.Approved
             ? await FindRecurringOverlapsAsync(rule, ct)
-            : new List<RosterFindingDto>();
+            : (new List<RosterFindingDto>(), new List<OverlapShiftDto>());
 
         return Ok(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Ok(new RecurringUnavailabilityApprovalResultDto
         {
-            Unavailability = await LoadUnavailabilityDtoAsync(rule.Id, ct), Overlaps = overlaps,
+            Unavailability = await LoadUnavailabilityDtoAsync(rule.Id, ct), Overlaps = overlaps, OverlapShifts = overlapShifts,
         }));
     }
 
@@ -397,19 +429,52 @@ public class LeaveController : ControllerBase
             && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined
             && (excludeId == null || r.Id != excludeId.Value), ct);
 
-    /// <summary>Overlapping Published shifts / Confirmed trip assignments for the just-approved leave window — informational only, approval is never blocked by this. See spec §3 "Reverse direction."</summary>
-    private async Task<List<RosterFindingDto>> FindLeaveOverlapsAsync(Guid userId, DateOnly startDate, DateOnly endDate, CancellationToken ct)
-    {
-        var overlaps = new List<RosterFindingDto>();
-
-        var shifts = await _db.Shifts
+    /// <summary>Published shifts for this user overlapping a date window — shared by <see cref="BuildOverlapFindingsAsync"/> (leave) and item 9's LeaveCoverage task raising, so both act on the exact same set. Participant included for <see cref="ToOverlapShiftDto"/>/task titles.</summary>
+    private Task<List<Shift>> FindOverlappingPublishedShiftsAsync(Guid userId, DateOnly startDate, DateOnly endDate, CancellationToken ct) =>
+        _db.Shifts.Include(s => s.Participant)
             .Where(s => s.UserId == userId && s.Status == ShiftStatus.Published
                         && s.ServiceDate >= startDate && s.ServiceDate <= endDate)
             .ToListAsync(ct);
-        overlaps.AddRange(shifts.Select(s => new RosterFindingDto
+
+    private static OverlapShiftDto ToOverlapShiftDto(Shift s) => new()
+    {
+        ShiftId = s.Id, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
+        EndsNextDay = s.EndsNextDay, ParticipantId = s.ParticipantId,
+        ParticipantName = s.Participant?.FullName ?? string.Empty,
+    };
+
+    /// <summary>Item 9: raises (or refreshes) a LeaveCoverage obligation task for every shift in <paramref name="overlappingShifts"/> — one SourceKey per (shift, leave) pair, so re-approving/editing never duplicates a task already raised for the same shift.</summary>
+    private async Task RaiseLeaveCoverageTasksAsync(LeaveRequest leave, List<Shift> overlappingShifts, CancellationToken ct)
+    {
+        if (overlappingShifts.Count == 0) return;
+
+        var staffName = await _db.Users.Where(u => u.Id == leave.UserId)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+
+        foreach (var shift in overlappingShifts)
+        {
+            var participantName = shift.Participant?.FullName ?? "a participant";
+            await _obligationTasks.EnsureAsync(new ObligationTaskSpec(
+                SourceKey: $"leave-coverage:{shift.Id}:{leave.Id}",
+                Type: TaskType.LeaveCoverage,
+                Title: $"Re-cover shift for {participantName} on {shift.ServiceDate.ToString("ddd d MMM", CultureInfo.InvariantCulture)} — {staffName} is on leave",
+                DueDate: shift.ServiceDate,
+                LinkTo: $"/rostering?date={shift.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}",
+                ShiftId: shift.Id,
+                LeaveRequestId: leave.Id,
+                Priority: TaskPriority.High), ct);
+        }
+    }
+
+    /// <summary>Overlapping Published shifts / Confirmed trip assignments for the just-approved leave window — informational only, approval is never blocked by this. See spec §3 "Reverse direction." Takes the shifts already fetched by <see cref="FindOverlappingPublishedShiftsAsync"/> so the caller and this method act on the same set (and item 9's task raising doesn't re-query it a third time).</summary>
+    private async Task<List<RosterFindingDto>> BuildOverlapFindingsAsync(List<Shift> overlappingShifts, Guid userId, DateOnly startDate, DateOnly endDate, CancellationToken ct)
+    {
+        var overlaps = new List<RosterFindingDto>();
+
+        overlaps.AddRange(overlappingShifts.Select(s => new RosterFindingDto
         {
             Code = "SHIFT_OVERLAP", Severity = RosterFindingSeverity.Warning,
-            Message = $"A published shift on {s.ServiceDate:d MMM yyyy} overlaps this leave.",
+            Message = $"A published shift on {s.ServiceDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)} overlaps this leave.",
         }));
 
         var trips = await _db.StaffAssignments
@@ -427,33 +492,36 @@ public class LeaveController : ControllerBase
     }
 
     /// <summary>
-    /// Same idea as <see cref="FindLeaveOverlapsAsync"/> for a recurring rule: expands the rule
+    /// Same idea as <see cref="BuildOverlapFindingsAsync"/> for a recurring rule: expands the rule
     /// over a bounded look-ahead (today..EffectiveTo, or today+84 days/12 weeks when open-ended —
     /// see this task's file-structure note; the spec does not bound this and an unbounded
     /// expansion is not safe for an indefinite rule) and checks each occurrence's date/time
-    /// against Published shifts and Confirmed trip assignments.
+    /// against Published shifts and Confirmed trip assignments. No LeaveCoverage tasks are raised
+    /// here (item 9 is scoped to Leave, not recurring unavailability) — OverlapShifts is returned
+    /// anyway since it's cheap off the same shift query.
     /// </summary>
-    private async Task<List<RosterFindingDto>> FindRecurringOverlapsAsync(RecurringUnavailability rule, CancellationToken ct)
+    private async Task<(List<RosterFindingDto> Overlaps, List<OverlapShiftDto> OverlapShifts)> FindRecurringOverlapsAsync(RecurringUnavailability rule, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var horizonStart = today > rule.EffectiveFrom ? today : rule.EffectiveFrom;
         var horizonEnd = rule.EffectiveTo ?? today.AddDays(84);
         var occurrences = new RecurringUnavailabilityExpander().Occurrences(rule, horizonStart, horizonEnd).ToHashSet();
-        if (occurrences.Count == 0) return new List<RosterFindingDto>();
+        if (occurrences.Count == 0) return (new List<RosterFindingDto>(), new List<OverlapShiftDto>());
 
         var overlaps = new List<RosterFindingDto>();
 
-        var shifts = await _db.Shifts
+        var shifts = await _db.Shifts.Include(s => s.Participant)
             .Where(s => s.UserId == rule.UserId && s.Status == ShiftStatus.Published
                         && s.ServiceDate >= horizonStart && s.ServiceDate <= horizonEnd
                         // s.EndsNextDay: EndTime is a next-day time-of-day, so the plain comparison
                         // below is meaningless for it — always include overnight shifts instead.
                         && (s.EndsNextDay || (s.StartTime < rule.EndTime && rule.StartTime < s.EndTime)))
             .ToListAsync(ct);
-        overlaps.AddRange(shifts.Where(s => occurrences.Contains(s.ServiceDate)).Select(s => new RosterFindingDto
+        var matchingShifts = shifts.Where(s => occurrences.Contains(s.ServiceDate)).ToList();
+        overlaps.AddRange(matchingShifts.Select(s => new RosterFindingDto
         {
             Code = "SHIFT_OVERLAP", Severity = RosterFindingSeverity.Warning,
-            Message = $"A published shift on {s.ServiceDate:d MMM yyyy} overlaps this recurring window.",
+            Message = $"A published shift on {s.ServiceDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)} overlaps this recurring window.",
         }));
 
         var trips = await _db.StaffAssignments
@@ -471,7 +539,7 @@ public class LeaveController : ControllerBase
                 Message = $"A confirmed trip assignment ({a.TripInstance?.TripName}) overlaps this recurring window.",
             }));
 
-        return overlaps;
+        return (overlaps, matchingShifts.Select(ToOverlapShiftDto).ToList());
     }
 
     private static LeaveRequestDto ToDto(LeaveRequest l) => new()

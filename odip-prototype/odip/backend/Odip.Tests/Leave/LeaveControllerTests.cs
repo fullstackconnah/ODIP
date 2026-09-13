@@ -302,6 +302,180 @@ public class LeaveControllerTests
         Assert.Contains(body.Data.Overlaps, o => o.Code == "TRIP_OVERLAP");
     }
 
+    [Fact]
+    public async Task ApproveLeave_ReturnsOverlapShiftsWithParticipantAndShiftDetails()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+
+        var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+        var overlapShift = Assert.Single(body.Data!.OverlapShifts);
+        Assert.Equal(shift.Id, overlapShift.ShiftId);
+        Assert.Equal(shift.ServiceDate, overlapShift.ServiceDate);
+        Assert.Equal(shift.StartTime, overlapShift.StartTime);
+        Assert.Equal(shift.EndTime, overlapShift.EndTime);
+        Assert.Equal(participant.Id, overlapShift.ParticipantId);
+        Assert.Equal("Amy Ng", overlapShift.ParticipantName);
+    }
+
+    /// <summary>Item 9 of the connection map: approving leave over a Published shift raises a LeaveCoverage obligation task keyed on (shift, leave).</summary>
+    [Fact]
+    public async Task ApproveLeave_OverlappingPublishedShift_RaisesLeaveCoverageTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.LeaveCoverage, task.TaskType);
+        Assert.Equal($"leave-coverage:{shift.Id}:{leave.Id}", task.SourceKey);
+        Assert.Equal(shift.Id, task.ShiftId);
+        Assert.Equal(leave.Id, task.LeaveRequestId);
+        Assert.Equal(shift.ServiceDate, task.DueDate);
+        Assert.Equal($"/rostering?date={shift.ServiceDate:yyyy-MM-dd}", task.LinkTo);
+        Assert.Equal(TaskPriority.High, task.Priority);
+        Assert.Equal(TaskItemStatus.NotStarted, task.Status);
+        Assert.Contains("Amy Ng", task.Title);
+        Assert.Contains(user.FirstName, task.Title);
+    }
+
+    [Fact]
+    public async Task ApproveLeave_NoOverlappingShifts_RaisesNoLeaveCoverageTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    /// <summary>Item 9: cancelling the leave removes the coverage obligation regardless of which shifts it was raised against.</summary>
+    [Fact]
+    public async Task CancelLeave_ApprovedWithOpenCoverageTask_CompletesTheTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        await db.SaveChangesAsync();
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+
+        await MakeController(db).CancelLeave(leave.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+        Assert.NotNull(task.AutoCompletedAt);
+    }
+
+    /// <summary>Item 9: editing dates on a still-Approved leave re-raises against the new window — EnsureAsync's idempotency means the SAME shift keeps its existing task with only Title/DueDate refreshed.</summary>
+    [Fact]
+    public async Task UpdateLeave_StillApprovedSameOverlappingShift_RefreshesExistingTaskDueDate()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.Equal(1, await db.BookingTasks.CountAsync());
+
+        var updateDto = new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(3) };
+        await MakeController(db).UpdateLeave(leave.Id, updateDto, CancellationToken.None);
+
+        Assert.Equal(1, await db.BookingTasks.CountAsync());
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal($"leave-coverage:{shift.Id}:{leave.Id}", task.SourceKey);
+        Assert.Equal(shift.ServiceDate, task.DueDate); // shift's own date, unaffected by the leave's new end date
+    }
+
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — see
+    /// TemplateRenderingTests' equivalent for the notification templates. The SHIFT_OVERLAP/
+    /// TRIP_OVERLAP finding messages must render invariantly regardless of the host's current
+    /// culture.
+    /// </summary>
+    [Fact]
+    public async Task ApproveLeave_OverlapMessages_RenderInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-AU");
+
+            using var db = CreateDb();
+            var user = SeedUser(db);
+            var leaveStart = new DateOnly(2026, 9, 20);
+            var leaveEnd = leaveStart.AddDays(2);
+            var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, leaveStart, leaveEnd);
+            var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+            db.Participants.Add(participant);
+            db.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = leaveStart,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, Status = ShiftStatus.Published,
+            });
+            await db.SaveChangesAsync();
+
+            var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+            var finding = Assert.Single(body.Data!.Overlaps, o => o.Code == "SHIFT_OVERLAP");
+            Assert.Contains("20 Sep 2026", finding.Message);
+            Assert.DoesNotContain("Sept", finding.Message);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
     /// <summary>Product ruling (2026-09-09): a decline reason is optional, not required — levelled
     /// down to match cancel, which has never demanded one. This replaces the old
     /// DeclineLeave_NoNote_Returns400, which encoded the now-reversed "reason mandatory" rule.</summary>

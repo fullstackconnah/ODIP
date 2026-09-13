@@ -1064,6 +1064,42 @@ public class RosteringControllerTests
         Assert.Equal(leaveEnd, bar.EndDate);
     }
 
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — see
+    /// TemplateRenderingTests' equivalent for the notification templates. ComputeCompliance's
+    /// "expired {date:d MMM yyyy}" notes must render invariantly regardless of the host's
+    /// current culture.
+    /// </summary>
+    [Fact]
+    public async Task GetBoard_StaffMode_ComplianceNote_RendersInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-AU");
+
+            using var db = CreateDb(Guid.NewGuid().ToString());
+            var staff = SeedStaff(db);
+            staff.IsFirstAidQualified = true;
+            staff.FirstAidExpiryDate = new DateOnly(2025, 9, 20); // before ServiceDate (2026-08-24)
+            await db.SaveChangesAsync();
+            var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+            var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+            var row = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id);
+            Assert.Contains(row.ComplianceNotes, n => n.Contains("20 Sep 2025"));
+            Assert.DoesNotContain(row.ComplianceNotes, n => n.Contains("Sept"));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
     [Fact]
     public async Task GetBoard_StaffMode_LeaveBarPopulatesKindSpecificFields()
     {
@@ -1248,5 +1284,115 @@ public class RosteringControllerTests
         await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = null }, CancellationToken.None);
 
         Assert.Empty(await db.NotificationOutbox.ToListAsync());
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ITEM 9 — LeaveCoverage obligation task auto-completion
+    // ══════════════════════════════════════════════════════════════
+
+    private static Odip.Domain.Entities.BookingTask SeedLeaveCoverageTask(OdipDbContext db, Guid shiftId, Guid leaveId)
+    {
+        var task = new Odip.Domain.Entities.BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"leave-coverage:{shiftId}:{leaveId}", TaskType = TaskType.LeaveCoverage,
+            Title = "Re-cover shift", DueDate = ServiceDate, ShiftId = shiftId, LeaveRequestId = leaveId,
+            Status = TaskItemStatus.NotStarted,
+        };
+        db.BookingTasks.Add(task);
+        db.SaveChanges();
+        return task;
+    }
+
+    [Fact]
+    public async Task AssignShift_ReassigningAwayFromOnLeaveStaff_CompletesLeaveCoverageTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var onLeaveStaff = SeedStaff(db, firstName: "Ben", lastName: "OnLeave");
+        var newStaff = SeedStaff(db, firstName: "Cara", lastName: "Covering");
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, onLeaveStaff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
+
+        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = newStaff.Id }, CancellationToken.None);
+
+        var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task AssignShift_ClearingAssignment_CompletesLeaveCoverageTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var onLeaveStaff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, onLeaveStaff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
+
+        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = null }, CancellationToken.None);
+
+        var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
+    }
+
+    /// <summary>Reassigning back to the SAME staff member (no UserId change) leaves the task open — it's still that staff member's shift.</summary>
+    [Fact]
+    public async Task AssignShift_SameStaffMember_LeavesLeaveCoverageTaskOpen()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
+
+        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
+
+        var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.NotStarted, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingTheShift_CompletesLeaveCoverageTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
+
+        var updateDto = new Odip.Application.DTOs.UpdateShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Cancelled,
+        };
+        await controller.UpdateShift(shift.Id, updateDto, CancellationToken.None);
+
+        var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task DeleteShift_CompletesLeaveCoverageTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var staff = SeedStaff(db);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
+
+        await controller.DeleteShift(shift.Id, CancellationToken.None);
+
+        var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
     }
 }

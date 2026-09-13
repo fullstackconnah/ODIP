@@ -245,7 +245,7 @@ public class ParticipantAlertsService
                 {
                     var severity = incident.Severity == IncidentSeverity.Critical ? AlertSeverity.Critical : AlertSeverity.Warning;
                     Add(p.Id, "open-serious-incident", severity,
-                        $"Open {incident.Severity} incident: {incident.Title} ({incident.IncidentDateTime:d MMM})",
+                        $"Open {incident.Severity} incident: {incident.Title} ({incident.IncidentDateTime.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)})",
                         "history", $"/incidents/{incident.Id}");
                 }
 

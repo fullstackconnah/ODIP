@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -43,16 +44,19 @@ public class RosteringController : ControllerBase
     private readonly IConfiguration? _config;
 
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
     public RosteringController(
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
-        IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+        IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
     private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
@@ -406,12 +410,20 @@ public class RosteringController : ControllerBase
         var rejection = EvaluateFindings(findings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
+        var previousUserId = shift.UserId;
         shift.ParticipantId = dto.ParticipantId; shift.UserId = dto.StaffId;
         shift.ServiceDate = dto.ServiceDate; shift.StartTime = dto.StartTime; shift.EndTime = dto.EndTime;
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
         shift.ShiftPatternId = dto.ShiftPatternId; shift.Notes = dto.Notes; shift.Status = dto.Status;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+
+        // Item 9 of the connection map: reassigning the shift away from the on-leave staff
+        // member (or clearing it) — or cancelling it outright — closes the LeaveCoverage
+        // obligation it was raised against. Re-assigning it back to the SAME staff member (no
+        // UserId change) while it stays Published leaves the task open.
+        if (previousUserId != shift.UserId || shift.Status == ShiftStatus.Cancelled)
+            await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
@@ -423,6 +435,9 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<bool>.Fail("Shift not found."));
+
+        // Item 9: deleting the shift removes whatever coverage gap it represented.
+        await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
         _db.Shifts.Remove(shift);
         await _db.SaveChangesAsync(ct);
@@ -451,9 +466,15 @@ public class RosteringController : ControllerBase
         var rejection = EvaluateFindings(findings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
+        var previousUserId = shift.UserId;
         shift.UserId = dto.StaffId;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+
+        // Item 9 of the connection map: reassigning away from (or clearing) the on-leave staff
+        // member closes the LeaveCoverage obligation raised against this shift.
+        if (previousUserId != shift.UserId)
+            await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
         // NotificationEventType.ShiftAssigned — only when a staff member is actually being set;
         // clearing an assignment (dto.StaffId null) has no recipient (design spec §5).
@@ -1289,7 +1310,7 @@ public class RosteringController : ControllerBase
         {
             return (RosterComplianceLevel.Blocked, new List<string>
             {
-                $"{staff.FullName}'s worker screening expired {expiry:d MMM yyyy}."
+                $"{staff.FullName}'s worker screening expired {expiry.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}."
             });
         }
 
@@ -1297,13 +1318,13 @@ public class RosteringController : ControllerBase
         if (staff.WorkerScreeningExpiryDate is null)
             notes.Add($"{staff.FullName} has no worker screening recorded — confirm it before the shift.");
         if (staff.IsFirstAidQualified && staff.FirstAidExpiryDate is { } firstAid && firstAid < weekStart)
-            notes.Add($"{staff.FullName}'s first aid certificate expired {firstAid:d MMM yyyy}.");
+            notes.Add($"{staff.FullName}'s first aid certificate expired {firstAid.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
         if (staff.IsDriverEligible && staff.DriverLicenceExpiryDate is { } licence && licence < weekStart)
-            notes.Add($"{staff.FullName}'s driver licence expired {licence:d MMM yyyy}.");
+            notes.Add($"{staff.FullName}'s driver licence expired {licence.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
         if (staff.IsManualHandlingCompetent && staff.ManualHandlingExpiryDate is { } manualHandling && manualHandling < weekStart)
-            notes.Add($"{staff.FullName}'s manual handling competency expired {manualHandling:d MMM yyyy}.");
+            notes.Add($"{staff.FullName}'s manual handling competency expired {manualHandling.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
         if (staff.IsMedicationCompetent && staff.MedicationCompetencyExpiryDate is { } medication && medication < weekStart)
-            notes.Add($"{staff.FullName}'s medication competency expired {medication:d MMM yyyy}.");
+            notes.Add($"{staff.FullName}'s medication competency expired {medication.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
 
         return notes.Count > 0 ? (RosterComplianceLevel.Warning, notes) : (RosterComplianceLevel.Ok, notes);
     }

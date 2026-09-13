@@ -616,6 +616,40 @@ public class ParticipantAlertsServiceTests
         Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
     }
 
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — see
+    /// TemplateRenderingTests' equivalent for the notification templates. The
+    /// "open-serious-incident" alert's "({IncidentDateTime:d MMM})" suffix must render
+    /// invariantly regardless of the host's current culture.
+    /// </summary>
+    [Fact]
+    public async Task OpenSeriousIncident_RendersInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-AU");
+
+            using var db = CreateDb(Guid.NewGuid().ToString());
+            var participant = SeedParticipant(db);
+            var incident = NewIncident(participant.Id, IncidentSeverity.High);
+            incident.IncidentDateTime = new DateTime(2026, 9, 20, 10, 0, 0, DateTimeKind.Utc);
+            db.IncidentReports.Add(incident);
+            db.SaveChanges();
+
+            var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+            var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
+            Assert.Contains("20 Sep", alert.Message);
+            Assert.DoesNotContain("Sept", alert.Message);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
     [Fact]
     public async Task OpenSeriousIncident_CriticalSeverityOpen_FiresAsCritical()
     {
