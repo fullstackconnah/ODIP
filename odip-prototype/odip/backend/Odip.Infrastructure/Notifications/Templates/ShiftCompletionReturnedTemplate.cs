@@ -17,7 +17,7 @@ public static class ShiftCompletionReturnedTemplate
         Subject: $"Shift returned for correction: {p.ParticipantName} on {p.ServiceDate:d MMM yyyy}",
         PlainTextBody: $"Your shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} was returned " +
                        $"for correction.\n\nReason: {p.ReturnReason}\n\nView it: {baseUrl}/portal",
-        HtmlBody: $"<p>Your shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} was returned " +
-                  $"for correction.</p><p>Reason: {p.ReturnReason}</p>" +
-                  $"<p><a href=\"{baseUrl}/portal\">View it</a></p>");
+        HtmlBody: $"<p>Your shift with {Html.E(p.ParticipantName)} on {p.ServiceDate:d MMM yyyy} was returned " +
+                  $"for correction.</p><p>Reason: {Html.E(p.ReturnReason)}</p>" +
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View it</a></p>");
 }

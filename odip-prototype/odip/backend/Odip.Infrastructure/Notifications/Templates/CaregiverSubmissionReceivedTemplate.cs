@@ -12,6 +12,6 @@ public static class CaregiverSubmissionReceivedTemplate
         Subject: $"Caregiver submission received: {p.ParticipantName}",
         PlainTextBody: $"{p.CaregiverName} has submitted a profile update for {p.ParticipantName}.\n\n" +
                        $"Review it: {baseUrl}/caregiver-submissions",
-        HtmlBody: $"<p>{p.CaregiverName} has submitted a profile update for {p.ParticipantName}.</p>" +
-                  $"<p><a href=\"{baseUrl}/caregiver-submissions\">Review it</a></p>");
+        HtmlBody: $"<p>{Html.E(p.CaregiverName)} has submitted a profile update for {Html.E(p.ParticipantName)}.</p>" +
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/caregiver-submissions\">Review it</a></p>");
 }

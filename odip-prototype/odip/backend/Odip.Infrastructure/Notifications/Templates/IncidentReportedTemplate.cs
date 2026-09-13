@@ -17,6 +17,6 @@ public static class IncidentReportedTemplate
         Subject: $"Incident reported: {p.IncidentType} ({p.Severity})",
         PlainTextBody: $"{p.ReportedByName} reported a {p.Severity} {p.IncidentType} incident.\n\n" +
                        $"Review it: {baseUrl}/incidents",
-        HtmlBody: $"<p>{p.ReportedByName} reported a {p.Severity} {p.IncidentType} incident.</p>" +
-                  $"<p><a href=\"{baseUrl}/incidents\">Review it</a></p>");
+        HtmlBody: $"<p>{Html.E(p.ReportedByName)} reported a {Html.E(p.Severity)} {Html.E(p.IncidentType)} incident.</p>" +
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/incidents\">Review it</a></p>");
 }

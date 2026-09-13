@@ -12,6 +12,6 @@ public static class WitnessRequestedTemplate
         Subject: $"Witness needed: {p.ParticipantName}'s medication",
         PlainTextBody: $"{p.AdministeringStaffName} needs you to witness a medication administration " +
                        $"for {p.ParticipantName}.\n\nReview it: {baseUrl}/portal/witness-approvals",
-        HtmlBody: $"<p>{p.AdministeringStaffName} needs you to witness a medication administration " +
-                  $"for {p.ParticipantName}.</p><p><a href=\"{baseUrl}/portal/witness-approvals\">Review it</a></p>");
+        HtmlBody: $"<p>{Html.E(p.AdministeringStaffName)} needs you to witness a medication administration " +
+                  $"for {Html.E(p.ParticipantName)}.</p><p><a href=\"{Html.Attr(baseUrl)}/portal/witness-approvals\">Review it</a></p>");
 }

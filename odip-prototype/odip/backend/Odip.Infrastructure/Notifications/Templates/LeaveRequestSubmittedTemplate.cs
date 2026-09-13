@@ -13,7 +13,7 @@ public static class LeaveRequestSubmittedTemplate
         Subject: $"Leave request from {p.RequesterName}",
         PlainTextBody: $"{p.RequesterName} has requested {p.LeaveType} leave from " +
                        $"{p.StartDate:d MMM yyyy} to {p.EndDate:d MMM yyyy}.\n\nReview it: {baseUrl}/rostering/leave",
-        HtmlBody: $"<p>{p.RequesterName} has requested {p.LeaveType} leave from " +
+        HtmlBody: $"<p>{Html.E(p.RequesterName)} has requested {Html.E(p.LeaveType)} leave from " +
                   $"{p.StartDate:d MMM yyyy} to {p.EndDate:d MMM yyyy}.</p>" +
-                  $"<p><a href=\"{baseUrl}/rostering/leave\">Review it</a></p>");
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/rostering/leave\">Review it</a></p>");
 }

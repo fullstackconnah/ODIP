@@ -13,7 +13,7 @@ public static class ShiftAssignedTemplate
         Subject: $"New shift: {p.ParticipantName} on {p.ServiceDate:d MMM yyyy}",
         PlainTextBody: $"You've been assigned a shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} " +
                        $"from {p.StartTime:h:mm tt} to {p.EndTime:h:mm tt}.\n\nView it: {baseUrl}/portal",
-        HtmlBody: $"<p>You've been assigned a shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} " +
+        HtmlBody: $"<p>You've been assigned a shift with {Html.E(p.ParticipantName)} on {p.ServiceDate:d MMM yyyy} " +
                   $"from {p.StartTime:h:mm tt} to {p.EndTime:h:mm tt}.</p>" +
-                  $"<p><a href=\"{baseUrl}/portal\">View it</a></p>");
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View it</a></p>");
 }

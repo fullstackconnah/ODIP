@@ -18,7 +18,7 @@ public static class ShiftCompletionPendingReviewTemplate
         Subject: $"Shift ready for review: {p.WorkerName} / {p.ParticipantName}",
         PlainTextBody: $"{p.WorkerName}'s shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} " +
                        $"has been submitted and is awaiting review.\n\nReview it: {baseUrl}/rostering",
-        HtmlBody: $"<p>{p.WorkerName}'s shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} " +
+        HtmlBody: $"<p>{Html.E(p.WorkerName)}'s shift with {Html.E(p.ParticipantName)} on {p.ServiceDate:d MMM yyyy} " +
                   $"has been submitted and is awaiting review.</p>" +
-                  $"<p><a href=\"{baseUrl}/rostering\">Review it</a></p>");
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/rostering\">Review it</a></p>");
 }

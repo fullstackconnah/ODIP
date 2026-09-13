@@ -13,14 +13,14 @@ public static class LeaveRequestDecidedTemplate
     {
         var outcome = p.Approved ? "approved" : "declined";
         var noteText = string.IsNullOrWhiteSpace(p.DecisionNote) ? string.Empty : $"\n\nNote: {p.DecisionNote}";
-        var noteHtml = string.IsNullOrWhiteSpace(p.DecisionNote) ? string.Empty : $"<p>Note: {p.DecisionNote}</p>";
+        var noteHtml = string.IsNullOrWhiteSpace(p.DecisionNote) ? string.Empty : $"<p>Note: {Html.E(p.DecisionNote)}</p>";
         return new(
             RecipientAddress: p.RecipientEmail,
             Subject: $"Your {p.LeaveType} leave request was {outcome}",
             PlainTextBody: $"Your {p.LeaveType} leave request from {p.StartDate:d MMM yyyy} to " +
                            $"{p.EndDate:d MMM yyyy} was {outcome}.{noteText}\n\nView it: {baseUrl}/portal/leave",
-            HtmlBody: $"<p>Your {p.LeaveType} leave request from {p.StartDate:d MMM yyyy} to " +
+            HtmlBody: $"<p>Your {Html.E(p.LeaveType)} leave request from {p.StartDate:d MMM yyyy} to " +
                       $"{p.EndDate:d MMM yyyy} was {outcome}.</p>{noteHtml}" +
-                      $"<p><a href=\"{baseUrl}/portal/leave\">View it</a></p>");
+                      $"<p><a href=\"{Html.Attr(baseUrl)}/portal/leave\">View it</a></p>");
     }
 }
