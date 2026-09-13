@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { CalendarOff, Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
@@ -13,17 +14,26 @@ import {
   useLeaveRequests, useRecurringUnavailabilities, useApproveLeave, useDeclineLeave, useCancelLeave,
   useApproveUnavailability, useDeclineUnavailability, useCancelUnavailability,
   useCreateLeaveOnBehalf, useCreateUnavailabilityOnBehalf, useStaff,
+  useUpdateLeave, useUpdateUnavailability,
+  useStaffAvailabilityRecords, useCreateStaffAvailability, useUpdateStaffAvailability, useDeleteStaffAvailability,
 } from '@/api/hooks'
 import { LeaveRequestFormModal } from '@/pages/portal/components/LeaveRequestFormModal'
 import { UnavailabilityFormModal } from '@/pages/portal/components/UnavailabilityFormModal'
+import { AvailabilityRecordFormModal } from '@/pages/rostering/components/AvailabilityRecordFormModal'
 import { LEAVE_STATUS_COLORS, LEAVE_TYPE_LABELS } from '@/api/types'
-import type { LeaveRequestDto, RecurringUnavailabilityDto, LeaveStatus, RosterFindingDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
+import type {
+  LeaveRequestDto, RecurringUnavailabilityDto, StaffAvailabilityDto, LeaveStatus, RosterFindingDto,
+  CreateLeaveRequestDto, CreateRecurringUnavailabilityDto, CreateStaffAvailabilityDto,
+} from '@/api/types'
 import { formatEffectiveRange } from './lib/roster'
 import { extractErrorMessage } from '@/lib/utils'
+
+type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
 type ApprovalRow =
   | { rowKind: 'leave'; key: string; data: LeaveRequestDto }
   | { rowKind: 'unavailability'; key: string; data: RecurringUnavailabilityDto }
+  | { rowKind: 'legacy'; key: string; data: LegacyRecord }
 
 const STATUS_FILTER_ITEMS = [
   { value: '', label: 'All statuses' },
@@ -33,20 +43,44 @@ const STATUS_FILTER_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
+// Neutral grey — StatusBadge's own STATUS_COLORS has no 'record' key, so without this override
+// it would fall through to the amber DEFAULT_COLOR and read as "awaiting decision", which a
+// legacy record (no status/decision workflow at all) never is.
+const LEGACY_RECORD_COLOR = { record: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]' }
+
 function rowType(row: ApprovalRow) {
-  return row.rowKind === 'leave' ? `Leave — ${LEAVE_TYPE_LABELS[row.data.leaveType]}` : 'Regular unavailability'
+  if (row.rowKind === 'leave') return `Leave — ${LEAVE_TYPE_LABELS[row.data.leaveType]}`
+  if (row.rowKind === 'unavailability') return 'Regular unavailability'
+  return row.data.availabilityType
 }
 
 function rowWindow(row: ApprovalRow) {
-  return row.rowKind === 'leave'
-    ? formatEffectiveRange(row.data.startDate, row.data.endDate)
-    : `${row.data.dayOfWeek} ${row.data.startTime.slice(0, 5)}–${row.data.endTime.slice(0, 5)}, ${formatEffectiveRange(row.data.effectiveFrom, row.data.effectiveTo)}`
+  if (row.rowKind === 'leave') return formatEffectiveRange(row.data.startDate, row.data.endDate)
+  if (row.rowKind === 'unavailability') {
+    return `${row.data.dayOfWeek} ${row.data.startTime.slice(0, 5)}–${row.data.endTime.slice(0, 5)}, ${formatEffectiveRange(row.data.effectiveFrom, row.data.effectiveTo)}`
+  }
+  return formatEffectiveRange(row.data.startDateTime.slice(0, 10), row.data.endDateTime.slice(0, 10))
+}
+
+/** Sort key for the merged table — requestedAt for leave/unavailability rows; a legacy row has no
+ * requestedAt (there's no request workflow), so it falls back to createdAt if the DTO ever grows
+ * one, else startDateTime. */
+function rowSortKey(row: ApprovalRow): string {
+  if (row.rowKind === 'legacy') {
+    const data = row.data as LegacyRecord & { createdAt?: string }
+    return data.createdAt ?? data.startDateTime
+  }
+  return row.data.requestedAt
 }
 
 export default function LeaveApprovalsPage() {
   const { canApproveLeave } = usePermissions()
-  const [statusFilter, setStatusFilter] = useState<LeaveStatus | ''>('Pending')
-  const [staffFilter, setStaffFilter] = useState('')
+  const [searchParams] = useSearchParams()
+  // A ?userId= link (e.g. from a staff profile) means "show me this person's history" — the
+  // default Pending-only view would otherwise hide everything but their live requests.
+  const linkedUserId = searchParams.get('userId') ?? ''
+  const [statusFilter, setStatusFilter] = useState<LeaveStatus | ''>(linkedUserId ? '' : 'Pending')
+  const [staffFilter, setStaffFilter] = useState(linkedUserId)
   const [fromFilter, setFromFilter] = useState('')
   const [toFilter, setToFilter] = useState('')
 
@@ -64,8 +98,15 @@ export default function LeaveApprovalsPage() {
     userId: staffFilter || undefined,
   }), [statusFilter, staffFilter])
 
+  const legacyFilters = useMemo(() => ({
+    userId: staffFilter || undefined,
+    from: fromFilter || undefined,
+    to: toFilter || undefined,
+  }), [staffFilter, fromFilter, toFilter])
+
   const { data: leaveRequests = [], isLoading: leaveLoading, isError: leaveError, refetch: refetchLeave } = useLeaveRequests(filters)
   const { data: unavailabilities = [], isLoading: unavailabilityLoading, isError: unavailabilityError, refetch: refetchUnavailability } = useRecurringUnavailabilities(unavailabilityFilters)
+  const { data: legacyRecords = [], isLoading: legacyLoading, isError: legacyError, refetch: refetchLegacy } = useStaffAvailabilityRecords(legacyFilters)
   const { data: staff = [] } = useStaff()
 
   // Effective range [effectiveFrom, effectiveTo ?? ∞) overlaps the [fromFilter, toFilter] window
@@ -85,15 +126,35 @@ export default function LeaveApprovalsPage() {
   const cancelUnavailability = useCancelUnavailability()
   const createLeaveOnBehalf = useCreateLeaveOnBehalf()
   const createUnavailabilityOnBehalf = useCreateUnavailabilityOnBehalf()
+  const updateLeave = useUpdateLeave()
+  const updateUnavailability = useUpdateUnavailability()
+  const createStaffAvailability = useCreateStaffAvailability()
+  const updateStaffAvailability = useUpdateStaffAvailability()
+  const deleteStaffAvailability = useDeleteStaffAvailability()
 
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
   const staffNameById = useMemo(() => new Map(staff.map(s => [s.id, s.fullName])), [staff])
 
-  const [onBehalfMode, setOnBehalfMode] = useState<'leave' | 'unavailability' | null>(null)
+  // A legacy record has no status of its own — it's shown as a settled "Record" whenever the
+  // filter isn't scoped to a workflow status that couldn't apply to it (Pending/Declined/
+  // Cancelled are all leave/unavailability-only states).
+  const visibleLegacyRecords: LegacyRecord[] = useMemo(
+    () => (statusFilter === '' || statusFilter === 'Approved')
+      ? legacyRecords.map(r => ({ ...r, userFullName: staffNameById.get(r.staffId) ?? 'Unknown staff' }))
+      : [],
+    [legacyRecords, statusFilter, staffNameById],
+  )
+
+  const [onBehalfMode, setOnBehalfMode] = useState<'leave' | 'unavailability' | 'availability' | null>(null)
   const [onBehalfError, setOnBehalfError] = useState<string | null>(null)
   const [approveTarget, setApproveTarget] = useState<ApprovalRow | null>(null)
   const [approveOverlaps, setApproveOverlaps] = useState<RosterFindingDto[] | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [editTarget, setEditTarget] = useState<ApprovalRow | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editOverlaps, setEditOverlaps] = useState<RosterFindingDto[] | null>(null)
+  const [deleteLegacyTarget, setDeleteLegacyTarget] = useState<{ rowKind: 'legacy'; key: string; data: LegacyRecord } | null>(null)
+  const [deleteLegacyError, setDeleteLegacyError] = useState<string | null>(null)
   const [declineTarget, setDeclineTarget] = useState<ApprovalRow | null>(null)
   const [declineNote, setDeclineNote] = useState('')
   const [declineError, setDeclineError] = useState<string | null>(null)
@@ -103,10 +164,17 @@ export default function LeaveApprovalsPage() {
   const rows: ApprovalRow[] = useMemo(() => [
     ...leaveRequests.map(r => ({ rowKind: 'leave' as const, key: `leave-${r.id}`, data: r })),
     ...visibleUnavailabilities.map(r => ({ rowKind: 'unavailability' as const, key: `unavailability-${r.id}`, data: r })),
-  ].sort((a, b) => b.data.requestedAt.localeCompare(a.data.requestedAt)), [leaveRequests, visibleUnavailabilities])
+    ...visibleLegacyRecords.map(r => ({ rowKind: 'legacy' as const, key: `legacy-${r.id}`, data: r })),
+  ].sort((a, b) => rowSortKey(b).localeCompare(rowSortKey(a))), [leaveRequests, visibleUnavailabilities, visibleLegacyRecords])
 
-  const isLoading = leaveLoading || unavailabilityLoading
-  const isError = leaveError || unavailabilityError
+  const isLoading = leaveLoading || unavailabilityLoading || legacyLoading
+  const isError = leaveError || unavailabilityError || legacyError
+
+  function refetchAll() {
+    refetchLeave()
+    refetchUnavailability()
+    refetchLegacy()
+  }
 
   async function handleApproveConfirm() {
     if (!approveTarget) return
@@ -175,7 +243,83 @@ export default function LeaveApprovalsPage() {
     }
   }
 
+  async function handleOnBehalfAvailability(payload: CreateStaffAvailabilityDto) {
+    setOnBehalfError(null)
+    try {
+      await createStaffAvailability.mutateAsync(payload)
+      setOnBehalfMode(null)
+    } catch (err) {
+      setOnBehalfError(extractErrorMessage(err, 'Could not save this availability record. Please try again.'))
+    }
+  }
+
+  function openEdit(row: ApprovalRow) {
+    setEditError(null)
+    setEditTarget(row)
+  }
+
+  function closeEditFlow() {
+    setEditTarget(null)
+    setEditError(null)
+  }
+
+  async function handleEditLeaveSubmit(payload: CreateLeaveRequestDto) {
+    if (!editTarget || editTarget.rowKind !== 'leave') return
+    setEditError(null)
+    try {
+      const result = await updateLeave.mutateAsync({
+        id: editTarget.data.id,
+        data: { leaveType: payload.leaveType, startDate: payload.startDate, endDate: payload.endDate, reason: payload.reason },
+      })
+      closeEditFlow()
+      if (result.overlaps.length > 0) setEditOverlaps(result.overlaps)
+    } catch (err) {
+      setEditError(extractErrorMessage(err, 'Could not save this leave request. Please try again.'))
+    }
+  }
+
+  async function handleEditUnavailabilitySubmit(payload: CreateRecurringUnavailabilityDto) {
+    if (!editTarget || editTarget.rowKind !== 'unavailability') return
+    setEditError(null)
+    try {
+      const result = await updateUnavailability.mutateAsync({
+        id: editTarget.data.id,
+        data: {
+          dayOfWeek: payload.dayOfWeek, startTime: payload.startTime, endTime: payload.endTime,
+          effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo, notes: payload.notes,
+        },
+      })
+      closeEditFlow()
+      if (result.overlaps.length > 0) setEditOverlaps(result.overlaps)
+    } catch (err) {
+      setEditError(extractErrorMessage(err, 'Could not save this unavailability rule. Please try again.'))
+    }
+  }
+
+  async function handleEditLegacySubmit(payload: CreateStaffAvailabilityDto) {
+    if (!editTarget || editTarget.rowKind !== 'legacy') return
+    setEditError(null)
+    try {
+      await updateStaffAvailability.mutateAsync({ id: editTarget.data.id, data: payload })
+      closeEditFlow()
+    } catch (err) {
+      setEditError(extractErrorMessage(err, 'Could not save this availability record. Please try again.'))
+    }
+  }
+
+  async function handleDeleteLegacyConfirm() {
+    if (!deleteLegacyTarget) return
+    setDeleteLegacyError(null)
+    try {
+      await deleteStaffAvailability.mutateAsync(deleteLegacyTarget.data.id)
+      setDeleteLegacyTarget(null)
+    } catch (err) {
+      setDeleteLegacyError(extractErrorMessage(err, 'Could not delete this record. Please try again.'))
+    }
+  }
+
   function rowRequestedBy(row: ApprovalRow) {
+    if (row.rowKind === 'legacy') return '—'
     const { requestedByUserId, userId, requestedAt } = row.data
     const who = requestedByUserId === userId ? 'Self' : (staffNameById.get(requestedByUserId) ?? 'Coordinator')
     return `${who} · ${requestedAt.slice(0, 10)}`
@@ -186,7 +330,9 @@ export default function LeaveApprovalsPage() {
     { key: 'type', header: 'Type', render: rowType },
     { key: 'window', header: 'Dates', render: rowWindow },
     { key: 'requestedAt', header: 'Requested', render: rowRequestedBy },
-    { key: 'status', header: 'Status', render: row => (
+    { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
+      <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
+    ) : (
       <div>
         <StatusBadge status={row.data.status} colorMap={LEAVE_STATUS_COLORS} />
         {row.data.status === 'Declined' && row.data.decisionNote && (
@@ -195,20 +341,48 @@ export default function LeaveApprovalsPage() {
       </div>
     ) },
     ...(canApproveLeave ? [{
-      key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => row.data.status === 'Pending' ? (
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
-            Decline
-          </button>
-          <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
-            Approve
-          </button>
-        </div>
-      ) : row.data.status === 'Approved' ? (
-        <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
-          {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
-        </button>
-      ) : null,
+      key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => {
+        if (row.rowKind === 'legacy') {
+          return (
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+                Edit
+              </button>
+              <button type="button" onClick={() => setDeleteLegacyTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
+                Delete
+              </button>
+            </div>
+          )
+        }
+        if (row.data.status === 'Pending') {
+          return (
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+                Edit
+              </button>
+              <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+                Decline
+              </button>
+              <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+                Approve
+              </button>
+            </div>
+          )
+        }
+        if (row.data.status === 'Approved') {
+          return (
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+                Edit
+              </button>
+              <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
+                {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
+              </button>
+            </div>
+          )
+        }
+        return null
+      },
     }] : []),
   ]
 
@@ -220,8 +394,12 @@ export default function LeaveApprovalsPage() {
             variant="menu"
             label="Enter on behalf"
             icon={<Plus className="w-4 h-4" />}
-            items={[{ value: 'leave', label: 'Leave' }, { value: 'unavailability', label: 'Regular unavailability' }]}
-            onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability') }}
+            items={[
+              { value: 'leave', label: 'Leave' },
+              { value: 'unavailability', label: 'Regular unavailability' },
+              { value: 'availability', label: 'Availability record' },
+            ]}
+            onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability' | 'availability') }}
           />
         )}
       </PageHeader>
@@ -261,7 +439,7 @@ export default function LeaveApprovalsPage() {
           icon={CalendarOff}
           title="Couldn't load leave requests."
           description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: () => { refetchLeave(); refetchUnavailability() } }}
+          action={{ label: 'Try again', onClick: refetchAll }}
         />
       ) : rows.length === 0 ? (
         <EmptyState icon={CalendarOff} title="No requests match these filters" description="Try a different status, staff member or date range." />
@@ -289,6 +467,100 @@ export default function LeaveApprovalsPage() {
           staffOptions={staffOptions}
         />
       )}
+      {onBehalfMode === 'availability' && (
+        <AvailabilityRecordFormModal
+          open
+          onClose={() => setOnBehalfMode(null)}
+          onSubmit={handleOnBehalfAvailability}
+          submitting={createStaffAvailability.isPending}
+          errorMessage={onBehalfError}
+          staffOptions={staffOptions}
+        />
+      )}
+
+      {editTarget?.rowKind === 'leave' && (
+        <LeaveRequestFormModal
+          open
+          mode="edit"
+          onClose={closeEditFlow}
+          onSubmit={handleEditLeaveSubmit}
+          submitting={updateLeave.isPending}
+          errorMessage={editError}
+          initialValues={{
+            leaveType: editTarget.data.leaveType,
+            startDate: editTarget.data.startDate,
+            endDate: editTarget.data.endDate,
+            reason: editTarget.data.reason ?? '',
+          }}
+        />
+      )}
+      {editTarget?.rowKind === 'unavailability' && (
+        <UnavailabilityFormModal
+          open
+          mode="edit"
+          onClose={closeEditFlow}
+          onSubmit={handleEditUnavailabilitySubmit}
+          submitting={updateUnavailability.isPending}
+          errorMessage={editError}
+          initialValues={{
+            dayOfWeek: editTarget.data.dayOfWeek,
+            startTime: editTarget.data.startTime.slice(0, 5),
+            endTime: editTarget.data.endTime.slice(0, 5),
+            effectiveFrom: editTarget.data.effectiveFrom,
+            effectiveTo: editTarget.data.effectiveTo ?? '',
+            notes: editTarget.data.notes ?? '',
+          }}
+        />
+      )}
+      {editTarget?.rowKind === 'legacy' && (
+        <AvailabilityRecordFormModal
+          open
+          mode="edit"
+          onClose={closeEditFlow}
+          onSubmit={handleEditLegacySubmit}
+          submitting={updateStaffAvailability.isPending}
+          errorMessage={editError}
+          initialValues={{
+            availabilityType: editTarget.data.availabilityType as 'Available' | 'Unavailable' | 'Training' | 'Preferred' | 'Tentative',
+            startDate: editTarget.data.startDateTime.slice(0, 10),
+            endDate: editTarget.data.endDateTime.slice(0, 10),
+            notes: editTarget.data.notes ?? '',
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={editOverlaps !== null}
+        onCancel={() => setEditOverlaps(null)}
+        onConfirm={() => setEditOverlaps(null)}
+        title="Saved"
+        confirmLabel="Done"
+        message={
+          editOverlaps && editOverlaps.length > 0 ? (
+            <div className="space-y-2">
+              <p>{`Saved — this overlaps ${editOverlaps.length} rostered shift/trip${editOverlaps.length === 1 ? '' : 's'}.`}</p>
+              <FindingsList findings={editOverlaps} />
+            </div>
+          ) : null
+        }
+      />
+
+      <ConfirmDialog
+        open={deleteLegacyTarget !== null}
+        onCancel={() => { setDeleteLegacyTarget(null); setDeleteLegacyError(null) }}
+        onConfirm={handleDeleteLegacyConfirm}
+        title="Delete record"
+        variant="danger"
+        confirmLabel="Yes, delete it"
+        cancelLabel="Keep"
+        loading={deleteStaffAvailability.isPending}
+        message={
+          <div className="space-y-2">
+            <p>{deleteLegacyTarget ? `Delete the availability record for ${deleteLegacyTarget.data.userFullName}?` : ''}</p>
+            {deleteLegacyError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{deleteLegacyError}</p>}
+          </div>
+        }
+      />
 
       <ConfirmDialog
         open={approveTarget !== null && approveOverlaps === null}

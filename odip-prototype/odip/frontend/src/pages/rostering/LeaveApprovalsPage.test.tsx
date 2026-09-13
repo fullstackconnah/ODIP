@@ -3,29 +3,32 @@ import { render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import LeaveApprovalsPage from './LeaveApprovalsPage'
-import { makeLeaveRequest, makeRecurringRule } from './test-fixtures-leave'
+import { makeLeaveRequest, makeRecurringRule, makeAvailabilityRecord } from './test-fixtures-leave'
 import type { StaffListDto } from '@/api/types'
 
 // LeaveApprovalsPage renders LeaveRequestFormModal/UnavailabilityFormModal ("Enter on behalf"),
 // which call useUnsavedChangesWarning — a data router is required (see Task 7's Interfaces
 // section; mirrors VehicleCreatePage.test.tsx:3,13-20).
-function renderPage() {
+function renderPage(initialEntry = '/rostering/leave') {
   const router = createMemoryRouter(
     [{ path: '/rostering/leave', element: <LeaveApprovalsPage /> }],
-    { initialEntries: ['/rostering/leave'] },
+    { initialEntries: [initialEntry] },
   )
   return render(<RouterProvider router={router} />)
 }
 
 const {
-  mockUseLeaveRequests, mockUseRecurringUnavailabilities, mockUseStaff,
+  mockUseLeaveRequests, mockUseRecurringUnavailabilities, mockUseStaff, mockUseStaffAvailabilityRecords,
   mockApproveLeaveMutateAsync, mockDeclineLeaveMutateAsync, mockCancelLeaveMutateAsync,
   mockApproveUnavailabilityMutateAsync, mockDeclineUnavailabilityMutateAsync, mockCancelUnavailabilityMutateAsync,
   mockCreateLeaveOnBehalfMutateAsync, mockCreateUnavailabilityOnBehalfMutateAsync,
+  mockUpdateLeaveMutateAsync, mockUpdateUnavailabilityMutateAsync,
+  mockCreateStaffAvailabilityMutateAsync, mockUpdateStaffAvailabilityMutateAsync, mockDeleteStaffAvailabilityMutateAsync,
 } = vi.hoisted(() => ({
   mockUseLeaveRequests: vi.fn(),
   mockUseRecurringUnavailabilities: vi.fn(),
   mockUseStaff: vi.fn(() => ({ data: [{ id: 'staff-1', fullName: 'Alex Rivera' }] as StaffListDto[] })),
+  mockUseStaffAvailabilityRecords: vi.fn(),
   mockApproveLeaveMutateAsync: vi.fn(),
   mockDeclineLeaveMutateAsync: vi.fn(),
   mockCancelLeaveMutateAsync: vi.fn(),
@@ -34,12 +37,18 @@ const {
   mockCancelUnavailabilityMutateAsync: vi.fn(),
   mockCreateLeaveOnBehalfMutateAsync: vi.fn(),
   mockCreateUnavailabilityOnBehalfMutateAsync: vi.fn(),
+  mockUpdateLeaveMutateAsync: vi.fn(),
+  mockUpdateUnavailabilityMutateAsync: vi.fn(),
+  mockCreateStaffAvailabilityMutateAsync: vi.fn(),
+  mockUpdateStaffAvailabilityMutateAsync: vi.fn(),
+  mockDeleteStaffAvailabilityMutateAsync: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useLeaveRequests: mockUseLeaveRequests,
   useRecurringUnavailabilities: mockUseRecurringUnavailabilities,
   useStaff: mockUseStaff,
+  useStaffAvailabilityRecords: mockUseStaffAvailabilityRecords,
   useApproveLeave: () => ({ mutateAsync: mockApproveLeaveMutateAsync, isPending: false }),
   useDeclineLeave: () => ({ mutateAsync: mockDeclineLeaveMutateAsync, isPending: false }),
   useCancelLeave: () => ({ mutateAsync: mockCancelLeaveMutateAsync, isPending: false }),
@@ -48,6 +57,11 @@ vi.mock('@/api/hooks', () => ({
   useCancelUnavailability: () => ({ mutateAsync: mockCancelUnavailabilityMutateAsync, isPending: false }),
   useCreateLeaveOnBehalf: () => ({ mutateAsync: mockCreateLeaveOnBehalfMutateAsync, isPending: false }),
   useCreateUnavailabilityOnBehalf: () => ({ mutateAsync: mockCreateUnavailabilityOnBehalfMutateAsync, isPending: false }),
+  useUpdateLeave: () => ({ mutateAsync: mockUpdateLeaveMutateAsync, isPending: false }),
+  useUpdateUnavailability: () => ({ mutateAsync: mockUpdateUnavailabilityMutateAsync, isPending: false }),
+  useCreateStaffAvailability: () => ({ mutateAsync: mockCreateStaffAvailabilityMutateAsync, isPending: false }),
+  useUpdateStaffAvailability: () => ({ mutateAsync: mockUpdateStaffAvailabilityMutateAsync, isPending: false }),
+  useDeleteStaffAvailability: () => ({ mutateAsync: mockDeleteStaffAvailabilityMutateAsync, isPending: false }),
 }))
 
 function setUserRole(role: string) {
@@ -62,6 +76,7 @@ beforeEach(() => {
   setUserRole('Coordinator')
   mockUseLeaveRequests.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockUseRecurringUnavailabilities.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+  mockUseStaffAvailabilityRecords.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockApproveLeaveMutateAsync.mockReset()
   mockDeclineLeaveMutateAsync.mockReset()
   mockCancelLeaveMutateAsync.mockReset()
@@ -70,6 +85,11 @@ beforeEach(() => {
   mockCancelUnavailabilityMutateAsync.mockReset()
   mockCreateLeaveOnBehalfMutateAsync.mockReset()
   mockCreateUnavailabilityOnBehalfMutateAsync.mockReset()
+  mockUpdateLeaveMutateAsync.mockReset()
+  mockUpdateUnavailabilityMutateAsync.mockReset()
+  mockCreateStaffAvailabilityMutateAsync.mockReset()
+  mockUpdateStaffAvailabilityMutateAsync.mockReset()
+  mockDeleteStaffAvailabilityMutateAsync.mockReset()
 })
 
 describe('LeaveApprovalsPage', () => {
@@ -322,5 +342,195 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^decline$/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
+  })
+
+  it('gives a Pending leave row an Edit button alongside Decline/Approve', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Pending' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
+  })
+
+  it('gives an Approved leave row an Edit button alongside Cancel', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Approved' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^cancel leave$/i })).toBeInTheDocument()
+  })
+
+  it('edits a Pending leave request: opens the modal pre-filled and submits PUT with the edited body', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({
+      data: [makeLeaveRequest({ id: 'leave-1', leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    mockUpdateLeaveMutateAsync.mockResolvedValue({ leave: makeLeaveRequest({ id: 'leave-1' }), overlaps: [] })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+
+    expect(screen.getByText('Edit leave request')).toBeInTheDocument()
+    expect(screen.getByLabelText(/start date/i)).toHaveValue('2026-09-14')
+    expect(screen.queryByRole('combobox', { name: /staff member/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(mockUpdateLeaveMutateAsync).toHaveBeenCalledWith({
+      id: 'leave-1',
+      data: { leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' },
+    })
+  })
+
+  it('shows the overlaps dialog after editing a leave request when the result carries overlaps', async () => {
+    const user = userEvent.setup()
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1' })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUpdateLeaveMutateAsync.mockResolvedValue({
+      leave: makeLeaveRequest({ id: 'leave-1' }),
+      overlaps: [{ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Warning', message: 'Overlaps a published shift.', requiresReason: false }],
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(await screen.findByText(/saved.*overlaps 1 rostered shift\/trip/i)).toBeInTheDocument()
+    expect(screen.getByText('Overlaps a published shift.')).toBeInTheDocument()
+  })
+
+  it('edits a recurring unavailability rule: opens the modal pre-filled and submits PUT with the edited body', async () => {
+    const user = userEvent.setup()
+    mockUseRecurringUnavailabilities.mockReturnValue({
+      data: [makeRecurringRule({ id: 'rule-1', dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '13:00:00', effectiveFrom: '2026-09-07', effectiveTo: null, notes: 'Physio.' })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    mockUpdateUnavailabilityMutateAsync.mockResolvedValue({ unavailability: makeRecurringRule({ id: 'rule-1' }), overlaps: [] })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    expect(screen.getByText('Edit regular unavailability')).toBeInTheDocument()
+    expect(screen.getByLabelText(/start time/i)).toHaveValue('10:00')
+
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(mockUpdateUnavailabilityMutateAsync).toHaveBeenCalledWith({
+      id: 'rule-1',
+      data: { dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '13:00:00', effectiveFrom: '2026-09-07', effectiveTo: null, notes: 'Physio.' },
+    })
+  })
+
+  describe('legacy availability records', () => {
+    it('renders under the All statuses filter with their type and Edit/Delete actions', async () => {
+      const user = userEvent.setup()
+      mockUseStaffAvailabilityRecords.mockReturnValue({
+        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1', availabilityType: 'Training' })],
+        isLoading: false, isError: false, refetch: vi.fn(),
+      })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: 'Pending' }))
+      await user.click(screen.getByRole('option', { name: 'All statuses' }))
+
+      expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
+      expect(screen.getByText('Training')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
+    })
+
+    it('are hidden under the default Pending filter', () => {
+      mockUseStaffAvailabilityRecords.mockReturnValue({
+        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1' })],
+        isLoading: false, isError: false, refetch: vi.fn(),
+      })
+      renderPage()
+
+      expect(screen.queryByText('Training')).not.toBeInTheDocument()
+    })
+
+    it('deletes a record after confirm', async () => {
+      const user = userEvent.setup()
+      mockUseStaffAvailabilityRecords.mockReturnValue({
+        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1' })],
+        isLoading: false, isError: false, refetch: vi.fn(),
+      })
+      mockDeleteStaffAvailabilityMutateAsync.mockResolvedValue(true)
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: 'Pending' }))
+      await user.click(screen.getByRole('option', { name: 'All statuses' }))
+
+      await user.click(screen.getByRole('button', { name: /^delete$/i }))
+      const dialog = screen.getByRole('alertdialog')
+      expect(within(dialog).getByText('Delete record')).toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: /^yes, delete it$/i }))
+
+      expect(mockDeleteStaffAvailabilityMutateAsync).toHaveBeenCalledWith('av-1')
+    })
+
+    it('edits a record: opens the modal pre-filled and submits PUT with the edited body', async () => {
+      const user = userEvent.setup()
+      mockUseStaffAvailabilityRecords.mockReturnValue({
+        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1', availabilityType: 'Training', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59', notes: 'Refresher.' })],
+        isLoading: false, isError: false, refetch: vi.fn(),
+      })
+      mockUpdateStaffAvailabilityMutateAsync.mockResolvedValue({ id: 'av-1' })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: 'Pending' }))
+      await user.click(screen.getByRole('option', { name: 'All statuses' }))
+
+      await user.click(screen.getByRole('button', { name: /^edit$/i }))
+      expect(screen.getByText('Edit availability record')).toBeInTheDocument()
+      expect(screen.getByLabelText(/start date/i)).toHaveValue('2026-09-14')
+
+      await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+      expect(mockUpdateStaffAvailabilityMutateAsync).toHaveBeenCalledWith({
+        id: 'av-1',
+        data: {
+          staffId: '', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59',
+          availabilityType: 'Training', isRecurring: false, notes: 'Refresher.',
+        },
+      })
+    })
+  })
+
+  it('"Enter on behalf" gains an Availability record item that opens AvailabilityRecordFormModal', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /enter on behalf/i }))
+    await user.click(screen.getByRole('option', { name: 'Availability record' }))
+
+    expect(screen.getByText('Enter availability record on behalf of staff')).toBeInTheDocument()
+  })
+
+  it('"Enter on behalf" — Availability record posts CreateStaffAvailabilityDto', async () => {
+    const user = userEvent.setup()
+    mockCreateStaffAvailabilityMutateAsync.mockResolvedValue({ id: 'av-1' })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /enter on behalf/i }))
+    await user.click(screen.getByRole('option', { name: 'Availability record' }))
+
+    await user.click(screen.getByRole('combobox', { name: /staff member/i }))
+    await user.click(screen.getByRole('option', { name: 'Alex Rivera' }))
+    await user.type(screen.getByLabelText(/start date/i), '2026-09-14')
+    await user.type(screen.getByLabelText(/end date/i), '2026-09-18')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateStaffAvailabilityMutateAsync).toHaveBeenCalledWith({
+      staffId: 'staff-1', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59',
+      availabilityType: 'Available', isRecurring: false, notes: undefined,
+    })
+  })
+
+  it('presets the staff filter and clears the status filter to All when ?userId= is present on mount', () => {
+    renderPage('/rostering/leave?userId=staff-1')
+
+    expect(mockUseLeaveRequests).toHaveBeenCalledWith(expect.objectContaining({ userId: 'staff-1', status: undefined }))
+    expect(mockUseRecurringUnavailabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'staff-1', status: undefined }))
   })
 })

@@ -1,4 +1,4 @@
-import type { LeaveBarDto, LeaveRequestDto, RecurringUnavailabilityDto } from '@/api/types'
+import type { LeaveBarDto, LeaveRequestDto, RecurringUnavailabilityDto, StaffAvailabilityDto } from '@/api/types'
 
 export function makeLeaveBar(overrides: Partial<LeaveBarDto> = {}): LeaveBarDto {
   return {
@@ -31,6 +31,24 @@ export function makeLeaveRequest(overrides: Partial<LeaveRequestDto> = {}): Leav
     decidedByUserId: null,
     decidedAt: null,
     decisionNote: null,
+    ...overrides,
+  }
+}
+
+/** Legacy StaffAvailability record fixture — LeaveApprovalsPage's 'legacy' row kind. Unlike
+ * makeLeaveRequest/makeRecurringRule, StaffAvailabilityDto carries no requestedAt/status —
+ * LeaveApprovalsPage resolves userFullName itself off `staffId` via the staff list, so this
+ * fixture deliberately doesn't include one. */
+export function makeAvailabilityRecord(overrides: Partial<StaffAvailabilityDto> = {}): StaffAvailabilityDto {
+  return {
+    id: 'av-1',
+    staffId: 'staff-1',
+    startDateTime: '2026-09-14T00:00:00',
+    endDateTime: '2026-09-18T23:59:59',
+    availabilityType: 'Training',
+    isRecurring: false,
+    recurrenceNotes: null,
+    notes: null,
     ...overrides,
   }
 }
