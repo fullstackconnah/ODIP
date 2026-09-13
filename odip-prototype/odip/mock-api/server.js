@@ -1023,6 +1023,8 @@ const sampleOverlapFinding = {
 // Zhang (s-0004) with assigneeOnApprovedLeave: true — she has an Approved Sick leave request
 // (leave-0002, 2026-09-08..09-09) that now covers this shift, so it renders as an "On leave"
 // hole rather than a normal filled chip; board-shift-0001 is a normal filled shift for contrast.
+// The matching ASSIGNEE_ON_LEAVE entry in `exceptions` below is the server-side counterpart the
+// board/drawer now rely on instead of a client-synthesised one.
 function rosterBoard() {
   return {
     groupBy: 'Participant',
@@ -1054,7 +1056,13 @@ function rosterBoard() {
         tripBars: [], scheduledHours: 12, daysWithoutCover: 6,
       },
     ],
-    exceptions: [],
+    exceptions: [{
+      shiftId: 'board-shift-0002', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-09-08',
+      finding: {
+        code: 'ASSIGNEE_ON_LEAVE', severity: 'Warning',
+        message: 'Mei Zhang is on approved leave on 2026-09-08', requiresReason: false,
+      },
+    }],
   }
 }
 

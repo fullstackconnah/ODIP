@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { useRosterBoard, useAssignShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
-import type { ShiftDto, RosterFindingDto, RosterBoardDto, RosterExceptionDto } from '@/api/types'
+import type { ShiftDto, RosterFindingDto, RosterBoardDto } from '@/api/types'
 import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
   type ShiftSlideOverTarget,
@@ -73,31 +73,10 @@ export default function RosterBoardPage() {
   }, [staff])
   const staffRegionById = useMemo(() => new Map(staff.map(s => [s.id, s.region])), [staff])
 
-  // A shift whose assignee's leave was approved after the assignment isn't necessarily
-  // reflected in the board's own server-computed `exceptions` (those come from findings raised
-  // at assign-time) — surfaced here as client-side synthetic exceptions so the toolbar's
-  // "N exceptions" count and the drawer it opens both include these holes, not just the
-  // server-known ones.
-  const onLeaveExceptions: RosterExceptionDto[] = useMemo(
-    () => allBoardShifts(board)
-      .filter(s => s.assigneeOnApprovedLeave)
-      .map(s => ({
-        shiftId: s.id,
-        participantName: s.participantName,
-        serviceDate: s.serviceDate,
-        finding: {
-          code: 'ASSIGNEE_ON_APPROVED_LEAVE',
-          severity: 'Warning',
-          message: `${s.staffName ?? 'The assigned staff member'} has approved leave covering this shift — it needs a new assignee.`,
-          requiresReason: false,
-        },
-      })),
-    [board],
-  )
-  const combinedExceptions = useMemo(
-    () => [...(board?.exceptions ?? []), ...onLeaveExceptions],
-    [board, onLeaveExceptions],
-  )
+  // The board's own server-computed `exceptions` now include an ASSIGNEE_ON_LEAVE entry for
+  // every shift whose assignee's leave was approved after the assignment (RosteringController.
+  // GetBoard) — no client-side synthesis needed here any more.
+  const combinedExceptions = board?.exceptions ?? []
 
   const filteredBoard = useMemo(() => {
     if (!board) return undefined
