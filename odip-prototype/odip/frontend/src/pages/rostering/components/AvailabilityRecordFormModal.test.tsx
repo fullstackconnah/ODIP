@@ -88,5 +88,20 @@ describe('AvailabilityRecordFormModal', () => {
         notes: 'Fire warden refresher.',
       })
     })
+
+    it('submits initialValues.staffId even though no staff picker is rendered', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn(async () => {})
+      renderModal({
+        open: true, onClose: noop, onSubmit, submitting: false, mode: 'edit',
+        initialValues: { ...initialValues, staffId: 'staff-1' },
+      })
+
+      expect(screen.queryByRole('combobox', { name: /staff member/i })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ staffId: 'staff-1' }))
+    })
   })
 })

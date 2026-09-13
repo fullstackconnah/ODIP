@@ -490,7 +490,7 @@ describe('LeaveApprovalsPage', () => {
       expect(mockUpdateStaffAvailabilityMutateAsync).toHaveBeenCalledWith({
         id: 'av-1',
         data: {
-          staffId: '', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59',
+          staffId: 'staff-1', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59',
           availabilityType: 'Training', isRecurring: false, notes: 'Refresher.',
         },
       })

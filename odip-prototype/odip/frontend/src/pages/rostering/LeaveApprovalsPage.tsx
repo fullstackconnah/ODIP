@@ -521,6 +521,7 @@ export default function LeaveApprovalsPage() {
           submitting={updateStaffAvailability.isPending}
           errorMessage={editError}
           initialValues={{
+            staffId: editTarget.data.staffId,
             availabilityType: editTarget.data.availabilityType as 'Available' | 'Unavailable' | 'Training' | 'Preferred' | 'Tentative',
             startDate: editTarget.data.startDateTime.slice(0, 10),
             endDate: editTarget.data.endDateTime.slice(0, 10),
