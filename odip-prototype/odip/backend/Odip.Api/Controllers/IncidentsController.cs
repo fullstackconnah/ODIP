@@ -45,6 +45,39 @@ public class IncidentsController : ControllerBase
             : Task.FromResult(true);
 
     /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a MedicationAdministration — same-tenant scoping comes for free from
+    /// _db.MedicationAdministrations' ambient OdipDbContext query filter, same pattern as
+    /// <see cref="IsValidUserRefAsync"/>.
+    /// </summary>
+    private Task<bool> IsValidMedicationAdministrationRefAsync(Guid? medicationAdministrationId, CancellationToken ct) =>
+        medicationAdministrationId.HasValue
+            ? _db.MedicationAdministrations.AnyAsync(m => m.Id == medicationAdministrationId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a Shift — same-tenant scoping comes for free from _db.Shifts' ambient
+    /// OdipDbContext query filter, same pattern as <see cref="IsValidUserRefAsync"/>.
+    /// </summary>
+    private Task<bool> IsValidShiftRefAsync(Guid? shiftId, CancellationToken ct) =>
+        shiftId.HasValue
+            ? _db.Shifts.AnyAsync(s => s.Id == shiftId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a ShiftNote — same-tenant scoping comes for free from _db.ShiftNotes'
+    /// ambient OdipDbContext query filter, same pattern as <see cref="IsValidUserRefAsync"/>. A
+    /// direct existence check against _db.ShiftNotes (rather than joining via its parent Shift) is
+    /// sufficient — ShiftNote is its own ITenantEntity with its own ambient filter.
+    /// </summary>
+    private Task<bool> IsValidShiftNoteRefAsync(Guid? shiftNoteId, CancellationToken ct) =>
+        shiftNoteId.HasValue
+            ? _db.ShiftNotes.AnyAsync(n => n.Id == shiftNoteId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
     /// INC-01/INC-02/INC-04 cross-field validation shared by Create and Update: a Trip-stream
     /// incident must carry a valid trip link, an "Other" incident type must carry its specify
     /// text, and a RestrictivePracticeUse incident must carry which of the register's 6
@@ -143,7 +176,7 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
-        [FromQuery] bool? isActive, CancellationToken ct)
+        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, CancellationToken ct)
     {
         var query = _db.IncidentReports
             .Include(i => i.TripInstance)
@@ -168,6 +201,7 @@ public class IncidentsController : ControllerBase
         if (status.HasValue) query = query.Where(i => i.Status == status.Value);
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
+        if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
 
         var items = await query.OrderByDescending(i => i.IncidentDateTime)
             .Select(i => new IncidentListDto
@@ -191,7 +225,10 @@ public class IncidentsController : ControllerBase
                 IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             }).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
@@ -209,6 +246,10 @@ public class IncidentsController : ControllerBase
             .Include(i => i.RestrictivePractice)
             .Include(i => i.Injuries)
             .Include(i => i.Witnesses).ThenInclude(w => w.WitnessUser)
+            .Include(i => i.MedicationAdministration).ThenInclude(m => m!.ParticipantMedication)
+            .Include(i => i.Shift).ThenInclude(s => s!.Participant)
+            .Include(i => i.Shift).ThenInclude(s => s!.User)
+            .Include(i => i.ShiftNote)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -232,6 +273,9 @@ public class IncidentsController : ControllerBase
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
                 CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId,
                 // Detail fields
                 ParticipantBookingId = i.ParticipantBookingId,
                 InvolvedStaffId = i.InvolvedUserId,
@@ -281,7 +325,32 @@ public class IncidentsController : ControllerBase
                 FamilyNotifiedAt = i.FamilyNotifiedAt,
                 SupportCoordinatorNotified = i.SupportCoordinatorNotified,
                 SupportCoordinatorNotifiedAt = i.SupportCoordinatorNotifiedAt,
-                UpdatedAt = i.UpdatedAt
+                UpdatedAt = i.UpdatedAt,
+                MedicationContext = i.MedicationAdministration != null ? new IncidentMedicationContextDto
+                {
+                    MedicationAdministrationId = i.MedicationAdministration.Id,
+                    MedicationName = i.MedicationAdministration.ParticipantMedication != null
+                        ? i.MedicationAdministration.ParticipantMedication.Name : string.Empty,
+                    Status = i.MedicationAdministration.Status,
+                    AdministeredAt = i.MedicationAdministration.AdministeredAt ?? i.MedicationAdministration.ScheduledAt,
+                    RecordedByName = i.MedicationAdministration.RecordedByName,
+                } : null,
+                ShiftContext = i.Shift != null ? new IncidentShiftContextDto
+                {
+                    ShiftId = i.Shift.Id,
+                    Date = i.Shift.ServiceDate,
+                    StartTime = i.Shift.StartTime,
+                    EndTime = i.Shift.EndTime,
+                    ParticipantName = i.Shift.Participant != null ? i.Shift.Participant.FullName : string.Empty,
+                    StaffName = i.Shift.User != null ? i.Shift.User.FullName : null,
+                } : null,
+                ShiftNoteContext = i.ShiftNote != null ? new IncidentShiftNoteContextDto
+                {
+                    ShiftNoteId = i.ShiftNote.Id,
+                    Excerpt = i.ShiftNote.Body.Length > 200 ? i.ShiftNote.Body.Substring(0, 200) : i.ShiftNote.Body,
+                    FlaggedCategories = i.ShiftNote.FlaggedCategories,
+                    CreatedAt = i.ShiftNote.CreatedAt,
+                } : null
             }).FirstOrDefaultAsync(ct);
 
         if (item == null) return NotFound(ApiResponse<IncidentDetailDto>.Fail("Incident not found"));
@@ -307,6 +376,12 @@ public class IncidentsController : ControllerBase
         var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
         if (witnessError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
+        if (!await IsValidMedicationAdministrationRefAsync(dto.MedicationAdministrationId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Medication administration not found."));
+        if (!await IsValidShiftRefAsync(dto.ShiftId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift not found."));
+        if (!await IsValidShiftNoteRefAsync(dto.ShiftNoteId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift note not found."));
 
         // INC-04: determined once here, from the register as it stood right now — see
         // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
@@ -341,6 +416,9 @@ public class IncidentsController : ControllerBase
             EmergencyServicesDetails = dto.EmergencyServicesDetails,
             WitnessNames = dto.WitnessNames,
             WitnessStatements = dto.WitnessStatements,
+            MedicationAdministrationId = dto.MedicationAdministrationId,
+            ShiftId = dto.ShiftId,
+            ShiftNoteId = dto.ShiftNoteId,
             Status = IncidentStatus.Draft
         };
 
@@ -419,7 +497,10 @@ public class IncidentsController : ControllerBase
             IsOverdue24h = incident.QscReportingStatus == QscReportingStatus.Required
                 && incident.QscReportedAt == null
                 && (DateTime.UtcNow - incident.CreatedAt).TotalHours > 24,
-            CreatedAt = incident.CreatedAt
+            CreatedAt = incident.CreatedAt,
+            MedicationAdministrationId = incident.MedicationAdministrationId,
+            ShiftId = incident.ShiftId,
+            ShiftNoteId = incident.ShiftNoteId
         }));
     }
 
@@ -447,6 +528,12 @@ public class IncidentsController : ControllerBase
         var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
         if (witnessError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
+        if (!await IsValidMedicationAdministrationRefAsync(dto.MedicationAdministrationId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Medication administration not found."));
+        if (!await IsValidShiftRefAsync(dto.ShiftId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift not found."));
+        if (!await IsValidShiftNoteRefAsync(dto.ShiftNoteId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift note not found."));
 
         i.ServiceType = dto.ServiceType;
         i.TripInstanceId = dto.TripInstanceId;
@@ -477,6 +564,11 @@ public class IncidentsController : ControllerBase
         i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
         i.WitnessNames = dto.WitnessNames;
         i.WitnessStatements = dto.WitnessStatements;
+        // Connection-map source links (Deliverable 1): may be newly set, cleared back to null, or
+        // changed to a different source — assigning null clears the link.
+        i.MedicationAdministrationId = dto.MedicationAdministrationId;
+        i.ShiftId = dto.ShiftId;
+        i.ShiftNoteId = dto.ShiftNoteId;
         i.QscReportingStatus = dto.QscReportingStatus;
         i.QscReportedAt = dto.QscReportedAt;
         i.QscReferenceNumber = dto.QscReferenceNumber;
@@ -580,7 +672,10 @@ public class IncidentsController : ControllerBase
             IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                 && i.QscReportedAt == null
                 && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-            CreatedAt = i.CreatedAt
+            CreatedAt = i.CreatedAt,
+            MedicationAdministrationId = i.MedicationAdministrationId,
+            ShiftId = i.ShiftId,
+            ShiftNoteId = i.ShiftNoteId
         }));
     }
 
@@ -630,7 +725,49 @@ public class IncidentsController : ControllerBase
                 IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
+            }).ToListAsync(ct);
+
+        return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
+    }
+
+    [HttpGet("shift/{shiftId:guid}")]
+    public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByShift(Guid shiftId, CancellationToken ct)
+    {
+        var items = await _db.IncidentReports
+            .Include(i => i.TripInstance)
+            .Include(i => i.ReportedByUser)
+            .Include(i => i.InvolvedParticipant)
+            .Where(i => i.ShiftId == shiftId && i.IsActive)
+            .OrderByDescending(i => i.IncidentDateTime)
+            .Select(i => new IncidentListDto
+            {
+                Id = i.Id,
+                ServiceType = i.ServiceType,
+                TripInstanceId = i.TripInstanceId,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
+                IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
+                Severity = i.Severity,
+                Status = i.Status,
+                Title = i.Title,
+                IncidentDateTime = i.IncidentDateTime,
+                Location = i.Location,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
+                InvolvedParticipantName = i.InvolvedParticipant != null
+                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
+                QscReportingStatus = i.QscReportingStatus,
+                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
+                    && i.QscReportedAt == null
+                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             }).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
@@ -664,7 +801,10 @@ public class IncidentsController : ControllerBase
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
                 IsOverdue24h = true,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             }).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));

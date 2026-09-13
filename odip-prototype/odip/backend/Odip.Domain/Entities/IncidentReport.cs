@@ -1,4 +1,5 @@
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 
 namespace Odip.Domain.Entities;
 
@@ -58,6 +59,18 @@ public class IncidentReport
     /// </summary>
     public Guid? RestrictivePracticeId { get; set; }
     public RestrictivePractice? RestrictivePractice { get; set; }
+
+    // Connection-map source links (Deliverable 1): optional pointers back to the specific
+    // MedicationAdministration / Shift / ShiftNote this incident was raised from, when it was
+    // filed from one of those contexts rather than standalone. All three are SetNull FKs — same
+    // idiom as RestrictivePracticeId above — so a hard-deleted source row never blocks/cascades
+    // into the incident, it just loses the link.
+    public Guid? MedicationAdministrationId { get; set; }
+    public MedicationAdministration? MedicationAdministration { get; set; }
+    public Guid? ShiftId { get; set; }
+    public Shift? Shift { get; set; }
+    public Guid? ShiftNoteId { get; set; }
+    public ShiftNote? ShiftNote { get; set; }
 
     /// <summary>
     /// IN-4: free-text description of the restrictive practice actually used, captured ONLY when
