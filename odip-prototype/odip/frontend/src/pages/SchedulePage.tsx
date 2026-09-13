@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
-  ScheduleAssignmentCell, QualBadge, TripStatusBadge, AvailabilityEditor,
+  ScheduleAssignmentCell, QualBadge, TripStatusBadge, AvailabilityList,
   StaffAssignModal, VehicleAssignModal,
   formatDate, tripAccentText,
 } from './schedule'
@@ -333,7 +333,7 @@ export default function SchedulePage() {
                         className="bg-[var(--color-surface-container-low)]/40"
                       >
                         <td colSpan={tripCount + 1}>
-                          <AvailabilityEditor staffId={s.id} staffName={s.fullName} availability={s.availability} />
+                          <AvailabilityList staffId={s.id} staffName={s.fullName} availability={s.availability} />
                         </td>
                       </tr>
                     )}
