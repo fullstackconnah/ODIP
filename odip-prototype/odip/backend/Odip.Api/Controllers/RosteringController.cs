@@ -700,9 +700,20 @@ public class RosteringController : ControllerBase
         if (trimmedReason.Length > 500)
             return BadRequest(ApiResponse<ShiftCompletionDto>.Fail("Return reason must be 500 characters or fewer.", ShiftErrorCodes.ShiftReturnReasonTooLong));
 
-        // SHIFT_ALREADY_CLAIMED (design spec §3) is deliberately not implemented here —
-        // ClaimLineItem.ShiftId doesn't exist until PR 3's migration, and nothing in PR 1 can
-        // attach a claim to a shift, so the check is structurally unreachable until then.
+        // SHIFT_ALREADY_CLAIMED (design spec §3) — now reachable: PR 3's AddShiftClaims
+        // migration gives ClaimLineItem a ShiftId, and ShiftClaimGenerationService can attach a
+        // claim line to a Completed shift. A shift can only reach here (PendingReview) again via
+        // an un-cancel + re-Start/Finish cycle, but defend the invariant regardless.
+        var claimedLine = await _db.ClaimLineItems.FirstOrDefaultAsync(l => l.ShiftId == id, ct);
+        if (claimedLine is not null)
+        {
+            var claimReference = await _db.TripClaims
+                .Where(c => c.Id == claimedLine.TripClaimId)
+                .Select(c => c.ClaimReference)
+                .FirstOrDefaultAsync(ct);
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                $"This shift has already been claimed ({claimReference}).", ShiftErrorCodes.ShiftAlreadyClaimed));
+        }
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;

@@ -16,14 +16,16 @@ public class ClaimsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ClaimGenerationService _generator;
+    private readonly ShiftClaimGenerationService _shiftGenerator;
     private readonly BprCsvService _bprService;
     private readonly InvoiceService _invoiceService;
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
-        BprCsvService bprService, InvoiceService invoiceService)
+        ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService)
     {
         _db = db;
         _generator = generator;
+        _shiftGenerator = shiftGenerator;
         _bprService = bprService;
         _invoiceService = invoiceService;
     }
@@ -57,7 +59,7 @@ public class ClaimsController : ControllerBase
             var tripName = await _db.TripInstances.Where(t => t.Id == tripId).Select(t => t.TripName).FirstOrDefaultAsync(ct);
             return Ok(ApiResponse<TripClaimListDto>.Ok(new TripClaimListDto
             {
-                Id = claim.Id, TripInstanceId = claim.TripInstanceId, TripName = tripName ?? string.Empty,
+                Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = tripName ?? string.Empty,
                 Status = claim.Status, ClaimReference = claim.ClaimReference,
                 TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
             }));
@@ -78,11 +80,83 @@ public class ClaimsController : ControllerBase
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new TripClaimListDto
             {
-                Id = c.Id, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance.TripName,
+                Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance!.TripName,
                 Status = c.Status, ClaimReference = c.ClaimReference,
                 TotalAmount = c.TotalAmount, CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<TripClaimListDto>>.Ok(items));
+    }
+
+    // GET /api/v1/participants/{participantId}/claims?kind=
+    // Shift-completion design spec §2 (PR 3) — mirrors GetClaimsForTrip above but filtered by
+    // ParticipantId instead of TripInstanceId. TripClaim is NOT ITenantEntity (standing ruling),
+    // so cross-tenant safety is enforced by gating on the tenant-filtered Participants set
+    // first: a participantId that doesn't resolve under the caller's tenant returns an empty
+    // list rather than leaking another tenant's claims.
+    [HttpGet("participants/{participantId:guid}/claims")]
+    public async Task<ActionResult<ApiResponse<List<TripClaimListDto>>>> GetClaimsForParticipant(
+        Guid participantId, [FromQuery] ClaimKind? kind, CancellationToken ct)
+    {
+        var participantExists = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
+        if (!participantExists)
+            return Ok(ApiResponse<List<TripClaimListDto>>.Ok(new List<TripClaimListDto>()));
+
+        var query = _db.TripClaims.Where(c => c.ParticipantId == participantId);
+        if (kind.HasValue)
+            query = query.Where(c => c.Kind == kind.Value);
+
+        var items = await query
+            .Include(c => c.TripInstance)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new TripClaimListDto
+            {
+                Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId,
+                TripName = c.TripInstance != null ? c.TripInstance.TripName : string.Empty,
+                ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
+                Status = c.Status, ClaimReference = c.ClaimReference,
+                TotalAmount = c.TotalAmount, CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate
+            }).ToListAsync(ct);
+        return Ok(ApiResponse<List<TripClaimListDto>>.Ok(items));
+    }
+
+    // POST /api/v1/participants/{participantId}/claims/from-shifts/preview
+    [HttpPost("participants/{participantId:guid}/claims/from-shifts/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimPreviewResponseDto>>> PreviewShiftClaim(
+        Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var preview = await _shiftGenerator.PreviewAsync(participantId, dto.From, dto.To, ct);
+            return Ok(ApiResponse<ShiftClaimPreviewResponseDto>.Ok(preview));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<ShiftClaimPreviewResponseDto>.Fail(ex.Message));
+        }
+    }
+
+    // POST /api/v1/participants/{participantId}/claims/from-shifts
+    [HttpPost("participants/{participantId:guid}/claims/from-shifts")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<TripClaimListDto>>> GenerateShiftClaim(
+        Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var claim = await _shiftGenerator.GenerateDraftClaimAsync(participantId, dto.From, dto.To, ct);
+            return Ok(ApiResponse<TripClaimListDto>.Ok(new TripClaimListDto
+            {
+                Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = string.Empty,
+                ParticipantId = claim.ParticipantId, PeriodFrom = claim.PeriodFrom, PeriodTo = claim.PeriodTo,
+                Status = claim.Status, ClaimReference = claim.ClaimReference,
+                TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
+            }));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<TripClaimListDto>.Fail(ex.Message));
+        }
     }
 
     // GET /api/v1/claims/{claimId}
@@ -101,7 +175,8 @@ public class ClaimsController : ControllerBase
 
         return Ok(ApiResponse<TripClaimDetailDto>.Ok(new TripClaimDetailDto
         {
-            Id = c.Id, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance?.TripName ?? string.Empty,
+            Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance?.TripName ?? string.Empty,
+            ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
             Status = c.Status, ClaimReference = c.ClaimReference,
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
             CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate,
