@@ -213,5 +213,11 @@ export function usePermissions() {
 
     /** Mirrors LeaveController's [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]. */
     canApproveLeave: isSuperAdmin || isAdmin || isCoordinator,
+
+    /** Mirrors PortalController's shift start/finish — any non-ReadOnly authenticated user, own shifts only. */
+    canCompleteOwnShifts: !isReadOnly,
+
+    /** Mirrors RosteringController's completion review actions — [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]. */
+    canReviewCompletions: isSuperAdmin || isAdmin || isCoordinator,
   };
 }

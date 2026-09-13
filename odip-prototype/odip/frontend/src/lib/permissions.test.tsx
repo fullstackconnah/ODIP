@@ -17,11 +17,13 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
       <li data-testid="can-approve-leave">{String(canApproveLeave)}</li>
+      <li data-testid="can-complete-own-shifts">{String(canCompleteOwnShifts)}</li>
+      <li data-testid="can-review-completions">{String(canReviewCompletions)}</li>
     </ul>
   )
 }
@@ -92,6 +94,42 @@ describe('usePermissions leave capabilities', () => {
       setUserRole(role)
       const { unmount } = render(<CapabilityProbe />)
       expect(screen.getByTestId('can-approve-leave')).toHaveTextContent('false')
+      unmount()
+    }
+  })
+})
+
+describe('usePermissions shift-completion capabilities', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('canCompleteOwnShifts is true for every role except ReadOnly', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'SupportWorker'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-complete-own-shifts')).toHaveTextContent('true')
+      unmount()
+    }
+  })
+
+  it('canCompleteOwnShifts is false for ReadOnly', () => {
+    setUserRole('ReadOnly')
+    render(<CapabilityProbe />)
+    expect(screen.getByTestId('can-complete-own-shifts')).toHaveTextContent('false')
+  })
+
+  it('canReviewCompletions is true only for Admin, Coordinator and SuperAdmin', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-review-completions')).toHaveTextContent('true')
+      unmount()
+    }
+    for (const role of ['SupportWorker', 'ReadOnly'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-review-completions')).toHaveTextContent('false')
       unmount()
     }
   })

@@ -266,7 +266,13 @@ export const OVERNIGHT_SUPPORT_TYPES = ['None', 'ActiveNight', 'PassiveNight', '
 export type OvernightSupportType = typeof OVERNIGHT_SUPPORT_TYPES[number]
 
 // ── Shift Status ─────────────────────────────────────────
-export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled'] as const
+// InProgress/PendingReview added by the shift-completion design spec (§1/§3) — a worker's
+// Start/Finish taps flip a Published shift through these two states before Approve/Return
+// settles it back to Completed or Published. ShiftSlideOver's status dropdown still lists all
+// six (a coordinator picking one of these two there gets the backend's SHIFT_STATUS_LOCKED 409,
+// since UpdateShift only allows Draft<->Published — narrowing that dropdown is a follow-up, not
+// part of this PR).
+export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled', 'InProgress', 'PendingReview'] as const
 export type ShiftStatus = typeof SHIFT_STATUSES[number]
 
 // ── Compatibility Level ──────────────────────────────────
