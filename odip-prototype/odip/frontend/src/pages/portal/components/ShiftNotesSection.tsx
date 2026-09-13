@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { MessageSquare, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { MessageSquare, AlertCircle, AlertTriangle, FileCheck } from 'lucide-react'
 import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote, useAcknowledgeShiftNoteFlags } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { formatWithTimeZone } from '@/lib/utils'
@@ -70,6 +70,30 @@ function FlagBanner({
           File incident report
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Connection map item 4: once a flagged note has led to an incident (ShiftNoteDto.incidentId
+ * set), the FlagBanner's dismiss/file actions no longer apply — the loop is closed. Replaces
+ * them with a link into the incident that was filed. Support workers can open incidents per
+ * src/lib/permissions.ts (canAccessPage('incidents') includes SupportWorker), so a plain Link
+ * is enough here — no extra gating needed.
+ */
+function IncidentFiledNotice({ incidentId }: { incidentId: string }) {
+  return (
+    <div
+      role="status"
+      className="mt-2 flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)]/40 p-3 text-sm text-[var(--color-foreground)]"
+    >
+      <FileCheck className="w-4 h-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
+      <span>
+        Incident filed —{' '}
+        <Link to={`/incidents/${incidentId}`} className="font-medium text-[var(--color-primary)] hover:underline">
+          view report
+        </Link>
+      </span>
     </div>
   )
 }
@@ -147,6 +171,7 @@ export function ShiftNotesSection({
       endTime,
       endsNextDay,
       reportedByUserId: currentUserId,
+      shiftId,
     }
     navigate('/incidents/new', { state: prefill })
   }
@@ -222,13 +247,17 @@ export function ShiftNotesSection({
                     )}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap">{note.body}</p>
-                  {note.flaggedCategories.length > 0 && !note.flagsAcknowledgedAt && (
-                    <FlagBanner
-                      note={note}
-                      onFileIncident={() => goToIncident(note)}
-                      onDismiss={() => dismissFlags(note.id)}
-                      dismissing={acknowledgeFlags.isPending && acknowledgeFlags.variables === note.id}
-                    />
+                  {note.flaggedCategories.length > 0 && (
+                    note.incidentId ? (
+                      <IncidentFiledNotice incidentId={note.incidentId} />
+                    ) : !note.flagsAcknowledgedAt && (
+                      <FlagBanner
+                        note={note}
+                        onFileIncident={() => goToIncident(note)}
+                        onDismiss={() => dismissFlags(note.id)}
+                        dismissing={acknowledgeFlags.isPending && acknowledgeFlags.variables === note.id}
+                      />
+                    )
                   )}
                 </>
               )}
