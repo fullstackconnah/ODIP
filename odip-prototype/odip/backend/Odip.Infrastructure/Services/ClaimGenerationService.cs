@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
@@ -359,7 +360,7 @@ public class ClaimGenerationService
 
         foreach (var day in days)
         {
-            var dayType = ResolveDayType(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
+            var dayType = DayTypeResolver.Resolve(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
 
             if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date)
             {
@@ -374,17 +375,6 @@ public class ClaimGenerationService
         }
 
         return result;
-    }
-
-    private static ClaimDayType ResolveDayType(DateOnly date, bool isPublicHoliday)
-    {
-        if (isPublicHoliday) return ClaimDayType.PublicHoliday;
-        return date.DayOfWeek switch
-        {
-            DayOfWeek.Saturday => ClaimDayType.Saturday,
-            DayOfWeek.Sunday => ClaimDayType.Sunday,
-            _ => ClaimDayType.Weekday
-        };
     }
 
     private static decimal GetPriceForState(SupportCatalogueItem item, string state) =>
