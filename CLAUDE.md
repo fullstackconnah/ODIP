@@ -173,6 +173,12 @@ npm run lint
   AutoMapper profiles "to match the pattern," and do not assume either one is wired up just
   because the package reference exists.
 
+- The deploy image runs `dotnet test` under invariant globalization; the dev machine is en-AU.
+  Culture-dependent formatting differs ("Sept" locally, "Sep" in the container) and a test that
+  hard-codes the local form passes locally then fails the deploy (2026-09-13, run 34753911258).
+  Format every server-rendered string (emails, exports, findings) with
+  `CultureInfo.InvariantCulture` and never assert a current-culture rendering.
+
 - Legacy `StaffAvailability` has NO tenant filter (no `ITenantEntity`, no `HasQueryFilter`) —
   any query over `_db.StaffAvailabilities` not keyed on a tenant-scoped user id leaks across
   tenants. Scope it via `_db.Users.Any(u => u.Id == a.UserId)` (Users IS filtered). Check the same

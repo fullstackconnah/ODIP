@@ -17,10 +17,10 @@ public static class LeaveRequestDecidedTemplate
         return new(
             RecipientAddress: p.RecipientEmail,
             Subject: $"Your {p.LeaveType} leave request was {outcome}",
-            PlainTextBody: $"Your {p.LeaveType} leave request from {p.StartDate:d MMM yyyy} to " +
-                           $"{p.EndDate:d MMM yyyy} was {outcome}.{noteText}\n\nView it: {baseUrl}/portal/leave",
-            HtmlBody: $"<p>Your {Html.E(p.LeaveType)} leave request from {p.StartDate:d MMM yyyy} to " +
-                      $"{p.EndDate:d MMM yyyy} was {outcome}.</p>{noteHtml}" +
+            PlainTextBody: $"Your {p.LeaveType} leave request from {Html.Date(p.StartDate)} to " +
+                           $"{Html.Date(p.EndDate)} was {outcome}.{noteText}\n\nView it: {baseUrl}/portal/leave",
+            HtmlBody: $"<p>Your {Html.E(p.LeaveType)} leave request from {Html.Date(p.StartDate)} to " +
+                      $"{Html.Date(p.EndDate)} was {outcome}.</p>{noteHtml}" +
                       $"<p><a href=\"{Html.Attr(baseUrl)}/portal/leave\">View it</a></p>");
     }
 }

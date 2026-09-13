@@ -10,10 +10,10 @@ public static class ShiftAssignedTemplate
 {
     public static NotificationMessage Render(ShiftAssignedPayload p, string baseUrl) => new(
         RecipientAddress: p.RecipientEmail,
-        Subject: $"New shift: {p.ParticipantName} on {p.ServiceDate:d MMM yyyy}",
-        PlainTextBody: $"You've been assigned a shift with {p.ParticipantName} on {p.ServiceDate:d MMM yyyy} " +
-                       $"from {p.StartTime:h:mm tt} to {p.EndTime:h:mm tt}.\n\nView it: {baseUrl}/portal",
-        HtmlBody: $"<p>You've been assigned a shift with {Html.E(p.ParticipantName)} on {p.ServiceDate:d MMM yyyy} " +
-                  $"from {p.StartTime:h:mm tt} to {p.EndTime:h:mm tt}.</p>" +
+        Subject: $"New shift: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
+        PlainTextBody: $"You've been assigned a shift with {p.ParticipantName} on {Html.Date(p.ServiceDate)} " +
+                       $"from {Html.Time(p.StartTime)} to {Html.Time(p.EndTime)}.\n\nView it: {baseUrl}/portal",
+        HtmlBody: $"<p>You've been assigned a shift with {Html.E(p.ParticipantName)} on {Html.Date(p.ServiceDate)} " +
+                  $"from {Html.Time(p.StartTime)} to {Html.Time(p.EndTime)}.</p>" +
                   $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View it</a></p>");
 }
