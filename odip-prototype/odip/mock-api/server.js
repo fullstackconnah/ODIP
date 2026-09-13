@@ -1125,6 +1125,63 @@ function shiftClaimPreview() {
   }
 }
 
+// Notifications (docs/specs/2026-09-08-notifications-design.md §6) — preference grid for
+// Settings → Notifications (every signed-in user) and the outbox for Settings → Failed Sends
+// (canManageNotifications). Event type / channel / status names copied verbatim from the
+// backend enums (NotificationEntities.cs) — same "append-only, never renumber" list.
+const NOTIFICATION_EVENT_TYPES = [
+  'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
+  'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
+  'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
+  'ServiceAgreementSigned', 'IntegrationDegraded',
+]
+
+// GET/PUT notifications/preferences fixture — every event x channel, Email defaulting ON per
+// the documented default (§1), one row (IncidentReported/Email) turned off for preview purposes
+// so the grid doesn't render as an undifferentiated wall of checked boxes.
+function notificationPreferenceGrid() {
+  return {
+    rows: NOTIFICATION_EVENT_TYPES.flatMap((eventType) => ([
+      { eventType, channel: 'Email', enabled: eventType !== 'IncidentReported' },
+      { eventType, channel: 'Sms', enabled: true },
+    ])),
+  }
+}
+
+// GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
+// caveat as leave/staff-availability above: always returns the full fixture list, any filtering
+// left to the frontend.
+const notificationOutbox = [
+  {
+    id: 'notif-0001', eventType: 'LeaveRequestSubmitted', entityType: 'LeaveRequest', entityId: 'leave-0001',
+    recipientUserId: 's-0001', recipientName: 'Callum Radford', status: 'Failed', attempts: 5,
+    nextAttemptAt: '2026-09-13T04:00:00Z', lastError: 'SmtpCommandException: 421 Service not available',
+    createdAt: '2026-09-12T09:00:05Z',
+  },
+  {
+    id: 'notif-0002', eventType: 'WitnessRequested', entityType: 'MedicationAdministration', entityId: 'ma-0002',
+    recipientUserId: 's-0002', recipientName: 'Priya Nadarajah', status: 'Sent', attempts: 1,
+    nextAttemptAt: '2026-09-12T10:05:00Z', createdAt: '2026-09-12T10:00:00Z', sentAt: '2026-09-12T10:00:12Z',
+  },
+  {
+    id: 'notif-0003', eventType: 'IncidentReported', entityType: 'Incident', entityId: 'inc-0001',
+    recipientUserId: 's-0004', recipientName: 'Mei Zhang', status: 'Skipped', attempts: 0,
+    nextAttemptAt: '2026-09-11T15:00:00Z', lastError: 'User preference disabled', createdAt: '2026-09-11T15:00:00Z',
+  },
+  {
+    id: 'notif-0004', eventType: 'ShiftAssigned', entityType: 'Shift', entityId: 'sh-0001',
+    recipientUserId: 's-0003', recipientName: "Jack O'Sullivan", status: 'Pending', attempts: 0,
+    nextAttemptAt: '2026-09-13T09:00:00Z', createdAt: '2026-09-13T08:55:00Z',
+  },
+]
+
+/** Stateless like every other POST here: resets the fixture row's shape without mutating
+ * `notificationOutbox`, so a follow-up GET admin/notifications still shows the original row. */
+function retriedNotification(id) {
+  const row = notificationOutbox.find((n) => n.id === id) || notificationOutbox[0]
+  return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
+}
+
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
@@ -1275,6 +1332,12 @@ const routes = [
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
   ['rostering/completions', () => paged(completionQueueItems)],
   ['rostering/shifts/:id/completion', (id) => shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0]],
+
+  // Notifications (design spec §6) — GET admin/notifications joins this plain table (query
+  // string ignored, same caveat noted on notificationOutbox above); GET notifications/preferences
+  // is the self-service grid.
+  ['notifications/preferences', () => notificationPreferenceGrid()],
+  ['admin/notifications', () => notificationOutbox],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -1363,6 +1426,13 @@ const postRoutes = [
     tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
     totalAmount: 320, createdAt: new Date().toISOString(),
   })],
+
+  // Notifications (design spec §2/§6) — stateless like every other POST here: retry doesn't
+  // mutate notificationOutbox, so a follow-up GET admin/notifications still shows the original
+  // Failed row. test-email always reports success, mirroring the real endpoint's 200-either-way
+  // contract without needing an actual SMTP config to demo against.
+  ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
+  ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -1380,6 +1450,20 @@ const putRoutes = [
     unavailability: { ...(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0]), ...body },
     overlaps: [],
   })],
+
+  // PUT notifications/preferences — echoes the base grid with the submitted rows' `enabled`
+  // values merged in (stateless: doesn't mutate any fixture, so a follow-up GET still returns
+  // the original defaults).
+  ['notifications/preferences', (body) => {
+    const updates = Array.isArray(body) ? body : []
+    const grid = notificationPreferenceGrid()
+    return {
+      rows: grid.rows.map((row) => {
+        const match = updates.find((u) => u.eventType === row.eventType && u.channel === row.channel)
+        return match ? { ...row, enabled: !!match.enabled } : row
+      }),
+    }
+  }],
 ]
 
 function matchRoute(pattern, segments) {
