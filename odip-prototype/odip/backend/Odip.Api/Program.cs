@@ -189,6 +189,9 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
+// ── Obligation tasks (item 9 of the connection map — generic task engine) ──
+builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, Odip.Infrastructure.Tasks.ObligationTaskService>();
+
 // ── Forwarded Headers ────────────────────────────────────────
 // The app sits behind nginx (see nginx/default.conf), which proxies /api/ to this
 // container and sets X-Real-IP / X-Forwarded-For. Without this, every request's
