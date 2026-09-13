@@ -68,14 +68,14 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
           participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [
-            { type: 'routine-coverage-gap', severity: 'Warning', message: 'No active routines recorded', deepLinkTab: 'routines' },
+            { type: 'routine-coverage-gap', severity: 'Warning', message: 'No active routines recorded', deepLinkTab: 'routines', linkTo: null },
           ],
           criticalCount: 0, warningCount: 1, infoCount: 0,
         },
@@ -93,6 +93,39 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
 
     const link = screen.getByText('Jamie Smith').closest('a')
     expect(link).toHaveAttribute('href', '/participants/p1?tab=details')
+  })
+
+  it('links to alert.linkTo instead of the participant tab when the alert carries one, and shows the human type label', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        {
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
+          alerts: [
+            { type: 'OpenSeriousIncident', severity: 'Critical', message: 'Open serious incident requires review', deepLinkTab: 'incidents', linkTo: '/incidents/inc-1' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+        {
+          participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
+          alerts: [
+            { type: 'QscReportOverdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    const incidentLink = screen.getByText('Jamie Smith').closest('a')
+    expect(incidentLink).toHaveAttribute('href', '/incidents/inc-1')
+    const qscLink = screen.getByText('Alex Rivera').closest('a')
+    expect(qscLink).toHaveAttribute('href', '/qsc-reports/qsc-1')
+
+    // The card shows the alert type in the same human wording as the label map, alongside the message.
+    expect(screen.getByText('Open serious incident')).toBeInTheDocument()
+    expect(screen.getByText('QSC report overdue')).toBeInTheDocument()
   })
 
   it('shows an "All clear" tile and no list section when there are no Critical alerts', () => {
@@ -120,7 +153,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
@@ -129,7 +162,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
           // generate a permanent, undismissable Critical alert.
           participantId: 'p2', participantName: 'Churned Client', isActive: false,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },

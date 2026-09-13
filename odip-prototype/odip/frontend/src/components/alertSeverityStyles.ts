@@ -11,3 +11,14 @@ export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; te
   Warning: { icon: AlertCircle, text: 'text-[var(--color-on-warning-container)]', bg: 'bg-[var(--color-warning-container)]', label: 'Warning' },
   Info: { icon: Info, text: 'text-[var(--color-info)]', bg: 'bg-[var(--color-surface-container-low)]', label: 'Info' },
 }
+
+/**
+ * Human-readable wording for a computed alert's machine-readable `type` code, for surfaces that
+ * show the alert type itself (e.g. the dashboard's Critical-alerts cards) rather than just its
+ * `message`. Most alert types (e.g. "plan-expired") are only ever shown via their `message`, so
+ * this only needs entries for types that are shown by type — add to it as that need grows.
+ */
+export const ALERT_TYPE_LABELS: Record<string, string> = {
+  OpenSeriousIncident: 'Open serious incident',
+  QscReportOverdue: 'QSC report overdue',
+}
