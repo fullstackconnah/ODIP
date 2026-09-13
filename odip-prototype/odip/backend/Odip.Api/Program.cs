@@ -182,6 +182,13 @@ builder.Services.AddScoped<Odip.Application.Interfaces.IPublicHolidaySyncService
 builder.Services.AddSingleton<Odip.Application.Interfaces.ILoginAttemptTracker, Odip.Infrastructure.Services.LoginAttemptTracker>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.HolidaySyncBackgroundService>();
 
+// ── Notifications (transactional outbox + dispatcher) ──────────
+// docs/specs/2026-09-08-notifications-design.md.
+builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip.Infrastructure.Notifications.NotificationRaiser>();
+builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
+builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
+
 // ── Forwarded Headers ────────────────────────────────────────
 // The app sits behind nginx (see nginx/default.conf), which proxies /api/ to this
 // container and sets X-Real-IP / X-Forwarded-For. Without this, every request's
