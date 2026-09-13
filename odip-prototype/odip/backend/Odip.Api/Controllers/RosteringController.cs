@@ -103,6 +103,11 @@ public class RosteringController : ControllerBase
 
         var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
 
+        // PUBLIC_HOLIDAY (connection-map item 8): loaded once for the whole week and reused for
+        // every shift's context below, same as weekShifts/weekTripAssignments/weekWindows — avoids
+        // one PublicHolidays query per shift on the board.
+        var weekPublicHolidays = await LoadPublicHolidaysAsync(start, end, ct);
+
         // ── Every ACTIVE participant, not just ones with shifts this week — an empty week
         // is itself the coverage gap the participant-mode board exists to surface. Shifts
         // referencing a participant outside that active set (edge case) still need a name
@@ -147,7 +152,8 @@ public class RosteringController : ControllerBase
                 ? level : CompatibilityLevel.Allowed;
 
             var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
+                weekPublicHolidays);
             return _conflictService.Check(shift, ctx).ToList();
         }
 
@@ -1173,10 +1179,31 @@ public class RosteringController : ControllerBase
             .Select(c => (CompatibilityLevel?)c.Level)
             .FirstOrDefaultAsync(ct) ?? CompatibilityLevel.Allowed;
 
+        // PUBLIC_HOLIDAY only ever checks the candidate's ServiceDate (see RosterConflictService.
+        // CheckPublicHoliday), so that's the only date this query needs regardless of EndsNextDay.
+        var publicHolidays = await LoadPublicHolidaysAsync(candidate.ServiceDate, candidate.ServiceDate, ct);
+
         var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold);
+            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
+            publicHolidays);
 
         return _conflictService.Check(candidate, ctx).ToList();
+    }
+
+    /// <summary>
+    /// PUBLIC_HOLIDAY source of truth (connection-map item 8): same state-scoping as
+    /// <c>ClaimGenerationService.CalculateClaimInternalAsync</c> — a holiday row with a null
+    /// <see cref="Odip.Domain.Entities.PublicHoliday.State"/> applies everywhere, one scoped to a
+    /// state only applies there, and the provider's own state (falling back to "VIC") decides
+    /// which scoped rows count. One query per call.
+    /// </summary>
+    private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var state = (await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct)) ?? "VIC";
+        return await _db.PublicHolidays
+            .Where(h => h.Date >= start && h.Date <= end && (h.State == null || h.State == state))
+            .Select(h => new PublicHolidayRef(h.Date, h.Name))
+            .ToListAsync(ct);
     }
 
     /// <summary>

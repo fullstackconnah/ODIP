@@ -757,10 +757,27 @@ public class StaffAssignmentsController : ControllerBase
 
         var availability = await _unavailabilityQuery.GetWindowsAsync(new[] { staffId }, assignmentStart, assignmentEnd, ct);
 
+        // Loaded for consistency with the other two RosterCheckContext callers (connection-map
+        // item 8), even though RosterConflictService.CheckStaffAssignment never reads
+        // ctx.PublicHolidays — see that method's summary for why trip assignments don't get the
+        // PUBLIC_HOLIDAY finding.
+        var publicHolidays = await LoadPublicHolidaysAsync(assignmentStart, assignmentEnd, ct);
+
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
-            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
+            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold,
+            publicHolidays);
 
         return _conflictService.CheckStaffAssignment(assignmentStart, assignmentEnd, excludeAssignmentId, ctx).ToList();
+    }
+
+    /// <summary>Same state-scoped PublicHoliday load as RosteringController.LoadPublicHolidaysAsync — see there.</summary>
+    private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var state = (await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct)) ?? "VIC";
+        return await _db.PublicHolidays
+            .Where(h => h.Date >= start && h.Date <= end && (h.State == null || h.State == state))
+            .Select(h => new PublicHolidayRef(h.Date, h.Name))
+            .ToListAsync(ct);
     }
 
     /// <summary>Dry-run findings for a candidate trip assignment. Never writes — mirrors POST /rostering/shifts/check.</summary>

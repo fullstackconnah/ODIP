@@ -1131,4 +1131,84 @@ public class RosteringControllerTests
         Assert.Equal(new TimeOnly(12, 0), bar.EndTime);
         Assert.Null(bar.AvailabilityType);
     }
+
+    // ── PUBLIC_HOLIDAY (connection-map item 8) ────────────────
+
+    [Fact]
+    public async Task CheckShift_ServiceDateIsSeededPublicHoliday_ReturnsPublicHolidayFinding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = ServiceDate, Name = "Test Holiday", State = null });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var dto = new CheckShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        };
+
+        var result = await controller.CheckShift(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        var finding = Assert.Single(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+        Assert.False(finding.RequiresReason);
+        Assert.Contains("Test Holiday", finding.Message);
+    }
+
+    [Fact]
+    public async Task CheckShift_NoPublicHolidaySeeded_DoesNotReturnPublicHolidayFinding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var dto = new CheckShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = staff.Id, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        };
+
+        var result = await controller.CheckShift(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
+        Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+    }
+
+    [Fact]
+    public async Task GetBoard_ShiftOnSeededPublicHoliday_IncludedInExceptions()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id,
+            ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            EndsNextDay = false, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+        });
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = ServiceDate, Name = "Test Holiday", State = null });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(ok.Value);
+        Assert.Contains(body.Data!.Exceptions, f => f.Finding.Code == RosterConflictService.PublicHoliday);
+    }
+
+    // StaffAssignmentsController's Check never fires PUBLIC_HOLIDAY even when a holiday sits
+    // inside the assignment window — see StaffAssignmentGateTests / RosterConflictServiceTests
+    // for the trip-assignment-side coverage (RosterConflictService.CheckStaffAssignment never
+    // calls CheckPublicHoliday; VehiclesStaffController.StaffAssignmentsController still loads
+    // PublicHolidays for context-shape consistency but nothing consumes it there).
 }

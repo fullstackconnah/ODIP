@@ -13,6 +13,13 @@ namespace Odip.Domain.Rostering.Services;
 /// </summary>
 public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, string Message, bool RequiresReason = false);
 
+/// <summary>One public holiday relevant to the context's date range, used by
+/// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>
+/// when the candidate shift's <see cref="Shift.ServiceDate"/> matches. Callers load these from
+/// <c>PublicHoliday</c> rows the same way <c>ClaimGenerationService</c> does (state-scoped via
+/// ProviderSettings), then map to this lightweight record so the pure domain layer never sees EF entities.</summary>
+public sealed record PublicHolidayRef(DateOnly Date, string Name);
+
 /// <summary>
 /// Everything <see cref="RosterConflictService.Check"/> needs about the candidate's staff,
 /// participant, and surrounding roster to evaluate every rule in one pass. Callers assemble
@@ -30,6 +37,10 @@ public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, 
 /// <param name="Availability">This staff member's unavailability windows (leave, recurring rules, legacy StaffAvailability rows) relevant to the candidate's window — see <see cref="Infrastructure.Rostering.StaffUnavailabilityQuery"/>.</param>
 /// <param name="Compatibility">The staff-participant compatibility level (Allowed when no matrix row exists).</param>
 /// <param name="WeeklyHoursThreshold">Weekly hours above which <c>OVER_HOURS</c> fires. See <see cref="RosterConflictService.DefaultWeeklyHoursThreshold"/>.</param>
+/// <param name="PublicHolidays">Public holidays relevant to the candidate's date range, used by
+/// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>.
+/// Last positional parameter so existing callers keep compiling; null and an empty list are both
+/// treated as "no holidays" — see <see cref="RosterConflictService.Check"/>.</param>
 public sealed record RosterCheckContext(
     User Staff,
     Participant? Participant,
@@ -38,7 +49,8 @@ public sealed record RosterCheckContext(
     IReadOnlyList<StaffAssignment> TripAssignments,
     IReadOnlyList<UnavailabilityWindow> Availability,
     CompatibilityLevel Compatibility,
-    decimal WeeklyHoursThreshold);
+    decimal WeeklyHoursThreshold,
+    IReadOnlyList<PublicHolidayRef>? PublicHolidays = null);
 
 /// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
 /// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
@@ -92,6 +104,7 @@ public sealed class RosterConflictService
     public const string VehicleDoubleBooked = "VEHICLE_DOUBLE_BOOKED";
     public const string VehicleOverSeats = "VEHICLE_OVER_SEATS";
     public const string VehicleOverWheelchair = "VEHICLE_OVER_WHEELCHAIR";
+    public const string PublicHoliday = "PUBLIC_HOLIDAY";
 
     /// <summary>Runs every rule against <paramref name="candidate"/> and returns every finding that fires.</summary>
     public IReadOnlyList<RosterFinding> Check(Shift candidate, RosterCheckContext ctx)
@@ -110,6 +123,7 @@ public sealed class RosterConflictService
         CheckCompetencyMissing(candidate, ctx, findings);
         CheckRatioShortfall(candidate, ctx, findings);
         CheckOverHours(candidate, ctx, findings);
+        CheckPublicHoliday(candidate, ctx, findings);
 
         return findings;
     }
@@ -123,6 +137,10 @@ public sealed class RosterConflictService
     /// whole days: AssignmentStart 00:00 through the day AFTER AssignmentEnd at 00:00 (AssignmentEnd
     /// itself is inclusive). ctx.Participant is expected to be null — build the context the same way
     /// StaffAssignmentsController.CheckAsync does.
+    /// <see cref="PublicHoliday"/> is deliberately NOT evaluated here (connection-map item 8): a
+    /// trip assignment spans multiple days and the claim already prices any public holiday inside
+    /// that span via <c>ClaimGenerationService</c>/<c>DayTypeResolver</c> — re-surfacing it as a
+    /// per-shift roster warning would be noise on a candidate that isn't a single-day Shift anyway.
     /// </summary>
     public IReadOnlyList<RosterFinding> CheckStaffAssignment(
         DateOnly assignmentStart, DateOnly assignmentEnd, Guid excludeAssignmentId, RosterCheckContext ctx)
@@ -428,6 +446,24 @@ public sealed class RosterConflictService
             findings.Add(new RosterFinding(OverHours, RosterFindingSeverity.Warning,
                 $"{ctx.Staff.FullName}'s rostered hours for the week ({total:0.##}h) exceed the {ctx.WeeklyHoursThreshold:0.##}h threshold."));
         }
+    }
+
+    /// <summary>
+    /// Fires when the candidate shift's <see cref="Shift.ServiceDate"/> matches a date in
+    /// <see cref="RosterCheckContext.PublicHolidays"/> — an overnight shift (<see cref="Shift.EndsNextDay"/>)
+    /// only checks its ServiceDate, not the day it ends on, matching how a Shift is a single-day
+    /// record everywhere else in this service. Never RequiresReason: a public holiday is
+    /// informational for the coordinator, not a conflict to resolve. Not called from
+    /// <see cref="CheckStaffAssignment"/> — see that method's summary for why.
+    /// </summary>
+    private static void CheckPublicHoliday(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
+    {
+        var holiday = ctx.PublicHolidays?.FirstOrDefault(h => h.Date == candidate.ServiceDate);
+        if (holiday is null) return;
+
+        var when = candidate.ServiceDate.ToString("ddd d MMM", CultureInfo.InvariantCulture);
+        findings.Add(new RosterFinding(PublicHoliday, RosterFindingSeverity.Warning,
+            $"{when} is a public holiday ({holiday.Name}).", RequiresReason: false));
     }
 
     private static (DateTime Start, DateTime End) ToWindow(DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay)
