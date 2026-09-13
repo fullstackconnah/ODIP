@@ -247,3 +247,7 @@ npm run lint
   - Every edit form: submit with the server mocked to reject, then assert the error shows AND the
     edited values survive. react-hook-form `reset()` keyed on an inline `initialValues={{}}`
     literal re-fires on every parent render — build initial values with `useMemo` on the row.
+  - Any HTML assembled by string interpolation (email templates under
+    `Odip.Infrastructure/Notifications/Templates/`, exports, PDFs) → every payload field goes
+    through `WebUtility.HtmlEncode`, and a test renders it with `<script>` / `"` in each
+    user-controlled field and asserts the encoded form (caught by automated review 2026-09-13).
