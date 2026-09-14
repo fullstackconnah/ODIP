@@ -129,17 +129,21 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     expect(screen.queryByRole('link', { name: /show all incidents/i })).not.toBeInTheDocument()
   })
 
-  it('shows only overdue incidents when visiting /incidents?qsc=overdue', () => {
+  it('requests the isOverdueQsc filter server-side when visiting /incidents?qsc=overdue, instead of filtering client-side', () => {
+    // The server is now the sole source of the overdue subset — mockUseIncidents standing in for
+    // it returns only the already-overdue row, exactly as the real GetAll?isOverdueQsc=true would.
+    // If the page still ran a client-side `.filter(i => i.isOverdue24h)` on top of that (double
+    // filtering) the assertions below would still pass, so the params assertion is the one that
+    // actually proves the server-side wiring, not the DOM assertions alone.
     mockUseIncidents.mockReturnValue({
-      data: [
-        baseIncident({ id: 'inc-1', title: 'Overdue one', isOverdue24h: true }),
-        baseIncident({ id: 'inc-2', title: 'On-time one', isOverdue24h: false }),
-      ],
+      data: [baseIncident({ id: 'inc-1', title: 'Overdue one', isOverdue24h: true })],
       isLoading: false,
     })
     mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ id: 'inc-1', isOverdue24h: true })] })
     renderPage('/incidents?qsc=overdue')
 
+    const paramsArg = mockUseIncidents.mock.calls.at(-1)?.[0]
+    expect(paramsArg).toHaveProperty('isOverdueQsc', 'true')
     expect(screen.getByText('Overdue one')).toBeInTheDocument()
     expect(screen.queryByText('On-time one')).not.toBeInTheDocument()
   })
@@ -161,6 +165,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     const paramsArg = mockUseIncidents.mock.calls.at(-1)?.[0]
     expect(paramsArg).not.toHaveProperty('status')
     expect(paramsArg).not.toHaveProperty('severity')
+    expect(paramsArg).toHaveProperty('isOverdueQsc', 'true')
     expect(screen.getByText('Overdue one')).toBeInTheDocument()
   })
 

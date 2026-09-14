@@ -38,7 +38,7 @@ public class BillingController : ControllerBase
         [FromQuery] Guid? participantId, [FromQuery] FundingRouteType? routeType,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.FundingSources.AsQueryable();
         if (participantId.HasValue) query = query.Where(f => f.ParticipantId == participantId.Value);
@@ -112,7 +112,7 @@ public class BillingController : ControllerBase
         [FromQuery] Guid? participantId, [FromQuery] bool? activeOnly,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var query = _db.ServiceBookings.AsQueryable();
@@ -216,7 +216,7 @@ public class BillingController : ControllerBase
         [FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var events = _db.BillableEvents.AsQueryable();
         if (participantId.HasValue) events = events.Where(e => e.ParticipantId == participantId.Value);
@@ -330,7 +330,7 @@ public class BillingController : ControllerBase
     public async Task<ActionResult<ApiResponse<PagedResult<ClaimBatchListDto>>>> GetClaimBatches(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var projected = _db.ClaimBatches.OrderByDescending(b => b.CreatedAt).Select(b => new ClaimBatchListDto
         {

@@ -160,7 +160,7 @@ function makeCompletion(overrides: Partial<NonNullable<PortalShiftDetailDto['com
     varianceMinutesEnd: 0,
     isOutlierVariance: false,
     varianceReviewMinutes: 15,
-    returnCount: 0,
+    shiftReturnCount: 0,
     incidents: [],
     ...overrides,
   }

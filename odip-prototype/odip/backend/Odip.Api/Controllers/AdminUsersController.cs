@@ -45,9 +45,10 @@ public class AdminUsersController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 20;
-        if (pageSize > 100) pageSize = 100;
+        // Deliberately a lower default/ceiling (20/100, not the house 50/200) — admin user
+        // lists are smaller and this predates the shared 50/200 convention. Do not "tidy"
+        // this to match every other controller.
+        (page, pageSize) = PagingParams.Clamp(page, pageSize, maxPageSize: 100);
 
         var query = _db.Users
             .IgnoreQueryFilters()

@@ -31,7 +31,7 @@ public class FieldRegistryController : ControllerBase
         [FromQuery] string? domain, [FromQuery] string? appearsIn, [FromQuery] string? search,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.FieldDefinitions.AsQueryable();
         if (!string.IsNullOrWhiteSpace(domain))

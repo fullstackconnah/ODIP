@@ -165,7 +165,7 @@ public class ParticipantsController : ControllerBase
         [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.Participants.AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))

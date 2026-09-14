@@ -50,7 +50,7 @@ public record ShiftCompletionDto(
     int VarianceMinutesEnd,
     bool IsOutlierVariance,
     int VarianceReviewMinutes,
-    int ReturnCount,
+    int ShiftReturnCount,
     // Connection-map reverse link (Deliverable 2): active incidents raised against this shift —
     // populated on the RosteringController.GetShiftCompletion DETAIL endpoint only; every other
     // caller of ShiftCompletionMapper.ToDtoAsync gets an empty list (see the mapper's

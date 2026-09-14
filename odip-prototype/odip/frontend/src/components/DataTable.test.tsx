@@ -431,3 +431,119 @@ describe('DataTable — mobile card view (I-1)', () => {
     expect(screen.getByText('Bianca').closest('td')).toHaveAttribute('data-label', '')
   })
 })
+
+describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
+  it('renders no pagination controls when the pagination prop is absent', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    expect(screen.queryByRole('button', { name: /previous page/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /next page/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
+  })
+
+  it('still sorts client-side when pagination is absent (unchanged existing behaviour)', async () => {
+    const user = userEvent.setup()
+    render(<DataTable data={rows} columns={columns} keyField="id" sortable />)
+
+    await user.click(screen.getByRole('columnheader', { name: /name/i }))
+
+    const cells = screen.getAllByRole('cell')
+    expect(cells[0]).toHaveTextContent('Alex')
+  })
+
+  it('renders "Showing X-Y of Z" and Previous/Next controls when pagination is present', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 1, pageSize: 2, totalCount: 5, onPageChange: vi.fn() }}
+      />
+    )
+
+    expect(screen.getByText(/showing 1-2 of 5/i)).toBeInTheDocument()
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /previous page/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /next page/i })).toBeInTheDocument()
+  })
+
+  it('disables Previous on the first page and Next on the last page', () => {
+    const { rerender } = render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 1, pageSize: 2, totalCount: 5, onPageChange: vi.fn() }}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /previous page/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /next page/i })).toBeEnabled()
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 3, pageSize: 2, totalCount: 5, onPageChange: vi.fn() }}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /previous page/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /next page/i })).toBeDisabled()
+  })
+
+  it('fires onPageChange with the next/previous page number when the controls are clicked', async () => {
+    const user = userEvent.setup()
+    const onPageChange = vi.fn()
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 2, pageSize: 2, totalCount: 5, onPageChange }}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /next page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(3)
+
+    await user.click(screen.getByRole('button', { name: /previous page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(1)
+  })
+
+  it('suppresses client-side sorting when pagination is present, trusting the server order', async () => {
+    const user = userEvent.setup()
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        sortable
+        pagination={{ page: 1, pageSize: 2, totalCount: 2, onPageChange: vi.fn() }}
+      />
+    )
+
+    // Clicking the sortable header still toggles aria-sort (the affordance stays live)...
+    const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    await user.click(nameHeader)
+    expect(nameHeader).toHaveAttribute('aria-sort', 'ascending')
+
+    // ...but row order is untouched — still server/data order (Bianca, Alex), not re-sorted to Alex-first.
+    const cells = screen.getAllByRole('cell')
+    expect(cells[0]).toHaveTextContent('Bianca')
+  })
+
+  it('does not render pagination controls when totalCount is 0', () => {
+    render(
+      <DataTable
+        data={[]}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 1, pageSize: 50, totalCount: 0, onPageChange: vi.fn() }}
+      />
+    )
+
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
+  })
+})

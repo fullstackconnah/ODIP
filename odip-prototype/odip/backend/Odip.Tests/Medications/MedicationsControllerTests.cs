@@ -965,6 +965,128 @@ public class MedicationsControllerTests
         Assert.Equal("Admin,Coordinator,SuperAdmin", authorizeAttr.Roles);
     }
 
+    // ── GetRegister ordering: (LastName, Name) tiebreaker ────────────────────────────
+
+    /// <summary>
+    /// Correctness fix: GetRegister orders by (Participant.LastName, Name), and both can tie —
+    /// two different participants can share a surname, or one participant can have two
+    /// medications with the same name. Without a unique tiebreaker, Skip/Take over ties is
+    /// non-deterministic. Asserts GetRegister's
+    /// `.OrderBy(LastName).ThenBy(Name).ThenBy(Id)` resolves ties to the same, repeatable order
+    /// (ascending Id) across two independent calls. Mirrors
+    /// IncidentsControllerTests.GetAll_TiedIncidentDateTime_OrdersStablyByIdAcrossRepeatedCalls.
+    /// </summary>
+    [Fact]
+    public async Task GetRegister_TiedLastNameAndMedicationName_OrdersStablyByIdAcrossRepeatedCalls()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participantA = SeedParticipant(db, "Sophie", "Brown");
+        var participantB = SeedParticipant(db, "Harrison", "Brown");
+        var medA = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantA.Id, Name = "Panadol",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        var medB = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantB.Id, Name = "Panadol",
+            Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+            Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.AddRange(medA, medB);
+        db.SaveChanges();
+
+        var expectedTiedOrder = new[] { medA, medB }.OrderBy(m => m.Id).Select(m => m.Id).ToList();
+
+        var controller = new MedicationsController(db, tenant);
+        var firstCall = await controller.GetRegister(null, null, ct: CancellationToken.None);
+        var firstItems = Assert.IsType<ApiResponse<PagedResult<MedicationListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!.Items;
+
+        var secondCall = await controller.GetRegister(null, null, ct: CancellationToken.None);
+        var secondItems = Assert.IsType<ApiResponse<PagedResult<MedicationListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!.Items;
+
+        var firstTiedOrder = firstItems.Where(m => m.Name == "Panadol").Select(m => m.Id).ToList();
+        var secondTiedOrder = secondItems.Where(m => m.Name == "Panadol").Select(m => m.Id).ToList();
+
+        Assert.Equal(expectedTiedOrder, firstTiedOrder);
+        Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
+
+    /// <summary>
+    /// The correctness guarantee the Id tiebreaker exists for: paging over rows that tie on
+    /// (LastName, Name) must partition the result set into disjoint, exhaustive pages — no row
+    /// duplicated across pages, none silently dropped. Mirrors
+    /// IncidentsControllerTests.GetAll_PagingOverTiedIncidentDateTime_PartitionsDisjointAndExhaustive.
+    /// </summary>
+    [Fact]
+    public async Task GetRegister_PagingOverTiedLastNameAndName_PartitionsDisjointAndExhaustive()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participants = new[]
+        {
+            SeedParticipant(db, "Sophie", "Brown"),
+            SeedParticipant(db, "Harrison", "Brown"),
+            SeedParticipant(db, "Amara", "Brown"),
+        };
+        foreach (var p in participants)
+        {
+            db.ParticipantMedications.Add(new ParticipantMedication
+            {
+                Id = Guid.NewGuid(), ParticipantId = p.Id, Name = "Panadol",
+                Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+                Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            });
+        }
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var page1Call = await controller.GetRegister(null, null, page: 1, pageSize: 2, ct: CancellationToken.None);
+        var page1 = Assert.IsType<ApiResponse<PagedResult<MedicationListDto>>>(Assert.IsType<OkObjectResult>(page1Call.Result).Value).Data!;
+
+        var page2Call = await controller.GetRegister(null, null, page: 2, pageSize: 2, ct: CancellationToken.None);
+        var page2 = Assert.IsType<ApiResponse<PagedResult<MedicationListDto>>>(Assert.IsType<OkObjectResult>(page2Call.Result).Value).Data!;
+
+        Assert.Equal(3, page1.TotalCount);
+        Assert.Equal(2, page1.Items.Count);
+        Assert.Single(page2.Items);
+
+        var page1Ids = page1.Items.Select(m => m.Id).ToList();
+        var page2Ids = page2.Items.Select(m => m.Id).ToList();
+        Assert.Empty(page1Ids.Intersect(page2Ids)); // disjoint — no row duplicated across pages
+        Assert.Equal(3, page1Ids.Concat(page2Ids).Distinct().Count()); // exhaustive — every row appears exactly once
+    }
+
+    [Fact]
+    public async Task GetRegister_FiltersBySearchAndStatus_UnderPagedResult()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participantA = SeedParticipant(db, "Sophie", "Brown");
+        var participantB = SeedParticipant(db, "Harrison", "Lee");
+        db.ParticipantMedications.AddRange(
+            new ParticipantMedication
+            {
+                Id = Guid.NewGuid(), ParticipantId = participantA.Id, Name = "Panadol",
+                Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+                Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            },
+            new ParticipantMedication
+            {
+                Id = Guid.NewGuid(), ParticipantId = participantB.Id, Name = "Ibuprofen",
+                Type = MedicationType.Prn, PrnIndication = "Pain", PrnMaxDosesPer24h = 4,
+                Status = MedicationStatus.Ceased, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+            });
+        db.SaveChanges();
+
+        var controller = new MedicationsController(db, tenant);
+        var result = await controller.GetRegister("Panadol", MedicationStatus.Active, ct: CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<PagedResult<MedicationListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+
+        var item = Assert.Single(body.Items);
+        Assert.Equal("Panadol", item.Name);
+        Assert.Equal(1, body.TotalCount);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // Connection-map reverse link (Deliverable 2): AdministrationDto/MarEntryDto.IncidentId
     // ══════════════════════════════════════════════════════════════

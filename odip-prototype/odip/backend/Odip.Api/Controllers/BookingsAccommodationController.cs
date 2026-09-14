@@ -19,13 +19,24 @@ public class BookingsController : ControllerBase
     public BookingsController(OdipDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<BookingListDto>>>> GetAll([FromQuery] Guid? tripId, [FromQuery] BookingStatus? status, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
+        [FromQuery] Guid? tripId, [FromQuery] BookingStatus? status,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
     {
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+
         var query = _db.ParticipantBookings.Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
         if (tripId.HasValue) query = query.Where(b => b.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(b => b.BookingStatus == status.Value);
 
-        var items = await query.OrderByDescending(b => b.BookingDate)
+        // Correctness fix: BookingDate is a plain date (not a timestamp) and many bookings are
+        // created on the same day, so ties on the sole OrderByDescending key are common. With no
+        // tiebreaker, SQL makes no ordering guarantee among tied rows, so two independent
+        // Skip/Take executions (page 1, page 2) can each resolve the tied group differently — a
+        // row can land on both pages (duplicate) or neither (vanishes). .Id is a unique Guid
+        // primary key, so ThenBy(b => b.Id) makes the total order deterministic and safe to
+        // paginate. Mirrors IncidentsController.GetAll's identical fix.
+        var projectedQuery = query.OrderByDescending(b => b.BookingDate).ThenBy(b => b.Id)
             .Select(b => new BookingListDto
             {
                 Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
@@ -35,8 +46,10 @@ public class BookingsController : ControllerBase
                 NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
                 SupportRatioOverride = b.SupportRatioOverride, ActionRequired = b.ActionRequired,
                 InsuranceStatus = b.InsuranceStatus, PaymentStatus = b.PaymentStatus
-            }).ToListAsync(ct);
-        return Ok(ApiResponse<List<BookingListDto>>.Ok(items));
+            });
+
+        var result = await PagedResult<BookingListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<BookingListDto>>.Ok(result));
     }
 
     [HttpGet("{id:guid}")]

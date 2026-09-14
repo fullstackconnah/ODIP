@@ -1,3 +1,4 @@
+import { apiGet } from '../client'
 import type { PagedResult } from '../types'
 
 /**
@@ -20,4 +21,19 @@ export function toTruncatableList<T>(result: PagedResult<T>): TruncatableList<T>
   list.totalCount = result.totalCount
   list.isTruncated = result.items.length < result.totalCount
   return list
+}
+
+/**
+ * Fetches one `PagedResult<T>` list endpoint and flattens it to a `TruncatableList<T>` in one
+ * call — the boilerplate every one of trips.ts/participants.ts/billing.ts's queryFns currently
+ * repeats by hand (`apiGet<PagedResult<T>>(url, params).then(toTruncatableList)`). Deliberately a
+ * plain function, not a hook: every caller is a use*() hook's own queryFn, never a component, so
+ * it never needs to appear in a `vi.mock('@/api/hooks')` fixture (see the module doc comment
+ * above for why a *hook* here is unsafe).
+ */
+export function fetchPagedList<T>(
+  url: string,
+  params?: Record<string, string>,
+): Promise<TruncatableList<T>> {
+  return apiGet<PagedResult<T>>(url, params).then(toTruncatableList)
 }

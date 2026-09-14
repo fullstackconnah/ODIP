@@ -633,7 +633,7 @@ const shiftCompletions = [
     reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: '2026-09-08T18:00:00Z',
     reviewOutcome: 'Approved', returnReason: null,
     varianceMinutesStart: -2, varianceMinutesEnd: 5, isOutlierVariance: false, varianceReviewMinutes: 15,
-    returnCount: 0, incidents: [],
+    shiftReturnCount: 0, incidents: [],
   },
   {
     id: 'sc-0002', shiftId: 'shift-0002', actualStart: '2026-09-10T19:32:00Z', actualEnd: '2026-09-10T23:50:00Z',
@@ -643,7 +643,7 @@ const shiftCompletions = [
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
     reviewOutcome: null, returnReason: null,
     varianceMinutesStart: 32, varianceMinutesEnd: -10, isOutlierVariance: true, varianceReviewMinutes: 15,
-    returnCount: 0,
+    shiftReturnCount: 0,
     incidents: [
       { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00Z' },
     ],
@@ -714,7 +714,7 @@ function buildPortalShiftDetail(shiftId, overrides = {}) {
     participant: portalParticipantSummary(base.participantId),
     routines: [], riskEntries: [], medications: [],
     completion,
-    returnCount: completion ? completion.returnCount : 0,
+    returnCount: completion ? completion.shiftReturnCount : 0,
     lastReturnReason: null,
   }
 }
@@ -748,7 +748,7 @@ const completionQueueItems = Object.values(portalShiftBase)
       varianceMinutesStart: completion.varianceMinutesStart, varianceMinutesEnd: completion.varianceMinutesEnd,
       status: base.status, timeZoneId: completion.timeZoneId,
       isOutlierVariance: completion.isOutlierVariance, varianceReviewMinutes: completion.varianceReviewMinutes,
-      returnCount: completion.returnCount,
+      returnCount: completion.shiftReturnCount,
     }
   })
   .filter(Boolean)
@@ -1496,7 +1496,7 @@ const routes = [
   // every other "GET routes don't filter by query string" route noted elsewhere in this file.
   ['incidents', (searchParams) => {
     const involvedUserId = searchParams.get('involvedUserId')
-    return involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents
+    return paged(involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents)
   }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
@@ -1510,7 +1510,7 @@ const routes = [
   ['participants/:id/administrations', (id) => medicationAdministrations.filter((a) => a.participantId === id)],
 
   // bookings
-  ['bookings', () => bookings],
+  ['bookings', () => paged(bookings)],
   ['bookings/:id', (id) => {
     const b = bookings.find((x) => x.id === id) || bookings[0]
     return bookingDetail(b)
@@ -1625,7 +1625,7 @@ const postRoutes = [
       startedAt: now, submittedAt: null,
       reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
       varianceMinutesStart: 0, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15,
-      returnCount: 0, incidents: [],
+      shiftReturnCount: 0, incidents: [],
     }
     return buildPortalShiftDetail(id, { status: 'InProgress', completion })
   }],
@@ -1638,7 +1638,7 @@ const postRoutes = [
       startedAt: now, submittedAt: now,
       reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
       varianceMinutesStart: 3, varianceMinutesEnd: -2, isOutlierVariance: false, varianceReviewMinutes: 15,
-      returnCount: 0, incidents: [],
+      shiftReturnCount: 0, incidents: [],
     }
     return buildPortalShiftDetail(id, { status: 'PendingReview', completion })
   }],
@@ -1650,7 +1650,7 @@ const postRoutes = [
     const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
     return {
       ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(),
-      reviewOutcome: 'Returned', returnReason: body?.reason ?? '', returnCount: c.returnCount + 1,
+      reviewOutcome: 'Returned', returnReason: body?.reason ?? '', shiftReturnCount: c.shiftReturnCount + 1,
     }
   }],
   ['rostering/completions/approve-batch', (body) => {

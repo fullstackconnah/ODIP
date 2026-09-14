@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Odip.Application.Common;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -57,8 +58,10 @@ public class AuditController : ControllerBase
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
             return BadRequest(new { error = "Invalid entity type." });
 
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 50;
+        // Deliberately a lower ceiling (100, not the house 200) — audit history pages are
+        // rarely browsed deep, and this predates the shared 50/200 convention. Do not "tidy"
+        // this to match every other controller.
+        (page, pageSize) = PagingParams.Clamp(page, pageSize, maxPageSize: 100);
 
         var query = _db.AuditLogs
             .Where(a => a.EntityType == canonicalEntityType && a.EntityId == entityId)

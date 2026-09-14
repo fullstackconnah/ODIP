@@ -205,11 +205,15 @@ public class IncidentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetAll(
+    public async Task<ActionResult<ApiResponse<PagedResult<IncidentListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
-        [FromQuery] bool? isActive, [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId, CancellationToken ct)
+        [FromQuery] bool? isActive, [FromQuery] bool? isOverdueQsc,
+        [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
     {
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+
         var query = _db.IncidentReports
             .Include(i => i.TripInstance)
             .Include(i => i.ReportedByUser)
@@ -236,7 +240,26 @@ public class IncidentsController : ControllerBase
         if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
         if (involvedUserId.HasValue) query = query.Where(i => i.InvolvedUserId == involvedUserId.Value);
 
-        var items = await query.OrderByDescending(i => i.IncidentDateTime)
+        // Moved server-side from IncidentsPage.tsx's client-side `.filter(i => i.isOverdue24h)`,
+        // which used to run over the full (unpaged) result set. Once GetAll only sends one page,
+        // filtering client-side would silently apply to that page's ~50 rows instead of every
+        // matching incident — for compliance data, under-reporting overdue incidents is the worst
+        // possible failure. This is the EXACT same predicate as the IsOverdue24h projection below
+        // (and the identical expression used by Create/Update/GetByTrip's IsOverdue24h), applied
+        // as a Where instead of a Select so it participates in TotalCount/paging correctly.
+        if (isOverdueQsc == true)
+            query = query.Where(i => i.QscReportingStatus == QscReportingStatus.Required
+                && i.QscReportedAt == null
+                && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24);
+
+        // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
+        // trivially collision-prone — two incidents can share the exact same value. With no
+        // tiebreaker, SQL makes no ordering guarantee among rows that tie on the only ORDER BY
+        // key, so two independent Skip/Take executions (page 1, page 2) can each resolve the tied
+        // group differently — a row can land on both pages (duplicate) or neither (vanishes).
+        // .Id is a unique Guid primary key, so ThenBy(i => i.Id) makes the total order
+        // deterministic and safe to paginate.
+        var projectedQuery = query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
             .Select(i => new IncidentListDto
             {
                 Id = i.Id,
@@ -262,9 +285,10 @@ public class IncidentsController : ControllerBase
                 MedicationAdministrationId = i.MedicationAdministrationId,
                 ShiftId = i.ShiftId,
                 ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            });
 
-        return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
+        var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
     }
 
     [HttpGet("{id:guid}")]

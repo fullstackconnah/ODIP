@@ -59,7 +59,7 @@ public class RosteringController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
-    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
+    private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
 
     // ══════════════════════════════════════════════════════════════
     // BOARD
@@ -690,44 +690,90 @@ public class RosteringController : ControllerBase
     /// The review queue. status defaults to PendingReview; other ShiftStatus values let the
     /// queue show shifts in other states (e.g. Completed, for already-approved history). Only
     /// shifts with a current active ShiftCompletion row are included.
+    ///
+    /// Critique I2: this used to materialise every matching Shift/ShiftCompletion, sort in
+    /// memory, then Skip/Take the in-memory list — paging only the response body, not the work.
+    /// The orchestrator's ruling for the fix (see the review) was deliberately NOT "persist an
+    /// IsOutlierVariance boolean at Finish" — that would encode the currently-configured
+    /// Rostering:VarianceReviewMinutes threshold as data and go stale the moment the threshold
+    /// changed. Instead the outlier predicate is evaluated per-row in SQL, against the
+    /// already-persisted VarianceMinutesStart/VarianceMinutesEnd columns and the live threshold,
+    /// so both the sort and the Skip/Take run in the database.
+    ///
+    /// The one piece that stays out of SQL is the true timezone-converted RosteredStart (needs a
+    /// per-row TimeZoneInfo call EF can't translate) — the ORDER BY tiebreak below uses the raw
+    /// Shift.ServiceDate/Shift.StartTime instead. Within one IANA zone these are monotonic with
+    /// the converted RosteredStart for any single calendar ServiceDate (a DST transition would
+    /// have to fall inside the shift's own service day to diverge them), and every existing test
+    /// fixture uses one zone, so the ordering this endpoint returns is unchanged; it only stops
+    /// being byte-for-byte identical to the old in-memory sort in the DST-transition-day/
+    /// multi-timezone-tenant edge case the old code could reach only because it fully
+    /// materialised the timezone conversion for every row anyway.
     /// </summary>
     [HttpGet("completions")]
     public async Task<ActionResult<ApiResponse<PagedResult<CompletionQueueItemDto>>>> GetCompletions(
         [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
         var statusFilter = status ?? ShiftStatus.PendingReview;
         var thresholdMinutes = VarianceReviewMinutes;
 
-        // Narrow projection (critique P2 — "hydrates full graphs") instead of .Include(Participant)/
-        // .Include(User): only the fields the queue actually needs, including the four the
-        // rostered-time conversion needs (ServiceDate/StartTime/EndTime/EndsNextDay) — see
-        // ShiftCompletionMapper.BuildQueueItemsAsync, shared with StaffController's staff-overview
-        // endpoint (item 12 — RecentCompletions).
-        var shiftQuery = _db.Shifts
-            .Where(s => s.Status == statusFilter);
-        if (from.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate >= from.Value);
-        if (to.HasValue) shiftQuery = shiftQuery.Where(s => s.ServiceDate <= to.Value);
+        // Only shifts with a current active completion (inner join, not a dictionary lookup after
+        // the fact) — narrows the row set the ORDER BY/Skip/Take below has to work over.
+        var joined =
+            from s in _db.Shifts
+            join c in _db.ShiftCompletions on s.Id equals c.ShiftId
+            where s.Status == statusFilter && c.IsActive
+            select new { Shift = s, Completion = c };
 
-        var items = await ShiftCompletionMapper.BuildQueueItemsAsync(_db, shiftQuery, thresholdMinutes, ct);
+        if (from.HasValue) joined = joined.Where(x => x.Shift.ServiceDate >= from.Value);
+        if (to.HasValue) joined = joined.Where(x => x.Shift.ServiceDate <= to.Value);
 
-        // Outlier-first, then chronological — the coordinator's queue previously had "no signal
-        // for what actually needs attention" (critique P1). In-memory sort: IsOutlierVariance and
-        // the RosteredStart used for the date/time tiebreak are both derived (timezone-aware),
-        // not translatable to SQL.
-        var sorted = items
-            .OrderByDescending(i => i.IsOutlierVariance)
-            .ThenBy(i => i.ServiceDate)
-            .ThenBy(i => i.RosteredStart)
-            .ToList();
+        // Outlier-first (critique P1 — "no signal for what actually needs attention"), then
+        // chronological. Math.Abs(int) and the boolean comparison both translate to SQL; no
+        // nullable column is involved here (VarianceMinutesStart/End are non-nullable ints), so
+        // the Postgres-vs-EF-InMemory null-ordering trap the hardening PR hit elsewhere
+        // (GetShiftCompletions' SubmittedAt sort) doesn't apply to this key.
+        var ordered = joined
+            .OrderByDescending(x => Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes)
+            .ThenBy(x => x.Shift.ServiceDate)
+            .ThenBy(x => x.Shift.StartTime);
 
-        var totalCount = sorted.Count;
-        var paged = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var totalCount = await ordered.CountAsync(ct);
+
+        // Narrow projection (critique P2 — "hydrates full graphs") applied AFTER Skip/Take, so
+        // only the requested page's rows are ever materialised.
+        var pageRows = await ordered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new
+            {
+                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount,
+                ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
+                StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
+                CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
+                x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd,
+            })
+            .ToListAsync(ct);
+
+        var items = pageRows.Select(row =>
+        {
+            var rosteredShift = new Shift
+            {
+                ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
+            };
+            var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, row.TimeZoneId);
+            var isOutlier = ShiftCompletionMapper.IsOutlierVariance(row.VarianceMinutesStart, row.VarianceMinutesEnd, thresholdMinutes);
+            return new CompletionQueueItemDto(
+                row.Id, row.CompletionId, row.ParticipantName, row.StaffName,
+                row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
+                row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
+                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount);
+        }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(
-            new PagedResult<CompletionQueueItemDto> { Items = paged, Page = page, PageSize = pageSize, TotalCount = totalCount }));
+            new PagedResult<CompletionQueueItemDto> { Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount }));
     }
 
     /// <summary>
@@ -745,7 +791,8 @@ public class RosteringController : ControllerBase
         if (completion is null)
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct, includeIncidents: true)));
+        var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shiftReturnCount, ct, includeIncidents: true)));
     }
 
     /// <summary>
@@ -768,9 +815,12 @@ public class RosteringController : ControllerBase
             return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
         var thresholdMinutes = VarianceReviewMinutes;
+        // All rows share ShiftId == id, so ReturnCount is fetched once (critique M7) instead of
+        // once per completion.
+        var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
         var dtos = new List<ShiftCompletionDto>();
         foreach (var c in completions)
-            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, ct));
+            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, shiftReturnCount, ct));
         return Ok(ApiResponse<List<ShiftCompletionDto>>.Ok(dtos));
     }
 
@@ -800,7 +850,7 @@ public class RosteringController : ControllerBase
         shift.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
     /// <summary>
@@ -871,15 +921,20 @@ public class RosteringController : ControllerBase
         }
 
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, ct)));
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
     /// <summary>
     /// Approves up to 100 PendingReview shifts in one call (critique P3 — "no batch approve"; the
     /// queue previously had no way to clear a day's clean submissions at once). Each id follows
-    /// exactly the single-approve rules via ResolvePendingReviewCompletionAsync — a failure on one
-    /// id doesn't abort the batch. One SaveChangesAsync at the end; overall response is always 200
-    /// even when some items failed, since the response body itself reports per-item outcome.
+    /// exactly the single-approve rules via <see cref="ResolvePendingReviewCompletion"/> — a
+    /// failure on one id doesn't abort the batch. Two bulk queries load every shift/completion the
+    /// batch could need up front (critique M3 — this used to run
+    /// ResolvePendingReviewCompletionAsync per id, up to 2N round-trips) instead of querying per
+    /// id; the classification rules themselves are shared with the single-approve/return path via
+    /// ResolvePendingReviewCompletion, so per-item results/codes are unchanged. One
+    /// SaveChangesAsync at the end; overall response is always 200 even when some items failed,
+    /// since the response body itself reports per-item outcome.
     /// </summary>
     [HttpPost("completions/approve-batch")]
     public async Task<ActionResult<ApiResponse<List<ApproveBatchResultDto>>>> ApproveBatch(
@@ -898,9 +953,23 @@ public class RosteringController : ControllerBase
         var results = new List<ApproveBatchResultDto>();
 
         // De-dup: EF identity resolution would hand the second occurrence the already-approved tracked entity and report a false SHIFT_NOT_PENDING_REVIEW.
-        foreach (var shiftId in dto.ShiftIds.Distinct())
+        var distinctIds = dto.ShiftIds.Distinct().ToList();
+
+        // Two bulk queries instead of up to 2N round-trips (critique M3). completionsByShiftId is
+        // a superset of what every id actually needs (it doesn't pre-filter on shift status), but
+        // that's cheaper than querying per id and doesn't change the outcome below.
+        var shiftsById = await _db.Shifts
+            .Where(s => distinctIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+        var completionsByShiftId = await _db.ShiftCompletions
+            .Where(c => distinctIds.Contains(c.ShiftId) && c.IsActive)
+            .ToDictionaryAsync(c => c.ShiftId, ct);
+
+        foreach (var shiftId in distinctIds)
         {
-            var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(shiftId, ct);
+            shiftsById.TryGetValue(shiftId, out var shift);
+            completionsByShiftId.TryGetValue(shiftId, out var completion);
+            var (resolvedShift, resolvedCompletion, error) = ResolvePendingReviewCompletion(shift, completion);
             if (error is not null)
             {
                 var (code, message) = ExtractBatchFailure(error);
@@ -908,13 +977,13 @@ public class RosteringController : ControllerBase
                 continue;
             }
 
-            completion!.ReviewedByUserId = reviewerId;
-            completion.ReviewedAt = now;
-            completion.ReviewOutcome = ReviewOutcome.Approved;
-            completion.UpdatedAt = now;
+            resolvedCompletion!.ReviewedByUserId = reviewerId;
+            resolvedCompletion.ReviewedAt = now;
+            resolvedCompletion.ReviewOutcome = ReviewOutcome.Approved;
+            resolvedCompletion.UpdatedAt = now;
 
-            shift!.Status = ShiftStatus.Completed;
-            shift.UpdatedAt = now;
+            resolvedShift!.Status = ShiftStatus.Completed;
+            resolvedShift.UpdatedAt = now;
 
             results.Add(new ApproveBatchResultDto(shiftId, true, null, null));
         }
@@ -1199,8 +1268,8 @@ public class RosteringController : ControllerBase
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.
     /// <paramref name="includeIncidents"/> forwards to the mapper's own parameter — only
     /// GetShiftCompletion passes true (see that method's remarks).</summary>
-    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, CancellationToken ct, bool includeIncidents = false)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, ct, includeIncidents);
+    private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct, bool includeIncidents = false)
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct, includeIncidents);
 
     /// <summary>
     /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the
@@ -1211,6 +1280,20 @@ public class RosteringController : ControllerBase
     private async Task<(Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<ShiftCompletionDto>>? Error)> ResolvePendingReviewCompletionAsync(Guid shiftId, CancellationToken ct)
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == shiftId, ct);
+        var completion = shift is not null && shift.Status == ShiftStatus.PendingReview
+            ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shiftId && c.IsActive, ct)
+            : null;
+        return ResolvePendingReviewCompletion(shift, completion);
+    }
+
+    /// <summary>
+    /// The pure classification rules ResolvePendingReviewCompletionAsync applies, extracted
+    /// (critique M3) so ApproveBatch can run them in memory over shift/completion dictionaries it
+    /// loaded with two bulk queries instead of calling the async, per-id version 2N times. Same
+    /// check order as before: shift-404 -&gt; status-409 -&gt; completion-404.
+    /// </summary>
+    private (Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<ShiftCompletionDto>>? Error) ResolvePendingReviewCompletion(Shift? shift, ShiftCompletion? completion)
+    {
         if (shift is null)
             return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found.")));
 
@@ -1218,7 +1301,6 @@ public class RosteringController : ControllerBase
             return (null, null, Conflict(ApiResponse<ShiftCompletionDto>.Fail(
                 "This shift isn't awaiting review.", ShiftErrorCodes.ShiftNotPendingReview)));
 
-        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shiftId && c.IsActive, ct);
         if (completion is null)
             return (null, null, NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound)));
 

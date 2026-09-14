@@ -87,7 +87,7 @@ function makeCompletionDetail(overrides: Partial<ShiftCompletionDto> = {}): Shif
     varianceMinutesEnd: 5,
     isOutlierVariance: false,
     varianceReviewMinutes: 15,
-    returnCount: 0,
+    shiftReturnCount: 0,
     incidents: [],
     ...overrides,
   }

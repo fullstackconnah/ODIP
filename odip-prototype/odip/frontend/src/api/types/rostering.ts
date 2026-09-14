@@ -118,7 +118,7 @@ export interface ShiftCompletionDto {
   varianceMinutesEnd: number
   isOutlierVariance: boolean
   varianceReviewMinutes: number
-  returnCount: number
+  shiftReturnCount: number
   /** Connection map item 4: incidents raised during this shift, surfaced above the approve/
    * return actions on the (not-yet-built) completion review component. */
   incidents: {

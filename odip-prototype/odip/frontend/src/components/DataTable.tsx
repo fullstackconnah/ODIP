@@ -86,6 +86,24 @@ export type DataTableProps<T> = {
    * to the user's `tableVerticalDividers` preference (GEN-2, see `useUiPreferences`) — pass an
    * explicit `true`/`false` here to override that preference for this table specifically. */
   verticalDividers?: boolean
+  /**
+   * Signals that `data` is one server-paged slice of `totalCount`, not the full result set.
+   * Its presence is the sole switch: when provided, `DataTable` renders "Showing X-Y of Z" +
+   * Previous/Next controls (same pattern as `UsersTab.tsx`'s pager) and stops re-sorting `data`
+   * client-side (see `sortedData` below) — sorting one page of N would silently misrepresent the
+   * dataset's true order while still claiming (via the sort chevrons/`aria-sort`) that the whole
+   * table is sorted. A paginated caller that wants sortable columns must pass a controlled
+   * `sort`/`onSortChange` pair and turn `onSortChange` into a server-side query param itself;
+   * `DataTable`'s existing controlled-sort path already does the right thing mechanically once
+   * `pagination` stops the second, wrong, client-side sort on top of it. Omitted by every
+   * existing caller today, so no existing table's rendering or behavior changes.
+   */
+  pagination?: {
+    page: number
+    pageSize: number
+    totalCount: number
+    onPageChange: (page: number) => void
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -157,6 +175,7 @@ export function DataTable<T>({
   selectedRows,
   onSelectionChange,
   verticalDividers,
+  pagination,
 }: DataTableProps<T>) {
   const { prefs } = useUiPreferences()
   const showVerticalDividers = verticalDividers ?? prefs.tableVerticalDividers
@@ -167,6 +186,12 @@ export function DataTable<T>({
   const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
 
   const sortedData = useMemo(() => {
+    // Once a caller pages server-side, `data` is only one slice of the full result set — sorting
+    // just that slice client-side would sort *within the page* while the chevrons/aria-sort keep
+    // claiming the whole table is sorted, silently misrepresenting the true order. Trust the
+    // server's order exactly as returned; a paginated caller wires sort server-side instead via
+    // the existing controlled sort/onSortChange props.
+    if (pagination) return data
     if (!activeSort) return data
     const col = columns.find(c => c.key === activeSort.key)
     if (!col) return data
@@ -178,7 +203,7 @@ export function DataTable<T>({
       return activeSort.direction === 'desc' ? -cmp : cmp
     })
     return sorted
-  }, [data, activeSort, columns])
+  }, [data, activeSort, columns, pagination])
 
   const selectAllRef = useRef<HTMLInputElement>(null)
 
@@ -383,6 +408,35 @@ export function DataTable<T>({
           </tfoot>
         )}
       </table>
+      {pagination && pagination.totalCount > 0 && (
+        <div className={`flex items-center justify-between text-sm ${cellPadding} border-t border-[var(--color-border)]`}>
+          <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
+            Showing {(pagination.page - 1) * pagination.pageSize + 1}-
+            {Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--color-muted-foreground)]" aria-current="page">
+              Page {pagination.page} of {Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize))}
+            </span>
+            <button
+              onClick={() => pagination.onPageChange(pagination.page - 1)}
+              disabled={pagination.page <= 1}
+              aria-label="Previous page"
+              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => pagination.onPageChange(pagination.page + 1)}
+              disabled={pagination.page >= Math.ceil(pagination.totalCount / pagination.pageSize)}
+              aria-label="Next page"
+              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
