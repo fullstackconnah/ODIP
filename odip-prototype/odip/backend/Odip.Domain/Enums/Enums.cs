@@ -210,7 +210,13 @@ public enum TaskType
     PostTrip,
     InsuranceConfirmation,
     GenerateNdisClaims,
-    Other
+    Other,
+    // Generic obligation tasks (item 9 of the connection map) — raised and auto-completed by
+    // IObligationTaskService rather than a controller's direct BookingTasks.Add.
+    LeaveCoverage,
+    IncidentQscReport,
+    MedicationWitness,
+    FlaggedNoteFollowUp
 }
 
 public enum TaskPriority
@@ -392,6 +398,16 @@ public enum TripClaimStatus
     PartiallyPaid = 5,
     Rejected = 6,
     Cancelled = 7
+}
+
+/// <summary>
+/// Discriminates a <see cref="Odip.Domain.Entities.TripClaim"/>'s origin (shift-completion
+/// design spec §1, delivery PR 3). Append-only — Trip=0 keeps every pre-existing row correct.
+/// </summary>
+public enum ClaimKind
+{
+    Trip = 0,
+    Shift = 1
 }
 
 public enum ClaimLineItemStatus

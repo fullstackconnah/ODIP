@@ -32,6 +32,7 @@ import {
 } from '@/lib/incidentPrefill'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
+import { formatDateAu } from '@/lib/utils'
 import {
   incidentResolver, type IncidentFormData,
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
@@ -421,6 +422,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         witnessUserId: w.witnessUserId,
         witnessName: w.witnessName,
       })),
+      // Connection map: only ever set on a create-mode submission that started from one of these
+      // two router-state hand-offs — marPrefill/shiftNotePrefill are both hard-gated on !isEdit.
+      medicationAdministrationId: marPrefill ? marPrefill.medicationAdministrationId : undefined,
+      shiftId: shiftNotePrefill ? shiftNotePrefill.shiftId : undefined,
+      shiftNoteId: shiftNotePrefill ? shiftNotePrefill.shiftNoteId : undefined,
     }
 
     try {
@@ -570,6 +576,20 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             </p>
           </div>
         </Card>
+      )}
+
+      {/* Connection map: a compact, always-visible reminder of what this incident is linked to —
+          the banners above explain the hand-off once; this line stays visible as the reporter
+          works through the wizard's later steps. No new inputs — this is purely informational. */}
+      {marPrefill && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Linked to: Medication administration · {marPrefill.medicationName} · {ADMIN_STATUS_LABELS[marPrefill.outcome]}
+        </p>
+      )}
+      {shiftNotePrefill && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Linked to: Shift note from {formatDateAu(shiftNotePrefill.serviceDate)}
+        </p>
       )}
 
       {mutation.isError && (

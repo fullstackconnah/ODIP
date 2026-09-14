@@ -1,11 +1,17 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, type RenderResult } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { ShiftChip } from './ShiftChip'
 import { formatShiftTimeRange } from '../lib/roster'
 import { makeShift, makeFinding } from '../test-fixtures'
 
 function noop() {}
+
+/** ShiftChip now renders participant/staff name Links, which need a Router ancestor. */
+function renderChip(ui: React.ReactElement): RenderResult {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 /**
  * "Open" button accessible name is "<time range><participant name>" with no separator, which
@@ -20,13 +26,13 @@ function getOpenButton(shift: ReturnType<typeof makeShift>) {
 describe('ShiftChip severity marker', () => {
   it('renders the blocking marker keyed off severity, never a specific finding code', () => {
     const shift = makeShift({ findings: [makeFinding({ code: 'ANYTHING_AT_ALL', severity: 'Blocking' })] })
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.getByRole('img', { name: /1 blocking issue/i })).toBeInTheDocument()
   })
 
   it('renders a different (warning) marker when only Warning findings are present', () => {
     const shift = makeShift({ findings: [makeFinding({ code: 'SOME_OTHER_CODE', severity: 'Warning' })] })
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     const marker = screen.getByRole('img', { name: /1 warning/i })
     expect(marker).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /blocking/i })).not.toBeInTheDocument()
@@ -40,13 +46,13 @@ describe('ShiftChip severity marker', () => {
         makeFinding({ code: 'C', severity: 'Warning' }),
       ],
     })
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.getByRole('img', { name: '1 blocking issue, 2 warnings' })).toBeInTheDocument()
   })
 
   it('renders no marker at all when there are no findings', () => {
     const shift = makeShift({ findings: [] })
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.queryByRole('img', { name: /blocking|warning/i })).not.toBeInTheDocument()
   })
 })
@@ -54,7 +60,7 @@ describe('ShiftChip severity marker', () => {
 describe('ShiftChip open button vs drag handle', () => {
   it('is a separate element from the drag handle', () => {
     const shift = makeShift()
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     const openButton = getOpenButton(shift)
     const dragHandle = screen.getByRole('button', { name: /drag to move/i })
     expect(openButton).not.toBe(dragHandle)
@@ -64,7 +70,7 @@ describe('ShiftChip open button vs drag handle', () => {
     const user = userEvent.setup()
     const onOpen = vi.fn()
     const shift = makeShift()
-    render(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     const openButton = getOpenButton(shift)
     openButton.focus()
@@ -81,7 +87,7 @@ describe('ShiftChip open button vs drag handle', () => {
     const user = userEvent.setup()
     const onOpen = vi.fn()
     const shift = makeShift()
-    render(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     await user.click(getOpenButton(shift))
     expect(onOpen).toHaveBeenCalledWith(shift)
@@ -92,7 +98,7 @@ describe('ShiftChip menu', () => {
   it('offers Edit, Assign to…, Unassign and Delete when the shift has an assigned staff member', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: 'staff-1' })
-    render(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
@@ -104,7 +110,7 @@ describe('ShiftChip menu', () => {
   it('omits Unassign for an unfilled (dashed) chip with no staff, but keeps Edit/Assign/Delete', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: null, staffName: null })
-    render(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
@@ -117,14 +123,91 @@ describe('ShiftChip menu', () => {
 describe('ShiftChip read-only (canWrite false)', () => {
   it('renders no menu and no drag handle', () => {
     const shift = makeShift()
-    render(<ShiftChip shift={shift} canWrite={false} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite={false} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.queryByRole('button', { name: /actions for/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /drag to move/i })).not.toBeInTheDocument()
   })
 
   it('still renders the open button so the shift can be viewed', () => {
     const shift = makeShift()
-    render(<ShiftChip shift={shift} canWrite={false} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    renderChip(<ShiftChip shift={shift} canWrite={false} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(getOpenButton(shift)).toBeInTheDocument()
+  })
+})
+
+describe('ShiftChip on-leave state', () => {
+  it('renders an "On leave" mini-label with an explanatory title for a filled shift whose assignee has approved leave', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const label = screen.getByText('On leave')
+    expect(label).toBeInTheDocument()
+    expect(label).toHaveAttribute('title', expect.stringContaining('approved leave'))
+  })
+
+  it('renders a dashed border for a filled shift whose assignee has approved leave, same as an unfilled chip', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(container.querySelector('.border-dashed')).not.toBeNull()
+  })
+
+  it('does not render the "On leave" label or a dashed border for a normal filled shift', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: false })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByText('On leave')).not.toBeInTheDocument()
+    expect(container.querySelector('.border-dashed')).toBeNull()
+  })
+
+  it('ignores assigneeOnApprovedLeave for an unfilled chip (no staffId) — it never applies to a hole that is already open', () => {
+    const shift = makeShift({ staffId: null, staffName: null, assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByText('On leave')).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftChip cross-domain links', () => {
+  it('links the participant name to their participant page', () => {
+    const shift = makeShift({ participantId: 'participant-9', participantName: 'Mia Chen' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9')
+  })
+
+  it('links the staff name to their staff detail page when the shift is filled', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+  })
+
+  it('renders no staff link for an unfilled (dashed) chip', () => {
+    const shift = makeShift({ staffId: null, staffName: null })
+    renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    // Only the participant link should exist — no staff name to link.
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+  })
+
+  it('clicking the participant link navigates without also opening the shift slide-over', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const shift = makeShift({ participantId: 'participant-9', participantName: 'Mia Chen' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    await user.click(screen.getByRole('link', { name: 'Mia Chen' }))
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('clicking the staff link navigates without also opening the shift slide-over', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    await user.click(screen.getByRole('link', { name: 'Alex Rivera' }))
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })

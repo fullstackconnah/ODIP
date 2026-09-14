@@ -33,9 +33,12 @@ public class InvoiceService
             .FirstOrDefaultAsync(c => c.Id == claimId, ct)
             ?? throw new InvalidOperationException("Claim not found.");
 
+        // Nullability audit (shift-completion design spec, delivery PR 3): Kind == Shift claim
+        // lines have ParticipantBooking == null — filter those out before the id comparison so
+        // this NotFound-shaped lookup doesn't NRE on a shift-kind claim's line items.
         var booking = claim.LineItems
             .Select(l => l.ParticipantBooking)
-            .FirstOrDefault(b => b.Id == bookingId)
+            .FirstOrDefault(b => b != null && b.Id == bookingId)
             ?? throw new InvalidOperationException("Booking not found in this claim.");
 
         var planType = booking.PlanTypeOverride ?? booking.Participant.PlanType;

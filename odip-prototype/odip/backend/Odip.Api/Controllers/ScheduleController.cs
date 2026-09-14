@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
@@ -17,11 +18,14 @@ public class ScheduleController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
+    private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
 
-    public ScheduleController(OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery)
+    public ScheduleController(
+        OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery, IStaffAvailabilityItemsQuery availabilityItemsQuery)
     {
         _db = db;
         _unavailabilityQuery = unavailabilityQuery;
+        _availabilityItemsQuery = availabilityItemsQuery;
     }
 
     /// <summary>
@@ -144,34 +148,30 @@ public class ScheduleController : ControllerBase
             .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled)
             .ToListAsync(ct);
 
-        // Load availability within the overall trip window
-        var overallStart = trips.Min(t => t.StartDate).ToDateTime(TimeOnly.MinValue);
-        var overallEnd = trips.Max(t => t.StartDate.AddDays(t.DurationDays - 1)).ToDateTime(TimeOnly.MaxValue);
-
-        var staffAvailability = await _db.StaffAvailabilities
-            .Where(a => staffIds.Contains(a.UserId)
-                && a.StartDateTime < overallEnd && a.EndDateTime > overallStart)
-            .ToListAsync(ct);
-
         // Unavailability windows (approved leave, approved recurring rules, legacy StaffAvailability
         // Unavailable/Training rows) via the shared IStaffUnavailabilityQuery — see
-        // docs/specs/2026-09-07-staff-leave-unavailability-design.md §3/§4. staffAvailability above
-        // stays as-is: it still feeds ScheduleStaffDto.Availability, which this change doesn't touch.
+        // docs/specs/2026-09-07-staff-leave-unavailability-design.md §3/§4. These drive the
+        // per-trip status cells below; ScheduleStaffDto.Availability is built separately, from the
+        // raw LeaveRequest/RecurringUnavailability/StaffAvailability records (not these expanded
+        // windows) — see IStaffAvailabilityItemsQuery below.
         var overallStartDate = trips.Min(t => t.StartDate);
         var overallEndDate = trips.Max(t => t.StartDate.AddDays(t.DurationDays - 1));
         var unavailabilityWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, overallStartDate, overallEndDate, ct);
+
+        // Raw records backing ScheduleStaffDto.Availability, filtered to the same overall window
+        // and to Pending/Approved status (Declined/Cancelled rows are never shown) — shared with
+        // the staff hub's overview endpoint (item 12) via IStaffAvailabilityItemsQuery.
+        var availabilityItemsByStaff = await _availabilityItemsQuery.GetAsync(staffIds, overallStartDate, overallEndDate, ct);
 
         // Grouped once up front instead of a linear Where(...) scan per staff row inside the
         // allStaff.Select below — an ILookup returns an empty sequence for a missing key, so no
         // null check is needed at either call site.
         var assignmentsByStaff = staffAssignments.ToLookup(a => a.UserId);
-        var availabilityByStaff = staffAvailability.ToLookup(a => a.UserId);
         var windowsByStaff = unavailabilityWindows.ToLookup(w => w.UserId);
 
         var staffDtos = allStaff.Select(s =>
         {
             var myAssignments = assignmentsByStaff[s.Id].ToList();
-            var myAvailability = availabilityByStaff[s.Id].ToList();
             var myWindows = windowsByStaff[s.Id].ToList();
 
             var tripStatuses = trips.Select(t =>
@@ -258,13 +258,7 @@ public class ScheduleController : ControllerBase
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent,
                 IsOvernightEligible = s.IsOvernightEligible,
                 TripStatuses = tripStatuses,
-                Availability = myAvailability.Select(a => new StaffAvailabilityDto
-                {
-                    Id = a.Id, StaffId = a.UserId,
-                    StartDateTime = a.StartDateTime, EndDateTime = a.EndDateTime,
-                    AvailabilityType = a.AvailabilityType,
-                    IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
-                }).ToList(),
+                Availability = availabilityItemsByStaff[s.Id].ToList(),
                 PreferredForTrips = prefsByStaff.TryGetValue(s.Id, out var staffPrefs)
                     ? staffPrefs.Select(kv => new TripPreferenceDto(kv.Key, kv.Value)).ToList()
                     : new List<TripPreferenceDto>(),

@@ -3,23 +3,26 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
-const { mockApiGet, mockApiGetWithDefault, mockApiPost } = vi.hoisted(() => ({
+const { mockApiGet, mockApiGetWithDefault, mockApiPost, mockApiPut } = vi.hoisted(() => ({
   mockApiGet: vi.fn(async () => ({ leave: [], unavailability: [] })),
   mockApiGetWithDefault: vi.fn(async (): Promise<unknown[]> => []),
   mockApiPost: vi.fn(async () => ({})),
+  mockApiPut: vi.fn(async () => ({})),
 }))
 
 vi.mock('../client', () => ({
   apiGet: mockApiGet,
   apiGetWithDefault: mockApiGetWithDefault,
   apiPost: mockApiPost,
+  apiPut: mockApiPut,
 }))
 
 import {
   useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability,
   useLeaveRequests, useRecurringUnavailabilities, usePendingLeaveCount,
-  useCreateLeaveOnBehalf, useApproveLeave, useDeclineLeave, useCancelLeave,
+  useCreateLeaveOnBehalf, useApproveLeave, useDeclineLeave, useCancelLeave, useUpdateLeave,
   useCreateUnavailabilityOnBehalf, useApproveUnavailability, useDeclineUnavailability, useCancelUnavailability,
+  useUpdateUnavailability,
 } from './leave'
 
 function wrapper(qc: QueryClient) {
@@ -30,6 +33,7 @@ beforeEach(() => {
   mockApiGet.mockClear()
   mockApiGetWithDefault.mockClear().mockResolvedValue([])
   mockApiPost.mockClear().mockResolvedValue({})
+  mockApiPut.mockClear().mockResolvedValue({})
 })
 
 describe('leave hooks — portal (self-service)', () => {
@@ -146,6 +150,20 @@ describe('leave hooks — coordinator', () => {
     expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/cancel')
   })
 
+  it('useUpdateLeave PUTs to /leave/{id} and invalidates leave, unavailability, staff-availability, schedule and roster-board caches', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateLeave(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ id: 'leave-1', data: { leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' } })
+    expect(mockApiPut).toHaveBeenCalledWith('/leave/leave-1', { leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['staff-availability'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['schedule-overview'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['schedule'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
   it('useCreateUnavailabilityOnBehalf posts to /leave/unavailability', async () => {
     const qc = new QueryClient()
     const { result } = renderHook(() => useCreateUnavailabilityOnBehalf(), { wrapper: wrapper(qc) })
@@ -172,5 +190,19 @@ describe('leave hooks — coordinator', () => {
     const { result } = renderHook(() => useCancelUnavailability(), { wrapper: wrapper(qc) })
     await result.current.mutateAsync('rule-1')
     expect(mockApiPost).toHaveBeenCalledWith('/leave/unavailability/rule-1/cancel')
+  })
+
+  it('useUpdateUnavailability PUTs to /leave/unavailability/{id} and invalidates leave, unavailability, staff-availability, schedule and roster-board caches', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateUnavailability(), { wrapper: wrapper(qc) })
+    await result.current.mutateAsync({ id: 'rule-1', data: { dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '13:00:00', effectiveFrom: '2026-09-07', effectiveTo: null, notes: null } })
+    expect(mockApiPut).toHaveBeenCalledWith('/leave/unavailability/rule-1', { dayOfWeek: 'Tuesday', startTime: '10:00:00', endTime: '13:00:00', effectiveFrom: '2026-09-07', effectiveTo: null, notes: null })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['recurring-unavailabilities'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['staff-availability'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['schedule-overview'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['schedule'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 })

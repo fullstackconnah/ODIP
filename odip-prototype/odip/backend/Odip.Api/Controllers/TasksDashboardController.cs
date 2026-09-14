@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -46,9 +47,11 @@ public class TasksController : ControllerBase
         var items = await query.OrderBy(t => t.DueDate).ThenByDescending(t => t.Priority)
             .Select(t => new TaskDto
             {
-                Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance.TripName,
+                Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
                 ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
                 VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
+                LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+                MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
                 TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
                 OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
@@ -75,6 +78,8 @@ public class TasksController : ControllerBase
             Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
             ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
             VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
+            LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+            MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
             TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
             OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
             Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
@@ -106,6 +111,8 @@ public class TasksController : ControllerBase
             Id = task.Id, TripInstanceId = task.TripInstanceId, TripName = task.TripInstance?.TripName,
             ParticipantBookingId = task.ParticipantBookingId, AccommodationReservationId = task.AccommodationReservationId,
             VehicleAssignmentId = task.VehicleAssignmentId, StaffAssignmentId = task.StaffAssignmentId,
+            LinkTo = task.LinkTo, SourceKey = task.SourceKey, ShiftId = task.ShiftId, IncidentReportId = task.IncidentReportId,
+            MedicationAdministrationId = task.MedicationAdministrationId, ShiftNoteId = task.ShiftNoteId, LeaveRequestId = task.LeaveRequestId,
             TaskType = task.TaskType, Title = task.Title, OwnerId = task.OwnerId,
             OwnerName = task.Owner != null ? task.Owner.FirstName + " " + task.Owner.LastName : null,
             Priority = task.Priority, DueDate = task.DueDate, Status = task.Status,
@@ -135,6 +142,8 @@ public class TasksController : ControllerBase
             Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
             ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
             VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
+            LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+            MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
             TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
             OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
             Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
@@ -411,7 +420,9 @@ public class DashboardController : ControllerBase
             .Where(t => t.Status == TaskItemStatus.Overdue || (t.DueDate != null && t.DueDate < today && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled))
             .Select(t => new TaskDto
             {
-                Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance.TripName,
+                Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
+                LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+                MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
                 TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
                 OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status
@@ -438,10 +449,7 @@ public class DashboardController : ControllerBase
         var openIncidentCount = await _db.IncidentReports.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var qscCutoff = DateTime.UtcNow.AddHours(-24);
-        var qscOverdueCount = await _db.IncidentReports.CountAsync(
-            i => i.IsActive && i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null && i.CreatedAt < qscCutoff, ct);
+        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(DateTime.UtcNow), ct);
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {

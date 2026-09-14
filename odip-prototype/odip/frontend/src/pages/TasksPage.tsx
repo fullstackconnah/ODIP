@@ -1,4 +1,5 @@
 import { useTasks, useUpdateTask, useDeleteTask } from '@/api/hooks'
+import { TASK_TYPE_LABELS } from '@/api/types'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -60,8 +61,17 @@ export default function TasksPage() {
       ) : null,
     },
     { key: 'title', header: 'Task', sortable: true, className: 'font-medium' },
-    { key: 'tripName', header: 'Trip', sortable: true },
-    { key: 'taskType', header: 'Type', sortable: true },
+    {
+      key: 'tripName',
+      header: 'Trip',
+      sortable: true,
+      render: (t) => t.tripInstanceId && t.tripName ? (
+        <Link to={`/trips/${t.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+          {t.tripName}
+        </Link>
+      ) : (t.tripName ?? '—'),
+    },
+    { key: 'taskType', header: 'Type', sortable: true, render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     { key: 'ownerName', header: 'Owner', sortable: true },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {
@@ -103,6 +113,15 @@ export default function TasksPage() {
           )}
         </div>
       ),
+    },
+    {
+      key: 'linkTo',
+      header: '',
+      render: (t) => t.linkTo ? (
+        <Link to={t.linkTo} className="text-[var(--color-primary)] hover:underline">
+          Open
+        </Link>
+      ) : null,
     },
     { key: 'actions', header: '', render: (t) => canWrite ? actionButtons(t) : null },
   ]

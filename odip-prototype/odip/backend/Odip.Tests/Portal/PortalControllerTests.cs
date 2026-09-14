@@ -500,6 +500,34 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetShiftNotes_IncidentId_PopulatedWhenActiveIncidentReferencesNote()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var referencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Fell during transfer." };
+        var unreferencedNote = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Uneventful shift." };
+        db.ShiftNotes.AddRange(referencedNote, unreferencedNote);
+        db.SaveChanges();
+        var incident = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftNoteId = referencedNote.Id, ReportedByUserId = user.Id,
+            Title = "Reported from a shift note", Description = "Details.", IncidentDateTime = DateTime.UtcNow,
+            Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft, IsActive = true,
+        };
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.GetShiftNotes(shift.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<ShiftNoteDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(incident.Id, body.Data!.Single(n => n.Id == referencedNote.Id).IncidentId);
+        Assert.Null(body.Data.Single(n => n.Id == unreferencedNote.Id).IncidentId);
+    }
+
+    [Fact]
     public async Task UpdateShiftNote_Author_UpdatesBody()
     {
         var (db, tenant) = CreateDb();
@@ -709,6 +737,88 @@ public class PortalControllerTests
         var result = await controller.AcknowledgeShiftNoteFlags(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ITEM 9 — FlaggedNoteFollowUp obligation task
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CreateShiftNote_FlaggedBody_RaisesFlaggedNoteFollowUpTask()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "She had a fall near the bathroom this morning." }, CancellationToken.None);
+        var noteId = Assert.IsType<ApiResponse<ShiftNoteDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Id;
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.FlaggedNoteFollowUp, task.TaskType);
+        Assert.Equal($"flagged-note:{noteId}", task.SourceKey);
+        Assert.Equal(noteId, task.ShiftNoteId);
+        Assert.Equal(shift.Id, task.ShiftId);
+        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), task.DueDate);
+        Assert.Equal("/incidents?view=flagged-notes", task.LinkTo);
+        Assert.Contains("Falls", task.Title);
+    }
+
+    [Fact]
+    public async Task CreateShiftNote_NeutralBody_RaisesNoFlaggedNoteFollowUpTask()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "Quiet shift, watched a movie together." }, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task UpdateShiftNote_EditIntroducesAKeyword_RaisesFlaggedNoteFollowUpTask()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "Original body.", FlaggedCategories = ShiftNoteFlagCategory.None };
+        db.ShiftNotes.Add(note);
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "She slipped on the wet floor." }, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal($"flagged-note:{note.Id}", task.SourceKey);
+        Assert.Equal(TaskItemStatus.NotStarted, task.Status);
+    }
+
+    /// <summary>Item 9: acknowledging the flags closes the FlaggedNoteFollowUp task — the coordinator has made the "does this need an incident?" call.</summary>
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_CompletesFlaggedNoteFollowUpTask()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = user.Id, AuthorName = "Ben Turner", Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        db.ShiftNotes.Add(note);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"flagged-note:{note.Id}", TaskType = TaskType.FlaggedNoteFollowUp,
+            Title = "Flagged shift note (Falls) — decide whether an incident is needed",
+            ShiftNoteId = note.Id, ShiftId = shift.Id, Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        await controller.AcknowledgeShiftNoteFlags(note.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
     }
 
     // ══════════════════════════════════════════════════════════════

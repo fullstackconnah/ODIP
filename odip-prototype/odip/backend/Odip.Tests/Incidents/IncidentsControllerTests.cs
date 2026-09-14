@@ -6,7 +6,9 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
 
@@ -81,6 +83,70 @@ public class IncidentsControllerTests
         return practice;
     }
 
+    /// <summary>Connection-map fixture: a ParticipantMedication row, needed as the FK target for <see cref="SeedMedicationAdministration"/>.</summary>
+    private static ParticipantMedication SeedMedication(OdipDbContext db, Guid participantId, Guid? tenantId = null, string name = "Panadol Osteo")
+    {
+        var medication = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ParticipantId = participantId,
+            Name = name, DoseDescription = "1 tablet",
+        };
+        db.ParticipantMedications.Add(medication);
+        db.SaveChanges();
+        return medication;
+    }
+
+    /// <summary>Connection-map fixture (Deliverable 1): a MedicationAdministration row an incident can link to via <see cref="IncidentReport.MedicationAdministrationId"/>.</summary>
+    private static MedicationAdministration SeedMedicationAdministration(
+        OdipDbContext db, Guid participantMedicationId, Guid participantId, Guid? tenantId = null,
+        MedicationAdministrationStatus status = MedicationAdministrationStatus.Administered,
+        DateTime? administeredAt = null, DateTime? scheduledAt = null, string recordedByName = "Jamie Cole")
+    {
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(),
+            ParticipantMedicationId = participantMedicationId, ParticipantId = participantId,
+            Status = status, AdministeredAt = administeredAt, ScheduledAt = scheduledAt,
+            RecordedByName = recordedByName,
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        return admin;
+    }
+
+    /// <summary>Connection-map fixture (Deliverable 1): a Shift row an incident can link to via <see cref="IncidentReport.ShiftId"/>.</summary>
+    private static Shift SeedShift(
+        OdipDbContext db, Guid participantId, Guid? userId = null, Guid? tenantId = null,
+        DateOnly? serviceDate = null, TimeOnly? startTime = null, TimeOnly? endTime = null)
+    {
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ParticipantId = participantId,
+            UserId = userId, ServiceDate = serviceDate ?? new DateOnly(2026, 8, 30),
+            StartTime = startTime ?? new TimeOnly(9, 0), EndTime = endTime ?? new TimeOnly(17, 0),
+        };
+        db.Shifts.Add(shift);
+        db.SaveChanges();
+        return shift;
+    }
+
+    /// <summary>Connection-map fixture (Deliverable 1): a ShiftNote row an incident can link to via <see cref="IncidentReport.ShiftNoteId"/>.</summary>
+    private static ShiftNote SeedShiftNote(
+        OdipDbContext db, Guid shiftId, Guid authorUserId, Guid? tenantId = null,
+        string authorName = "Alex Rivera", string body = "Note body describing what happened during the shift.",
+        ShiftNoteFlagCategory flaggedCategories = ShiftNoteFlagCategory.None)
+    {
+        var note = new ShiftNote
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ShiftId = shiftId,
+            AuthorUserId = authorUserId, AuthorName = authorName, Body = body,
+            FlaggedCategories = flaggedCategories,
+        };
+        db.ShiftNotes.Add(note);
+        db.SaveChanges();
+        return note;
+    }
+
     private static CreateIncidentDto CreateDto(
         Guid reportedByStaffId, IncidentType incidentType = IncidentType.RestrictivePracticeUse,
         RestrictivePracticeType? rpType = RestrictivePracticeType.Seclusion, Guid? involvedParticipantId = null,
@@ -112,6 +178,41 @@ public class IncidentsControllerTests
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
         Assert.Contains(body.Errors!, e => e.Contains("restrictive practice type", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// NotificationEventType.IncidentReported trigger — recipients are the tenant's Admin/
+    /// Coordinator users. Ruling (design spec §4): the payload carries no participant name.
+    /// </summary>
+    [Fact]
+    public async Task Create_RaisesIncidentReportedForAdminsAndCoordinators_NotSupportWorkers()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db); // default Role = Admin (enum ordinal 0) — also a valid recipient
+        var coordinator = SeedUser(db, firstName: "Cara", lastName: "Coord");
+        coordinator.Role = UserRole.Coordinator;
+        var supportWorker = SeedUser(db, firstName: "Sam", lastName: "Support");
+        supportWorker.Role = UserRole.SupportWorker;
+        db.SaveChanges();
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(dto, CancellationToken.None);
+
+        var rows = await db.NotificationOutbox.ToListAsync();
+        var recipientIds = rows.Select(r => r.RecipientUserId).ToList();
+        Assert.Contains(reporter.Id, recipientIds);
+        Assert.Contains(coordinator.Id, recipientIds);
+        Assert.DoesNotContain(supportWorker.Id, recipientIds);
+        Assert.All(rows, r => Assert.Equal(Odip.Domain.Notifications.NotificationEventType.IncidentReported, r.EventType));
+
+        // Ruling: the raised payload must carry no participant identity at all.
+        foreach (var row in rows)
+        {
+            Assert.DoesNotContain(participant.FirstName, row.PayloadJson);
+            Assert.DoesNotContain(participant.LastName, row.PayloadJson);
+        }
     }
 
     [Fact]
@@ -147,7 +248,9 @@ public class IncidentsControllerTests
         var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id);
         var result = await controller.Create(dto, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Equal(participant.Id, body.Data!.InvolvedParticipantId);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.True(saved.IsRestrictivePracticeAuthorised);
     }
@@ -390,7 +493,9 @@ public class IncidentsControllerTests
 
         var updateResult = await controller.Update(incidentId, updateDto, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(updateResult.Result);
+        var updateOk = Assert.IsType<OkObjectResult>(updateResult.Result);
+        var updateBody = Assert.IsType<ApiResponse<IncidentListDto>>(updateOk.Value);
+        Assert.Equal(participantWithoutPractice.Id, updateBody.Data!.InvolvedParticipantId);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.Equal(RestrictivePracticeType.MechanicalRestraint, saved.RestrictivePracticeType);
         Assert.Equal(participantWithoutPractice.Id, saved.InvolvedParticipantId);
@@ -1030,13 +1135,15 @@ public class IncidentsControllerTests
         await controller.Delete(incident.Id, CancellationToken.None);
 
         var defaultResult = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
         var defaultOk = Assert.IsType<OkObjectResult>(defaultResult.Result);
         var defaultItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(defaultOk.Value);
         Assert.DoesNotContain(defaultItems.Data!.Items, i => i.Id == incident.Id);
 
         var closedResult = await controller.GetAll(
-            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+            tripId: null, status: IncidentStatus.Closed, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
         var closedOk = Assert.IsType<OkObjectResult>(closedResult.Result);
         var closedItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(closedOk.Value);
         Assert.Contains(closedItems.Data!.Items, i => i.Id == incident.Id);
@@ -1072,11 +1179,13 @@ public class IncidentsControllerTests
         var expectedTiedOrder = tiedIncidents.OrderBy(i => i.Id).Select(i => i.Id).ToList();
 
         var firstCall = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
         var firstItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(firstCall.Result).Value).Data!.Items;
 
         var secondCall = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null, ct: CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
         var secondItems = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(secondCall.Result).Value).Data!.Items;
 
         var firstTiedOrder = firstItems.Where(i => i.IncidentDateTime == tiedDateTime).Select(i => i.Id).ToList();
@@ -1107,12 +1216,12 @@ public class IncidentsControllerTests
 
         var page1Result = await controller.GetAll(
             tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
-            page: 1, pageSize: 2, ct: CancellationToken.None);
+            shiftId: null, involvedUserId: null, page: 1, pageSize: 2, ct: CancellationToken.None);
         var page1 = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(page1Result.Result).Value).Data!;
 
         var page2Result = await controller.GetAll(
             tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
-            page: 2, pageSize: 2, ct: CancellationToken.None);
+            shiftId: null, involvedUserId: null, page: 2, pageSize: 2, ct: CancellationToken.None);
         var page2 = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(page2Result.Result).Value).Data!;
 
         Assert.Equal(3, page1.TotalCount);
@@ -1159,7 +1268,8 @@ public class IncidentsControllerTests
         await CreateAndBackdate("Not QSC-required", TimeSpan.FromHours(48), QscReportingStatus.NotRequired);
 
         var result = await controller.GetAll(
-            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: true, ct: CancellationToken.None);
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: true,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
         var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
 
         var titles = items.Select(i => i.Title).ToList();
@@ -1168,5 +1278,541 @@ public class IncidentsControllerTests
         Assert.DoesNotContain("Already reported", titles);
         Assert.DoesNotContain("Not QSC-required", titles);
         Assert.All(items, i => Assert.True(i.IsOverdue24h));
+    }
+
+    /// <summary>
+    /// The list DTO must carry the involved participant's id (not just its display name) so the
+    /// frontend can link the row to the participant record.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_ReturnsInvolvedParticipantId_EqualToSourceEntity()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(ok.Value);
+        var item = Assert.Single(items.Data!.Items, i => i.Id == incident.Id);
+        Assert.Equal(participant.Id, item.InvolvedParticipantId);
+        Assert.Equal(incident.InvolvedParticipantId, item.InvolvedParticipantId);
+    }
+
+    // ── Connection-map (Deliverable 1): MedicationAdministrationId/ShiftId/ShiftNoteId ────────
+
+    [Fact]
+    public async Task Create_WithMedicationShiftAndShiftNoteIds_PersistsAllThree()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var medication = SeedMedication(db, participant.Id);
+        var medAdmin = SeedMedicationAdministration(db, medication.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id);
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with
+        {
+            MedicationAdministrationId = medAdmin.Id,
+            ShiftId = shift.Id,
+            ShiftNoteId = shiftNote.Id,
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Equal(medAdmin.Id, body.Data!.MedicationAdministrationId);
+        Assert.Equal(shift.Id, body.Data.ShiftId);
+        Assert.Equal(shiftNote.Id, body.Data.ShiftNoteId);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(medAdmin.Id, saved.MedicationAdministrationId);
+        Assert.Equal(shift.Id, saved.ShiftId);
+        Assert.Equal(shiftNote.Id, saved.ShiftNoteId);
+    }
+
+    [Fact]
+    public async Task Create_MedicationAdministrationIdBelongsToDifferentTenant_ReturnsBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        Guid reporterId, participantId, otherTenantMedAdminId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var reporter = SeedUser(seedDb, tenantA);
+            var participant = SeedParticipant(seedDb, tenantA);
+            reporterId = reporter.Id;
+            participantId = participant.Id;
+            var medication = SeedMedication(seedDb, participant.Id, tenantB);
+            var medAdmin = SeedMedicationAdministration(seedDb, medication.Id, participant.Id, tenantB);
+            otherTenantMedAdminId = medAdmin.Id;
+        }
+
+        using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
+        var controller = new IncidentsController(scopedDb);
+
+        var dto = CreateDto(reporterId, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participantId) with
+        {
+            MedicationAdministrationId = otherTenantMedAdminId,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await scopedDb.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_ShiftIdBelongsToDifferentTenant_ReturnsBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        Guid reporterId, participantId, otherTenantShiftId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var reporter = SeedUser(seedDb, tenantA);
+            var participant = SeedParticipant(seedDb, tenantA);
+            reporterId = reporter.Id;
+            participantId = participant.Id;
+            var shift = SeedShift(seedDb, participant.Id, tenantId: tenantB);
+            otherTenantShiftId = shift.Id;
+        }
+
+        using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
+        var controller = new IncidentsController(scopedDb);
+
+        var dto = CreateDto(reporterId, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participantId) with
+        {
+            ShiftId = otherTenantShiftId,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await scopedDb.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_ShiftNoteIdBelongsToDifferentTenant_ReturnsBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        Guid reporterId, participantId, otherTenantShiftNoteId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var reporter = SeedUser(seedDb, tenantA);
+            var participant = SeedParticipant(seedDb, tenantA);
+            reporterId = reporter.Id;
+            participantId = participant.Id;
+            var otherTenantReporter = SeedUser(seedDb, tenantB, firstName: "Harrison", lastName: "Lee");
+            var shift = SeedShift(seedDb, participant.Id, tenantId: tenantB);
+            var shiftNote = SeedShiftNote(seedDb, shift.Id, otherTenantReporter.Id, tenantB);
+            otherTenantShiftNoteId = shiftNote.Id;
+        }
+
+        using var scopedDb = CreateTenantScopedDb(dbName, tenantA);
+        var controller = new IncidentsController(scopedDb);
+
+        var dto = CreateDto(reporterId, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participantId) with
+        {
+            ShiftNoteId = otherTenantShiftNoteId,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value);
+        Assert.Contains(body.Errors!, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await scopedDb.IncidentReports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_CanSetPreviouslyNullSourceLinkIds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var medication = SeedMedication(db, participant.Id);
+        var medAdmin = SeedMedicationAdministration(db, medication.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id);
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(createDto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            MedicationAdministrationId = medAdmin.Id,
+            ShiftId = shift.Id,
+            ShiftNoteId = shiftNote.Id,
+        };
+
+        var result = await controller.Update(incidentId, updateDto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Equal(medAdmin.Id, body.Data!.MedicationAdministrationId);
+        Assert.Equal(shift.Id, body.Data.ShiftId);
+        Assert.Equal(shiftNote.Id, body.Data.ShiftNoteId);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(medAdmin.Id, saved.MedicationAdministrationId);
+        Assert.Equal(shift.Id, saved.ShiftId);
+        Assert.Equal(shiftNote.Id, saved.ShiftNoteId);
+    }
+
+    [Fact]
+    public async Task Update_CanClearPreviouslySetSourceLinkIdsToNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var medication = SeedMedication(db, participant.Id);
+        var medAdmin = SeedMedicationAdministration(db, medication.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id);
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id);
+        var controller = new IncidentsController(db);
+
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with
+        {
+            MedicationAdministrationId = medAdmin.Id,
+            ShiftId = shift.Id,
+            ShiftNoteId = shiftNote.Id,
+        };
+        await controller.Create(createDto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "Updated description.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.NotRequired,
+            FamilyNotified = false,
+            SupportCoordinatorNotified = false,
+            MedicationAdministrationId = null,
+            ShiftId = null,
+            ShiftNoteId = null,
+        };
+
+        var result = await controller.Update(incidentId, updateDto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(ok.Value);
+        Assert.Null(body.Data!.MedicationAdministrationId);
+        Assert.Null(body.Data.ShiftId);
+        Assert.Null(body.Data.ShiftNoteId);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Null(saved.MedicationAdministrationId);
+        Assert.Null(saved.ShiftId);
+        Assert.Null(saved.ShiftNoteId);
+    }
+
+    [Fact]
+    public async Task GetAll_FiltersByShiftId()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id);
+        var otherShift = SeedShift(db, participant.Id);
+        var controller = new IncidentsController(db);
+
+        var matchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with { ShiftId = shift.Id };
+        var nonMatchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with { ShiftId = otherShift.Id };
+        await controller.Create(matchingDto, CancellationToken.None);
+        await controller.Create(nonMatchingDto, CancellationToken.None);
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: shift.Id, involvedUserId: null, ct: CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(ok.Value);
+        Assert.All(items.Data!.Items, i => Assert.Equal(shift.Id, i.ShiftId));
+        Assert.Single(items.Data!.Items);
+    }
+
+    /// <summary>Staff-hub support (connection map item 12): the staff overview's RecentIncidents
+    /// panel filters on this. </summary>
+    [Fact]
+    public async Task GetAll_FiltersByInvolvedUserId()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var involvedStaff = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var otherStaff = SeedUser(db, firstName: "Sam", lastName: "Diaz");
+        var controller = new IncidentsController(db);
+
+        var matchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { InvolvedStaffId = involvedStaff.Id };
+        var nonMatchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { InvolvedStaffId = otherStaff.Id };
+        await controller.Create(matchingDto, CancellationToken.None);
+        await controller.Create(nonMatchingDto, CancellationToken.None);
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: involvedStaff.Id, ct: CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(ok.Value);
+        Assert.Single(items.Data!.Items);
+    }
+
+    [Fact]
+    public async Task GetByShift_ReturnsMatchingActiveIncidents()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id);
+        var otherShift = SeedShift(db, participant.Id);
+        var controller = new IncidentsController(db);
+
+        var matchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with { ShiftId = shift.Id };
+        var nonMatchingDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with { ShiftId = otherShift.Id };
+        var created = await controller.Create(matchingDto, CancellationToken.None);
+        await controller.Create(nonMatchingDto, CancellationToken.None);
+        var expectedId = ((ApiResponse<IncidentListDto>)((OkObjectResult)created.Result!).Value!).Data!.Id;
+
+        var result = await controller.GetByShift(shift.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsType<ApiResponse<List<IncidentListDto>>>(ok.Value);
+        var item = Assert.Single(items.Data!);
+        Assert.Equal(expectedId, item.Id);
+        Assert.Equal(shift.Id, item.ShiftId);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsMedicationShiftAndShiftNoteContext_WhenIdsSet()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var staff = SeedUser(db, firstName: "Jamie", lastName: "Cole");
+        var medication = SeedMedication(db, participant.Id, name: "Panadol Osteo");
+        var administeredAt = new DateTime(2026, 8, 30, 8, 0, 0, DateTimeKind.Utc);
+        var medAdmin = SeedMedicationAdministration(
+            db, medication.Id, participant.Id, status: MedicationAdministrationStatus.Administered,
+            administeredAt: administeredAt, recordedByName: "Jamie Cole");
+        var shift = SeedShift(db, participant.Id, userId: staff.Id, serviceDate: new DateOnly(2026, 8, 30), startTime: new TimeOnly(9, 0), endTime: new TimeOnly(17, 0));
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id, body: new string('x', 250), flaggedCategories: ShiftNoteFlagCategory.Falls);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with
+        {
+            MedicationAdministrationId = medAdmin.Id,
+            ShiftId = shift.Id,
+            ShiftNoteId = shiftNote.Id,
+        };
+        await controller.Create(dto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var result = await controller.GetById(incidentId, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var data = body.Data!;
+
+        Assert.NotNull(data.MedicationContext);
+        Assert.Equal(medAdmin.Id, data.MedicationContext!.MedicationAdministrationId);
+        Assert.Equal("Panadol Osteo", data.MedicationContext.MedicationName);
+        Assert.Equal(MedicationAdministrationStatus.Administered, data.MedicationContext.Status);
+        Assert.Equal(administeredAt, data.MedicationContext.AdministeredAt);
+        Assert.Equal("Jamie Cole", data.MedicationContext.RecordedByName);
+
+        Assert.NotNull(data.ShiftContext);
+        Assert.Equal(shift.Id, data.ShiftContext!.ShiftId);
+        Assert.Equal(new DateOnly(2026, 8, 30), data.ShiftContext.Date);
+        Assert.Equal(new TimeOnly(9, 0), data.ShiftContext.StartTime);
+        Assert.Equal(new TimeOnly(17, 0), data.ShiftContext.EndTime);
+        Assert.Equal(participant.FullName, data.ShiftContext.ParticipantName);
+        Assert.Equal(staff.FullName, data.ShiftContext.StaffName);
+
+        Assert.NotNull(data.ShiftNoteContext);
+        Assert.Equal(shiftNote.Id, data.ShiftNoteContext!.ShiftNoteId);
+        Assert.Equal(200, data.ShiftNoteContext.Excerpt.Length);
+        Assert.Equal(new string('x', 200), data.ShiftNoteContext.Excerpt);
+        Assert.Equal(new[] { "Falls" }, data.ShiftNoteContext.FlaggedCategories);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsNullContexts_WhenSourceLinkIdsUnset()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id);
+        await controller.Create(dto, CancellationToken.None);
+        var incidentId = (await db.IncidentReports.SingleAsync()).Id;
+
+        var result = await controller.GetById(incidentId, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(body.Data!.MedicationContext);
+        Assert.Null(body.Data.ShiftContext);
+        Assert.Null(body.Data.ShiftNoteContext);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ITEM 9 — IncidentQscReport obligation task + FlaggedNoteFollowUp completion
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Create_CriticalIncident_RaisesIncidentQscReportTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(dto, CancellationToken.None);
+
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.Equal(QscReportingStatus.Required, incident.QscReportingStatus);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.IncidentQscReport, task.TaskType);
+        Assert.Equal($"incident-qsc:{incident.Id}", task.SourceKey);
+        Assert.Equal(incident.Id, task.IncidentReportId);
+        Assert.Equal(DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)), task.DueDate);
+        Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
+        Assert.Equal(TaskPriority.High, task.Priority);
+        Assert.Contains(incident.Title, task.Title);
+    }
+
+    [Fact]
+    public async Task Create_NonQscIncident_RaisesNoIncidentQscReportTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Medium);
+        await controller.Create(dto, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_SettingQscReportedAt_CompletesTheTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id, Severity = IncidentSeverity.Critical,
+            Status = IncidentStatus.Draft, Title = incident.Title, Description = incident.Description,
+            IncidentDateTime = incident.IncidentDateTime,
+            QscReportingStatus = QscReportingStatus.Required, QscReportedAt = DateTime.UtcNow,
+        };
+        await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+        Assert.NotNull(task.AutoCompletedAt);
+    }
+
+    [Fact]
+    public async Task Update_StatusLeavesRequired_CompletesTheTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        var createDto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null,
+            involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
+        await controller.Create(createDto, CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.PropertyDamage,
+            InvolvedParticipantId = participant.Id, Severity = IncidentSeverity.Critical,
+            Status = IncidentStatus.Draft, Title = incident.Title, Description = incident.Description,
+            IncidentDateTime = incident.IncidentDateTime,
+            QscReportingStatus = QscReportingStatus.NotRequired, QscReportedAt = null,
+        };
+        await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+    }
+
+    [Fact]
+    public async Task Create_LinkingFlaggedShiftNote_CompletesFlaggedNoteFollowUpTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id);
+        var shiftNote = SeedShiftNote(db, shift.Id, reporter.Id, flaggedCategories: ShiftNoteFlagCategory.Falls);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"flagged-note:{shiftNote.Id}", TaskType = TaskType.FlaggedNoteFollowUp,
+            Title = "Flagged shift note (Falls) — decide whether an incident is needed",
+            ShiftNoteId = shiftNote.Id, ShiftId = shift.Id, Status = TaskItemStatus.NotStarted,
+        });
+        await db.SaveChangesAsync();
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null, involvedParticipantId: participant.Id) with
+        {
+            ShiftNoteId = shiftNote.Id,
+        };
+        await controller.Create(dto, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.FlaggedNoteFollowUp);
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
     }
 }

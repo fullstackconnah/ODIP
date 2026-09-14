@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { ParticipantAlertDto } from '@/api/types'
 import { ALERT_SEVERITY_STYLES } from './alertSeverityStyles'
 
@@ -35,19 +36,34 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
         // so a participant with several non-critical alerts doesn't get talked over. The role
         // sits on this wrapper, not the <button> itself, so the row keeps its button semantics.
         const role = a.severity === 'Critical' ? 'alert' : 'status'
+        const rowClassName = `w-full flex items-center gap-2 text-left text-sm px-3 py-2 rounded-lg ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
         return (
           <div key={`${a.type}:${a.message}`} role={role}>
-            <button
-              type="button"
-              onClick={() => onSelectTab?.(a.deepLinkTab)}
-              className={`w-full flex items-center gap-2 text-left text-sm px-3 py-2 rounded-lg ${style.bg} ${style.text} hover:opacity-90 transition-opacity`}
-            >
-              <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="flex-1">{a.message}</span>
-              {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
-                  pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-              <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
-            </button>
+            {a.linkTo ? (
+              // Alerts whose target isn't a participant-page tab (e.g. an open incident) link
+              // straight to that route instead of switching tabs. `aria-label` keeps the
+              // accessible name equal to the message even though the severity pill is also
+              // rendered inside the link for visual parity with the tab-select row below.
+              <Link to={a.linkTo} aria-label={a.message} className={rowClassName}>
+                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span className="flex-1" aria-hidden="true">{a.message}</span>
+                {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
+                    pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
+                <span className="text-[10px] font-bold uppercase tracking-wide shrink-0" aria-hidden="true">{style.label}</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectTab?.(a.deepLinkTab)}
+                className={rowClassName}
+              >
+                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span className="flex-1">{a.message}</span>
+                {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
+                    pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
+                <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
+              </button>
+            )}
           </div>
         )
       })}

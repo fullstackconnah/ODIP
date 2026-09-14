@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -11,7 +12,43 @@ import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
-import type { MarEntryDto, MarPrnDto } from '@/api/types/medications'
+import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medications'
+import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
+
+/**
+ * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
+ * the incident already filed for it, or an action to file one now — reused as-is by the scheduled
+ * slots below. PRN rows in this tab (MarPrnDto) don't carry a completed administration inline
+ * (see MarPrnDto — no `administration` field), so this only applies to scheduled-slot rows here;
+ * participant-detail/MedicationsTab's administration-history rows cover PRN doses via the flat
+ * history list instead.
+ */
+function IncidentLinkOrAction({
+  administration, strength, canFile,
+}: { administration: AdministrationDto; strength?: string | null; canFile: boolean }) {
+  const navigate = useNavigate()
+  if (!isIncidentTriggerOutcome(administration.status)) return null
+  if (administration.incidentId) {
+    return (
+      <Link
+        to={`/incidents/${administration.incidentId}`}
+        className="block text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+      >
+        Incident filed
+      </Link>
+    )
+  }
+  if (!canFile) return null
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration, { strength }) })}
+      className="block text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+    >
+      File incident
+    </button>
+  )
+}
 
 function todayIso(): string {
   const d = new Date()
@@ -56,7 +93,7 @@ function SkeletonRow() {
 }
 
 export default function MarTab() {
-  const { canRecordAdministrations, canManageMedications } = usePermissions()
+  const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
   const [date, setDate] = useState(todayIso())
   const [participantId, setParticipantId] = useState('')
   const { data: mar, isLoading } = useMar(date, participantId || undefined)
@@ -179,7 +216,12 @@ export default function MarTab() {
                   >
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-[var(--color-foreground)]">{entry.participantName}</span>
+                        <Link
+                          to={`/participants/${entry.participantId}?tab=medications`}
+                          className="font-medium text-[var(--color-foreground)] hover:underline"
+                        >
+                          {entry.participantName}
+                        </Link>
                         {entry.isOverdue && (
                           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-white">Overdue</span>
                         )}
@@ -218,6 +260,11 @@ export default function MarTab() {
                               Amend
                             </button>
                           )}
+                          <IncidentLinkOrAction
+                            administration={entry.administration}
+                            strength={entry.strength}
+                            canFile={canCreateIncidents}
+                          />
                         </div>
                       ) : canRecordAdministrations ? (
                         <button
@@ -251,7 +298,12 @@ export default function MarTab() {
                 <Card key={prn.medicationId} className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="font-medium">{prn.participantName}</p>
+                      <Link
+                        to={`/participants/${prn.participantId}?tab=medications`}
+                        className="font-medium hover:underline"
+                      >
+                        {prn.participantName}
+                      </Link>
                       <p className="text-sm text-[var(--color-foreground)]">{prn.name}{prn.strength ? ` ${prn.strength}` : ''}</p>
                       {prn.doseDescription && <p className="text-xs text-[var(--color-muted-foreground)]">{prn.doseDescription}</p>}
                     </div>

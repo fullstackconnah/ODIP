@@ -73,6 +73,11 @@ export default function RosterBoardPage() {
   }, [staff])
   const staffRegionById = useMemo(() => new Map(staff.map(s => [s.id, s.region])), [staff])
 
+  // The board's own server-computed `exceptions` now include an ASSIGNEE_ON_LEAVE entry for
+  // every shift whose assignee's leave was approved after the assignment (RosteringController.
+  // GetBoard) — no client-side synthesis needed here any more.
+  const combinedExceptions = board?.exceptions ?? []
+
   const filteredBoard = useMemo(() => {
     if (!board) return undefined
     if (board.groupBy === 'Participant') {
@@ -188,7 +193,7 @@ export default function RosterBoardPage() {
         onRegionFilterChange={setRegionFilter}
         unfilledOnly={unfilledOnly}
         onUnfilledOnlyChange={setUnfilledOnly}
-        exceptionsCount={board?.exceptions.length ?? 0}
+        exceptionsCount={combinedExceptions.length}
         onOpenExceptions={() => setExceptionsOpen(true)}
         canWrite={canWrite}
         onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
@@ -268,7 +273,7 @@ export default function RosterBoardPage() {
       <ExceptionsDrawer
         open={exceptionsOpen}
         onClose={() => setExceptionsOpen(false)}
-        exceptions={board?.exceptions ?? []}
+        exceptions={combinedExceptions}
         onJumpToShift={shiftId => {
           const shift = allBoardShifts(board).find(s => s.id === shiftId)
           setExceptionsOpen(false)

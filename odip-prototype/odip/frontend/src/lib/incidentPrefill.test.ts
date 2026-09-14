@@ -6,8 +6,10 @@ import {
   suggestedIncidentSeverity,
   previewRpAuthorisation,
   buildRpIncidentDescriptionSkeleton,
+  buildMarIncidentPrefill,
   type MarIncidentPrefillState,
 } from './incidentPrefill'
+import type { AdministrationDto } from '@/api/types/medications'
 
 // MED-03/INC-03 controller ruling: "wrong medication administered" IS an auto-incident trigger
 // alongside refused/withheld/missed — Administered (a normal successful dose) is not.
@@ -31,6 +33,7 @@ describe('isMarIncidentPrefillState', () => {
       participantId: 'p1',
       participantName: 'Sophie Brown',
       medicationName: 'Levetiracetam',
+      medicationAdministrationId: 'admin-1',
     }
     expect(isMarIncidentPrefillState(state)).toBe(true)
   })
@@ -59,9 +62,64 @@ describe('buildIncidentTitleSkeleton', () => {
   it('names the outcome, medication and participant', () => {
     const title = buildIncidentTitleSkeleton({
       source: 'mar-administration', outcome: 'Refused', participantId: 'p1',
-      participantName: 'Sophie Brown', medicationName: 'Levetiracetam',
+      participantName: 'Sophie Brown', medicationName: 'Levetiracetam', medicationAdministrationId: 'admin-1',
     })
     expect(title).toBe('Refused — Levetiracetam (Sophie Brown)')
+  })
+})
+
+// Connection map: buildMarIncidentPrefill is the ONE place an AdministrationDto becomes a
+// MarIncidentPrefillState — RecordAdministrationModal, MarTab's scheduled rows and
+// participant-detail/MedicationsTab's administration-history rows all call this instead of each
+// hand-assembling the shape, so drift between the three "File incident" entry points can't happen.
+describe('buildMarIncidentPrefill', () => {
+  function administration(overrides: Partial<AdministrationDto> = {}): AdministrationDto {
+    return {
+      id: 'admin-7', participantMedicationId: 'med-1', participantId: 'participant-1', participantName: 'Sophie Brown',
+      medicationName: 'Levetiracetam', doseDescription: '1 tablet', tripInstanceId: null,
+      scheduledAt: '2026-09-01T22:00:00Z', administeredAt: '2026-09-01T22:10:00Z', administeredAtTimeZone: 'Australia/Brisbane',
+      status: 'Missed', doseGiven: null, recordedByName: 'Alex Rivera', recordedByUserId: 'staff-1',
+      witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
+      reason: 'Participant was asleep at the scheduled time.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
+      limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-01T22:15:00Z', incidentId: null,
+      ...overrides,
+    }
+  }
+
+  it('carries the administration\'s own fields straight through, keyed by its id', () => {
+    const prefill = buildMarIncidentPrefill(administration())
+
+    expect(prefill).toEqual({
+      source: 'mar-administration',
+      outcome: 'Missed',
+      participantId: 'participant-1',
+      participantName: 'Sophie Brown',
+      medicationName: 'Levetiracetam',
+      strength: null,
+      doseDescription: '1 tablet',
+      scheduledAt: '2026-09-01T22:00:00Z',
+      administeredAt: '2026-09-01T22:10:00Z',
+      administeredAtTimeZone: 'Australia/Brisbane',
+      recordedByName: 'Alex Rivera',
+      recordedByUserId: 'staff-1',
+      reason: 'Participant was asleep at the scheduled time.',
+      notes: null,
+      tripInstanceId: null,
+      medicationAdministrationId: 'admin-7',
+    })
+  })
+
+  it('threads extras.strength through when supplied (the one field the administration record itself does not carry)', () => {
+    const prefill = buildMarIncidentPrefill(administration(), { strength: '500mg' })
+    expect(prefill.strength).toBe('500mg')
+  })
+
+  it('carries notes through only for a WrongMedication outcome', () => {
+    const wrongMed = buildMarIncidentPrefill(administration({ status: 'WrongMedication', notes: 'Gave Paracetamol 500mg instead' }))
+    expect(wrongMed.notes).toBe('Gave Paracetamol 500mg instead')
+
+    const refused = buildMarIncidentPrefill(administration({ status: 'Refused', notes: 'Unrelated free-text note' }))
+    expect(refused.notes).toBeNull()
   })
 })
 

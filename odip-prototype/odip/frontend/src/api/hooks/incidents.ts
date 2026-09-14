@@ -52,6 +52,15 @@ export function useCreateIncident() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      // Connection map seam follow-up: filing an incident can be the "File incident" hand-off
+      // from a flagged shift note (IncidentsPage's queue) or from a MAR/administration-history
+      // row (MarTab/participant-detail MedicationsTab) — invalidate all three so "Incident
+      // filed" / the flagged-notes queue reflect the new link without a manual refresh. Query
+      // keys mirrored from rostering.ts's useFlaggedShiftNotes and medications.ts's
+      // invalidateMedicationCaches.
+      qc.invalidateQueries({ queryKey: ['flagged-shift-notes'] })
+      qc.invalidateQueries({ queryKey: ['mar'] })
+      qc.invalidateQueries({ queryKey: ['participant-administrations'] })
     },
   })
 }

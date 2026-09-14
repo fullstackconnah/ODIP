@@ -63,7 +63,7 @@ export const ACTIVITY_CATEGORIES = ['Leisure', 'Dining', 'Transport', 'Sightseei
 export type ActivityCategory = typeof ACTIVITY_CATEGORIES[number]
 
 // ── Task Type ───────────────────────────────────────────
-export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'Other'] as const
+export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'LeaveCoverage', 'IncidentQscReport', 'MedicationWitness', 'FlaggedNoteFollowUp', 'Other'] as const
 export type TaskType = typeof TASK_TYPES[number]
 
 // ── Task Priority ───────────────────────────────────────
@@ -266,8 +266,28 @@ export const OVERNIGHT_SUPPORT_TYPES = ['None', 'ActiveNight', 'PassiveNight', '
 export type OvernightSupportType = typeof OVERNIGHT_SUPPORT_TYPES[number]
 
 // ── Shift Status ─────────────────────────────────────────
-export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled'] as const
+// InProgress/PendingReview added by the shift-completion design spec (§1/§3) — a worker's
+// Start/Finish taps flip a Published shift through these two states before Approve/Return
+// settles it back to Completed or Published.
+export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled', 'InProgress', 'PendingReview'] as const
 export type ShiftStatus = typeof SHIFT_STATUSES[number]
+
+// Subset of SHIFT_STATUSES a coordinator can actually set via PUT /shifts/{id} —
+// RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever allows a
+// Draft/Published/Cancelled source AND target; InProgress/PendingReview/Completed are
+// system/worker-driven states reachable only through the completion endpoints
+// (start/finish/approve/return) and any other transition into/out of them 409s with
+// ShiftErrorCodes.ShiftStatusLocked. ShiftSlideOver's status dropdown narrows to this set,
+// showing the shift's actual status read-only when it's one of the worker-driven ones instead
+// of offering a transition the backend will always reject.
+export const COORDINATOR_SETTABLE_SHIFT_STATUSES = ['Draft', 'Published', 'Cancelled'] as const
+
+// ── Claim Kind ───────────────────────────────────────────
+// Discriminates a TripClaim's origin (shift-completion design spec §1, PR 3): Trip claims are
+// generated from a TripInstance's confirmed bookings; Shift claims are generated from a
+// participant's completed, unclaimed Shifts. Append-only, mirrors backend ClaimKind exactly.
+export const CLAIM_KINDS = ['Trip', 'Shift'] as const
+export type ClaimKind = typeof CLAIM_KINDS[number]
 
 // ── Compatibility Level ──────────────────────────────────
 export const COMPATIBILITY_LEVELS = ['Preferred', 'Allowed', 'Excluded'] as const

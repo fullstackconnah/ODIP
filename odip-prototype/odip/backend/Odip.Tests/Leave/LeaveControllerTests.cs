@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
@@ -301,6 +302,180 @@ public class LeaveControllerTests
         Assert.Contains(body.Data.Overlaps, o => o.Code == "TRIP_OVERLAP");
     }
 
+    [Fact]
+    public async Task ApproveLeave_ReturnsOverlapShiftsWithParticipantAndShiftDetails()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+
+        var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+        var overlapShift = Assert.Single(body.Data!.OverlapShifts);
+        Assert.Equal(shift.Id, overlapShift.ShiftId);
+        Assert.Equal(shift.ServiceDate, overlapShift.ServiceDate);
+        Assert.Equal(shift.StartTime, overlapShift.StartTime);
+        Assert.Equal(shift.EndTime, overlapShift.EndTime);
+        Assert.Equal(participant.Id, overlapShift.ParticipantId);
+        Assert.Equal("Amy Ng", overlapShift.ParticipantName);
+    }
+
+    /// <summary>Item 9 of the connection map: approving leave over a Published shift raises a LeaveCoverage obligation task keyed on (shift, leave).</summary>
+    [Fact]
+    public async Task ApproveLeave_OverlappingPublishedShift_RaisesLeaveCoverageTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskType.LeaveCoverage, task.TaskType);
+        Assert.Equal($"leave-coverage:{shift.Id}:{leave.Id}", task.SourceKey);
+        Assert.Equal(shift.Id, task.ShiftId);
+        Assert.Equal(leave.Id, task.LeaveRequestId);
+        Assert.Equal(shift.ServiceDate, task.DueDate);
+        Assert.Equal($"/rostering?date={shift.ServiceDate:yyyy-MM-dd}", task.LinkTo);
+        Assert.Equal(TaskPriority.High, task.Priority);
+        Assert.Equal(TaskItemStatus.NotStarted, task.Status);
+        Assert.Contains("Amy Ng", task.Title);
+        Assert.Contains(user.FirstName, task.Title);
+    }
+
+    [Fact]
+    public async Task ApproveLeave_NoOverlappingShifts_RaisesNoLeaveCoverageTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    /// <summary>Item 9: cancelling the leave removes the coverage obligation regardless of which shifts it was raised against.</summary>
+    [Fact]
+    public async Task CancelLeave_ApprovedWithOpenCoverageTask_CompletesTheTask()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        await db.SaveChangesAsync();
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+
+        await MakeController(db).CancelLeave(leave.Id, CancellationToken.None);
+
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal(TaskItemStatus.Completed, task.Status);
+        Assert.NotNull(task.AutoCompletedAt);
+    }
+
+    /// <summary>Item 9: editing dates on a still-Approved leave re-raises against the new window — EnsureAsync's idempotency means the SAME shift keeps its existing task with only Title/DueDate refreshed.</summary>
+    [Fact]
+    public async Task UpdateLeave_StillApprovedSameOverlappingShift_RefreshesExistingTaskDueDate()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today.AddDays(2));
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = Today.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+        Assert.Equal(1, await db.BookingTasks.CountAsync());
+
+        var updateDto = new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(3) };
+        await MakeController(db).UpdateLeave(leave.Id, updateDto, CancellationToken.None);
+
+        Assert.Equal(1, await db.BookingTasks.CountAsync());
+        var task = await db.BookingTasks.SingleAsync();
+        Assert.Equal($"leave-coverage:{shift.Id}:{leave.Id}", task.SourceKey);
+        Assert.Equal(shift.ServiceDate, task.DueDate); // shift's own date, unaffected by the leave's new end date
+    }
+
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — see
+    /// TemplateRenderingTests' equivalent for the notification templates. The SHIFT_OVERLAP/
+    /// TRIP_OVERLAP finding messages must render invariantly regardless of the host's current
+    /// culture.
+    /// </summary>
+    [Fact]
+    public async Task ApproveLeave_OverlapMessages_RenderInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-AU");
+
+            using var db = CreateDb();
+            var user = SeedUser(db);
+            var leaveStart = new DateOnly(2026, 9, 20);
+            var leaveEnd = leaveStart.AddDays(2);
+            var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, leaveStart, leaveEnd);
+            var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+            db.Participants.Add(participant);
+            db.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = leaveStart,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, Status = ShiftStatus.Published,
+            });
+            await db.SaveChangesAsync();
+
+            var result = await MakeController(db).ApproveLeave(leave.Id, CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+            var finding = Assert.Single(body.Data!.Overlaps, o => o.Code == "SHIFT_OVERLAP");
+            Assert.Contains("20 Sep 2026", finding.Message);
+            Assert.DoesNotContain("Sept", finding.Message);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
     /// <summary>Product ruling (2026-09-09): a decline reason is optional, not required — levelled
     /// down to match cancel, which has never demanded one. This replaces the old
     /// DeclineLeave_NoNote_Returns400, which encoded the now-reversed "reason mandatory" rule.</summary>
@@ -331,6 +506,38 @@ public class LeaveControllerTests
         var body = Assert.IsType<ApiResponse<LeaveRequestDto>>(ok.Value);
         Assert.Equal(LeaveStatus.Declined, body.Data!.Status);
         Assert.Equal("No cover available that week.", body.Data.DecisionNote);
+    }
+
+    /// <summary>NotificationEventType.LeaveRequestDecided trigger — recipient is leave.UserId, not the coordinator caller. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task ApproveLeave_RaisesLeaveRequestDecidedForTheOwner_NotTheCaller()
+    {
+        using var db = CreateDb();
+        var owner = SeedUser(db);
+        var leave = SeedLeave(db, owner.Id);
+        var callerId = Guid.NewGuid();
+
+        await MakeController(db, callerId).ApproveLeave(leave.Id, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(NotificationEventType.LeaveRequestDecided, row.EventType);
+        Assert.Equal(owner.Id, row.RecipientUserId);
+        Assert.NotEqual(callerId, row.RecipientUserId);
+    }
+
+    /// <summary>Same trigger as approve above, fired exactly once per decline.</summary>
+    [Fact]
+    public async Task DeclineLeave_RaisesLeaveRequestDecidedForTheOwner()
+    {
+        using var db = CreateDb();
+        var owner = SeedUser(db);
+        var leave = SeedLeave(db, owner.Id);
+
+        await MakeController(db).DeclineLeave(leave.Id, new LeaveDecisionDto { DecisionNote = "No cover" }, CancellationToken.None);
+
+        var row = await db.NotificationOutbox.SingleAsync();
+        Assert.Equal(NotificationEventType.LeaveRequestDecided, row.EventType);
+        Assert.Equal(owner.Id, row.RecipientUserId);
     }
 
     [Theory]
@@ -529,5 +736,283 @@ public class LeaveControllerTests
         var result = await MakeController(db).CancelUnavailability(rule.Id, CancellationToken.None);
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(expected, ((ApiResponse<RecurringUnavailabilityDto>)conflict.Value!).Errors!.Single());
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PUT (Deliverable 2)
+    // ══════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task UpdateLeave_UnknownId_Returns404()
+    {
+        using var db = CreateDb();
+        var result = await MakeController(db).UpdateLeave(
+            Guid.NewGuid(), new UpdateLeaveRequestDto { LeaveType = LeaveType.Sick, StartDate = Today, EndDate = Today }, CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData(LeaveStatus.Declined, "This request has already been declined.")]
+    [InlineData(LeaveStatus.Cancelled, "This request has already been cancelled.")]
+    public async Task UpdateLeave_DeclinedOrCancelled_Returns409(LeaveStatus status, string expected)
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, status);
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Sick, StartDate = Today, EndDate = Today }, CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(expected, ((ApiResponse<LeaveApprovalResultDto>)conflict.Value!).Errors!.Single());
+    }
+
+    [Fact]
+    public async Task UpdateLeave_EndBeforeStart_Returns400()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(-1) },
+            CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_DuplicateAgainstDifferentRow_Returns409()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Approved, Today.AddDays(5), Today.AddDays(5));
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today);
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today.AddDays(5), EndDate = Today.AddDays(5) },
+            CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_NoDuplicateWhenOnlyMatchIsItself_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today);
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today, Reason = "Updated" },
+            CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+        Assert.Equal("Updated", body.Data!.Leave.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_NoNameIdentifierClaim_Returns401()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeControllerWithoutNameIdentifier(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today }, CancellationToken.None);
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_Pending_FieldsUpdated_StatusUnchanged_UpdatedAtBumped_EmptyOverlaps()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today);
+        var beforeUpdatedAt = leave.UpdatedAt;
+
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id,
+            new UpdateLeaveRequestDto { LeaveType = LeaveType.Sick, StartDate = Today.AddDays(1), EndDate = Today.AddDays(3), Reason = "Feeling unwell" },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+        Assert.Equal(LeaveType.Sick, body.Data!.Leave.LeaveType);
+        Assert.Equal(Today.AddDays(1), body.Data.Leave.StartDate);
+        Assert.Equal(Today.AddDays(3), body.Data.Leave.EndDate);
+        Assert.Equal("Feeling unwell", body.Data.Leave.Reason);
+        Assert.Equal(LeaveStatus.Pending, body.Data.Leave.Status);
+        Assert.Empty(body.Data.Overlaps);
+
+        var updated = await db.LeaveRequests.FindAsync(leave.Id);
+        Assert.True(updated!.UpdatedAt > beforeUpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_Approved_ReturnsOverlaps_WhenOverlappingAssignmentExists()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Approved, Today, Today.AddDays(1));
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripCode = "T1", TripName = "Beach Trip", StartDate = Today, DurationDays = 3 };
+        db.TripInstances.Add(trip);
+        db.StaffAssignments.Add(new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = user.Id,
+            AssignmentStart = Today, AssignmentEnd = Today.AddDays(2), Status = AssignmentStatus.Confirmed,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(1) },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<LeaveApprovalResultDto>>(ok.Value);
+        Assert.Equal(LeaveStatus.Approved, body.Data!.Leave.Status);
+        Assert.Contains(body.Data.Overlaps, o => o.Code == "TRIP_OVERLAP");
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_UnknownId_Returns404()
+    {
+        using var db = CreateDb();
+        var result = await MakeController(db).UpdateUnavailability(
+            Guid.NewGuid(),
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData(LeaveStatus.Declined, "This request has already been declined.")]
+    [InlineData(LeaveStatus.Cancelled, "This request has already been cancelled.")]
+    public async Task UpdateUnavailability_DeclinedOrCancelled_Returns409(LeaveStatus status, string expected)
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, status);
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(expected, ((ApiResponse<RecurringUnavailabilityApprovalResultDto>)conflict.Value!).Errors!.Single());
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_EndBeforeStart_Returns400()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(12, 0), EndTime = new TimeOnly(9, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_DuplicateAgainstDifferentRow_Returns409()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedRuleInternal(db, user.Id, LeaveStatus.Approved, new TimeOnly(13, 0), new TimeOnly(15, 0));
+        var rule = SeedRule(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(13, 0), EndTime = new TimeOnly(15, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_NoDuplicateWhenOnlyMatchIsItself_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today, Notes = "Updated" },
+            CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityApprovalResultDto>>(ok.Value);
+        Assert.Equal("Updated", body.Data!.Unavailability.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_NoNameIdentifierClaim_Returns401()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, LeaveStatus.Pending);
+        var result = await MakeControllerWithoutNameIdentifier(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today },
+            CancellationToken.None);
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_Pending_FieldsUpdated_StatusUnchanged_UpdatedAtBumped_EmptyOverlaps()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var rule = SeedRule(db, user.Id, LeaveStatus.Pending);
+        var beforeUpdatedAt = rule.UpdatedAt;
+
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto
+            {
+                DayOfWeek = DayOfWeek.Friday, StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0),
+                EffectiveFrom = Today.AddDays(1), EffectiveTo = Today.AddDays(30), Notes = "Changed",
+            },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityApprovalResultDto>>(ok.Value);
+        Assert.Equal(DayOfWeek.Friday, body.Data!.Unavailability.DayOfWeek);
+        Assert.Equal(new TimeOnly(10, 0), body.Data.Unavailability.StartTime);
+        Assert.Equal(new TimeOnly(14, 0), body.Data.Unavailability.EndTime);
+        Assert.Equal(Today.AddDays(1), body.Data.Unavailability.EffectiveFrom);
+        Assert.Equal(Today.AddDays(30), body.Data.Unavailability.EffectiveTo);
+        Assert.Equal("Changed", body.Data.Unavailability.Notes);
+        Assert.Equal(LeaveStatus.Pending, body.Data.Unavailability.Status);
+        Assert.Empty(body.Data.Overlaps);
+
+        var updated = await db.RecurringUnavailabilities.FindAsync(rule.Id);
+        Assert.True(updated!.UpdatedAt > beforeUpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateUnavailability_Approved_ReturnsOverlaps_WhenOverlappingShiftExists()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var wednesday = realToday.AddDays(((int)DayOfWeek.Wednesday - (int)realToday.DayOfWeek + 7) % 7);
+        var rule = new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = realToday,
+            Status = LeaveStatus.Approved, RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.RecurringUnavailabilities.Add(rule);
+        db.SaveChanges();
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Participants.Add(participant);
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = user.Id, ServiceDate = wednesday,
+            StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await MakeController(db).UpdateUnavailability(
+            rule.Id,
+            new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = realToday },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<RecurringUnavailabilityApprovalResultDto>>(ok.Value);
+        Assert.Equal(LeaveStatus.Approved, body.Data!.Unavailability.Status);
+        Assert.Contains(body.Data.Overlaps, o => o.Code == "SHIFT_OVERLAP");
     }
 }

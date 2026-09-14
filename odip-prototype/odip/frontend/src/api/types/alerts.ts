@@ -5,12 +5,16 @@ import type { AlertSeverity } from './enums'
  * derives these at read time (see Odip.Infrastructure.Services.ParticipantAlertsService). `type`
  * is a stable machine-readable code (e.g. "plan-expired") that can be used as a React key;
  * `deepLinkTab` is a ParticipantDetailPage tab key — link to `/participants/{id}?tab=${deepLinkTab}`.
+ * `linkTo` is an app route path (e.g. `/incidents/<id>`) for an alert whose target is not a
+ * participant-page tab — when set, consumers should link there instead of using `deepLinkTab`.
+ * Existing alert types keep `linkTo: null` and continue to use `deepLinkTab`.
  */
 export interface ParticipantAlertDto {
   type: string
   severity: AlertSeverity
   message: string
   deepLinkTab: string
+  linkTo: string | null
 }
 
 /** Ranked alerts (Critical first) for one participant, plus per-severity counts. */

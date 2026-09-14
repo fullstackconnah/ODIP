@@ -10,6 +10,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
@@ -301,6 +302,45 @@ public class ShiftCompletionStateMachineTests
 
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal(ShiftStatus.PendingReview, saved.Status);
+    }
+
+    /// <summary>NotificationEventType.ShiftCompletionPendingReview trigger — one outbox row per tenant Admin/Coordinator, none for a SupportWorker. docs/specs/2026-09-08-notifications-design.md §5.</summary>
+    [Fact]
+    public async Task FinishShift_InProgressWithNote_RaisesShiftCompletionPendingReviewForCoordinators()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var coordinator = Seed(db, new User
+        {
+            Id = Guid.NewGuid(), FirstName = "Cara", LastName = "Coord",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.Coordinator, IsActive = true,
+        });
+        var otherWorker = Seed(db, new User
+        {
+            Id = Guid.NewGuid(), FirstName = "Sam", LastName = "Support",
+            Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
+            Role = UserRole.SupportWorker, IsActive = true,
+        });
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id, ShiftStatus.InProgress);
+        var completion = Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id,
+            ActualStart = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc),
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = user.Id,
+            StartedAt = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc), IsActive = true,
+        });
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        await controller.FinishShift(shift.Id, new FinishShiftDto(), CancellationToken.None);
+
+        var rows = await db.NotificationOutbox.ToListAsync();
+        var row = Assert.Single(rows);
+        Assert.Equal(NotificationEventType.ShiftCompletionPendingReview, row.EventType);
+        Assert.Equal(coordinator.Id, row.RecipientUserId);
+        Assert.DoesNotContain(rows, r => r.RecipientUserId == otherWorker.Id);
     }
 
     [Fact]

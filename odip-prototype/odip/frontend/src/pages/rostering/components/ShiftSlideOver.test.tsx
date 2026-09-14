@@ -270,6 +270,75 @@ describe('ShiftSlideOver status (PP-8)', () => {
   })
 })
 
+// PP-8 follow-up: RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever allows
+// a Draft/Published/Cancelled status — InProgress/PendingReview/Completed are worker/reviewer-
+// driven states reached only through the completion endpoints, and the dropdown must never
+// offer a transition the backend will always 409 (ShiftErrorCodes.ShiftStatusLocked).
+describe('ShiftSlideOver status — coordinator-settable statuses only', () => {
+  it('offers only Draft/Published/Cancelled when the shift is in a coordinator-settable status', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ status: 'Draft', findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText('Status'))
+
+    expect(screen.getByRole('option', { name: 'Draft' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Published' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Cancelled' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Completed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'InProgress' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'PendingReview' })).not.toBeInTheDocument()
+  })
+
+  it.each(['InProgress', 'PendingReview', 'Completed'] as const)(
+    'shows the current status read-only (disabled, not offering other options) when the shift is %s',
+    (workerStatus) => {
+      const shift = makeShift({ status: workerStatus, findings: [] })
+      render(
+        <ShiftSlideOver
+          target={{ mode: 'edit', shift }}
+          onClose={noop}
+          canWrite
+          participantOptions={participantOptions}
+          staffOptions={staffOptions}
+        />,
+      )
+
+      const statusControl = screen.getByLabelText('Status')
+      expect(statusControl).toHaveTextContent(workerStatus)
+      expect(statusControl).toBeDisabled()
+    },
+  )
+
+  it('lets the coordinator save other field changes unchanged for a shift already in a worker-driven status', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ status: 'InProgress', findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.status).toBe('InProgress')
+  })
+})
+
 describe('ShiftSlideOver routines & specifics', () => {
   // makeShift's default serviceDate (2026-08-17) is a Monday, 09:00–17:00.
   it('renders a routine whose window overlaps the shift', () => {
@@ -627,6 +696,7 @@ describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
       updatedAt: '2026-08-17T09:30:00Z',
       flaggedCategories: [],
       flagsAcknowledgedAt: null,
+      incidentId: null,
       ...overrides,
     }
   }

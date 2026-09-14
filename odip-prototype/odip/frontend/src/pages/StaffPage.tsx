@@ -8,7 +8,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus, UserCog, Check } from 'lucide-react'
+import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
@@ -30,7 +30,8 @@ const ACTIVE_STATUS_COLORS: Record<string, string> = {
 }
 
 export default function StaffPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canAccessPage } = usePermissions()
+  const canAccessLeaveApprovals = canAccessPage('leave-approvals')
   const deleteStaff = useDeleteStaff()
   const updateStaff = useUpdateStaff()
   const [search, setSearch] = useState('')
@@ -79,7 +80,17 @@ export default function StaffPage() {
   }
 
   const staffColumns: Column<any>[] = [
-    { key: 'fullName', header: 'Name', sortable: true, className: 'font-medium' },
+    {
+      key: 'fullName',
+      header: 'Name',
+      sortable: true,
+      className: 'font-medium',
+      render: (s: StaffListDto) => (
+        <Link to={`/staff/${s.id}`} className="hover:text-[var(--color-primary)] hover:underline">
+          {s.fullName}
+        </Link>
+      ),
+    },
     { key: 'position', header: 'Position', sortable: true },
     { key: 'region', header: 'Region', sortable: true },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
@@ -116,7 +127,26 @@ export default function StaffPage() {
         )
       },
     },
-    { key: 'actions', header: '', render: (s) => actionButtons(s) },
+    {
+      key: 'actions',
+      header: '',
+      render: (s) => (
+        <div className="flex items-center justify-end gap-1">
+          {canAccessLeaveApprovals && (
+            <Link
+              to={`/rostering/leave?userId=${s.id}`}
+              onClick={e => e.stopPropagation()}
+              className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors inline-block"
+              title="Leave & availability"
+              aria-label="Leave & availability"
+            >
+              <CalendarOff className="w-4 h-4" />
+            </Link>
+          )}
+          {actionButtons(s)}
+        </div>
+      ),
+    },
   ]
 
   return (

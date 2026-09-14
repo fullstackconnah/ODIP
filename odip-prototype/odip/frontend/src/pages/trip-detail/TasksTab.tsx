@@ -16,10 +16,13 @@ const TASK_STATUS_ITEMS = [
 ]
 
 /** Builds the full UpdateTaskDto payload the PUT endpoint expects from an existing task plus a
- *  new status — the API takes the whole task, not a partial patch. */
-function toUpdateTaskPayload(task: TaskDto, status: TaskItemStatus): UpdateTaskDto {
+ *  new status — the API takes the whole task, not a partial patch. `task.tripInstanceId` is
+ *  optional as of item 9 (an obligation-engine task needn't have a trip) — every task rendered by
+ *  this tab was already fetched scoped to `tripId`, so that's the correct fallback for the rare
+ *  trip-less task that ends up here rather than sending an empty string. */
+function toUpdateTaskPayload(task: TaskDto, status: TaskItemStatus, tripId: string): UpdateTaskDto {
   return {
-    tripInstanceId: task.tripInstanceId,
+    tripInstanceId: task.tripInstanceId ?? tripId,
     participantBookingId: task.participantBookingId ?? undefined,
     accommodationReservationId: task.accommodationReservationId ?? undefined,
     vehicleAssignmentId: task.vehicleAssignmentId ?? undefined,
@@ -89,7 +92,7 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
             value={t.status}
             onChange={(val: string) => updateTask.mutate({
               id: t.id,
-              data: toUpdateTaskPayload(t, val as TaskItemStatus),
+              data: toUpdateTaskPayload(t, val as TaskItemStatus, tripId),
             })}
             colorClass={getStatusColor(t.status)}
             items={TASK_STATUS_ITEMS}

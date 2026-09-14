@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus } from '@/api/types'
-import { SUPPORT_RATIOS, SLEEPOVER_TYPES, SHIFT_STATUSES } from '@/api/types'
+import { SUPPORT_RATIOS, SLEEPOVER_TYPES, COORDINATOR_SETTABLE_SHIFT_STATUSES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
 import type { DropdownItem } from '@/components/Dropdown'
@@ -162,6 +162,19 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType])
 
   if (!open) return null
+
+  // PP-8 follow-up: RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever
+  // allows a Draft/Published/Cancelled status — InProgress/PendingReview/Completed are
+  // system/worker-driven states reached only through the completion endpoints
+  // (start/finish/approve/return), and picking one here would just 409 with
+  // ShiftErrorCodes.ShiftStatusLocked. When the shift is already in one of those states, show
+  // it read-only instead of offering a transition the backend will always reject.
+  const isCoordinatorSettable = (s: ShiftStatus): boolean =>
+    (COORDINATOR_SETTABLE_SHIFT_STATUSES as readonly string[]).includes(s)
+  const statusLocked = !!existing && !isCoordinatorSettable(existing.status)
+  const statusItems: DropdownItem[] = statusLocked
+    ? [{ value: existing!.status, label: existing!.status, disabled: true }]
+    : COORDINATOR_SETTABLE_SHIFT_STATUSES.map(s => ({ value: s, label: s }))
 
   const warningFindings = findings.filter(f => f.severity === 'Warning')
   // A Warning finding only forces a reason when the backend marks it requiresReason (e.g.
@@ -341,13 +354,16 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           </div>
 
           {isEdit && (
-            <FormField label="Status">
+            <FormField
+              label="Status"
+              hint={statusLocked ? 'Set automatically as the worker starts/finishes the shift and a reviewer approves or returns it — it can’t be changed here.' : undefined}
+            >
               <Dropdown
                 variant="form"
                 value={status}
                 onChange={v => setStatus(v as ShiftStatus)}
-                disabled={!canWrite}
-                items={SHIFT_STATUSES.map(s => ({ value: s, label: s }))}
+                disabled={!canWrite || statusLocked}
+                items={statusItems}
               />
             </FormField>
           )}

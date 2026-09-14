@@ -76,4 +76,34 @@ describe('LeaveRequestFormModal', () => {
     renderModal({ open: true, onClose: noop, onSubmit: vi.fn(), submitting: false, errorMessage: 'An identical request already exists.' })
     expect(screen.getByRole('alert')).toHaveTextContent('An identical request already exists.')
   })
+
+  describe('edit mode', () => {
+    const initialValues = { leaveType: 'Sick' as const, startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.' }
+
+    it('titles itself "Edit leave request", labels the submit button "Save changes", and hides the staff picker', () => {
+      renderModal({
+        open: true, onClose: noop, onSubmit: vi.fn(), submitting: false, mode: 'edit', initialValues,
+        staffOptions: [{ value: 'staff-1', label: 'Alex Rivera' }],
+      })
+
+      expect(screen.getByText('Edit leave request')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^save changes$/i })).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: /staff member/i })).not.toBeInTheDocument()
+    })
+
+    it('pre-fills the form from initialValues and submits the edited values with no userId', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn(async () => {})
+      renderModal({ open: true, onClose: noop, onSubmit, submitting: false, mode: 'edit', initialValues })
+
+      expect(screen.getByLabelText(/start date/i)).toHaveValue('2026-09-14')
+      expect(screen.getByLabelText(/end date/i)).toHaveValue('2026-09-18')
+
+      await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        leaveType: 'Sick', startDate: '2026-09-14', endDate: '2026-09-18', reason: 'Flu.',
+      })
+    })
+  })
 })

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveCount } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
-import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
+import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { Link } from 'react-router-dom'
 import {
   Map, Users, ListChecks, ChevronRight, CalendarDays, MapPin, ShieldAlert
@@ -359,10 +359,14 @@ export default function DashboardPage() {
             {criticalAlertItems.slice(0, 6).map(({ participantId, participantName, alert }) => {
               const style = ALERT_SEVERITY_STYLES.Critical
               const Icon = style.icon
+              // Alerts whose target isn't a participant-page tab (e.g. an open incident) link
+              // straight to that route instead of the participant's tab.
+              const href = alert.linkTo ?? `/participants/${participantId}?tab=${alert.deepLinkTab}`
+              const typeLabel = ALERT_TYPE_LABELS[alert.type]
               return (
                 <Link
                   key={`${participantId}:${alert.type}:${alert.message}`}
-                  to={`/participants/${participantId}?tab=${alert.deepLinkTab}`}
+                  to={href}
                   className={`p-5 rounded-[1.5rem] ${style.bg} border border-[var(--color-destructive)]/10 hover:opacity-90 transition-opacity`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -373,6 +377,9 @@ export default function DashboardPage() {
                   <h5 className="font-bold text-[var(--color-foreground)] mb-1 text-sm flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4 opacity-60" /> {participantName}
                   </h5>
+                  {typeLabel && (
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)] mb-0.5">{typeLabel}</p>
+                  )}
                   <p className="text-xs text-[var(--color-muted-foreground)] mb-4">{alert.message}</p>
                   <div className="flex items-center justify-end">
                     <span className="text-[var(--color-primary)] text-xs font-bold flex items-center gap-1">

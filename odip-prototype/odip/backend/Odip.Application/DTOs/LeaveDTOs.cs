@@ -43,6 +43,15 @@ public record LeaveDecisionDto
     public string? DecisionNote { get; init; }
 }
 
+/// <summary>PUT api/v1/leave/{id} body — editable only while Pending or Approved. UserId, Status, RequestedBy*, DecidedBy* are not changeable via this endpoint.</summary>
+public record UpdateLeaveRequestDto
+{
+    public LeaveType LeaveType { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    public string? Reason { get; init; }
+}
+
 public record RecurringUnavailabilityDto
 {
     public Guid Id { get; init; }
@@ -74,18 +83,50 @@ public record CreateRecurringUnavailabilityDto
     public Guid? UserId { get; init; }
 }
 
+/// <summary>PUT api/v1/leave/unavailability/{id} body — editable only while Pending or Approved. UserId, Status, RequestedBy*, DecidedBy* are not changeable via this endpoint.</summary>
+public record UpdateRecurringUnavailabilityDto
+{
+    public DayOfWeek DayOfWeek { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public DateOnly EffectiveFrom { get; init; }
+    public DateOnly? EffectiveTo { get; init; }
+    public string? Notes { get; init; }
+}
+
+/// <summary>
+/// One Published shift overlapping an approved leave/unavailability window — the structured form
+/// of <see cref="LeaveApprovalResultDto.Overlaps"/>' "SHIFT_OVERLAP" findings, carrying enough to
+/// deep-link into the roster and to name the participant/date directly rather than parsing the
+/// finding's free-text Message. Item 9 of the connection map: also what
+/// <see cref="Odip.Api.Controllers.LeaveController.ApproveLeave"/>/<c>UpdateLeave</c> raise a
+/// LeaveCoverage obligation task for, one per shift.
+/// </summary>
+public record OverlapShiftDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+}
+
 /// <summary>POST /leave/{id}/approve response — the approved row plus any overlapping Published shifts/Confirmed trip assignments the coordinator should see before confirming. Approval itself is never blocked by these.</summary>
 public record LeaveApprovalResultDto
 {
     public LeaveRequestDto Leave { get; init; } = null!;
     public List<RosterFindingDto> Overlaps { get; init; } = new();
+    public List<OverlapShiftDto> OverlapShifts { get; init; } = new();
 }
 
-/// <summary>POST /leave/unavailability/{id}/approve response — same shape as <see cref="LeaveApprovalResultDto"/>.</summary>
+/// <summary>POST /leave/unavailability/{id}/approve response — same shape as <see cref="LeaveApprovalResultDto"/>. No LeaveCoverage tasks are raised here (item 9 is scoped to actual Leave, not recurring unavailability) — OverlapShifts is populated anyway since it's cheap off the same shift query.</summary>
 public record RecurringUnavailabilityApprovalResultDto
 {
     public RecurringUnavailabilityDto Unavailability { get; init; } = null!;
     public List<RosterFindingDto> Overlaps { get; init; } = new();
+    public List<OverlapShiftDto> OverlapShifts { get; init; } = new();
 }
 
 /// <summary>GET /portal/leave response.</summary>

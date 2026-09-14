@@ -1,14 +1,20 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, AlertTriangle, Accessibility, Armchair, Pill } from 'lucide-react'
-import { usePortalShiftDetail } from '@/api/hooks'
+import { ArrowLeft, AlertTriangle, Accessibility, Armchair, Pill, Clock } from 'lucide-react'
+import { usePortalShiftDetail, useShiftNotes, useStartShift, useFinishShift } from '@/api/hooks'
+import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
 import { MedicationBadges } from '@/pages/medications/MedicationBadges'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { getRelevantRoutines } from '@/pages/rostering/lib/routines'
-import { formatShiftTimeRange, formatDayAccessibleName, RATIO_LABELS } from '@/pages/rostering/lib/roster'
+import {
+  formatShiftTimeRange, formatDayAccessibleName, RATIO_LABELS, formatElapsedSince, formatVarianceMinutes,
+} from '@/pages/rostering/lib/roster'
+import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { OVERNIGHT_SUPPORT_LABELS } from './lib/portal'
 import { ShiftNotesSection } from './components/ShiftNotesSection'
+import type { PortalShiftDetailDto, StartShiftDto, FinishShiftDto } from '@/api/types'
 
 function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'warning' }) {
   const toneClass = tone === 'warning'
@@ -17,9 +23,148 @@ function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
   return <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${toneClass}`}>{children}</span>
 }
 
+const primaryButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
+
+/**
+ * Prompts for a geolocation stamp, then resolves regardless of the outcome (design spec ruling
+ * 1 — Start/Finish must never be blocked on permission): a grant resolves with lat/long and
+ * `geolocationDeclined: false`; a denial, timeout, or an environment with no Geolocation API at
+ * all (jsdom in tests, or a browser under a `geolocation=()` Permissions-Policy — see the spec's
+ * nginx/Program.cs note) all resolve the same way, with `geolocationDeclined: true` and no
+ * coordinates. Short 5s timeout so a slow/unresponsive location fix doesn't stall the tap.
+ */
+function requestGeolocation(): Promise<{ latitude?: number; longitude?: number; geolocationDeclined: boolean }> {
+  return new Promise(resolve => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      resolve({ geolocationDeclined: true })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, geolocationDeclined: false }),
+      () => resolve({ geolocationDeclined: true }),
+      { timeout: 5000 },
+    )
+  })
+}
+
+/**
+ * The Start/Finish card (design spec §4) — status-driven off `shift.status`. Rendered only for
+ * the four statuses a worker can actually see mid-flow (Published/InProgress/PendingReview/
+ * Completed); Draft/Cancelled shifts show no completion affordance at all.
+ */
+function ShiftCompletionCard({
+  shift, hasShiftNote, canAct, onStart, onFinish, starting, finishing, actionError,
+}: {
+  shift: PortalShiftDetailDto
+  hasShiftNote: boolean
+  canAct: boolean
+  onStart: () => void
+  onFinish: () => void
+  starting: boolean
+  finishing: boolean
+  actionError: string | null
+}) {
+  const showReturnedBanner = shift.status === 'Published' && shift.returnCount > 0 && !!shift.lastReturnReason
+
+  return (
+    <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2"><Clock className="w-4 h-4" /> Shift completion</h2>
+
+      {showReturnedBanner && (
+        <div role="alert" className="rounded-lg border border-[var(--color-error-container)] bg-[var(--color-error-container)]/40 p-3 text-sm text-[var(--color-on-error-container)]">
+          <span className="font-medium">Returned:</span> {shift.lastReturnReason}
+        </div>
+      )}
+
+      {actionError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{actionError}</p>}
+
+      {shift.status === 'Published' && canAct && (
+        <button type="button" onClick={onStart} disabled={starting} className={primaryButtonClass}>
+          {starting ? 'Starting…' : 'Start shift'}
+        </button>
+      )}
+
+      {shift.status === 'InProgress' && shift.completion && (
+        <div className="space-y-2">
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            In progress — started {formatElapsedSince(shift.completion.actualStart)} ago
+          </p>
+          {canAct && (
+            <>
+              <button type="button" onClick={onFinish} disabled={finishing || !hasShiftNote} className={primaryButtonClass}>
+                {finishing ? 'Finishing…' : 'Finish shift'}
+              </button>
+              {!hasShiftNote && (
+                <p className="text-xs text-[var(--color-muted-foreground)]">Add a shift note before finishing.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {shift.status === 'PendingReview' && (
+        <p role="status" className="text-sm text-[var(--color-muted-foreground)]">
+          Submitted — awaiting review
+        </p>
+      )}
+
+      {shift.status === 'Completed' && shift.completion && (
+        <div className="text-sm space-y-1">
+          <p>
+            <span className="text-[var(--color-muted-foreground)]">Actual:</span>{' '}
+            {formatWithTimeZone(shift.completion.actualStart, shift.completion.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}
+            {' – '}
+            {shift.completion.actualEnd
+              ? formatWithTimeZone(shift.completion.actualEnd, shift.completion.timeZoneId, { timeStyle: 'short' })
+              : '—'}
+          </p>
+          <p>
+            <span className="text-[var(--color-muted-foreground)]">Variance:</span>{' '}
+            {formatVarianceMinutes(shift.completion.varianceMinutesStart)} start / {formatVarianceMinutes(shift.completion.varianceMinutesEnd)} end
+          </p>
+          {shift.completion.reviewedByName && (
+            <p><span className="text-[var(--color-muted-foreground)]">Approved by:</span> {shift.completion.reviewedByName}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PortalShiftDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: shift, isLoading, isError, refetch } = usePortalShiftDetail(id)
+  // Called unconditionally, ahead of the isLoading/isError early returns below — these must run
+  // on every render of this component instance regardless of load state, or the hook-call count
+  // changes between renders once `shift` resolves.
+  const { data: shiftNotes } = useShiftNotes(id)
+  const { canCompleteOwnShifts } = usePermissions()
+  const startShift = useStartShift()
+  const finishShift = useFinishShift()
+  const [actionError, setActionError] = useState<string | null>(null)
+  const hasShiftNote = (shiftNotes?.length ?? 0) > 0
+
+  async function handleStart() {
+    if (!id) return
+    setActionError(null)
+    try {
+      const geo = await requestGeolocation()
+      await startShift.mutateAsync({ id, data: geo satisfies StartShiftDto })
+    } catch (err) {
+      setActionError(extractErrorMessage(err, "Couldn't start this shift. Check your connection and try again."))
+    }
+  }
+
+  async function handleFinish() {
+    if (!id) return
+    setActionError(null)
+    try {
+      const geo = await requestGeolocation()
+      await finishShift.mutateAsync({ id, data: geo satisfies FinishShiftDto })
+    } catch (err) {
+      setActionError(extractErrorMessage(err, "Couldn't finish this shift. Check your connection and try again."))
+    }
+  }
 
   if (isLoading) {
     return (
@@ -111,6 +256,20 @@ export default function PortalShiftDetailPage() {
         </div>
         {shift.notes && <p className="mt-3 text-sm whitespace-pre-wrap">{shift.notes}</p>}
       </div>
+
+      {/* Start/Finish (design spec §4) — no completion affordance for Draft/Cancelled. */}
+      {(shift.status === 'Published' || shift.status === 'InProgress' || shift.status === 'PendingReview' || shift.status === 'Completed') && (
+        <ShiftCompletionCard
+          shift={shift}
+          hasShiftNote={hasShiftNote}
+          canAct={canCompleteOwnShifts}
+          onStart={handleStart}
+          onFinish={handleFinish}
+          starting={startShift.isPending}
+          finishing={finishShift.isPending}
+          actionError={actionError}
+        />
+      )}
 
       {/* Participant summary */}
       <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-4">

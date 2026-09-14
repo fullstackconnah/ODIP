@@ -72,7 +72,8 @@ public class RosterConflictServiceTests
         IReadOnlyList<StaffAssignment>? tripAssignments = null,
         IReadOnlyList<UnavailabilityWindow>? availability = null,
         CompatibilityLevel compatibility = CompatibilityLevel.Allowed,
-        decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold) => new(
+        decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold,
+        IReadOnlyList<PublicHolidayRef>? publicHolidays = null) => new(
         Staff: staff,
         Participant: participant,
         StaffShiftsInWeek: staffShiftsInWeek ?? Array.Empty<Shift>(),
@@ -80,7 +81,8 @@ public class RosterConflictServiceTests
         TripAssignments: tripAssignments ?? Array.Empty<StaffAssignment>(),
         Availability: availability ?? Array.Empty<UnavailabilityWindow>(),
         Compatibility: compatibility,
-        WeeklyHoursThreshold: weeklyHoursThreshold);
+        WeeklyHoursThreshold: weeklyHoursThreshold,
+        PublicHolidays: publicHolidays);
 
     private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
         findings.Any(f => f.Code == code);
@@ -681,6 +683,62 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
 
         Assert.All(findings, f => Assert.False(f.RequiresReason));
+    }
+
+    // ── PUBLIC_HOLIDAY (connection-map item 8) ────────────────
+
+    [Fact]
+    public void Check_ServiceDateMatchesPublicHoliday_FiresPublicHolidayWarningNotRequiringReason()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 8, 24));
+        var holidays = new[] { new PublicHolidayRef(new DateOnly(2026, 8, 24), "Test Holiday") };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, publicHolidays: holidays));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.PublicHoliday);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.False(finding.RequiresReason);
+        Assert.Equal("Mon 24 Aug is a public holiday (Test Holiday).", finding.Message);
+    }
+
+    [Fact]
+    public void Check_ServiceDateNotAPublicHoliday_DoesNotFirePublicHoliday()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 8, 24));
+        var holidays = new[] { new PublicHolidayRef(new DateOnly(2026, 8, 25), "Different Day") };
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, publicHolidays: holidays));
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.PublicHoliday);
+    }
+
+    [Fact]
+    public void Check_NoPublicHolidaysSupplied_DoesNotFirePublicHoliday()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.PublicHoliday);
+    }
+
+    [Fact]
+    public void CheckStaffAssignment_MatchingHolidayInRange_NeverFiresPublicHoliday()
+    {
+        var staff = CompliantStaff();
+        var holidays = new[] { new PublicHolidayRef(new DateOnly(2026, 9, 11), "Test Holiday") };
+        var ctx = CompliantContext(staff, null, publicHolidays: holidays);
+
+        var findings = new RosterConflictService().CheckStaffAssignment(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
+
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.PublicHoliday);
     }
 
     // ── Trip-side parity: null-participant tolerance + CheckStaffAssignment ──

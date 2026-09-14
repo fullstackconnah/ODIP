@@ -330,7 +330,39 @@ public class VehicleAssignmentsController : ControllerBase
 public class StaffController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public StaffController(OdipDbContext db) => _db = db;
+    private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+
+    public StaffController(
+        OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
+        Microsoft.Extensions.Configuration.IConfiguration? config = null)
+    {
+        _db = db;
+        _availabilityItemsQuery = availabilityItemsQuery ?? new StaffAvailabilityItemsQuery(db);
+        _config = config;
+    }
+
+    /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
+    /// rather than shared so the two controllers can't accidentally couple on a private property.</summary>
+    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
+
+    private static StaffDetailDto ToStaffDetailDto(User s) => new()
+    {
+        Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
+        FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+        Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
+        Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
+        IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+        IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
+        IsActive = s.IsActive, Notes = s.Notes,
+        FirstAidExpiryDate = s.FirstAidExpiryDate,
+        DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
+        ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
+        MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
+        WorkerScreeningNumber = s.WorkerScreeningNumber,
+        WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+        HasExpiredQualifications = s.HasExpiredQualifications
+    };
 
     /// <summary>
     /// §4.1 role-change guardrails. SuperAdmin actors are unrestricted. Anyone else: cannot touch
@@ -544,6 +576,120 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
     }
 
+    /// <summary>
+    /// Connection map item 12 — the staff hub's single data source: the staff record plus five
+    /// pre-joined collections, each built from exactly one query (no per-row queries). 404s if
+    /// <paramref name="id"/> isn't in the caller's tenant — same as GetById, for free from
+    /// _db.Users' ambient tenant query filter.
+    /// </summary>
+    [HttpGet("{id:guid}/overview")]
+    public async Task<ActionResult<ApiResponse<StaffOverviewDto>>> GetOverview(Guid id, CancellationToken ct)
+    {
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s == null) return NotFound(ApiResponse<StaffOverviewDto>.Fail("Staff not found"));
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var staffIds = new List<Guid> { id };
+
+        // Availability: shared with ScheduleController.GetScheduleOverview via
+        // IStaffAvailabilityItemsQuery (pure move, connection map item 12).
+        var availabilityByStaff = await _availabilityItemsQuery.GetAsync(staffIds, today, today.AddDays(90), ct);
+        var availability = availabilityByStaff[id].ToList();
+
+        var upcomingShiftStatuses = new[] { ShiftStatus.Published, ShiftStatus.InProgress, ShiftStatus.PendingReview };
+        var upcomingShiftsWindowEnd = today.AddDays(14);
+        var upcomingShifts = await _db.Shifts
+            .Where(sh => sh.UserId == id && sh.ServiceDate >= today && sh.ServiceDate <= upcomingShiftsWindowEnd
+                         && upcomingShiftStatuses.Contains(sh.Status))
+            .OrderBy(sh => sh.ServiceDate).ThenBy(sh => sh.StartTime)
+            .Select(sh => new StaffOverviewUpcomingShiftDto
+            {
+                ShiftId = sh.Id, ServiceDate = sh.ServiceDate, StartTime = sh.StartTime, EndTime = sh.EndTime,
+                EndsNextDay = sh.EndsNextDay, ParticipantId = sh.ParticipantId,
+                ParticipantName = sh.Participant != null ? sh.Participant.FullName : string.Empty,
+                Status = sh.Status
+            })
+            .ToListAsync(ct);
+
+        // "trips ending today or later" — same Cancelled exclusion RosteringController.GetBoard
+        // and ScheduleController use for the same StaffAssignments table.
+        var upcomingTripAssignments = await _db.StaffAssignments
+            .Where(a => a.UserId == id && a.Status != AssignmentStatus.Cancelled && a.AssignmentEnd >= today)
+            .OrderBy(a => a.AssignmentStart)
+            .Select(a => new StaffOverviewTripAssignmentDto
+            {
+                AssignmentId = a.Id, TripInstanceId = a.TripInstanceId, TripName = a.TripInstance.TripName,
+                StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd
+            })
+            .ToListAsync(ct);
+
+        // Newest 10 active incidents where this staff member is the INVOLVED user, not the
+        // reporter — same projection shape as IncidentsController.GetAll.
+        var recentIncidents = await _db.IncidentReports
+            .Include(i => i.TripInstance).Include(i => i.ReportedByUser).Include(i => i.InvolvedParticipant)
+            .Where(i => i.InvolvedUserId == id && i.IsActive)
+            .OrderByDescending(i => i.IncidentDateTime)
+            .Take(10)
+            .Select(i => new IncidentListDto
+            {
+                Id = i.Id,
+                ServiceType = i.ServiceType,
+                TripInstanceId = i.TripInstanceId,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
+                IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
+                Severity = i.Severity,
+                Status = i.Status,
+                Title = i.Title,
+                IncidentDateTime = i.IncidentDateTime,
+                Location = i.Location,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
+                InvolvedParticipantName = i.InvolvedParticipant != null
+                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
+                QscReportingStatus = i.QscReportingStatus,
+                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
+                    && i.QscReportedAt == null
+                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
+            })
+            .ToListAsync(ct);
+
+        // Last 10 completions this staff member SUBMITTED (Shift.UserId at Start/manual-Finish
+        // time — see ShiftCompletion.SubmittedByUserId), newest first. The shift/completion
+        // projection itself is ShiftCompletionMapper.BuildQueueItemsAsync — the same one
+        // RosteringController.GetCompletions uses for the coordinator's review queue — so this
+        // reuses that timezone-aware variance calc rather than duplicating it; the "newest 10"
+        // selection and ordering happen here since BuildQueueItemsAsync doesn't sort.
+        var recentCompletionShiftIds = await _db.ShiftCompletions
+            .Where(c => c.SubmittedByUserId == id && c.IsActive)
+            .OrderByDescending(c => c.SubmittedAt ?? c.StartedAt)
+            .Take(10)
+            .Select(c => c.ShiftId)
+            .ToListAsync(ct);
+        var recentCompletionRank = recentCompletionShiftIds
+            .Select((shiftId, index) => (shiftId, index))
+            .ToDictionary(x => x.shiftId, x => x.index);
+        var recentCompletionsQuery = _db.Shifts.Where(sh => recentCompletionShiftIds.Contains(sh.Id));
+        var recentCompletions = (await Odip.Api.Rostering.ShiftCompletionMapper.BuildQueueItemsAsync(
+                _db, recentCompletionsQuery, VarianceReviewMinutes, ct))
+            .OrderBy(c => recentCompletionRank.GetValueOrDefault(c.ShiftId, int.MaxValue))
+            .ToList();
+
+        return Ok(ApiResponse<StaffOverviewDto>.Ok(new StaffOverviewDto
+        {
+            Staff = ToStaffDetailDto(s),
+            Availability = availability,
+            UpcomingShifts = upcomingShifts,
+            UpcomingTripAssignments = upcomingTripAssignments,
+            RecentIncidents = recentIncidents,
+            RecentCompletions = recentCompletions
+        }));
+    }
+
     [HttpGet("{id:guid}/availability")]
     public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAvailability(Guid id, CancellationToken ct)
     {
@@ -618,6 +764,33 @@ public class StaffAvailabilityController : ControllerBase
     /// </summary>
     private Task<bool> IsValidStaffRefAsync(Guid userId, CancellationToken ct) =>
         _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct);
+
+    [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAll(
+        [FromQuery] Guid? userId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        // StaffAvailability is not a tenant-scoped entity (no ITenantEntity, no HasQueryFilter),
+        // so scope rows to the caller's tenant by joining through the filtered Users set —
+        // same-tenant scoping comes for free from _db.Users' ambient OdipDbContext query filter.
+        var query = _db.StaffAvailabilities.Where(a => _db.Users.Any(u => u.Id == a.UserId)).AsQueryable();
+        if (userId.HasValue) query = query.Where(a => a.UserId == userId.Value);
+        if (from.HasValue) query = query.Where(a => a.EndDateTime >= from.Value.ToDateTime(TimeOnly.MinValue));
+        if (to.HasValue) query = query.Where(a => a.StartDateTime <= to.Value.ToDateTime(TimeOnly.MaxValue));
+
+        var items = await query
+            .OrderByDescending(a => a.StartDateTime)
+            .Select(a => new StaffAvailabilityDto
+            {
+                Id = a.Id, StaffId = a.UserId, StartDateTime = a.StartDateTime,
+                EndDateTime = a.EndDateTime, AvailabilityType = a.AvailabilityType,
+                IsRecurring = a.IsRecurring, RecurrenceNotes = a.RecurrenceNotes, Notes = a.Notes
+            }).ToListAsync(ct);
+        return Ok(ApiResponse<List<StaffAvailabilityDto>>.Ok(items));
+    }
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -730,6 +903,10 @@ public class StaffAssignmentsController : ControllerBase
 
         var availability = await _unavailabilityQuery.GetWindowsAsync(new[] { staffId }, assignmentStart, assignmentEnd, ct);
 
+        // No PublicHolidays load here (connection-map item 8): RosterConflictService.CheckStaffAssignment
+        // never reads ctx.PublicHolidays — trips already price holidays in claims and span multiple
+        // days, so they don't get a PUBLIC_HOLIDAY finding — so loading them for a trip assignment
+        // check would be a pure-waste DB round trip. Leaving the parameter unset defaults it to null.
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
             otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
 

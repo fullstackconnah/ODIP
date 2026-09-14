@@ -5,6 +5,8 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -15,7 +17,38 @@ namespace Odip.Api.Controllers;
 public class IncidentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public IncidentsController(OdipDbContext db) => _db = db;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
+
+    public IncidentsController(
+        OdipDbContext db,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+    {
+        _db = db;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+    }
+
+    /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
+    private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, CancellationToken ct)
+    {
+        if (incident.QscReportingStatus == QscReportingStatus.Required && incident.QscReportedAt == null)
+        {
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"incident-qsc:{incident.Id}",
+                Type: TaskType.IncidentQscReport,
+                Title: $"Report incident to the NDIS Commission: {incident.Title}",
+                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                LinkTo: $"/incidents/{incident.Id}",
+                IncidentReportId: incident.Id,
+                Priority: TaskPriority.High), ct);
+        }
+        else
+        {
+            await _obligationTasks.CompleteAsync($"incident-qsc:{incident.Id}", ct);
+        }
+    }
 
     private static readonly IncidentType[] QscRequiredTypes = new[]
     {
@@ -41,6 +74,39 @@ public class IncidentsController : ControllerBase
     private Task<bool> IsValidTripRefAsync(Guid? tripId, CancellationToken ct) =>
         tripId.HasValue
             ? _db.TripInstances.AnyAsync(t => t.Id == tripId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a MedicationAdministration — same-tenant scoping comes for free from
+    /// _db.MedicationAdministrations' ambient OdipDbContext query filter, same pattern as
+    /// <see cref="IsValidUserRefAsync"/>.
+    /// </summary>
+    private Task<bool> IsValidMedicationAdministrationRefAsync(Guid? medicationAdministrationId, CancellationToken ct) =>
+        medicationAdministrationId.HasValue
+            ? _db.MedicationAdministrations.AnyAsync(m => m.Id == medicationAdministrationId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a Shift — same-tenant scoping comes for free from _db.Shifts' ambient
+    /// OdipDbContext query filter, same pattern as <see cref="IsValidUserRefAsync"/>.
+    /// </summary>
+    private Task<bool> IsValidShiftRefAsync(Guid? shiftId, CancellationToken ct) =>
+        shiftId.HasValue
+            ? _db.Shifts.AnyAsync(s => s.Id == shiftId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
+    /// Connection-map source link (Deliverable 1) validation: null is always fine, otherwise the
+    /// id must resolve to a ShiftNote — same-tenant scoping comes for free from _db.ShiftNotes'
+    /// ambient OdipDbContext query filter, same pattern as <see cref="IsValidUserRefAsync"/>. A
+    /// direct existence check against _db.ShiftNotes (rather than joining via its parent Shift) is
+    /// sufficient — ShiftNote is its own ITenantEntity with its own ambient filter.
+    /// </summary>
+    private Task<bool> IsValidShiftNoteRefAsync(Guid? shiftNoteId, CancellationToken ct) =>
+        shiftNoteId.HasValue
+            ? _db.ShiftNotes.AnyAsync(n => n.Id == shiftNoteId.Value, ct)
             : Task.FromResult(true);
 
     /// <summary>
@@ -143,6 +209,7 @@ public class IncidentsController : ControllerBase
         [FromQuery] Guid? tripId, [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
         [FromQuery] bool? isActive, [FromQuery] bool? isOverdueQsc,
+        [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId,
         [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
@@ -170,6 +237,8 @@ public class IncidentsController : ControllerBase
         if (status.HasValue) query = query.Where(i => i.Status == status.Value);
         if (severity.HasValue) query = query.Where(i => i.Severity == severity.Value);
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
+        if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
+        if (involvedUserId.HasValue) query = query.Where(i => i.InvolvedUserId == involvedUserId.Value);
 
         // Moved server-side from IncidentsPage.tsx's client-side `.filter(i => i.isOverdue24h)`,
         // which used to run over the full (unpaged) result set. Once GetAll only sends one page,
@@ -205,13 +274,17 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
                 IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             });
 
         var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -230,6 +303,10 @@ public class IncidentsController : ControllerBase
             .Include(i => i.RestrictivePractice)
             .Include(i => i.Injuries)
             .Include(i => i.Witnesses).ThenInclude(w => w.WitnessUser)
+            .Include(i => i.MedicationAdministration).ThenInclude(m => m!.ParticipantMedication)
+            .Include(i => i.Shift).ThenInclude(s => s!.Participant)
+            .Include(i => i.Shift).ThenInclude(s => s!.User)
+            .Include(i => i.ShiftNote)
             .Where(i => i.Id == id)
             .Select(i => new IncidentDetailDto
             {
@@ -245,6 +322,7 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
@@ -252,9 +330,11 @@ public class IncidentsController : ControllerBase
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
                 CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId,
                 // Detail fields
                 ParticipantBookingId = i.ParticipantBookingId,
-                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedStaffId = i.InvolvedUserId,
                 InvolvedStaffName = i.InvolvedUser != null
                     ? i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName : null,
@@ -302,7 +382,35 @@ public class IncidentsController : ControllerBase
                 FamilyNotifiedAt = i.FamilyNotifiedAt,
                 SupportCoordinatorNotified = i.SupportCoordinatorNotified,
                 SupportCoordinatorNotifiedAt = i.SupportCoordinatorNotifiedAt,
-                UpdatedAt = i.UpdatedAt
+                UpdatedAt = i.UpdatedAt,
+                MedicationContext = i.MedicationAdministration != null ? new IncidentMedicationContextDto
+                {
+                    MedicationAdministrationId = i.MedicationAdministration.Id,
+                    MedicationName = i.MedicationAdministration.ParticipantMedication != null
+                        ? i.MedicationAdministration.ParticipantMedication.Name : string.Empty,
+                    Status = i.MedicationAdministration.Status,
+                    AdministeredAt = i.MedicationAdministration.AdministeredAt ?? i.MedicationAdministration.ScheduledAt,
+                    RecordedByName = i.MedicationAdministration.RecordedByName,
+                } : null,
+                ShiftContext = i.Shift != null ? new IncidentShiftContextDto
+                {
+                    ShiftId = i.Shift.Id,
+                    Date = i.Shift.ServiceDate,
+                    StartTime = i.Shift.StartTime,
+                    EndTime = i.Shift.EndTime,
+                    ParticipantName = i.Shift.Participant != null ? i.Shift.Participant.FullName : string.Empty,
+                    StaffName = i.Shift.User != null ? i.Shift.User.FullName : null,
+                } : null,
+                ShiftNoteContext = i.ShiftNote != null ? new IncidentShiftNoteContextDto
+                {
+                    ShiftNoteId = i.ShiftNote.Id,
+                    Excerpt = i.ShiftNote.Body.Length > 200 ? i.ShiftNote.Body.Substring(0, 200) : i.ShiftNote.Body,
+                    // Top-level projection: the enum value is fetched from the DB, then this
+                    // static helper runs client-side — same "one wire shape" as ShiftNoteDto's
+                    // own FlaggedCategories (ShiftNoteKeywordVocabulary.ToCategoryNames).
+                    FlaggedCategories = ShiftNoteKeywordVocabulary.ToCategoryNames(i.ShiftNote.FlaggedCategories),
+                    CreatedAt = i.ShiftNote.CreatedAt,
+                } : null
             }).FirstOrDefaultAsync(ct);
 
         if (item == null) return NotFound(ApiResponse<IncidentDetailDto>.Fail("Incident not found"));
@@ -328,6 +436,12 @@ public class IncidentsController : ControllerBase
         var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
         if (witnessError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
+        if (!await IsValidMedicationAdministrationRefAsync(dto.MedicationAdministrationId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Medication administration not found."));
+        if (!await IsValidShiftRefAsync(dto.ShiftId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift not found."));
+        if (!await IsValidShiftNoteRefAsync(dto.ShiftNoteId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift note not found."));
 
         // INC-04: determined once here, from the register as it stood right now — see
         // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
@@ -362,6 +476,9 @@ public class IncidentsController : ControllerBase
             EmergencyServicesDetails = dto.EmergencyServicesDetails,
             WitnessNames = dto.WitnessNames,
             WitnessStatements = dto.WitnessStatements,
+            MedicationAdministrationId = dto.MedicationAdministrationId,
+            ShiftId = dto.ShiftId,
+            ShiftNoteId = dto.ShiftNoteId,
             Status = IncidentStatus.Draft
         };
 
@@ -378,6 +495,16 @@ public class IncidentsController : ControllerBase
         }
 
         _db.IncidentReports.Add(incident);
+
+        // Item 9 of the connection map: raise the IncidentQscReport obligation task when this
+        // new incident is already Required-and-unreported.
+        await RaiseOrCompleteQscTaskAsync(incident, ct);
+
+        // Item 9: filing an incident against a flagged shift note satisfies the
+        // FlaggedNoteFollowUp task raised when that note was created/edited — "decide whether an
+        // incident is needed" is answered the moment one is linked.
+        if (incident.ShiftNoteId.HasValue)
+            await _obligationTasks.CompleteAsync($"flagged-note:{incident.ShiftNoteId.Value}", ct);
 
         // IN-5: injury rows submitted alongside a new incident are created in the same
         // SaveChangesAsync call as the incident insert below — transactional with it, mirrors
@@ -413,6 +540,24 @@ public class IncidentsController : ControllerBase
             });
         }
 
+        // NotificationEventType.IncidentReported — recipients are the tenant's Admin/
+        // Coordinator users. Ruling (design spec §4): the email carries NO participant name —
+        // see IncidentReportedTemplate's own doc comment for why.
+        var reporterName = await _db.Users.Where(u => u.Id == dto.ReportedByStaffId)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var incidentRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in incidentRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.IncidentReported, "IncidentReport", incident.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.IncidentReportedPayload(
+                    recipient.Email, reporterName, dto.IncidentType.ToString(), dto.Severity.ToString()),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
@@ -433,13 +578,17 @@ public class IncidentsController : ControllerBase
             IncidentDateTime = incident.IncidentDateTime,
             Location = incident.Location,
             ReportedByName = incident.ReportedByUser != null ? incident.ReportedByUser.FirstName + " " + incident.ReportedByUser.LastName : null,
+            InvolvedParticipantId = incident.InvolvedParticipantId,
             InvolvedParticipantName = incident.InvolvedParticipant != null
                 ? incident.InvolvedParticipant.FirstName + " " + incident.InvolvedParticipant.LastName : null,
             QscReportingStatus = incident.QscReportingStatus,
             IsOverdue24h = incident.QscReportingStatus == QscReportingStatus.Required
                 && incident.QscReportedAt == null
                 && (DateTime.UtcNow - incident.CreatedAt).TotalHours > 24,
-            CreatedAt = incident.CreatedAt
+            CreatedAt = incident.CreatedAt,
+            MedicationAdministrationId = incident.MedicationAdministrationId,
+            ShiftId = incident.ShiftId,
+            ShiftNoteId = incident.ShiftNoteId
         }));
     }
 
@@ -467,6 +616,12 @@ public class IncidentsController : ControllerBase
         var witnessError = await ValidateWitnessesAsync(dto.Witnesses, ct);
         if (witnessError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(witnessError));
+        if (!await IsValidMedicationAdministrationRefAsync(dto.MedicationAdministrationId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Medication administration not found."));
+        if (!await IsValidShiftRefAsync(dto.ShiftId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift not found."));
+        if (!await IsValidShiftNoteRefAsync(dto.ShiftNoteId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Shift note not found."));
 
         i.ServiceType = dto.ServiceType;
         i.TripInstanceId = dto.TripInstanceId;
@@ -497,6 +652,11 @@ public class IncidentsController : ControllerBase
         i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
         i.WitnessNames = dto.WitnessNames;
         i.WitnessStatements = dto.WitnessStatements;
+        // Connection-map source links (Deliverable 1): may be newly set, cleared back to null, or
+        // changed to a different source — assigning null clears the link.
+        i.MedicationAdministrationId = dto.MedicationAdministrationId;
+        i.ShiftId = dto.ShiftId;
+        i.ShiftNoteId = dto.ShiftNoteId;
         i.QscReportingStatus = dto.QscReportingStatus;
         i.QscReportedAt = dto.QscReportedAt;
         i.QscReferenceNumber = dto.QscReferenceNumber;
@@ -573,6 +733,10 @@ public class IncidentsController : ControllerBase
             }
         }
 
+        // Item 9 of the connection map: an edit may change QscReportingStatus/QscReportedAt in
+        // either direction — raise/refresh or complete the IncidentQscReport task accordingly.
+        await RaiseOrCompleteQscTaskAsync(i, ct);
+
         await _db.SaveChangesAsync(ct);
 
         await _db.Entry(i).Reference(x => x.TripInstance).LoadAsync(ct);
@@ -593,13 +757,17 @@ public class IncidentsController : ControllerBase
             IncidentDateTime = i.IncidentDateTime,
             Location = i.Location,
             ReportedByName = i.ReportedByUser != null ? i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName : null,
+            InvolvedParticipantId = i.InvolvedParticipantId,
             InvolvedParticipantName = i.InvolvedParticipant != null
                 ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
             QscReportingStatus = i.QscReportingStatus,
             IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                 && i.QscReportedAt == null
                 && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-            CreatedAt = i.CreatedAt
+            CreatedAt = i.CreatedAt,
+            MedicationAdministrationId = i.MedicationAdministrationId,
+            ShiftId = i.ShiftId,
+            ShiftNoteId = i.ShiftNoteId
         }));
     }
 
@@ -642,13 +810,56 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
                 IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
                     && i.QscReportedAt == null
                     && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
+            }).ToListAsync(ct);
+
+        return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
+    }
+
+    [HttpGet("shift/{shiftId:guid}")]
+    public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByShift(Guid shiftId, CancellationToken ct)
+    {
+        var items = await _db.IncidentReports
+            .Include(i => i.TripInstance)
+            .Include(i => i.ReportedByUser)
+            .Include(i => i.InvolvedParticipant)
+            .Where(i => i.ShiftId == shiftId && i.IsActive)
+            .OrderByDescending(i => i.IncidentDateTime)
+            .Select(i => new IncidentListDto
+            {
+                Id = i.Id,
+                ServiceType = i.ServiceType,
+                TripInstanceId = i.TripInstanceId,
+                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
+                IncidentType = i.IncidentType,
+                OtherTypeSpecify = i.OtherTypeSpecify,
+                Severity = i.Severity,
+                Status = i.Status,
+                Title = i.Title,
+                IncidentDateTime = i.IncidentDateTime,
+                Location = i.Location,
+                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
+                InvolvedParticipantName = i.InvolvedParticipant != null
+                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
+                QscReportingStatus = i.QscReportingStatus,
+                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
+                    && i.QscReportedAt == null
+                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             }).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
@@ -657,15 +868,11 @@ public class IncidentsController : ControllerBase
     [HttpGet("overdue-qsc")]
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetOverdueQsc(CancellationToken ct)
     {
-        var cutoff = DateTime.UtcNow.AddHours(-24);
         var items = await _db.IncidentReports
             .Include(i => i.TripInstance)
             .Include(i => i.ReportedByUser)
             .Include(i => i.InvolvedParticipant)
-            .Where(i => i.IsActive
-                && i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && i.CreatedAt < cutoff)
+            .Where(QscReporting.IsOverdueExpr(DateTime.UtcNow))
             .OrderByDescending(i => i.CreatedAt)
             .Select(i => new IncidentListDto
             {
@@ -681,11 +888,15 @@ public class IncidentsController : ControllerBase
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
                 ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
                 IsOverdue24h = true,
-                CreatedAt = i.CreatedAt
+                CreatedAt = i.CreatedAt,
+                MedicationAdministrationId = i.MedicationAdministrationId,
+                ShiftId = i.ShiftId,
+                ShiftNoteId = i.ShiftNoteId
             }).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));

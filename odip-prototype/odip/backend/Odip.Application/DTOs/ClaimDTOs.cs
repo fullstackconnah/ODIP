@@ -10,8 +10,15 @@ namespace Odip.Application.DTOs;
 public record TripClaimListDto
 {
     public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
+    /// <summary>Trip (default) or Shift — shift-completion design spec §1/§2.</summary>
+    public ClaimKind Kind { get; init; } = ClaimKind.Trip;
+    /// <summary>Set for Kind == Trip; null for Kind == Shift.</summary>
+    public Guid? TripInstanceId { get; init; }
     public string TripName { get; init; } = string.Empty;
+    /// <summary>Set for Kind == Shift; null for Kind == Trip.</summary>
+    public Guid? ParticipantId { get; init; }
+    public DateOnly? PeriodFrom { get; init; }
+    public DateOnly? PeriodTo { get; init; }
     public TripClaimStatus Status { get; init; }
     public string ClaimReference { get; init; } = string.Empty;
     public decimal TotalAmount { get; init; }
@@ -33,7 +40,11 @@ public record ClaimLineItemDto
 {
     public Guid Id { get; init; }
     public Guid TripClaimId { get; init; }
-    public Guid ParticipantBookingId { get; init; }
+    /// <summary>Set for Kind == Trip line items; null for Kind == Shift.</summary>
+    public Guid? ParticipantBookingId { get; init; }
+    /// <summary>Set for Kind == Shift line items (design spec §1/§3); null for Kind == Trip.</summary>
+    public Guid? ShiftId { get; init; }
+    public Guid? ParticipantId { get; init; }
     public string ParticipantName { get; init; } = string.Empty;
     public string NdisNumber { get; init; } = string.Empty;
     public PlanType PlanType { get; init; }
@@ -115,6 +126,34 @@ public record ClaimPreviewLineItemDto
     public ClaimDayType DayType { get; init; }
     public DateOnly SupportsDeliveredFrom { get; init; }
     public DateOnly SupportsDeliveredTo { get; init; }
+    public decimal Hours { get; init; }
+    public decimal UnitPrice { get; init; }
+    public decimal TotalAmount { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CLAIM-FROM-SHIFTS DTOs (shift-completion design spec §2/§3, PR 3)
+// ══════════════════════════════════════════════════════════════
+
+public record GenerateShiftClaimRequestDto
+{
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+}
+
+public record ShiftClaimPreviewResponseDto
+{
+    public decimal TotalAmount { get; init; }
+    public List<ShiftClaimPreviewLineItemDto> LineItems { get; init; } = new();
+}
+
+public record ShiftClaimPreviewLineItemDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public string DayTypeLabel { get; init; } = string.Empty;
+    public ClaimDayType DayType { get; init; }
+    public string SupportItemCode { get; init; } = string.Empty;
     public decimal Hours { get; init; }
     public decimal UnitPrice { get; init; }
     public decimal TotalAmount { get; init; }

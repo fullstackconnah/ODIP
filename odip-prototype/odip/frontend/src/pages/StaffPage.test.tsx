@@ -98,6 +98,17 @@ describe('StaffPage — PP-45 search', () => {
   })
 })
 
+// Connection map item 12 — the staff name links to the new staff hub, same "name links to the
+// detail page" convention ParticipantsPage already uses.
+describe('StaffPage — staff detail link', () => {
+  it('links each staff name to their staff detail page', () => {
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/s1')
+    expect(screen.getByRole('link', { name: 'Sam Lee' })).toHaveAttribute('href', '/staff/s2')
+  })
+})
+
 // PP-46 — the Active -> Inactive transition on the status dropdown is staged behind a
 // ConfirmDialog; Active (re-activation) still fires immediately.
 describe('StaffPage — PP-46 deactivate confirm', () => {
@@ -165,5 +176,23 @@ describe('StaffPage — PP-47 worker screening icon label', () => {
     renderPage()
 
     expect(screen.getByLabelText('Worker screening current')).toBeInTheDocument()
+  })
+})
+
+describe('StaffPage — cross-domain links', () => {
+  it('links each row to that staff member\'s leave & availability for a role with leave-approvals access', () => {
+    setUserRole('Admin')
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=s1')
+  })
+
+  it('hides the leave & availability link for a role without leave-approvals access (SupportWorker)', () => {
+    setUserRole('SupportWorker')
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).queryByRole('link', { name: /leave.*availability/i })).not.toBeInTheDocument()
   })
 })

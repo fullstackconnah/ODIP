@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Billing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 
 namespace Odip.Application.DTOs;
 
@@ -1339,6 +1340,50 @@ public record StaffListDto
 
 public record StaffDetailDto : StaffListDto { }
 
+/// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>
+public record StaffOverviewUpcomingShiftDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public ShiftStatus Status { get; init; }
+}
+
+/// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingTripAssignments (trips ending today or later).</summary>
+public record StaffOverviewTripAssignmentDto
+{
+    public Guid AssignmentId { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+}
+
+/// <summary>
+/// Connection map item 12 — GET /staff/{id}/overview, the staff hub's single data source. Mirrors
+/// the participant hub's ParticipantDetailDto-plus-sub-resources shape, but pre-joined server-side
+/// into one call. Availability/UpcomingShifts/UpcomingTripAssignments/RecentIncidents/
+/// RecentCompletions are each built from exactly one query (plus the small internal ones
+/// IStaffAvailabilityItemsQuery and ShiftCompletionMapper.BuildQueueItemsAsync already make) —
+/// no per-row queries.
+/// </summary>
+public record StaffOverviewDto
+{
+    public StaffDetailDto Staff { get; init; } = null!;
+    /// <summary>Every Leave/RecurringUnavailability/legacy StaffAvailability row overlapping the next 90 days, all kinds.</summary>
+    public List<ScheduleAvailabilityItemDto> Availability { get; init; } = new();
+    public List<StaffOverviewUpcomingShiftDto> UpcomingShifts { get; init; } = new();
+    public List<StaffOverviewTripAssignmentDto> UpcomingTripAssignments { get; init; } = new();
+    /// <summary>Newest 10 active incidents where this staff member is the involved user (not the reporter).</summary>
+    public List<IncidentListDto> RecentIncidents { get; init; } = new();
+    /// <summary>Last 10 shift completions submitted by this staff member, newest first.</summary>
+    public List<CompletionQueueItemDto> RecentCompletions { get; init; } = new();
+}
+
 /// <summary>
 /// Create request for a Staff/User row. Username and Email are required per the staff/user
 /// unification design spec §4.1 — a staff record now IS a real login-capable account, not a
@@ -1579,12 +1624,21 @@ public record UpdateScheduledActivityDto
 public record TaskDto
 {
     public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
+    public Guid? TripInstanceId { get; init; }
     public string? TripName { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? AccommodationReservationId { get; init; }
     public Guid? VehicleAssignmentId { get; init; }
     public Guid? StaffAssignmentId { get; init; }
+    // Generic obligation source links (item 9 of the connection map) — set only on tasks raised
+    // by IObligationTaskService, never on manually-created trip/booking tasks.
+    public string? LinkTo { get; init; }
+    public string? SourceKey { get; init; }
+    public Guid? ShiftId { get; init; }
+    public Guid? IncidentReportId { get; init; }
+    public Guid? MedicationAdministrationId { get; init; }
+    public Guid? ShiftNoteId { get; init; }
+    public Guid? LeaveRequestId { get; init; }
     public TaskType TaskType { get; init; }
     public string Title { get; init; } = string.Empty;
     public Guid? OwnerId { get; init; }
@@ -1915,8 +1969,32 @@ public record ScheduleStaffDto
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public List<ScheduleStaffTripStatusDto> TripStatuses { get; init; } = new();
-    public List<StaffAvailabilityDto> Availability { get; init; } = new();
+    public List<ScheduleAvailabilityItemDto> Availability { get; init; } = new();
     public List<TripPreferenceDto> PreferredForTrips { get; init; } = new();
+}
+
+/// <summary>Source of a <see cref="ScheduleAvailabilityItemDto"/> row.</summary>
+public enum ScheduleAvailabilityKind { Leave, RecurringRule, Legacy }
+
+/// <summary>
+/// A single unified availability/unavailability record for a staff member on the schedule board,
+/// sourced directly from LeaveRequest, RecurringUnavailability, or the legacy StaffAvailability
+/// table (Kind says which) — not from the expanded IStaffUnavailabilityQuery windows used for the
+/// per-trip status cells. See docs/specs/2026-09-07-staff-leave-unavailability-design.md.
+/// </summary>
+public record ScheduleAvailabilityItemDto
+{
+    public Guid Id { get; init; }
+    public ScheduleAvailabilityKind Kind { get; init; }
+    public LeaveStatus? Status { get; init; }          // Leave/RecurringRule only; null for Legacy
+    public LeaveType? LeaveType { get; init; }         // Leave only
+    public AvailabilityType? AvailabilityType { get; init; } // Legacy only
+    public DateOnly StartDate { get; init; }           // Leave.StartDate | Rule.EffectiveFrom | Legacy StartDateTime.Date
+    public DateOnly? EndDate { get; init; }            // Leave.EndDate | Rule.EffectiveTo (nullable) | Legacy EndDateTime.Date
+    public DayOfWeek? DayOfWeek { get; init; }         // RecurringRule only
+    public TimeOnly? StartTime { get; init; }          // RecurringRule only
+    public TimeOnly? EndTime { get; init; }            // RecurringRule only
+    public string? Notes { get; init; }                // Leave.Reason | Rule.Notes | Legacy.Notes
 }
 
 public record ScheduleStaffTripStatusDto
@@ -1970,16 +2048,22 @@ public record IncidentListDto
     public DateTime IncidentDateTime { get; init; }
     public string? Location { get; init; }
     public string? ReportedByName { get; init; }
+    public Guid? InvolvedParticipantId { get; init; }
     public string? InvolvedParticipantName { get; init; }
     public QscReportingStatus QscReportingStatus { get; init; }
     public bool IsOverdue24h { get; init; }
     public DateTime CreatedAt { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the medication administration this incident was filed from, if any.</summary>
+    public Guid? MedicationAdministrationId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the shift this incident was filed from, if any.</summary>
+    public Guid? ShiftId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): the shift note this incident was filed from, if any.</summary>
+    public Guid? ShiftNoteId { get; init; }
 }
 
 public record IncidentDetailDto : IncidentListDto
 {
     public Guid? ParticipantBookingId { get; init; }
-    public Guid? InvolvedParticipantId { get; init; }
     public Guid? InvolvedStaffId { get; init; }
     public string? InvolvedStaffName { get; init; }
     public Guid ReportedByStaffId { get; init; }
@@ -2022,6 +2106,45 @@ public record IncidentDetailDto : IncidentListDto
     public bool SupportCoordinatorNotified { get; init; }
     public DateTime? SupportCoordinatorNotifiedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+
+    /// <summary>Populated only when <see cref="IncidentListDto.MedicationAdministrationId"/> is set.</summary>
+    public IncidentMedicationContextDto? MedicationContext { get; init; }
+    /// <summary>Populated only when <see cref="IncidentListDto.ShiftId"/> is set.</summary>
+    public IncidentShiftContextDto? ShiftContext { get; init; }
+    /// <summary>Populated only when <see cref="IncidentListDto.ShiftNoteId"/> is set.</summary>
+    public IncidentShiftNoteContextDto? ShiftNoteContext { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the medication administration an incident was filed from, for <see cref="IncidentDetailDto.MedicationContext"/>.</summary>
+public record IncidentMedicationContextDto
+{
+    public Guid MedicationAdministrationId { get; init; }
+    public string MedicationName { get; init; } = string.Empty;
+    public MedicationAdministrationStatus Status { get; init; }
+    public DateTime? AdministeredAt { get; init; }
+    public string? RecordedByName { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the shift an incident was filed from, for <see cref="IncidentDetailDto.ShiftContext"/>.</summary>
+public record IncidentShiftContextDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly Date { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string? StaffName { get; init; }
+}
+
+/// <summary>Connection-map (Deliverable 1): summary of the shift note an incident was filed from, for <see cref="IncidentDetailDto.ShiftNoteContext"/>.</summary>
+public record IncidentShiftNoteContextDto
+{
+    public Guid ShiftNoteId { get; init; }
+    public string Excerpt { get; init; } = string.Empty;
+    // NOTES-02/connection-map: category names, same ShiftNoteKeywordVocabulary.ToCategoryNames-
+    // produced shape as ShiftNoteDto.FlaggedCategories — not the raw [Flags] enum.
+    public IReadOnlyList<string> FlaggedCategories { get; init; } = Array.Empty<string>();
+    public DateTime CreatedAt { get; init; }
 }
 
 public record CreateIncidentDto
@@ -2088,6 +2211,13 @@ public record CreateIncidentDto
     /// is treated as newly added.
     /// </summary>
     public List<CreateIncidentWitnessDto> Witnesses { get; init; } = new();
+
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific medication administration. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? MedicationAdministrationId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific shift. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? ShiftId { get; init; }
+    /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific shift note. Server-validated to exist (same-tenant scoped) when non-null.</summary>
+    public Guid? ShiftNoteId { get; init; }
 }
 
 /// <summary>IN-5: one submitted injury row — see <see cref="Entities.IncidentInjury"/>.</summary>

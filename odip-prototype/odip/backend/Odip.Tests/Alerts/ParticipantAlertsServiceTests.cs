@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Api.Controllers;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -586,5 +587,265 @@ public class ParticipantAlertsServiceTests
         var result = await new ParticipantAlertsService(db).GetAlertsAsync(participantId: draft.Id);
 
         Assert.Single(result);
+    }
+
+    // ── Rule 6: open serious incident ───────────────────────────────────────
+
+    private static IncidentReport NewIncident(
+        Guid participantId, IncidentSeverity severity, IncidentStatus status = IncidentStatus.Submitted,
+        bool isActive = true, string title = "Fall in bathroom") => new()
+    {
+        Id = Guid.NewGuid(), ReportedByUserId = Guid.NewGuid(), InvolvedParticipantId = participantId,
+        IncidentType = IncidentType.Injury, Severity = severity, Status = status, IsActive = isActive,
+        Title = title, Description = "Something happened.", IncidentDateTime = DateTime.UtcNow.AddHours(-2),
+    };
+
+    [Fact]
+    public async Task OpenSeriousIncident_HighSeverityOpen_FiresAsWarning()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.High);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
+        Assert.Equal(AlertSeverity.Warning, alert.Severity);
+        Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
+    }
+
+    /// <summary>
+    /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
+    /// September as "Sept", while the container's invariant globalization renders "Sep" — see
+    /// TemplateRenderingTests' equivalent for the notification templates. The
+    /// "open-serious-incident" alert's "({IncidentDateTime:d MMM})" suffix must render
+    /// invariantly regardless of the host's current culture.
+    /// </summary>
+    [Fact]
+    public async Task OpenSeriousIncident_RendersInvariantDate_RegardlessOfCurrentCulture()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-AU");
+
+            using var db = CreateDb(Guid.NewGuid().ToString());
+            var participant = SeedParticipant(db);
+            var incident = NewIncident(participant.Id, IncidentSeverity.High);
+            incident.IncidentDateTime = new DateTime(2026, 9, 20, 10, 0, 0, DateTimeKind.Utc);
+            db.IncidentReports.Add(incident);
+            db.SaveChanges();
+
+            var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+            var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
+            Assert.Contains("20 Sep", alert.Message);
+            Assert.DoesNotContain("Sept", alert.Message);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task OpenSeriousIncident_CriticalSeverityOpen_FiresAsCritical()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "open-serious-incident");
+        Assert.Equal(AlertSeverity.Critical, alert.Severity);
+        Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
+    }
+
+    [Theory]
+    [InlineData(IncidentStatus.Resolved)]
+    [InlineData(IncidentStatus.Closed)]
+    public async Task OpenSeriousIncident_ResolvedOrClosed_DoesNotFire(IncidentStatus status)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.IncidentReports.Add(NewIncident(participant.Id, IncidentSeverity.Critical, status: status));
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
+    }
+
+    [Fact]
+    public async Task OpenSeriousIncident_Inactive_DoesNotFire()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.IncidentReports.Add(NewIncident(participant.Id, IncidentSeverity.Critical, isActive: false));
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
+    }
+
+    [Theory]
+    [InlineData(IncidentSeverity.Low)]
+    [InlineData(IncidentSeverity.Medium)]
+    public async Task OpenSeriousIncident_LowOrMediumSeverity_DoesNotFire(IncidentSeverity severity)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.IncidentReports.Add(NewIncident(participant.Id, severity));
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "open-serious-incident");
+    }
+
+    [Fact]
+    public async Task OpenSeriousIncident_ForDifferentParticipant_DoesNotAppear()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var otherParticipant = SeedParticipant(db, "Other", "Person");
+        db.IncidentReports.Add(NewIncident(otherParticipant.Id, IncidentSeverity.Critical));
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.Empty(result.Single().Alerts);
+    }
+
+    // ── Rule 7: QSC report overdue ───────────────────────────────────────────
+
+    [Fact]
+    public async Task QscReportOverdue_RequiredAndUnreportedPast24h_FiresAsCritical()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        incident.QscReportingStatus = QscReportingStatus.Required;
+        incident.QscReportedAt = null;
+        incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        var alert = Assert.Single(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
+        Assert.Equal(AlertSeverity.Critical, alert.Severity);
+        Assert.Equal($"/incidents/{incident.Id}", alert.LinkTo);
+    }
+
+    [Fact]
+    public async Task QscReportOverdue_AlreadyReported_DoesNotFire()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        incident.QscReportingStatus = QscReportingStatus.Required;
+        incident.QscReportedAt = DateTime.UtcNow.AddHours(-1);
+        incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
+    }
+
+    [Fact]
+    public async Task QscReportOverdue_WithinWindow_DoesNotFire()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        incident.QscReportingStatus = QscReportingStatus.Required;
+        incident.QscReportedAt = null;
+        incident.CreatedAt = DateTime.UtcNow.AddHours(-2);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
+    }
+
+    [Fact]
+    public async Task QscReportOverdue_NotRequired_DoesNotFire()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        incident.QscReportingStatus = QscReportingStatus.NotRequired;
+        incident.QscReportedAt = null;
+        incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.DoesNotContain(result.Single().Alerts, a => a.Type == "qsc-report-overdue");
+    }
+
+    [Fact]
+    public async Task GetAlertsAsync_IncludesIncidentRulesInAggregateCounts()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var incident = NewIncident(participant.Id, IncidentSeverity.Critical);
+        incident.QscReportingStatus = QscReportingStatus.Required;
+        incident.QscReportedAt = null;
+        incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        db.IncidentReports.Add(incident);
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        var dto = result.Single();
+        // One incident, open + High/Critical (open-serious-incident) AND QSC overdue
+        // (qsc-report-overdue) — both rules fire off the same row, both Critical.
+        Assert.Equal(2, dto.Alerts.Count);
+        Assert.Equal(2, dto.CriticalCount);
+        Assert.Contains(dto.Alerts, a => a.Type == "open-serious-incident");
+        Assert.Contains(dto.Alerts, a => a.Type == "qsc-report-overdue");
+    }
+
+    // ── Cross-check: the dashboard's QscOverdueCount and the alert rule agree ──
+
+    [Fact]
+    public async Task QscReportOverdue_AgreesWithDashboardQscOverdueCount()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var overdue = NewIncident(participant.Id, IncidentSeverity.Critical, title: "Overdue one");
+        overdue.QscReportingStatus = QscReportingStatus.Required;
+        overdue.QscReportedAt = null;
+        overdue.CreatedAt = DateTime.UtcNow.AddHours(-25);
+
+        var notOverdue = NewIncident(participant.Id, IncidentSeverity.Critical, title: "Reported already");
+        notOverdue.QscReportingStatus = QscReportingStatus.Required;
+        notOverdue.QscReportedAt = DateTime.UtcNow.AddHours(-1);
+        notOverdue.CreatedAt = DateTime.UtcNow.AddHours(-25);
+
+        db.IncidentReports.AddRange(overdue, notOverdue);
+        db.SaveChanges();
+
+        var alertResult = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+        var qscAlertCount = alertResult.Single().Alerts.Count(a => a.Type == "qsc-report-overdue");
+
+        var dashboardResponse = await new DashboardController(db).GetSummary(CancellationToken.None);
+        var dashboardOk = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(dashboardResponse.Result);
+        var dashboardBody = Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.DTOs.DashboardSummaryDto>>(dashboardOk.Value);
+
+        Assert.Equal(1, qscAlertCount);
+        Assert.Equal(qscAlertCount, dashboardBody.Data!.QscOverdueCount);
     }
 }

@@ -58,6 +58,30 @@ describe('DashboardPage — Overdue Tasks link (PP-75)', () => {
     expect(link).toHaveTextContent(/view/i)
     expect(screen.queryByText(/^resolve$/i)).not.toBeInTheDocument()
   })
+
+  // Item 9: an obligation-engine task (LeaveCoverage, IncidentQscReport, …) isn't raised against
+  // a trip, so tripInstanceId/tripName are now omitted from the wire response rather than sent as
+  // null — the tile must render this without throwing, and its click-through must still work.
+  it('renders a trip-less overdue task without crashing and keeps its View link working', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue({
+      data: {
+        upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
+        overdueTaskCount: 1, conflictCount: 0, tripsMissingAccommodation: 0,
+        tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
+        qscOverdueCount: 0, upcomingTrips: [],
+        overdueTasks: [{ id: 'task-2', title: 'Find leave cover', priority: 'High', dueDate: new Date(Date.now() - 3600000).toISOString(), ownerName: 'Sam Owner' }],
+      },
+      isLoading: false, isError: false,
+    })
+
+    expect(() => renderPage()).not.toThrow()
+    expect(screen.getByText('Find leave cover')).toBeInTheDocument()
+    const link = document.querySelector('a[href="/tasks/task-2/edit"]')
+    expect(link).not.toBeNull()
+    expect(link).toHaveTextContent(/view/i)
+  })
 })
 
 describe('DashboardPage — Critical Participant Alerts card', () => {
@@ -68,14 +92,14 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
         {
           participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [
-            { type: 'routine-coverage-gap', severity: 'Warning', message: 'No active routines recorded', deepLinkTab: 'routines' },
+            { type: 'routine-coverage-gap', severity: 'Warning', message: 'No active routines recorded', deepLinkTab: 'routines', linkTo: null },
           ],
           criticalCount: 0, warningCount: 1, infoCount: 0,
         },
@@ -93,6 +117,39 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
 
     const link = screen.getByText('Jamie Smith').closest('a')
     expect(link).toHaveAttribute('href', '/participants/p1?tab=details')
+  })
+
+  it('links to alert.linkTo instead of the participant tab when the alert carries one, and shows the human type label', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        {
+          participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
+          alerts: [
+            { type: 'open-serious-incident', severity: 'Critical', message: 'Open serious incident requires review', deepLinkTab: 'incidents', linkTo: '/incidents/inc-1' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+        {
+          participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
+          alerts: [
+            { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
+          ],
+          criticalCount: 1, warningCount: 0, infoCount: 0,
+        },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    const incidentLink = screen.getByText('Jamie Smith').closest('a')
+    expect(incidentLink).toHaveAttribute('href', '/incidents/inc-1')
+    const qscLink = screen.getByText('Alex Rivera').closest('a')
+    expect(qscLink).toHaveAttribute('href', '/qsc-reports/qsc-1')
+
+    // The card shows the alert type in the same human wording as the label map, alongside the message.
+    expect(screen.getByText('Open serious incident')).toBeInTheDocument()
+    expect(screen.getByText('QSC report overdue')).toBeInTheDocument()
   })
 
   it('shows an "All clear" tile and no list section when there are no Critical alerts', () => {
@@ -120,7 +177,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
         {
           participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },
@@ -129,7 +186,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
           // generate a permanent, undismissable Critical alert.
           participantId: 'p2', participantName: 'Churned Client', isActive: false,
           alerts: [
-            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details' },
+            { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },

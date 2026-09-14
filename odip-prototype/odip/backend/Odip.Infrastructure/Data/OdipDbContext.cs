@@ -6,6 +6,7 @@ using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Data;
@@ -103,6 +104,11 @@ public class OdipDbContext : DbContext
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
+
+    /// <summary>Transactional outbox — see <see cref="NotificationOutbox"/>'s type doc. docs/specs/2026-09-08-notifications-design.md.</summary>
+    public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -535,6 +541,44 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.OwnerId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Generic obligation source links (item 9) — SetNull, same idiom as the other
+            // optional FKs above: losing the source row (shift deleted, etc.) should orphan the
+            // task rather than take it down with it.
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.IncidentReport)
+                .WithMany()
+                .HasForeignKey(e => e.IncidentReportId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.MedicationAdministration)
+                .WithMany()
+                .HasForeignKey(e => e.MedicationAdministrationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.ShiftNote)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftNoteId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.LeaveRequest)
+                .WithMany()
+                .HasForeignKey(e => e.LeaveRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Idempotency key for IObligationTaskService.EnsureAsync — unique where not null
+            // (manually-created trip/booking tasks leave SourceKey null and are unconstrained).
+            entity.HasIndex(e => e.SourceKey).IsUnique().HasFilter("\"SourceKey\" IS NOT NULL");
+
+            entity.HasIndex(e => e.ShiftId);
+            entity.HasIndex(e => e.IncidentReportId);
+            entity.HasIndex(e => e.MedicationAdministrationId);
+            entity.HasIndex(e => e.ShiftNoteId);
+            entity.HasIndex(e => e.LeaveRequestId);
+
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.DueDate);
             entity.HasIndex(e => e.Priority);
@@ -579,11 +623,21 @@ public class OdipDbContext : DbContext
             // cascade into, an incident that once linked to it; the incident just loses the link.
             e.HasOne(i => i.RestrictivePractice).WithMany().HasForeignKey(i => i.RestrictivePracticeId).OnDelete(DeleteBehavior.SetNull);
 
+            // Connection-map source links (Deliverable 1): same SetNull idiom as
+            // RestrictivePractice above — no back-nav collection on the source entity (out of
+            // scope; later deliverables add their own reverse-link queries).
+            e.HasOne(i => i.MedicationAdministration).WithMany().HasForeignKey(i => i.MedicationAdministrationId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(i => i.Shift).WithMany().HasForeignKey(i => i.ShiftId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(i => i.ShiftNote).WithMany().HasForeignKey(i => i.ShiftNoteId).OnDelete(DeleteBehavior.SetNull);
+
             e.HasIndex(i => i.Status);
             e.HasIndex(i => i.Severity);
             e.HasIndex(i => i.QscReportingStatus);
             e.HasIndex(i => i.IsActive);
             e.HasIndex(i => i.RestrictivePracticeId);
+            e.HasIndex(i => i.MedicationAdministrationId);
+            e.HasIndex(i => i.ShiftId);
+            e.HasIndex(i => i.ShiftNoteId);
         });
 
         // ── IncidentInjury (IN-5) ────────────────────────────────
@@ -689,7 +743,18 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.TripInstance)
                 .WithMany(t => t.TripClaims)
                 .HasForeignKey(e => e.TripInstanceId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Shift-completion design spec §1 (PR 3) — Kind == Shift claims key off Participant
+            // + a date range instead of a TripInstance. TripClaim is deliberately NOT
+            // ITenantEntity (standing ruling); callers must scope through the tenant-filtered
+            // Participants/Shifts sets.
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.AuthorisedByUser)
                 .WithMany()
@@ -699,6 +764,7 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ClaimReference).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.TripInstanceId);
+            entity.HasIndex(e => e.ParticipantId);
         });
 
         // ── ClaimLineItem ─────────────────────────────────────────
@@ -720,10 +786,25 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.ParticipantBooking)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantBookingId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Shift-completion design spec §1 (PR 3) — the Shift-side parent for Kind == Shift
+            // claim lines, mutually exclusive with ParticipantBookingId (see check constraint
+            // below and the class doc comment).
+            entity.HasOne(e => e.Shift)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.ToTable(tb => tb.HasCheckConstraint(
+                "CK_ClaimLineItem_ExactlyOneParent",
+                "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1"));
 
             entity.HasIndex(e => e.TripClaimId);
             entity.HasIndex(e => e.ParticipantBookingId);
+            entity.HasIndex(e => e.ShiftId);
             entity.HasIndex(e => e.Status);
         });
 
@@ -1186,6 +1267,47 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.UserId, e.Status });
         });
 
+        // ── Notifications (outbox + preferences + delivery log) ────
+        // docs/specs/2026-09-08-notifications-design.md §1.
+        modelBuilder.Entity<NotificationOutbox>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EntityType).HasMaxLength(100);
+            entity.Property(e => e.LastError).HasMaxLength(2000);
+
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });                              // dispatcher poll
+            entity.HasIndex(e => new { e.TenantId, e.EventType, e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup
+        });
+
+        modelBuilder.Entity<NotificationPreference>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict: same idiom as LeaveRequest -> User — a user's preference history must
+            // not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.UserId, e.EventType, e.Channel }).IsUnique();
+        });
+
+        modelBuilder.Entity<NotificationLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RecipientAddress).HasMaxLength(320); // RFC 5321 max email length
+
+            // Restrict: an outbox row's delivery trail must not disappear if the row itself is
+            // ever deleted (it never is in v1, but this matches the codebase's default idiom).
+            entity.HasOne(e => e.Outbox)
+                .WithMany()
+                .HasForeignKey(e => e.OutboxId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.OutboxId);
+        });
+
         // ── StaffAssignment override fields (PR 3 wires the gate; columns land now) ──
         modelBuilder.Entity<StaffAssignment>(entity =>
         {
@@ -1500,6 +1622,15 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<TripInstance>()
             .HasIndex(e => e.TenantId);
 
+        // BookingTask (item 9 of the connection map): was previously scoped only through its
+        // required TripInstance FK. Now that TripInstanceId is optional (generic obligation
+        // tasks have no trip), it needs its own TenantId — auto-stamped on insert by
+        // SaveChangesAsync below, same as every other row here.
+        modelBuilder.Entity<BookingTask>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<BookingTask>()
+            .HasIndex(e => e.TenantId);
+
         modelBuilder.Entity<AppSettings>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<AppSettings>()
@@ -1584,6 +1715,22 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<RecurringUnavailability>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RecurringUnavailability>()
+            .HasIndex(e => e.TenantId);
+
+        // ── Notifications tenant query filters ─────────────────────────────────────
+        modelBuilder.Entity<NotificationOutbox>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<NotificationOutbox>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<NotificationPreference>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<NotificationPreference>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<NotificationLog>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<NotificationLog>()
             .HasIndex(e => e.TenantId);
 
         // ── Medication Management tenant query filters ────────────────────────────

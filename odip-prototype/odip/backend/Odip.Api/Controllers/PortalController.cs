@@ -49,12 +49,19 @@ public class PortalController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
     private readonly IConfiguration? _config;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
-    public PortalController(OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null)
+    public PortalController(
+        OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _config = config;
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
     private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
@@ -398,6 +405,25 @@ public class PortalController : ControllerBase
         shift.Status = ShiftStatus.PendingReview;
         shift.UpdatedAt = now;
 
+        // NotificationEventType.ShiftCompletionPendingReview — reserved by the notifications
+        // spec, wired here now the shift-completion feature exists (design spec §5, sibling
+        // event). Recipients are the tenant's Admin/Coordinator users, same as
+        // LeaveRequestSubmitted above.
+        var workerName = await _db.Users.Where(u => u.Id == shift.UserId!.Value)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var reviewRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in reviewRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftCompletionPendingReview, "ShiftCompletion", completion.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftCompletionPendingReviewPayload(
+                    recipient.Email, workerName, shift.Participant!.FullName, shift.ServiceDate),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
@@ -433,7 +459,9 @@ public class PortalController : ControllerBase
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync(ct);
 
-        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(notes.Select(ToShiftNoteDto).ToList()));
+        var incidentIds = await GetIncidentIdsByShiftNoteIdsAsync(notes.Select(n => n.Id).ToList(), ct);
+        return Ok(ApiResponse<List<ShiftNoteDto>>.Ok(
+            notes.Select(n => ToShiftNoteDto(n, LookupIncidentId(incidentIds, n.Id))).ToList()));
     }
 
     /// <summary>Creates a note on one of the caller's own shifts. Same ownership scoping as <see cref="GetShiftNotes"/>.</summary>
@@ -460,9 +488,15 @@ public class PortalController : ControllerBase
         // NOTES-02: scan at save time — client-advisory + server-recorded, never blocking.
         note.FlaggedCategories = ShiftNoteKeywordScanner.Scan(note.Body);
         _db.ShiftNotes.Add(note);
+
+        // Item 9 of the connection map: a flagged note raises a FlaggedNoteFollowUp obligation
+        // task — "decide whether an incident is needed".
+        await RaiseOrCompleteFlaggedNoteTaskAsync(note, ct);
+
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        // A brand-new note can't already be referenced by an incident.
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId: null)));
     }
 
     /// <summary>
@@ -493,9 +527,20 @@ public class PortalController : ControllerBase
         note.Body = newBody;
         note.FlaggedCategories = newFlags;
         note.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: an edit may introduce or change the flagged categories — raise/refresh the
+        // FlaggedNoteFollowUp task. (If flags cleared to None, the existing task — if any — is
+        // simply left for the incident-created/acknowledge-flags completion paths.)
+        await RaiseOrCompleteFlaggedNoteTaskAsync(note, ct);
+
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        var incidentId = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId == note.Id)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => (Guid?)i.Id)
+            .FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
 
     /// <summary>
@@ -518,9 +563,41 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
         note.FlagsAcknowledgedAt = DateTime.UtcNow;
+
+        // Item 9: acknowledging the flags closes the FlaggedNoteFollowUp task — the coordinator
+        // has now made the "does this need an incident?" call, even if the answer was no.
+        await _obligationTasks.CompleteAsync($"flagged-note:{note.Id}", ct);
+
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note)));
+        var incidentId = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId == note.Id)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => (Guid?)i.Id)
+            .FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
+    }
+
+    /// <summary>
+    /// Item 9 of the connection map: raises (or, if one already exists and is still open,
+    /// refreshes) the FlaggedNoteFollowUp task when this note is currently flagged. Deliberately
+    /// does NOT complete an existing task when the note's flags clear back to None on an edit —
+    /// per spec, only an incident being filed against this note (IncidentsController.Create) or
+    /// the coordinator acknowledging the flags closes it. Shared by CreateShiftNote/UpdateShiftNote.
+    /// </summary>
+    private async Task RaiseOrCompleteFlaggedNoteTaskAsync(ShiftNote note, CancellationToken ct)
+    {
+        if (note.FlaggedCategories != ShiftNoteFlagCategory.None)
+        {
+            var categories = string.Join(", ", ShiftNoteKeywordVocabulary.ToCategoryNames(note.FlaggedCategories));
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"flagged-note:{note.Id}",
+                Type: TaskType.FlaggedNoteFollowUp,
+                Title: $"Flagged shift note ({categories}) — decide whether an incident is needed",
+                DueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                LinkTo: "/incidents?view=flagged-notes",
+                ShiftNoteId: note.Id, ShiftId: note.ShiftId), ct);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -598,6 +675,11 @@ public class PortalController : ControllerBase
         admin.WitnessStatus = response;
         admin.WitnessRespondedAt = DateTime.UtcNow;
         admin.UpdatedAt = DateTime.UtcNow;
+
+        // Item 9: approving or declining closes the MedicationWitness obligation task either way
+        // — the sign-off has happened, whichever way it went.
+        await _obligationTasks.CompleteAsync($"med-witness:{admin.Id}", ct);
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToWitnessRequestDto(admin)));
@@ -695,6 +777,25 @@ public class PortalController : ControllerBase
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
         };
         _db.LeaveRequests.Add(leave);
+
+        // NotificationEventType.LeaveRequestSubmitted — recipients are the tenant's
+        // Admin/Coordinator users (design spec §5). One RaiseAsync call per recipient so each
+        // outbox row's payload carries that recipient's own email.
+        var requesterName = await _db.Users.Where(u => u.Id == staffId.Value)
+            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var leaveRecipients = await _db.Users
+            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .ToListAsync(ct);
+        foreach (var recipient in leaveRecipients)
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.LeaveRequestSubmitted, "LeaveRequest", leave.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.LeaveRequestSubmittedPayload(
+                    recipient.Email, requesterName, dto.LeaveType.ToString(), dto.StartDate, dto.EndDate),
+                ct);
+        }
+
         await _db.SaveChangesAsync(ct);
         await _db.Entry(leave).Reference(l => l.User).LoadAsync(ct);
         // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:171): POST /portal/leave is 201, not 200.
@@ -858,9 +959,32 @@ public class PortalController : ControllerBase
         m.Id, m.Name, m.Strength, m.DoseDescription, m.Type, m.TimesOfDay, m.IsHighRisk, m.IsPsychotropic,
         m.IsChemicalRestraint, m.DrugSchedule, m.SupportLevel, m.PrnIndication);
 
-    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n) => new(
+    private static ShiftNoteDto ToShiftNoteDto(ShiftNote n, Guid? incidentId) => new(
         n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
-        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt);
+        ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt, incidentId);
+
+    /// <summary>
+    /// Connection-map reverse link (Deliverable 2): for the given shift-note ids, the newest
+    /// active IncidentReport whose ShiftNoteId points back at each one — ONE query for the whole
+    /// batch (never per-row), same idiom as MedicationsController's administration-id lookup.
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> GetIncidentIdsByShiftNoteIdsAsync(IReadOnlyCollection<Guid> shiftNoteIds, CancellationToken ct)
+    {
+        if (shiftNoteIds.Count == 0) return new Dictionary<Guid, Guid>();
+        var rows = await _db.IncidentReports
+            .Where(i => i.IsActive && i.ShiftNoteId != null && shiftNoteIds.Contains(i.ShiftNoteId.Value))
+            .Select(i => new { NoteId = i.ShiftNoteId!.Value, i.Id, i.CreatedAt })
+            .ToListAsync(ct);
+        return rows
+            .GroupBy(r => r.NoteId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
+    }
+
+    /// <summary>Dictionary&lt;Guid, Guid&gt;.GetValueOrDefault returns Guid.Empty (not null) for a
+    /// missing key, which would wrongly stand in for "no incident" — this is the null-correct
+    /// lookup every incident-id-map read in this class uses instead.</summary>
+    private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
+        map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
     /// <summary>Same "fullName claim, fall back to the Name claim" idiom as ParticipantNotesController.GetCreatedByName.</summary>
     private string GetCallerName() =>

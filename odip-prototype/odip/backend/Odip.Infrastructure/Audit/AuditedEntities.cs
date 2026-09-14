@@ -1,4 +1,5 @@
 using Odip.Domain.Entities;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Audit;
@@ -66,6 +67,26 @@ public static class AuditedEntities
         // Shift-completion state machine: a Return's reason and every review decision must be
         // recoverable — same reasoning as Shift.OverrideReason above.
         typeof(ShiftCompletion),
+
+        // Compliance-coverage report (item 11): these six were flagged as audited-entity gaps.
+        // Restrictive practices, claims/line items, participant consent decisions, shift notes
+        // (compliance-adjacent per its own remarks — falls/medication/injury/behaviour keyword
+        // flags), and booking tasks all carry the same "who changed this, and when" requirement
+        // as the entities already listed above.
+        typeof(RestrictivePractice),
+        typeof(TripClaim),
+        typeof(ClaimLineItem),
+        typeof(ParticipantConsent),
+        typeof(ShiftNote),
+        typeof(BookingTask),
+
+        // Notifications: a user's own "stop emailing me about X" is worth a history — same
+        // reasoning as any other self-service preference change. NotificationOutbox/
+        // NotificationLog are deliberately NOT audited: outbox rows churn every dispatcher tick
+        // (Attempts/Status/NextAttemptAt update repeatedly on Pending rows) and would flood
+        // AuditLog with zero-investigative-value noise — their own Status/LastError/SentAt
+        // fields already are the purpose-built delivery trail (design spec §1).
+        typeof(NotificationPreference),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

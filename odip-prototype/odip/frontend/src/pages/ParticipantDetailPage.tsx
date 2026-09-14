@@ -8,14 +8,15 @@ import { TabNav } from '@/components/TabNav'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2 } from 'lucide-react'
+import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
-  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab,
+  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
+  RosteringTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
   ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
@@ -24,14 +25,18 @@ import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function ParticipantDetailPage() {
-  const { canWrite, canViewAlerts, canWriteParticipantDetails, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
-  type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'history'
+  type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'claims' | 'rostering' | 'history'
   const initialTab = searchParams.get('tab')
   const [tab, setTab] = useState<Tab>(
-    initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'history' ? initialTab : 'details'
+    initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'claims' || initialTab === 'rostering' || initialTab === 'history' ? initialTab : 'details'
   )
+  const canAccessClaims = canAccessPage('claims')
+  // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
+  // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
+  const canAccessRostering = canAccessPage('rostering')
   const { data: p, isLoading } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
@@ -167,6 +172,8 @@ export default function ParticipantDetailPage() {
           { key: 'notes', label: 'Notes', icon: StickyNote },
           { key: 'routines', label: 'Routines', icon: ListChecks },
           { key: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
+          ...(canAccessClaims ? [{ key: 'claims' as const, label: 'Claims', icon: FileText }] : []),
+          ...(canAccessRostering ? [{ key: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
           ...((isSuperAdmin || isAdmin) ? [{ key: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
@@ -272,6 +279,14 @@ export default function ParticipantDetailPage() {
 
       {tab === 'restrictive-practices' && (
         <RestrictivePracticesTab participantId={id} />
+      )}
+
+      {tab === 'claims' && canAccessClaims && (
+        <ClaimsTab participantId={id!} canWrite={canWrite} />
+      )}
+
+      {tab === 'rostering' && canAccessRostering && (
+        <RosteringTab participantId={id!} />
       )}
 
       {tab === 'history' && (isSuperAdmin || isAdmin) && p && (

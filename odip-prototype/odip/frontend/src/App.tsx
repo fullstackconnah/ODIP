@@ -31,10 +31,12 @@ const VehiclesPage = React.lazy(() => import('./pages/VehiclesPage'))
 const VehicleCreatePage = React.lazy(() => import('./pages/VehicleCreatePage'))
 const StaffPage = React.lazy(() => import('./pages/StaffPage'))
 const StaffCreatePage = React.lazy(() => import('./pages/StaffCreatePage'))
+const StaffDetailPage = React.lazy(() => import('./pages/StaffDetailPage'))
 const TasksPage = React.lazy(() => import('./pages/TasksPage'))
 const TaskCreatePage = React.lazy(() => import('./pages/TaskCreatePage'))
 const IncidentsPage = React.lazy(() => import('./pages/IncidentsPage'))
 const IncidentCreatePage = React.lazy(() => import('./pages/IncidentCreatePage'))
+const IncidentDetailPage = React.lazy(() => import('./pages/IncidentDetailPage'))
 const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
@@ -48,6 +50,7 @@ const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPa
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
 const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
+const CompletionReviewPage = React.lazy(() => import('@/pages/rostering/CompletionReviewPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
@@ -117,12 +120,14 @@ const router = createBrowserRouter(
         <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
         <Route path="/staff/new" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
         <Route path="/staff/:id/edit" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
+        <Route path="/staff/:id" element={<PrivateRoute page="staff"><StaffDetailPage /></PrivateRoute>} />
         <Route path="/tasks" element={<PrivateRoute page="tasks"><TasksPage /></PrivateRoute>} />
         <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
         <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
         <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
         <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
@@ -135,6 +140,7 @@ const router = createBrowserRouter(
         <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
         <Route path="/rostering/leave" element={<PrivateRoute page="leave-approvals"><LeaveApprovalsPage /></PrivateRoute>} />
+        <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />

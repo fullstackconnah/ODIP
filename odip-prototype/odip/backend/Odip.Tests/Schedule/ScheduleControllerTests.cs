@@ -58,6 +58,9 @@ public class ScheduleControllerTests
     private static ScheduleStaffTripStatusDto StatusFor(ApiResponse<ScheduleOverviewDto> body, Guid staffId, Guid tripId) =>
         body.Data!.Staff.Single(s => s.Id == staffId).TripStatuses.Single(t => t.TripId == tripId);
 
+    private static List<ScheduleAvailabilityItemDto> AvailabilityFor(ApiResponse<ScheduleOverviewDto> body, Guid staffId) =>
+        body.Data!.Staff.Single(s => s.Id == staffId).Availability;
+
     [Fact]
     public async Task PendingLeaveOverlappingTrip_StatusIsTentative()
     {
@@ -72,7 +75,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -97,7 +100,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -119,7 +122,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -142,7 +145,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -157,7 +160,7 @@ public class ScheduleControllerTests
         var staff = SeedStaff(db);
         var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -190,7 +193,7 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -224,11 +227,169 @@ public class ScheduleControllerTests
         });
         db.SaveChanges();
 
-        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db));
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
         Assert.Equal("Conflict", StatusFor(body, staff.Id, trip.Id).Status);
+    }
+
+    // ── Unified ScheduleStaffDto.Availability list (Deliverable 1) ──
+
+    /// <summary>
+    /// A staff member with one approved leave, one pending recurring rule, and one legacy
+    /// Training row — all overlapping the trip window — gets three ScheduleAvailabilityItemDto
+    /// entries sourced from the raw records (not the expanded unavailability windows), with the
+    /// right Kind/Status/fields on each.
+    /// </summary>
+    [Fact]
+    public async Task AvailabilityList_IncludesApprovedLeavePendingRuleAndLegacyRow_WithCorrectFields()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10)); // Thursday, 3-day trip -> Sept 10-12
+
+        var leave = new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 11),
+            Status = LeaveStatus.Approved, Reason = "Family event",
+            RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.LeaveRequests.Add(leave);
+
+        var rule = new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = DayOfWeek.Thursday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+            EffectiveFrom = new DateOnly(2026, 9, 1), Status = LeaveStatus.Pending,
+            Notes = "Study block", RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.RecurringUnavailabilities.Add(rule);
+
+        var legacy = new StaffAvailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, AvailabilityType = AvailabilityType.Training,
+            Notes = "First aid refresher",
+            StartDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(9, 0)),
+            EndDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(12, 0)),
+        };
+        db.StaffAvailabilities.Add(legacy);
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        var items = AvailabilityFor(body, staff.Id);
+        Assert.Equal(3, items.Count);
+
+        var leaveItem = Assert.Single(items, i => i.Kind == ScheduleAvailabilityKind.Leave);
+        Assert.Equal(leave.Id, leaveItem.Id);
+        Assert.Equal(LeaveStatus.Approved, leaveItem.Status);
+        Assert.Equal(LeaveType.Annual, leaveItem.LeaveType);
+        Assert.Equal(new DateOnly(2026, 9, 10), leaveItem.StartDate);
+        Assert.Equal(new DateOnly(2026, 9, 11), leaveItem.EndDate);
+        Assert.Equal("Family event", leaveItem.Notes);
+
+        var ruleItem = Assert.Single(items, i => i.Kind == ScheduleAvailabilityKind.RecurringRule);
+        Assert.Equal(rule.Id, ruleItem.Id);
+        Assert.Equal(LeaveStatus.Pending, ruleItem.Status);
+        Assert.Equal(DayOfWeek.Thursday, ruleItem.DayOfWeek);
+        Assert.Equal(new TimeOnly(9, 0), ruleItem.StartTime);
+        Assert.Equal(new TimeOnly(12, 0), ruleItem.EndTime);
+        Assert.Equal(new DateOnly(2026, 9, 1), ruleItem.StartDate);
+        Assert.Null(ruleItem.EndDate);
+        Assert.Equal("Study block", ruleItem.Notes);
+
+        var legacyItem = Assert.Single(items, i => i.Kind == ScheduleAvailabilityKind.Legacy);
+        Assert.Equal(legacy.Id, legacyItem.Id);
+        Assert.Null(legacyItem.Status);
+        Assert.Equal(AvailabilityType.Training, legacyItem.AvailabilityType);
+        Assert.Equal(new DateOnly(2026, 9, 10), legacyItem.StartDate);
+        Assert.Equal(new DateOnly(2026, 9, 10), legacyItem.EndDate);
+        Assert.Equal("First aid refresher", legacyItem.Notes);
+    }
+
+    [Fact]
+    public async Task AvailabilityList_ExcludesDeclinedLeaveAndCancelledRule()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 11),
+            Status = LeaveStatus.Declined, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = DayOfWeek.Thursday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+            EffectiveFrom = new DateOnly(2026, 9, 1), Status = LeaveStatus.Cancelled,
+            RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Empty(AvailabilityFor(body, staff.Id));
+    }
+
+    [Fact]
+    public async Task AvailabilityList_ExcludesLeaveOutsideWindow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10)); // window: Sept 10-12
+
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, LeaveType = LeaveType.Annual,
+            StartDate = new DateOnly(2026, 8, 1), EndDate = new DateOnly(2026, 8, 2),
+            Status = LeaveStatus.Approved, RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        Assert.Empty(AvailabilityFor(body, staff.Id));
+    }
+
+    [Fact]
+    public async Task AvailabilityList_IncludesOpenEndedRuleStartingBeforeWindow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10)); // window: Sept 10-12
+
+        var rule = new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, DayOfWeek = DayOfWeek.Thursday,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+            EffectiveFrom = new DateOnly(2026, 8, 1), EffectiveTo = null, Status = LeaveStatus.Approved,
+            RequestedByUserId = staff.Id, RequestedAt = DateTime.UtcNow,
+        };
+        db.RecurringUnavailabilities.Add(rule);
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ScheduleOverviewDto>>(ok.Value);
+        var item = Assert.Single(AvailabilityFor(body, staff.Id));
+        Assert.Equal(rule.Id, item.Id);
+        Assert.Equal(ScheduleAvailabilityKind.RecurringRule, item.Kind);
     }
 }

@@ -33,6 +33,23 @@ picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
   do not fix it in the main session. This is what keeps the orchestrator from sliding into
   implementer mode under time pressure.
 
+- Agent-prompt checklist (added 2026-09-13 after three seam bugs shipped as "done": a
+  cross-tenant leak, a mutation body missing `staffId`, an edit form that reset on re-render):
+  - State the OTHER side of every seam as fact in the prompt: what the caller sends, what the
+    callee validates/rejects, and the entity's tenant scoping. Agents test only what the prompt
+    names.
+  - When a flow crosses backend↔frontend (an endpoint plus the hook/page that calls it), give ONE
+    agent both sides and require a payload test — do not split it by layer.
+  - Every agent report must end with "Assumptions about code I did not own"; verify each one
+    against source before accepting the work. Read the diff at the seams, not just the tests.
+  - Never run a backend validation agent while a backend implementation agent is still building —
+    they collide on `bin/`/`obj/`.
+  - Agents committing concurrently in ONE worktree share the git index. `git add` then
+    `git commit` races: another agent's commit sweeps up your staged files (happened 2026-09-13,
+    ed771eb). Concurrent agents must commit with an explicit pathspec — `git commit -- <paths>`
+    — and never `git add -A`. Run at most 2 implementation agents at once (a session rate limit
+    killed 2 of 3 mid-run; resumed agents had to finish uncommitted work).
+
 - The only things the main session may do directly are: reading files for validation/review,
   trivial single-line CLAUDE.md/config touch-ups, and answering questions from already-gathered
   context. Everything else goes through an agent.
@@ -156,6 +173,20 @@ npm run lint
   AutoMapper profiles "to match the pattern," and do not assume either one is wired up just
   because the package reference exists.
 
+- The deploy image runs `dotnet test` under invariant globalization; the dev machine is en-AU.
+  Culture-dependent formatting differs ("Sept" locally, "Sep" in the container) and a test that
+  hard-codes the local form passes locally then fails the deploy (2026-09-13, run 34753911258).
+  Format every server-rendered string (emails, exports, findings) with
+  `CultureInfo.InvariantCulture` and never assert a current-culture rendering.
+
+- Legacy `StaffAvailability` has NO tenant filter (no `ITenantEntity`, no `HasQueryFilter`) —
+  any query over `_db.StaffAvailabilities` not keyed on a tenant-scoped user id leaks across
+  tenants. Scope it via `_db.Users.Any(u => u.Id == a.UserId)` (Users IS filtered). Check the same
+  before adding a list endpoint over any other entity that predates the tenant work.
+
+- Fresh worktrees have no `frontend/.env.local`; copy it from the main checkout or two
+  Firebase-env tests fail with `Missing required environment variable: VITE_FIREBASE_API_KEY`.
+
 - BOTH Dockerfiles run their test suites inside the image build — the backend one runs
   `dotnet test Odip.Tests/Odip.Tests.csproj -c Release --no-restore`, the frontend one runs
   `npm test`. The deploy workflow uses `docker compose build` as its gate, so a SINGLE failing test
@@ -211,3 +242,18 @@ npm run lint
   The frontend Dockerfile runs `npm test` before `npm run build`, so a failing suite blocks
   the deploy image build. `npm run lint` currently fails with pre-existing debt in non-test
   files — the working gate is "no new lint errors", alongside `npm run build` and `npm test`.
+  Baseline was 69 problems on 2026-09-13 — compare the count before/after, don't expect zero.
+
+- Seam tests that are mandatory, not optional (each was missing when a real bug shipped):
+  - New read/list endpoint → a cross-tenant negative test: a row owned by another tenant's user
+    is NOT returned to a non-SuperAdmin caller (fixture pattern: `LeaveControllerTests`'
+    "belongs to another tenant" cases).
+  - Any test of a mutation hook/page asserts the FULL request body (`expect.objectContaining` on
+    every field the backend validates), not merely that the call happened.
+  - Every edit form: submit with the server mocked to reject, then assert the error shows AND the
+    edited values survive. react-hook-form `reset()` keyed on an inline `initialValues={{}}`
+    literal re-fires on every parent render — build initial values with `useMemo` on the row.
+  - Any HTML assembled by string interpolation (email templates under
+    `Odip.Infrastructure/Notifications/Templates/`, exports, PDFs) → every payload field goes
+    through `WebUtility.HtmlEncode`, and a test renders it with `<script>` / `"` in each
+    user-controlled field and asserts the encoded form (caught by automated review 2026-09-13).

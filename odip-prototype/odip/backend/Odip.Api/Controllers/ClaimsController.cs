@@ -16,14 +16,16 @@ public class ClaimsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ClaimGenerationService _generator;
+    private readonly ShiftClaimGenerationService _shiftGenerator;
     private readonly BprCsvService _bprService;
     private readonly InvoiceService _invoiceService;
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
-        BprCsvService bprService, InvoiceService invoiceService)
+        ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService)
     {
         _db = db;
         _generator = generator;
+        _shiftGenerator = shiftGenerator;
         _bprService = bprService;
         _invoiceService = invoiceService;
     }
@@ -57,7 +59,7 @@ public class ClaimsController : ControllerBase
             var tripName = await _db.TripInstances.Where(t => t.Id == tripId).Select(t => t.TripName).FirstOrDefaultAsync(ct);
             return Ok(ApiResponse<TripClaimListDto>.Ok(new TripClaimListDto
             {
-                Id = claim.Id, TripInstanceId = claim.TripInstanceId, TripName = tripName ?? string.Empty,
+                Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = tripName ?? string.Empty,
                 Status = claim.Status, ClaimReference = claim.ClaimReference,
                 TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
             }));
@@ -78,11 +80,89 @@ public class ClaimsController : ControllerBase
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new TripClaimListDto
             {
-                Id = c.Id, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance.TripName,
+                Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance!.TripName,
                 Status = c.Status, ClaimReference = c.ClaimReference,
                 TotalAmount = c.TotalAmount, CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<TripClaimListDto>>.Ok(items));
+    }
+
+    // GET /api/v1/participants/{participantId}/claims?kind=
+    // Shift-completion design spec §2 (PR 3) — mirrors GetClaimsForTrip above but filtered by
+    // ParticipantId instead of TripInstanceId. TripClaim is NOT ITenantEntity (standing ruling),
+    // so cross-tenant safety is enforced by gating on the tenant-filtered Participants set
+    // first: a participantId that doesn't resolve under the caller's tenant returns an empty
+    // list rather than leaking another tenant's claims.
+    [HttpGet("participants/{participantId:guid}/claims")]
+    public async Task<ActionResult<ApiResponse<List<TripClaimListDto>>>> GetClaimsForParticipant(
+        Guid participantId, [FromQuery] ClaimKind? kind, CancellationToken ct)
+    {
+        var participantExists = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
+        if (!participantExists)
+            return Ok(ApiResponse<List<TripClaimListDto>>.Ok(new List<TripClaimListDto>()));
+
+        // Trip-kind claims (ClaimGenerationService) never set TripClaim.ParticipantId — they
+        // relate to a participant only through ClaimLineItem.ParticipantBooking.ParticipantId.
+        // Match on either path so the participant Claims tab (which renders both kinds) sees
+        // trip claims too, then apply the optional kind filter.
+        var query = _db.TripClaims.Where(c =>
+            c.ParticipantId == participantId ||
+            c.LineItems.Any(l => l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == participantId));
+        if (kind.HasValue)
+            query = query.Where(c => c.Kind == kind.Value);
+
+        var items = await query
+            .Include(c => c.TripInstance)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new TripClaimListDto
+            {
+                Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId,
+                TripName = c.TripInstance != null ? c.TripInstance.TripName : string.Empty,
+                ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
+                Status = c.Status, ClaimReference = c.ClaimReference,
+                TotalAmount = c.TotalAmount, CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate
+            }).ToListAsync(ct);
+        return Ok(ApiResponse<List<TripClaimListDto>>.Ok(items));
+    }
+
+    // POST /api/v1/participants/{participantId}/claims/from-shifts/preview
+    [HttpPost("participants/{participantId:guid}/claims/from-shifts/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimPreviewResponseDto>>> PreviewShiftClaim(
+        Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var preview = await _shiftGenerator.PreviewAsync(participantId, dto.From, dto.To, ct);
+            return Ok(ApiResponse<ShiftClaimPreviewResponseDto>.Ok(preview));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<ShiftClaimPreviewResponseDto>.Fail(ex.Message));
+        }
+    }
+
+    // POST /api/v1/participants/{participantId}/claims/from-shifts
+    [HttpPost("participants/{participantId:guid}/claims/from-shifts")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<TripClaimListDto>>> GenerateShiftClaim(
+        Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var claim = await _shiftGenerator.GenerateDraftClaimAsync(participantId, dto.From, dto.To, ct);
+            return Ok(ApiResponse<TripClaimListDto>.Ok(new TripClaimListDto
+            {
+                Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = string.Empty,
+                ParticipantId = claim.ParticipantId, PeriodFrom = claim.PeriodFrom, PeriodTo = claim.PeriodTo,
+                Status = claim.Status, ClaimReference = claim.ClaimReference,
+                TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
+            }));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<TripClaimListDto>.Fail(ex.Message));
+        }
     }
 
     // GET /api/v1/claims/{claimId}
@@ -94,31 +174,46 @@ public class ClaimsController : ControllerBase
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
                 .ThenInclude(l => l.ParticipantBooking)
-                    .ThenInclude(b => b.Participant)
+                    .ThenInclude(b => b!.Participant)
+            .Include(x => x.LineItems)
+                .ThenInclude(l => l.Shift)
+                    .ThenInclude(s => s!.Participant)
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
         if (c == null) return NotFound(ApiResponse<TripClaimDetailDto>.Fail("Claim not found"));
 
         return Ok(ApiResponse<TripClaimDetailDto>.Ok(new TripClaimDetailDto
         {
-            Id = c.Id, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance?.TripName ?? string.Empty,
+            Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance?.TripName ?? string.Empty,
+            ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
             Status = c.Status, ClaimReference = c.ClaimReference,
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
             CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate,
             AuthorisedByStaffId = c.AuthorisedByUserId,
             AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
             Notes = c.Notes,
-            LineItems = c.LineItems.Select(l => new ClaimLineItemDto
+            // Nullability audit (shift-completion design spec, delivery PR 3): exactly one of
+            // ParticipantBooking/Shift is set per line item — branch on whichever is present
+            // rather than assuming ParticipantBooking, which is null for Kind == Shift lines.
+            LineItems = c.LineItems.Select(l =>
             {
-                Id = l.Id, TripClaimId = l.TripClaimId, ParticipantBookingId = l.ParticipantBookingId,
-                ParticipantName = l.ParticipantBooking.Participant?.FullName ?? string.Empty,
-                NdisNumber = l.ParticipantBooking.Participant?.NdisNumber ?? string.Empty,
-                PlanType = l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant!.PlanType,
-                SupportItemCode = l.SupportItemCode, DayType = l.DayType,
-                SupportsDeliveredFrom = l.SupportsDeliveredFrom, SupportsDeliveredTo = l.SupportsDeliveredTo,
-                Hours = l.Hours, UnitPrice = l.UnitPrice, TotalAmount = l.TotalAmount,
-                GSTCode = l.GSTCode, ClaimType = l.ClaimType, ParticipantApproved = l.ParticipantApproved,
-                Status = l.Status, RejectionReason = l.RejectionReason, PaidAmount = l.PaidAmount
+                var participant = l.ParticipantBooking?.Participant ?? l.Shift?.Participant;
+                return new ClaimLineItemDto
+                {
+                    Id = l.Id, TripClaimId = l.TripClaimId,
+                    ParticipantBookingId = l.ParticipantBookingId, ShiftId = l.ShiftId,
+                    ParticipantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId,
+                    ParticipantName = participant?.FullName ?? string.Empty,
+                    NdisNumber = participant?.NdisNumber ?? string.Empty,
+                    PlanType = l.ParticipantBooking != null
+                        ? l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType ?? default
+                        : participant?.PlanType ?? default,
+                    SupportItemCode = l.SupportItemCode, DayType = l.DayType,
+                    SupportsDeliveredFrom = l.SupportsDeliveredFrom, SupportsDeliveredTo = l.SupportsDeliveredTo,
+                    Hours = l.Hours, UnitPrice = l.UnitPrice, TotalAmount = l.TotalAmount,
+                    GSTCode = l.GSTCode, ClaimType = l.ClaimType, ParticipantApproved = l.ParticipantApproved,
+                    Status = l.Status, RejectionReason = l.RejectionReason, PaidAmount = l.PaidAmount
+                };
             }).ToList()
         }));
     }
@@ -205,8 +300,15 @@ public class ClaimsController : ControllerBase
         if (claim.Status == TripClaimStatus.Submitted || claim.Status == TripClaimStatus.Paid)
             return BadRequest(ApiResponse<bool>.Fail("Cannot delete a claim that has been submitted or paid."));
 
-        // Reset participant bookings back to unclaimed
-        var bookingIds = claim.LineItems.Select(l => l.ParticipantBookingId).Distinct().ToList();
+        // Reset participant bookings back to unclaimed. Shift-completion design spec, delivery
+        // PR 3: Kind == Shift line items have ParticipantBookingId == null — filter those out
+        // rather than passing nulls into the ParticipantBookings lookup (a shift becomes
+        // unclaimed again simply by its ClaimLineItem row being removed below).
+        var bookingIds = claim.LineItems
+            .Where(l => l.ParticipantBookingId.HasValue)
+            .Select(l => l.ParticipantBookingId!.Value)
+            .Distinct()
+            .ToList();
         var bookings = await _db.ParticipantBookings
             .Where(b => bookingIds.Contains(b.Id))
             .ToListAsync(ct);

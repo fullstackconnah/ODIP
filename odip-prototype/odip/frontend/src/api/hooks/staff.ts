@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
+import { apiGet, apiGetWithDefault, apiPost, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type {
   StaffListDto,
   StaffDetailDto,
@@ -10,8 +10,10 @@ import type {
   UpdateStaffAssignmentDto,
   CheckStaffAssignmentDto,
   StaffAvailabilityDto,
+  CreateStaffAvailabilityDto,
   UpdateStaffAvailabilityDto,
   RosterFindingDto,
+  StaffOverviewDto,
 } from '../types'
 
 export function useStaff(params?: Record<string, string>) {
@@ -25,6 +27,19 @@ export function useStaffDetail(id: string | undefined) {
   return useQuery({
     queryKey: ['staff-detail', id],
     queryFn: () => apiGet<StaffDetailDto>(`/staff/${id}`),
+    enabled: !!id,
+  })
+}
+
+/**
+ * Connection map item 12 — GET /staff/{id}/overview, the single data source for StaffDetailPage's
+ * hub tabs (Availability/Credentials/Upcoming/Incidents/Completions). Mirrors useStaffDetail's
+ * enabled-on-id gate.
+ */
+export function useStaffOverview(id: string | undefined) {
+  return useQuery({
+    queryKey: ['staff-overview', id],
+    queryFn: () => apiGet<StaffOverviewDto>(`/staff/${id}/overview`),
     enabled: !!id,
   })
 }
@@ -126,6 +141,31 @@ export function useDeleteStaffAssignment() {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+    },
+  })
+}
+
+export type StaffAvailabilityListFilters = { userId?: string; from?: string; to?: string }
+
+/** GET /staff-availability?userId=&from=&to= — legacy StaffAvailability rows (LeaveApprovalsPage's
+ * 'legacy' row kind), newest first. Shares the ['staff-availability', ...] query-key prefix with
+ * useStaffAvailability(id) and the create/update/delete mutations below, so any of those
+ * invalidating ['staff-availability'] also refreshes this list. */
+export function useStaffAvailabilityRecords(filters: StaffAvailabilityListFilters = {}, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['staff-availability', filters],
+    queryFn: () => apiGetWithDefault<StaffAvailabilityDto[]>('/staff-availability', [], filters),
+    enabled: options?.enabled ?? true,
+  })
+}
+
+export function useCreateStaffAvailability() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateStaffAvailabilityDto) => apiPostRaw<StaffAvailabilityDto>('/staff-availability', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: ['staff-availability'] })
     },
   })
 }

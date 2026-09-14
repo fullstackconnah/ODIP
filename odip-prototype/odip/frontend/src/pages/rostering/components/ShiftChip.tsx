@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useDraggable } from '@dnd-kit/core'
 import { AlertOctagon, AlertTriangle, GripVertical, MoreVertical, ShieldCheck } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
@@ -45,6 +46,15 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
   const hasBlocking = shift.findings.some(f => f.severity === 'Blocking')
   const showRatio = shift.ratio !== 'OneToOne'
   const subjectLabel = shift.participantName
+  // Filled = a specific staff member covers this shift — that's the one extra fact this chip
+  // doesn't already show via its row context (a participant row already names the participant;
+  // a staff row already names the staff member), so it's surfaced here as a second, smaller link.
+  const isFilled = Boolean(shift.staffId && shift.staffName)
+  // A filled shift whose assignee's leave was approved AFTER the assignment was made — the chip
+  // still has a staffId, but that staff member won't actually be there, so this needs to read as
+  // a hole (dashed, like an unfilled chip) rather than a normal covered shift.
+  const onApprovedLeave = isFilled && shift.assigneeOnApprovedLeave
+  const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
@@ -60,12 +70,21 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
     else if (value === 'delete') onDelete(shift)
   }
 
+  /** Manual Enter/Space handling — see the comment on the div below for why this isn't a native
+   *  <button>: a real <button> can't validly contain the nested participant/staff <a> links. */
+  function handleOpenKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onOpen(shift)
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
       className={`group relative flex items-stretch gap-0.5 rounded-sm border bg-surface-container-low text-xs transition-opacity duration-150 ${
-        dashed ? 'border-dashed border-border' : 'border-border'
+        dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
       } ${isDragging ? 'opacity-50' : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
@@ -86,15 +105,23 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
         </button>
       )}
 
-      {/* The full visible card padding lives on this button (not the outer wrapper) so the
+      {/* The full visible card padding lives on this control (not the outer wrapper) so the
           tappable area matches what's visually presented — previously the padding sat on the
           non-interactive wrapper div, leaving a hit target of only ~96×16px against a visibly
-          larger card. */}
-      <button
-        type="button"
+          larger card.
+
+          role="button" + manual key handling instead of a native <button>: this control now
+          nests the participant/staff name as an <a> (via react-router Link) so each name can
+          navigate on its own — a <button> can't validly contain interactive descendants, but a
+          div can. Each nested Link stops propagation on click so clicking a name navigates
+          there instead of also opening this shift's slide-over. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onOpen(shift)}
+        onKeyDown={handleOpenKeyDown}
         // relative, no overflow-hidden here: the severity marker below needs to sit in the
-        // sliver of space above this button's own content without being clipped by it, so the
+        // sliver of space above this control's own content without being clipped by it, so the
         // clip boundary lives one level down, on the content wrapper — see that span's comment.
         className="relative flex min-w-0 flex-1 items-center rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
@@ -144,61 +171,96 @@ export function ShiftChip({ shift, canWrite, dashed, onOpen, onAssignTo, onUnass
           render outside and visually collide with the menu button next to it (icon-on-top-of-
           text) instead of just squeezing the name tighter — this clips it cleanly instead.
         */}
-        <span className="flex min-w-0 flex-1 items-center overflow-hidden rounded-sm px-1 py-1.5">
-          <span
-            className="shrink-0 font-medium tabular-nums text-foreground"
-            title={shift.endsNextDay ? `${formatShiftTimeRange(shift.startTime, shift.endTime)} — ends the next day` : undefined}
-          >
-            {formatShiftTimeRange(shift.startTime, shift.endTime)}
-            {/*
-              No visible "+1"/next-day glyph, deliberately, not just because it wouldn't fit
-              (though it doesn't: this button's own box is 65px, fixed by the day-column width,
-              and even a compact superscript form of range+suffix needed 74px). The real reason
-              is that an overnight shift is self-evident from its own times — "10pm–6am" has an
-              end earlier than its start, which can only mean the next day. The suffix was
-              restating what the range already says; a shift spanning past 24h into a *second*
-              next day would be the genuinely ambiguous case, and isn't a real roster shape here.
-              So dropping it is redundancy removed, not information lost — do not "restore" it.
-              It's still spelled out in full on hover (the title above) and for assistive tech
-              (below), for anyone who wants it stated explicitly rather than inferred.
-            */}
-            {shift.endsNextDay && <span className="sr-only"> (ends the next day)</span>}
-          </span>
-          {/*
-            No gap/margin between time and name — the two are already visually distinct (bold
-            foreground vs muted, different weight), and name yields to 0 width in exactly the
-            narrow cases where every pixel here goes to keeping time from clipping, so a gap
-            here would only ever cost time width without buying legibility back.
-          */}
-          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={subjectLabel}>
-            {subjectLabel}
-          </span>
-          {/*
-            Priority on a chip, narrowest-first: time > person > ratio > everything else. Time is
-            what a coordinator scans for and must never clip; the person's name already yields
-            (truncate, above); the ratio badge yields *entirely* at the chip's normal narrow
-            width — it drops from the visible layout rather than squeezing time or name, since a
-            day column is never wide enough to show all three. It stays discoverable: sr-only
-            here so it still contributes to this button's accessible name, visible in the
-            slide-over, and (the case that actually matters operationally) an under-covered ratio
-            surfaces as a RATIO_SHORTFALL finding, which the severity marker already makes
-            visible.
-          */}
-          {showRatio && (
-            <span className="sr-only">, {RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio</span>
-          )}
-          {shift.overrideReason && (
+        <span className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-sm px-1 py-1">
+          <span className="flex min-w-0 items-center">
             <span
-              className="ml-1 shrink-0 text-muted-foreground"
-              role="img"
-              aria-label={`Assigned with an override: ${shift.overrideReason}`}
-              title={`Assigned with an override: ${shift.overrideReason}`}
+              className="shrink-0 font-medium tabular-nums text-foreground"
+              title={shift.endsNextDay ? `${formatShiftTimeRange(shift.startTime, shift.endTime)} — ends the next day` : undefined}
             >
-              <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+              {formatShiftTimeRange(shift.startTime, shift.endTime)}
+              {/*
+                No visible "+1"/next-day glyph, deliberately, not just because it wouldn't fit
+                (though it doesn't: this control's own box is 65px, fixed by the day-column width,
+                and even a compact superscript form of range+suffix needed 74px). The real reason
+                is that an overnight shift is self-evident from its own times — "10pm–6am" has an
+                end earlier than its start, which can only mean the next day. The suffix was
+                restating what the range already says; a shift spanning past 24h into a *second*
+                next day would be the genuinely ambiguous case, and isn't a real roster shape here.
+                So dropping it is redundancy removed, not information lost — do not "restore" it.
+                It's still spelled out in full on hover (the title above) and for assistive tech
+                (below), for anyone who wants it stated explicitly rather than inferred.
+              */}
+              {shift.endsNextDay && <span className="sr-only"> (ends the next day)</span>}
+            </span>
+            {/*
+              No gap/margin between time and name — the two are already visually distinct (bold
+              foreground vs muted, different weight), and name yields to 0 width in exactly the
+              narrow cases where every pixel here goes to keeping time from clipping, so a gap
+              here would only ever cost time width without buying legibility back.
+
+              A Link, not plain text: clicking the participant's name should take you to their
+              participants page rather than opening this shift's slide-over — stopPropagation
+              keeps the click from also bubbling up to the open-shift div above.
+            */}
+            <Link
+              to={`/participants/${shift.participantId}`}
+              onClick={e => e.stopPropagation()}
+              className="min-w-0 flex-1 truncate text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-sm"
+              title={subjectLabel}
+            >
+              {subjectLabel}
+            </Link>
+            {/*
+              Priority on a chip, narrowest-first: time > person > ratio > everything else. Time is
+              what a coordinator scans for and must never clip; the person's name already yields
+              (truncate, above); the ratio badge yields *entirely* at the chip's normal narrow
+              width — it drops from the visible layout rather than squeezing time or name, since a
+              day column is never wide enough to show all three. It stays discoverable: sr-only
+              here so it still contributes to this control's accessible name, visible in the
+              slide-over, and (the case that actually matters operationally) an under-covered ratio
+              surfaces as a RATIO_SHORTFALL finding, which the severity marker already makes
+              visible.
+            */}
+            {showRatio && (
+              <span className="sr-only">, {RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio</span>
+            )}
+            {shift.overrideReason && (
+              <span
+                className="ml-1 shrink-0 text-muted-foreground"
+                role="img"
+                aria-label={`Assigned with an override: ${shift.overrideReason}`}
+                title={`Assigned with an override: ${shift.overrideReason}`}
+              >
+                <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+              </span>
+            )}
+          </span>
+          {/* Second line, only when a specific staff member covers this shift — the one useful
+              fact the row header alone doesn't already tell you. Same stopPropagation reasoning
+              as the participant Link above. */}
+          {isFilled && (
+            <Link
+              to={`/staff/${shift.staffId}`}
+              onClick={e => e.stopPropagation()}
+              className="truncate text-[10px] leading-tight text-muted-foreground/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-sm"
+              title={shift.staffName ?? undefined}
+            >
+              {shift.staffName}
+            </Link>
+          )}
+          {/* On-leave mini-label — a filled chip whose assignee's leave got approved after the
+              fact. The staff link above still names them (so it's clear whose leave created the
+              hole); this line is what makes the hole itself visible at a glance. */}
+          {onApprovedLeave && (
+            <span
+              className="block truncate text-[10px] font-semibold leading-tight text-muted-foreground"
+              title={onLeaveTitle}
+            >
+              On leave
             </span>
           )}
         </span>
-      </button>
+      </div>
 
       {canWrite && (
         <span className="flex shrink-0 items-center pr-1">

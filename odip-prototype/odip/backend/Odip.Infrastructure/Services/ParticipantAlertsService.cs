@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -27,6 +28,20 @@ namespace Odip.Infrastructure.Services;
 ///    zero <see cref="MedicationAdministration"/> rows (any status) in the last 7 days. Deliberately
 ///    simple per the brief: only Daily-frequency Regular meds are checked (not SpecificDays/EveryNDays),
 ///    and PRN medications are skipped entirely (no fixed schedule to be "missed" against).
+/// 6. <b>open-serious-incident</b> (Critical when the incident's <see cref="IncidentReport.Severity"/>
+///    is Critical, Warning when High) — an active <see cref="IncidentReport"/> naming the
+///    participant as <see cref="IncidentReport.InvolvedParticipantId"/>, High/Critical severity,
+///    and not yet <see cref="IncidentStatus.Resolved"/>/<see cref="IncidentStatus.Closed"/>. One
+///    alert per matching incident, not one per participant. <see cref="ParticipantAlertDto.LinkTo"/>
+///    points at <c>/incidents/{id}</c> — there is no incidents tab on the participant page, so
+///    <see cref="ParticipantAlertDto.DeepLinkTab"/> is set to the closest existing one ("history")
+///    only as a fallback for a consumer that hasn't picked up <see cref="ParticipantAlertDto.LinkTo"/> yet.
+/// 7. <b>qsc-report-overdue</b> (Critical) — an <see cref="IncidentReport"/> whose QSC report is
+///    overdue per <see cref="QscReporting.IsOverdue"/>, the exact predicate
+///    <c>DashboardController.GetSummary</c>'s <c>QscOverdueCount</c> and
+///    <c>IncidentsController.GetOverdueQsc</c> both use — extracted to
+///    <see cref="Odip.Domain.Incidents.QscReporting"/> so the three call sites cannot drift apart.
+///    Also links to <c>/incidents/{id}</c>.
 ///
 /// Dropped: a medication/support-profile "review overdue" rule was NOT added here — it would
 /// duplicate <c>MedicationsController.ToListDto</c>'s existing per-medication
@@ -96,13 +111,14 @@ public class ParticipantAlertsService
 
         var participantIds = participants.Select(p => p.Id).ToList();
         var alertsByParticipant = participantIds.ToDictionary(id => id, _ => new List<ParticipantAlertDto>());
-        void Add(Guid pid, string type, AlertSeverity severity, string message, string deepLinkTab) =>
+        void Add(Guid pid, string type, AlertSeverity severity, string message, string deepLinkTab, string? linkTo = null) =>
             alertsByParticipant[pid].Add(new ParticipantAlertDto
             {
                 Type = type,
                 Severity = severity,
                 Message = message,
                 DeepLinkTab = deepLinkTab,
+                LinkTo = linkTo,
             });
 
         // ── Rule 1: restrictive practice review overdue ──
@@ -195,6 +211,52 @@ public class ParticipantAlertsService
                 Add(p.Id, "plan-expiring-soon", AlertSeverity.Warning,
                     $"NDIS plan ends {planEndDate:yyyy-MM-dd}",
                     "details");
+            }
+        }
+
+        // ── Rules 6 & 7 share one query over incidents naming a participant in the set. Not
+        // ── tenant-filtered at the DB level (IncidentReport has no ITenantEntity), so scoping
+        // ── comes entirely from participantIds, which the Participants query above already
+        // ── narrowed to the current tenant.
+        var participantIncidents = await _db.IncidentReports
+            .Where(i => i.IsActive && i.InvolvedParticipantId != null && participantIds.Contains(i.InvolvedParticipantId.Value))
+            .Select(i => new
+            {
+                i.Id,
+                ParticipantId = i.InvolvedParticipantId!.Value,
+                i.Severity,
+                i.Status,
+                i.Title,
+                i.IncidentDateTime,
+                i.QscReportingStatus,
+                i.QscReportedAt,
+                i.CreatedAt,
+            })
+            .ToListAsync(ct);
+        var incidentsByParticipant = participantIncidents.ToLookup(i => i.ParticipantId);
+
+        foreach (var p in participants)
+        {
+            foreach (var incident in incidentsByParticipant[p.Id])
+            {
+                // Rule 6: open serious incident
+                if (incident.Severity is IncidentSeverity.High or IncidentSeverity.Critical
+                    && incident.Status is not (IncidentStatus.Resolved or IncidentStatus.Closed))
+                {
+                    var severity = incident.Severity == IncidentSeverity.Critical ? AlertSeverity.Critical : AlertSeverity.Warning;
+                    Add(p.Id, "open-serious-incident", severity,
+                        $"Open {incident.Severity} incident: {incident.Title} ({incident.IncidentDateTime.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)})",
+                        "history", $"/incidents/{incident.Id}");
+                }
+
+                // Rule 7: QSC report overdue — same predicate as the dashboard summary and the
+                // incidents "overdue QSC" endpoint (already IsActive-filtered above).
+                if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.CreatedAt, DateTime.UtcNow))
+                {
+                    Add(p.Id, "qsc-report-overdue", AlertSeverity.Critical,
+                        $"QSC report overdue: {incident.Title}",
+                        "history", $"/incidents/{incident.Id}");
+                }
             }
         }
 

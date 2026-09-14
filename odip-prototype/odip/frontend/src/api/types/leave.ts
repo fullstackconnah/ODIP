@@ -76,15 +76,43 @@ export interface CreateLeaveRequestDto {
   userId?: string | null
 }
 
+/** PUT /leave/{id} body. userId is never editable — a leave request stays attached to whoever
+ * it was raised for. Editable only while Pending/Approved server-side (409 otherwise). */
+export interface UpdateLeaveRequestDto {
+  leaveType: LeaveType
+  startDate: string
+  endDate: string
+  reason?: string | null
+}
+
 export interface LeaveDecisionDto {
   decisionNote: string
+}
+
+/** A rostered shift that overlaps the leave/unavailability window just approved or edited —
+ * beside the finding-shaped `overlaps` summary, this is enough to act on directly (per-row
+ * "Unassign and mark open" in the approvals dialog) without a second fetch. Mirrors backend
+ * ShiftDto's own date/time fields (serviceDate 'yyyy-MM-dd', start/endTime 'HH:mm:ss'). */
+export interface OverlapShiftDto {
+  shiftId: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  participantId: string
+  participantName: string
 }
 
 /** POST /leave/{id}/approve response — approval is never blocked by overlaps; the UI shows them. */
 export interface ApproveLeaveResultDto {
   leave: LeaveRequestDto
   overlaps: RosterFindingDto[]
+  overlapShifts: OverlapShiftDto[]
 }
+
+/** PUT /leave/{id} response — same { leave, overlaps } shape as approve; overlaps is empty when
+ * the edited request is still Pending. */
+export type LeaveApprovalResultDto = ApproveLeaveResultDto
 
 // ── Recurring weekly unavailability ───────────────────────
 
@@ -116,10 +144,25 @@ export interface CreateRecurringUnavailabilityDto {
   userId?: string | null
 }
 
+/** PUT /leave/unavailability/{id} body. userId is never editable. Editable only while
+ * Pending/Approved server-side (409 otherwise). */
+export interface UpdateRecurringUnavailabilityDto {
+  dayOfWeek: string
+  startTime: string
+  endTime: string
+  effectiveFrom: string
+  effectiveTo?: string | null
+  notes?: string | null
+}
+
 export interface ApproveRecurringUnavailabilityResultDto {
   unavailability: RecurringUnavailabilityDto
   overlaps: RosterFindingDto[]
+  overlapShifts: OverlapShiftDto[]
 }
+
+/** PUT /leave/unavailability/{id} response — same shape as approve. */
+export type RecurringUnavailabilityApprovalResultDto = ApproveRecurringUnavailabilityResultDto
 
 // ── Portal combined response ──────────────────────────────
 
