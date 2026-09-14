@@ -37,6 +37,17 @@ services:
     volumes:
       - documents:/data/documents
       - /home/connah/secrets/odip/firebase-credentials.json:/credentials/firebase.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/api/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Worst-case startup: the retry loop in Program.cs:396-479 does up to 5
+      # attempts with 2s/4s/8s/16s exponential backoff (30s total, Program.cs:475)
+      # before migrate+seed runs, plus up to 60s cold-start margin for JIT and EF
+      # migrations against a freshly-started Postgres (image pull time excluded).
+      # 30s + 60s = 90s.
+      start_period: 90s
 
   frontend:
     build:
@@ -58,7 +69,8 @@ services:
     ports:
       - "8475:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

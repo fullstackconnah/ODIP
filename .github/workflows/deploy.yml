@@ -79,6 +79,10 @@ jobs:
           docker compose build
 
       - name: Deploy
+        id: deploy
+        # `up -d` now waits for the api container's healthcheck (deploy/compose.yaml)
+        # before returning, and fails this step if api never turns healthy — that
+        # failure hands off to the "Roll back on failed deploy or health check" step.
         run: |
           set -euo pipefail
           cd "$STACK_DIR"
@@ -89,13 +93,18 @@ jobs:
         run: |
           set -uo pipefail
           cd "$STACK_DIR"
+          # The compose healthcheck on /api/health/ready already gates this step:
+          # `docker compose up -d` above blocks until the api container reports
+          # healthy, since frontend.depends_on now requires api's
+          # condition: service_healthy (deploy/compose.yaml). This loop confirms
+          # the stack is reachable end-to-end through nginx afterward.
           for i in $(seq 1 30); do
             FE=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/" || echo 000)
-            # Unauthenticated API call must return 401 — proves the API is up
-            # AND still enforcing auth.
-            API=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/api/v1/participants" || echo 000)
+            # Liveness through the frontend's nginx proxy — proves the API
+            # process is up and being routed to correctly.
+            API=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/api/health/live" || echo 000)
             echo "attempt $i: frontend=$FE api=$API"
-            if [ "$FE" = "200" ] && [ "$API" = "401" ]; then
+            if [ "$FE" = "200" ] && [ "$API" = "200" ]; then
               echo "Healthy."
               exit 0
             fi
@@ -104,10 +113,11 @@ jobs:
           echo "::error::Health check failed after 150s (frontend=$FE api=$API)"
           exit 1
 
-      - name: Roll back on failed health check
-        if: failure() && steps.health.outcome == 'failure'
+      - name: Roll back on failed deploy or health check
+        if: failure() && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure')
         run: |
           set -euo pipefail
+          # Reached when compose up -d gave up waiting for api to be healthy, or the end-to-end probe failed.
           cd "$STACK_DIR"
           ROLLED=0
           for img in odip-api odip-frontend; do
@@ -117,6 +127,8 @@ jobs:
             fi
           done
           if [ "$ROLLED" = "1" ]; then
+            # This up -d also blocks on the api container's healthcheck
+            # (deploy/compose.yaml), same as the initial Deploy step.
             docker compose up -d
             echo "::warning::Deploy failed health check — rolled back to previous images"
           else
