@@ -1,4 +1,4 @@
-# ODIP local preview — starts the mock API (port 5050) and the Vite dev server (port 5173).
+# ODIP local preview — starts the mock API (port 5062) and the Vite dev server (port 5173).
 # Requires the user-local Node install at ~\tools\node (set up 2026-08-02).
 $node = "$env:USERPROFILE\tools\node"
 $root = $PSScriptRoot

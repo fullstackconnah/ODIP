@@ -237,7 +237,7 @@ export default function SettingsPage() {
           onBack={() => setTenantDetail(undefined)}
           onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
           onAddUser={(tid) => { setDefaultTenantId(tid); setEditingUser(undefined); setUserPanelOpen(true) }}
-          onEditUser={(_userId) => { setUserPanelOpen(true) }}
+          onEditUser={() => { setUserPanelOpen(true) }}
         />
       )}
 
