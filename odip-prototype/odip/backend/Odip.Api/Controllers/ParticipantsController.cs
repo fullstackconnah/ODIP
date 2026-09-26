@@ -460,8 +460,9 @@ public class ParticipantsController : ControllerBase
         await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
         if (dto.CompleteIntake)
         {
-            participant.IntakeCompletedAt = DateTime.UtcNow;
-            await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
+            var snapshot = await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
+            // Completion metadata and its immutable evidence share one server-issued UTC instant.
+            participant.IntakeCompletedAt = snapshot.CompletedAtUtc;
         }
         await _db.SaveChangesAsync(ct);
         // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
@@ -638,8 +639,6 @@ public class ParticipantsController : ControllerBase
         // Never overwrites an already-set value (set once, never cleared — see
         // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
         // does not finalise the participant; only a subsequent Profile completion does that.
-        if (dto.CompleteIntake && p.IntakeCompletedAt == null)
-            p.IntakeCompletedAt = DateTime.UtcNow;
         p.UpdatedAt = DateTime.UtcNow;
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
@@ -660,7 +659,12 @@ public class ParticipantsController : ControllerBase
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (dto.CompleteIntake)
-            await _intakeSnapshots.PrepareCaptureAsync(p, CompletionActor(), dto.CompletionRequestId, ct);
+        {
+            var intakeSnapshot = await _intakeSnapshots.PrepareCaptureAsync(p, CompletionActor(), dto.CompletionRequestId, ct);
+            // Preserve the first completion stamp but create a separate immutable revision for an
+            // intentional later completion with a new idempotency key.
+            p.IntakeCompletedAt ??= intakeSnapshot.CompletedAtUtc;
+        }
         await _db.SaveChangesAsync(ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.

@@ -29,7 +29,18 @@ public sealed class ParticipantIntakeSnapshotService
 
         var completedAt = DateTime.UtcNow;
         var revision = (await _db.ParticipantIntakeSnapshots.Where(x => x.ParticipantId == participant.Id).MaxAsync(x => (int?)x.Revision, ct) ?? 0) + 1;
-        var fields = new { participant.Id, participant.TenantId, participant.FirstName, participant.LastName, participant.PreferredName, participant.DateOfBirth, participant.Phone, participant.Email, participant.AddressStreet, participant.AddressSuburb, participant.AddressState, participant.AddressPostcode, participant.NdisNumber, participant.PlanType, participant.FundingSource, participant.Region, participant.IsHighSupport, participant.MedicalSummary, participant.BehaviourRiskSummary, participant.Notes, participant.IntakeCompletedAt };
+        // This is deliberately the intake write contract, not the mutable full Participant profile.
+        // Keep the projection explicit: later additions to profile-only fields must not silently alter
+        // the meaning (or hash) of historical intake evidence.
+        var fields = new
+        {
+            participant.Id, participant.TenantId,
+            participant.FirstName, participant.LastName, participant.PreferredName,
+            participant.DateOfBirth, participant.Phone, participant.Email,
+            participant.AddressStreet, participant.AddressSuburb, participant.AddressState, participant.AddressPostcode,
+            participant.PrimaryDiagnosis, participant.MedicalSummary, participant.MobilityNotes,
+            participant.BehaviourRiskSummary, participant.Notes
+        };
         var snapshotJson = JsonSerializer.Serialize(new { completedAtUtc = completedAt, actor, revision, fields });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson))).ToLowerInvariant();
         var pdf = Document.Create(container => container.Page(page =>
