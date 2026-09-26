@@ -804,6 +804,19 @@ public class ParticipantsController : ControllerBase
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
 
+    /// <summary>Lists immutable intake-completion revisions for the authenticated participant tenant.</summary>
+    [HttpGet("{id:guid}/intake-snapshots")]
+    public async Task<ActionResult<ApiResponse<List<ParticipantIntakeSnapshotDto>>>> ListIntakeSnapshots(Guid id, CancellationToken ct)
+    {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var snapshots = await _db.ParticipantIntakeSnapshots
+            .Where(x => x.ParticipantId == id)
+            .OrderByDescending(x => x.Revision)
+            .Select(x => new ParticipantIntakeSnapshotDto { Revision = x.Revision, CompletedAtUtc = x.CompletedAtUtc })
+            .ToListAsync(ct);
+        return Ok(ApiResponse<List<ParticipantIntakeSnapshotDto>>.Ok(snapshots));
+    }
+
     /// <summary>Downloads the immutable dated PDF produced by an explicit intake completion.</summary>
     [HttpGet("{id:guid}/intake-snapshots/{revision:int}/download")]
     public async Task<IActionResult> DownloadIntakeSnapshotPdf(Guid id, int revision, CancellationToken ct)

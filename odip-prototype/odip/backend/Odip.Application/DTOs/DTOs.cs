@@ -629,6 +629,13 @@ public record SaveParticipantIntakeDto
     [StringLength(2000)] public string? Notes { get; init; }
 }
 
+/// <summary>Immutable intake-completion evidence available to the participant's tenant.</summary>
+public record ParticipantIntakeSnapshotDto
+{
+    public int Revision { get; init; }
+    public DateTime CompletedAtUtc { get; init; }
+}
+
 public record SupportProfileDto
 {
     public Guid Id { get; init; }

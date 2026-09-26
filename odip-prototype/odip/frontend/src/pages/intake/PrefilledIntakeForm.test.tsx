@@ -3,11 +3,13 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrefilledIntakeForm } from './PrefilledIntakeForm'
 
-const { mockSave, mockComplete } = vi.hoisted(() => ({ mockSave: vi.fn(), mockComplete: vi.fn() }))
+const { mockSave, mockComplete, mockRefetch, mockDownload } = vi.hoisted(() => ({ mockSave: vi.fn(), mockComplete: vi.fn(), mockRefetch: vi.fn(), mockDownload: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useSaveParticipantIntake: () => ({ mutateAsync: mockSave, isPending: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockComplete, isPending: false }),
+  useParticipantIntakeSnapshots: () => ({ data: [], refetch: mockRefetch }),
+  useDownloadParticipantIntakeSnapshotPdf: () => ({ mutate: mockDownload, isPending: false }),
 }))
 
 const participant = {

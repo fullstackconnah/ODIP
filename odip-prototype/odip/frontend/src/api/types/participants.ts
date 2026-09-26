@@ -711,6 +711,12 @@ export interface SaveParticipantIntakeDto {
   notes?: string | null
 }
 
+/** Tenant-scoped immutable intake evidence; use its exact revision for the PDF download route. */
+export interface ParticipantIntakeSnapshotDto {
+  revision: number
+  completedAtUtc: string
+}
+
 export interface SupportProfileDto {
   id: string
   participantId: string
