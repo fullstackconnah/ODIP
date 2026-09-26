@@ -563,8 +563,22 @@ public class SameTenantWritePathTests
     {
         var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
         var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
-        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Amy", LastName = "Ng", IsActive = true };
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Amy", LastName = "Ng",
+            IsActive = true, IntakeCompletedAt = DateTime.UtcNow
+        };
+        var onboarding = new ParticipantOnboarding
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id,
+            ProfileComplete = true, ServiceTypeConfirmed = true
+        };
+        // The production gate remains authoritative; this fixture persists all evidence it
+        // requires so the test reaches its intended cross-tenant staff validation.
+        typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!
+            .SetValue(onboarding, true);
         db.Participants.Add(participant);
+        db.ParticipantOnboardings.Add(onboarding);
         db.SaveChanges();
 
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
