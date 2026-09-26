@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
+import ElectronicSigningEvidencePanel from './ElectronicSigningEvidencePanel'
 
 const states: AgreementState[] = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 type DraftLineForm = { serviceType: string; itemCode: string; hours: string }
@@ -98,6 +99,7 @@ export default function ServiceAgreementDraftPage() {
       <h2 className="font-semibold">Server-priced draft versions</h2>
       {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map(draft => <article key={draft.id} className="rounded-lg border border-[var(--color-border)] p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>Version {draft.version}</strong> <span className="ml-2 text-sm">{draft.status}</span><p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {draft.agreementStartDate} to {draft.agreementEndDate}</p></div><button type="button" onClick={() => download.mutate({ participantId, id: draft.id })} disabled={download.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm disabled:opacity-50">{download.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</button></div>
+        <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[var(--color-muted-foreground)]"><th>Support type</th><th>Code</th><th>Hours</th><th>Server unit price</th><th>Catalogue provenance</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={`${line.itemCode}-${i}`} className="border-t border-[var(--color-border)]"><td className="py-2">{line.serviceType}</td><td>{line.itemCode}</td><td>{line.hours}</td><td>${line.unitPrice}</td><td>{line.catalogueVersion} · effective {line.catalogueEffectiveFrom}{line.catalogueEffectiveTo ? ` to ${line.catalogueEffectiveTo}` : ''}</td></tr>)}</tbody></table></div>
       </article>)}
       {download.isError && <p role="alert" className="text-sm text-[var(--color-destructive)]">Could not download this draft PDF. Try again.</p>}

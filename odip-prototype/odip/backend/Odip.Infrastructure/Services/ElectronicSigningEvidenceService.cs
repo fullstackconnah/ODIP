@@ -32,8 +32,9 @@ public sealed class ElectronicSigningEvidenceService
         var snapshot = await _db.ElectronicSigningSnapshots.Include(x => x.Evidence).SingleOrDefaultAsync(x => x.Id == snapshotId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (snapshot == null) return (null, "Document snapshot not found.");
         if (Hash(snapshot.DocumentJson) != snapshot.DocumentHash) return (null, "Document integrity check failed.");
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
+            return (null, "Signer name, capacity and idempotency key are required.");
         if (!request.DocumentWasDisplayed || !request.ConsentToElectronicMethod || !request.IntendsToSign) return (null, "The displayed document, electronic-method consent and intention are all required.");
-        if (request.IsAuthorisedRepresentative && string.IsNullOrWhiteSpace(request.SignerCapacity)) return (null, "Representative capacity is required.");
         var existing = snapshot.Evidence.SingleOrDefault(x => x.IdempotencyKey == request.IdempotencyKey);
         if (existing != null) return (existing, null);
         var previous = snapshot.Evidence.OrderByDescending(x => x.CreatedAt).FirstOrDefault()?.EvidenceHash ?? "GENESIS";

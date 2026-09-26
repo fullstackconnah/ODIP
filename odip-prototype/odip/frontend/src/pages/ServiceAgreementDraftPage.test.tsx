@@ -4,12 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, drafts } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn() }))
+const { createMutate, drafts, snapshotMutate, evidenceMutate } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => ({ data: { id: 'p-1', ndisNumber: '430000001', dateOfBirth: '1990-01-02' }, isLoading: false }),
   useServiceAgreementDrafts: () => ({ data: drafts(), isLoading: false }),
   useCreateServiceAgreementDraft: () => ({ mutate: createMutate, isPending: false }),
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
+  useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
 }))
 
 function renderPage() {

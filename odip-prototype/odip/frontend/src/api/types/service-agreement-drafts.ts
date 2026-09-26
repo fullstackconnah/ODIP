@@ -38,3 +38,30 @@ export interface CreateServiceAgreementDraftLineDto {
   itemCode: string
   hours: number
 }
+
+/** An immutable, development-only document capture. It remains PendingVerification. */
+export interface ElectronicSigningSnapshotDto {
+  id: string
+  draftId: string
+  draftVersion: number
+  documentJson: string
+  documentHash: string
+  status: 'PendingVerification'
+}
+
+export interface SubmitElectronicSigningEvidenceDto {
+  idempotencyKey: string
+  signerName: string
+  signerCapacity: string
+  isAuthorisedRepresentative: boolean
+  consentToElectronicMethod: boolean
+  intendsToSign: boolean
+  documentWasDisplayed: boolean
+}
+
+export interface ElectronicSigningEvidenceDto {
+  id: string
+  status: 'PendingVerification'
+  evidenceHash: string
+  createdAt: string
+}
