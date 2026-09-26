@@ -98,6 +98,8 @@ public class ElectronicSigningEvidenceServiceTests
             var response = await controller.CreateSigningSnapshot(participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
             Assert.IsType<BadRequestObjectResult>(response.Result);
 
+            // The pricing phase requires the original tenant context; keep it isolated from the missing-tenant assertion above.
+            tenant.SetupGet(x => x.TenantId).Returns(tenantId);
             var noCatalogueRequest = new CreateServiceAgreementDraftDto { PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = new DateOnly(2026, 7, 1), AgreementEndDate = new DateOnly(2027, 6, 30), State = "NSW", ServiceTypes = ["Support"], Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "Support", ItemCode = "UNCONFIGURED", Hours = 1 }] };
             var failedDraft = await new ServiceAgreementDraftService(db).CreateAsync(tenantId, participant.Id, noCatalogueRequest, "test", CancellationToken.None);
             Assert.Null(failedDraft.Draft); Assert.Equal("No active effective weekday catalogue price exists for UNCONFIGURED.", failedDraft.Error);
