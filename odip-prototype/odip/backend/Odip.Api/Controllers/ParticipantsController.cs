@@ -567,7 +567,9 @@ public class ParticipantsController : ControllerBase
         p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.IsRepeatClient = dto.IsRepeatClient;
-        p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
+        // Lifecycle flags are deliberately not copied from the full-profile DTO. They are derived
+        // below from the server-owned intake completion evidence and the permitted draft state.
+        p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.OtherDiagnoses = dto.OtherDiagnoses.Select(d => d.Trim()).ToList(); p.HidpaSupportCategories = dto.HidpaSupportCategories;
         p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
@@ -623,14 +625,6 @@ public class ParticipantsController : ControllerBase
         p.SupportsLookLikeMorning = dto.SupportsLookLikeMorning; p.SupportsLookLikeDay = dto.SupportsLookLikeDay;
         p.SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight;
         p.OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating;
-        // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
-        // draft (another "Save as draft" click, from any wizard step), false is a full save,
-        // including the final Review-step submission that's meant to clear a draft off for good.
-        // SPEC-05 PF-10.5: this is also "profile complete"'s single server-side flip point — every
-        // one of the field validators above (ValidateNames et al.) already ran, so an incomplete
-        // payload never reaches here with IsDraft=false; the client requests the transition, the
-        // server only ever honours it after its own validation passes, in this one place.
-        p.IsDraft = dto.IsDraft;
         // SPEC-05 PF-10.5: resuming an existing Intake draft (IntakeCompletedAt still null) routes
         // back through this same Update endpoint rather than a second Create — the resumed Intake
         // wizard's own final-step call sets CompleteIntake=true to stamp IntakeCompletedAt here,
@@ -641,23 +635,6 @@ public class ParticipantsController : ControllerBase
         // does not finalise the participant; only a subsequent Profile completion does that.
         p.UpdatedAt = DateTime.UtcNow;
 
-        // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
-        // compatibility row, in the same transaction as the participant update.
-        // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
-        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
-        // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
-        // ContactRoles, this is read on Update too (not create-mode-only).
-        await ParticipantPatchApplier.UpsertConsentsAsync(_db, p.Id, dto.Consents, ct);
-        // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
-        await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, p.Id, dto.HealthConditions, ct);
-        // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions above.
-        await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, p.Id, dto.AdlAssessments, ct);
-        // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
-        await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, p.Id, dto.ChecklistItems, ct);
-        // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
-        await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
-        // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
-        await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (dto.CompleteIntake)
         {
             var intakeSnapshot = await _intakeSnapshots.PrepareCaptureAsync(p, CompletionActor(), dto.CompletionRequestId, ct);
@@ -665,6 +642,32 @@ public class ParticipantsController : ControllerBase
             // intentional later completion with a new idempotency key.
             p.IntakeCompletedAt ??= intakeSnapshot.CompletedAtUtc;
         }
+
+        // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
+        // participant. In particular, a raw client cannot turn IsActive=true/IsDraft=false into
+        // booking eligibility without the server-issued intake completion timestamp. Once intake
+        // evidence exists, finalising the validated profile derives the active state; callers do
+        // not set IsActive directly.
+        p.IsDraft = !p.IntakeCompletedAt.HasValue || dto.IsDraft;
+        p.IsActive = p.IntakeCompletedAt.HasValue && !p.IsDraft;
+
+        // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
+        // compatibility row, in the same transaction as the participant update. Draft state is
+        // the derived state above, not the client-supplied flag.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: p.IsDraft);
+        // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
+        // ContactRoles, this is read on Update too (not create-mode-only).
+        await ParticipantPatchApplier.UpsertConsentsAsync(_db, p.Id, dto.Consents, ct);
+        // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
+        await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, p.Id, dto.HealthConditions, ct);
+        // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
+        await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, p.Id, dto.AdlAssessments, ct);
+        // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
+        await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, p.Id, dto.ChecklistItems, ct);
+        // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
+        await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
+        // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
+        await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         await _db.SaveChangesAsync(ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.

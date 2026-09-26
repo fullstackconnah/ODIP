@@ -299,6 +299,49 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task Update_ValidNamesButIncompleteIntake_IgnoresActivationFlagsAndBookingRemainsBlocked()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Inquiry", LastName = "Draft",
+            IsActive = false, IsDraft = true, IntakeCompletedAt = null,
+        };
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Test trip", StartDate = new DateOnly(2026, 9, 1),
+            DurationDays = 2, Status = Domain.Enums.TripStatus.Planning,
+        };
+        db.AddRange(participant, trip);
+        await db.SaveChangesAsync();
+
+        var participants = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var update = new UpdateParticipantDto
+        {
+            FirstName = "Valid", LastName = "Names", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None,
+            OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne,
+            IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await participants.Update(participant.Id, update, CancellationToken.None);
+        var updated = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.False(updated.Data!.IsActive);
+        Assert.True(updated.Data.IsDraft);
+        Assert.Null(updated.Data.IntakeCompletedAt);
+
+        var booking = new global::Odip.Api.Controllers.BookingsController(db);
+        var bookingResult = await booking.Create(new CreateBookingDto
+        {
+            TripInstanceId = trip.Id, ParticipantId = participant.Id,
+        }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(bookingResult.Result);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
     public async Task Create_GenderAndPlanDates_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
