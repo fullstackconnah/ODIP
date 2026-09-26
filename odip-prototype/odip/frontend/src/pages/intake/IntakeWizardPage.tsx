@@ -34,7 +34,7 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import {
   useCreateParticipant, useUpdateParticipant, useParticipant, usePersons,
@@ -125,6 +125,7 @@ export default function IntakeWizardPage() {
   const contactRoleFieldArray = useFieldArray({ control, name: 'contactRoles' })
 
   const [focusRequest, setFocusRequest] = useState<{ field: string } | null>(null)
+  const completionRequestId = useRef<string | null>(null)
   const requestFocus = (fieldName: string) => setFocusRequest({ field: fieldName })
   useEffect(() => {
     if (focusRequest) focusField(focusRequest.field)
@@ -266,6 +267,8 @@ export default function IntakeWizardPage() {
     }
     payload.isDraft = draft
     payload.completeIntake = completeIntake
+    // Keep the key after a rejected request so retry does not create duplicate evidence.
+    if (completeIntake) payload.completionRequestId = completionRequestId.current ??= crypto.randomUUID()
     return payload
   }
 

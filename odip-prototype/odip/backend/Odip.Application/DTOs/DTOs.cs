@@ -263,6 +263,9 @@ public record CreateParticipantDto
     /// existing draft row rather than creating a second Participant.
     /// </summary>
     public bool CompleteIntake { get; init; }
+    /// <summary>Stable client request key: retries of one completion reuse its immutable evidence revision.</summary>
+    [StringLength(100)]
+    public string? CompletionRequestId { get; init; }
     [StringLength(100)]
     public string? PreferredName { get; init; }
     /// <summary>INTAKE sub-wave A, PID-004.</summary>

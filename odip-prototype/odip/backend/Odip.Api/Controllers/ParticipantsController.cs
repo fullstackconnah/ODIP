@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -23,12 +24,14 @@ public class ParticipantsController : ControllerBase
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly ParticipantDocumentService _documentService;
     private readonly SafetyNoteSyncService _safetyNoteSync;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync)
+    private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null)
     {
         _db = db;
         _compatLink = compatLink;
         _documentService = documentService;
         _safetyNoteSync = safetyNoteSync;
+        _intakeSnapshots = intakeSnapshots ?? new ParticipantIntakeSnapshotService(db);
     }
 
     /// <summary>
@@ -451,6 +454,8 @@ public class ParticipantsController : ControllerBase
         // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
         await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
         await _db.SaveChangesAsync(ct);
+        if (dto.CompleteIntake)
+            await _intakeSnapshots.CaptureAsync(participant, User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "unknown", dto.CompletionRequestId, ct);
         // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
         // inserted above, in the same SaveChangesAsync), not from dto.ContactRoles — a role row
         // that failed some other validation and never persisted can't produce a false "satisfied"
@@ -647,6 +652,8 @@ public class ParticipantsController : ControllerBase
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         await _db.SaveChangesAsync(ct);
+        if (dto.CompleteIntake)
+            await _intakeSnapshots.CaptureAsync(p, User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "unknown", dto.CompletionRequestId, ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
         var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
@@ -783,6 +790,16 @@ public class ParticipantsController : ControllerBase
         var result = await _documentService.GenerateIntakeFormAsync(id, ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
+    }
+
+    /// <summary>Downloads the immutable dated PDF produced by an explicit intake completion.</summary>
+    [HttpGet("{id:guid}/intake-snapshots/{revision:int}/download")]
+    public async Task<IActionResult> DownloadIntakeSnapshotPdf(Guid id, int revision, CancellationToken ct)
+    {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var snapshot = await _intakeSnapshots.FindAsync(id, revision, ct);
+        if (snapshot == null) return NotFound(ApiResponse<bool>.Fail("Intake snapshot not found"));
+        return File(snapshot.PdfContent, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
     }
 
     /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>
