@@ -67,6 +67,31 @@ public class ParticipantInquiriesControllerTests
         Assert.Single(fixture.ParticipantOnboardings);
     }
 
+    [Fact]
+    public async Task Convert_TwoInquiriesLinkedToOneExistingParticipant_CreatesOneSharedOnboarding()
+    {
+        var tenantId = Guid.NewGuid();
+        using var fixture = CreateDb(tenantId).Db;
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.SetupGet(x => x.TenantId).Returns(tenantId);
+        tenant.SetupGet(x => x.IsSuperAdmin).Returns(false);
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ada", LastName = "Lovelace", IsActive = true, IsDraft = true };
+        var firstInquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ada", LastName = "Lovelace", Source = "Email" };
+        var secondInquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ada", LastName = "Lovelace", Source = "Phone" };
+        fixture.AddRange(participant, firstInquiry, secondInquiry);
+        await fixture.SaveChangesAsync();
+        var controller = new ParticipantInquiriesController(fixture, tenant.Object);
+
+        var first = Data<ParticipantInquiryDto>((await controller.Convert(firstInquiry.Id, new ConvertParticipantInquiryDto { ParticipantId = participant.Id }, CancellationToken.None)).Result!);
+        var second = Data<ParticipantInquiryDto>((await controller.Convert(secondInquiry.Id, new ConvertParticipantInquiryDto { ParticipantId = participant.Id }, CancellationToken.None)).Result!);
+
+        Assert.Equal(participant.Id, first.ParticipantId);
+        Assert.Equal(participant.Id, second.ParticipantId);
+        var onboarding = Assert.Single(fixture.ParticipantOnboardings);
+        Assert.Equal(participant.Id, onboarding.ParticipantId);
+        Assert.Equal(tenantId, onboarding.TenantId);
+    }
+
     [Theory]
     [InlineData("Web")]
     [InlineData("Email")]

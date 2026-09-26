@@ -70,7 +70,12 @@ public class ParticipantInquiriesController : ControllerBase
             }
             inquiry.ParticipantId = participant.Id;
             inquiry.UpdatedAt = DateTime.UtcNow;
-            _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
+            // Multiple inquiries may legitimately link to the same participant. The onboarding
+            // record is participant-owned and has a unique ParticipantId index, so only create
+            // it when this participant does not already have one.
+            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == participant.Id, ct);
+            if (onboarding == null)
+                _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
             await _db.SaveChangesAsync(ct);
         }
         else if (dto.ParticipantId is Guid requested && requested != inquiry.ParticipantId)

@@ -4,10 +4,16 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import InquiriesPage from './InquiriesPage'
 
-const { createMutate, convertMutate, useInquiries } = vi.hoisted(() => ({
+const { createMutate, convertMutate, navigate, useInquiries } = vi.hoisted(() => ({
   createMutate: vi.fn(),
   convertMutate: vi.fn(),
+  navigate: vi.fn(),
   useInquiries: vi.fn(),
+}))
+
+vi.mock('react-router-dom', async importOriginal => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -29,6 +35,7 @@ describe('InquiriesPage', () => {
   beforeEach(() => {
     createMutate.mockReset()
     convertMutate.mockReset()
+    navigate.mockReset()
     useInquiries.mockReset()
   })
 
@@ -59,6 +66,31 @@ describe('InquiriesPage', () => {
     const onSuccess = convertMutate.mock.calls[0][1].onSuccess as (inquiry: { participantId?: string }) => void
     await act(async () => { onSuccess({ participantId: 'participant-1' }) })
 
-    expect(await screen.findByText('Prefilled intake')).toBeInTheDocument()
+    expect(navigate).toHaveBeenCalledWith('/participants/participant-1/intake')
+  })
+
+  it('shows create failure feedback while preserving the entered inquiry', async () => {
+    createMutate.mockImplementation((_data, { onError }) => onError(new Error('request failed')))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByPlaceholderText('First name'), 'Ada')
+    await user.type(screen.getByPlaceholderText('Last name'), 'Lovelace')
+    await user.click(screen.getByRole('button', { name: 'Capture inquiry' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not capture this inquiry. Check the details and try again.')
+    expect(screen.getByPlaceholderText('First name')).toHaveValue('Ada')
+    expect(screen.getByPlaceholderText('Last name')).toHaveValue('Lovelace')
+  })
+
+  it('shows convert failure feedback without navigating away', async () => {
+    convertMutate.mockImplementation((_data, { onError }) => onError(new Error('request failed')))
+    const user = userEvent.setup()
+    renderPage([{ id: 'inquiry-1', firstName: 'Ada', lastName: 'Lovelace', phone: null, email: null, source: 'Web', provenance: null, createdAt: '2026-09-26T00:00:00Z' }])
+
+    await user.click(screen.getByRole('button', { name: 'Convert to intake' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not convert this inquiry to intake. Please try again.')
+    expect(navigate).not.toHaveBeenCalled()
   })
 })
