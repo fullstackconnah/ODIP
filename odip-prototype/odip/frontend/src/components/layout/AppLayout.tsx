@@ -53,6 +53,7 @@ const navItems: NavEntry[] = [
     msIcon: 'group',
     children: [
       { to: '/participants', icon: Users, label: 'All Participants', msIcon: 'group', page: 'participants' },
+      { to: '/inquiries', icon: ClipboardCheck, label: 'Inquiries', msIcon: 'contact_phone', page: 'participants' },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
       // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
       // decides visibility for both (the route itself further requires write access — see App.tsx).

@@ -60,7 +60,8 @@ public class ParticipantInquiriesController : ControllerBase
             if (dto.ParticipantId is Guid participantId)
             {
                 participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct);
-                if (participant == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Participant not found"));
+                // SuperAdmin bypasses EF's tenant filter; conversion never may link an inquiry to a foreign participant.
+                if (participant == null || participant.TenantId != inquiry.TenantId) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Participant not found"));
             }
             else
             {

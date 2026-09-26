@@ -1,10 +1,14 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
 namespace Odip.Infrastructure.Migrations;
 
+[DbContext(typeof(OdipDbContext))]
+[Migration("20260926000000_AddParticipantLifecycleFoundation")]
 public partial class AddParticipantLifecycleFoundation : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
