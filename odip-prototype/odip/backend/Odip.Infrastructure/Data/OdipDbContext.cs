@@ -1667,11 +1667,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-<<<<<<< HEAD
         modelBuilder.Entity<ParticipantIntakeSnapshot>()
-=======
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraft>()
->>>>>>> bundles/agreement
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // TenantId index for CaregiverProfileSubmission is declared on its own configuration
