@@ -6,6 +6,9 @@ export interface ServiceAgreementDraftDto {
   participantId: string
   version: number
   status: string
+  templateVersion: string
+  templateDocxSha256: string
+  templatePdfSha256: string
   state: AgreementState
   agreementStartDate: string
   agreementEndDate: string

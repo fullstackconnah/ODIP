@@ -25,7 +25,9 @@ public static class ServiceAgreementDraftPdfRenderer
             });
             page.Content().PaddingTop(16).Column(column =>
             {
-                column.Item().Text($"Draft version {draft.Version}").Bold().FontSize(14);
+                column.Item().Text($"Draft version {draft.Version} — template {ProvisionalAgreementTemplate.Version} ({ProvisionalAgreementTemplate.State})").Bold().FontSize(14);
+                Field(column, "Imported template DOCX", $"{ProvisionalAgreementTemplate.DocxFileName} · SHA-256 {ProvisionalAgreementTemplate.DocxSha256}");
+                Field(column, "Matching review PDF", $"{ProvisionalAgreementTemplate.PdfFileName} · SHA-256 {ProvisionalAgreementTemplate.PdfSha256}");
                 Field(column, "Participant", draft.ParticipantNameSnapshot);
                 Field(column, "NDIS number", draft.NdisNumberSnapshot ?? "Not recorded");
                 Field(column, "Date of birth", draft.DateOfBirthSnapshot?.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) ?? "Not recorded");

@@ -41,11 +41,13 @@ describe('ServiceAgreementDraftPage', () => {
     expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
   })
 
-  it('shows a server-priced line and its catalogue provenance without calling it signed', () => {
-    drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'Draft', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null }] }])
+  it('shows the selected unapproved source version and server-priced line without calling it signed', () => {
+    drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null }] }])
     render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
     expect(screen.getByText('$72.34')).toBeInTheDocument()
     expect(screen.getByText(/2026-07 · effective 2026-07-01/)).toBeInTheDocument()
     expect(screen.getByText(/not signed and not billing authority/i)).toBeInTheDocument()
+    expect(screen.getByText(/Selected source: ODIP-Service-Agreement-Blank-DRAFT-2026-09-27/)).toBeInTheDocument()
+    expect(screen.getByText(/DOCX SHA-256 docx-hash · PDF SHA-256 pdf-hash/)).toBeInTheDocument()
   })
 })

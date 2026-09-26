@@ -172,7 +172,10 @@ public class ServiceAgreementDraftServiceTests
             Assert.Equal("synthetic-v1", Assert.Single(first.Lines).CatalogueVersion);
             Assert.Equal(99.50m, Assert.Single(second.Lines).UnitPrice);
             Assert.Equal("synthetic-v2", Assert.Single(second.Lines).CatalogueVersion);
-            Assert.Equal("Draft", new ServiceAgreementDraftDto().Status);
+            Assert.Equal("UnapprovedDraft", new ServiceAgreementDraftDto().Status);
+            Assert.Equal("ODIP-Service-Agreement-Blank-DRAFT-2026-09-27", ProvisionalAgreementTemplate.Version);
+            Assert.Equal("2d87e4c21d569161f22aa2246a0146418d5f14fabe6c607616844a97ecb8648f", ProvisionalAgreementTemplate.DocxSha256);
+            Assert.Equal("d26f0d1ea2e78f4b29df37d89d0bad61400c842b4dc090e303969ddd9335d06d", ProvisionalAgreementTemplate.PdfSha256);
             Assert.Null(typeof(ServiceAgreementDraft).GetProperty("SignedAt"));
             Assert.Null(typeof(ServiceAgreementDraft).GetProperty("SignedBy"));
             Assert.Null(typeof(ServiceAgreementDraft).GetProperty("IsSigned"));
@@ -200,6 +203,13 @@ public class ServiceAgreementDraftServiceTests
             var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(list.Result);
             var response = Assert.IsType<Odip.Application.Common.ApiResponse<List<ServiceAgreementDraftDto>>>(ok.Value);
             Assert.Empty(response.Data!);
+            var ownList = await controller.List(ownParticipant.Id, CancellationToken.None);
+            var ownResponse = Assert.IsType<Odip.Application.Common.ApiResponse<List<ServiceAgreementDraftDto>>>(((Microsoft.AspNetCore.Mvc.OkObjectResult)ownList.Result!).Value);
+            var selected = Assert.Single(ownResponse.Data!);
+            Assert.Equal("UnapprovedDraft", selected.Status);
+            Assert.Equal(ProvisionalAgreementTemplate.Version, selected.TemplateVersion);
+            Assert.Equal(ProvisionalAgreementTemplate.DocxSha256, selected.TemplateDocxSha256);
+            Assert.Equal(ProvisionalAgreementTemplate.PdfSha256, selected.TemplatePdfSha256);
             var pdf = await controller.Pdf(ownParticipant.Id, Guid.NewGuid(), CancellationToken.None);
             Assert.IsType<Microsoft.AspNetCore.Mvc.NotFoundObjectResult>(pdf);
             Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(controller.AttachSignedEvidence(ownParticipant.Id, Guid.NewGuid()).Result);

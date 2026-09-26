@@ -26,7 +26,10 @@ public record ServiceAgreementDraftDto
     public Guid Id { get; init; }
     public Guid ParticipantId { get; init; }
     public int Version { get; init; }
-    public string Status { get; init; } = "Draft";
+    public string Status { get; init; } = "UnapprovedDraft";
+    public string TemplateVersion { get; init; } = string.Empty;
+    public string TemplateDocxSha256 { get; init; } = string.Empty;
+    public string TemplatePdfSha256 { get; init; } = string.Empty;
     public string State { get; init; } = string.Empty;
     public DateOnly AgreementStartDate { get; init; }
     public DateOnly AgreementEndDate { get; init; }

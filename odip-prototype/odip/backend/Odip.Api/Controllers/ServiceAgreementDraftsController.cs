@@ -73,6 +73,8 @@ public class ServiceAgreementDraftsController : ControllerBase
     private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => new()
     {
         Id = draft.Id, ParticipantId = draft.ParticipantId, Version = draft.Version, State = draft.State,
+        Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
+        TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
         Lines = draft.Lines.Select(x => new ServiceAgreementDraftLineDto { ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion, CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo }).ToList()
     };
