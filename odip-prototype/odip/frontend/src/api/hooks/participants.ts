@@ -6,6 +6,7 @@ import type {
   ParticipantDetailDto,
   CreateParticipantDto,
   UpdateParticipantDto,
+  SaveParticipantIntakeDto,
   PatchParticipantDto,
   SupportProfileDto,
   UpdateSupportProfileDto,
@@ -107,6 +108,19 @@ export function useUpdateParticipant() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto }) =>
       apiPutRaw<ParticipantDetailDto>(`/participants/${id}`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+    },
+  })
+}
+
+/** Saves only the approved intake subset for an already-created participant. */
+export function useSaveParticipantIntake() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: SaveParticipantIntakeDto }) =>
+      apiPutRaw<ParticipantDetailDto>(`/participants/${id}/intake`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })

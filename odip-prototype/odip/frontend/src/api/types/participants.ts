@@ -462,6 +462,8 @@ export interface CreateParticipantDto {
    * (isDraft=true) must NOT also set this.
    */
   completeIntake?: boolean
+  /** Stable client-generated idempotency key for an explicit intake completion retry. */
+  completionRequestId?: string
   preferredName?: string
   /** INTAKE sub-wave A, PID-004. */
   middleName?: string
@@ -688,6 +690,25 @@ export interface CreateParticipantDto {
 
 export interface UpdateParticipantDto extends CreateParticipantDto {
   isActive: boolean
+}
+
+/** Narrow write contract for a converted participant's incomplete intake. */
+export interface SaveParticipantIntakeDto {
+  firstName: string
+  lastName: string
+  preferredName?: string | null
+  dateOfBirth?: string | null
+  phone?: string | null
+  email?: string | null
+  addressStreet?: string | null
+  addressSuburb?: string | null
+  addressState?: string | null
+  addressPostcode?: string | null
+  primaryDiagnosis?: string | null
+  medicalSummary?: string | null
+  mobilityNotes?: string | null
+  behaviourRiskSummary?: string | null
+  notes?: string | null
 }
 
 export interface SupportProfileDto {

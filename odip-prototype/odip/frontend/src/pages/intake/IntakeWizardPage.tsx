@@ -62,6 +62,7 @@ import { SupportNeedsStep } from './steps/SupportNeedsStep'
 import { MedicalSummaryStep } from './steps/MedicalSummaryStep'
 import { BehaviourSummaryStep } from './steps/BehaviourSummaryStep'
 import { RisksHazardsStep } from './steps/RisksHazardsStep'
+import { PrefilledIntakeForm } from './PrefilledIntakeForm'
 
 const CULTURAL_TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
@@ -410,6 +411,9 @@ export default function IntakeWizardPage() {
   if (isEditMode && (participantLoading || !participant)) {
     return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   }
+
+  // Converted inquiries use only the narrow, server-enforced intake contract.
+  if (isEditMode && participant) return <PrefilledIntakeForm participant={participant} />
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
