@@ -31,8 +31,10 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const idempotencyKey = useRef(newIdempotencyKey())
+  const evidencePermitted = draft.status === 'ApprovedForElectronicSigning'
 
   const showDocument = () => {
+    if (!evidencePermitted) return
     setError(null)
     setSuccess(null)
     createSnapshot.mutate({ participantId, draftId: draft.id, draftVersion: draft.version }, {
@@ -42,6 +44,7 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
   }
 
   const submit = () => {
+    if (!evidencePermitted) return
     if (!snapshot) return
     setError(null)
     setSuccess(null)
@@ -67,10 +70,11 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
       <h3 id={`signing-evidence-${draft.id}`} className="font-semibold">In-app electronic signing evidence</h3>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Development-only evidence capture. It remains PendingVerification; it does not create a signed agreement, legal approval, billing authority, or scheduling permission.</p>
     </div>
-    {!snapshot && <button type="button" onClick={showDocument} disabled={createSnapshot.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">
+    {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Electronic signing evidence is unavailable because this agreement source is not approved.</p>}
+    {evidencePermitted && !snapshot && <button type="button" onClick={showDocument} disabled={createSnapshot.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">
       {createSnapshot.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Display immutable document before recording evidence
     </button>}
-    {snapshot && <>
+    {evidencePermitted && snapshot && <>
       <div className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3">
         <p className="text-sm font-medium">Immutable document version {snapshot.draftVersion}</p>
         <p className="mt-1 break-all text-xs text-[var(--color-muted-foreground)]">SHA-256: {snapshot.documentHash}</p>

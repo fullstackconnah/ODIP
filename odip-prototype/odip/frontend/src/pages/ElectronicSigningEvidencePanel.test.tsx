@@ -12,10 +12,20 @@ vi.mock('@/api/hooks', () => ({
 const draft = { id: 'draft-1', participantId: 'p-1', version: 4, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW' as const, agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] }
 
 describe('ElectronicSigningEvidencePanel', () => {
-  it('displays complete immutable JSON and submits every required attestation field as pending verification evidence', async () => {
+  it('does not expose signing actions or call mutation hooks for an unapproved agreement source', () => {
+    render(<ElectronicSigningEvidencePanel participantId="p-1" draft={draft} />)
+
+    expect(screen.getByText(/agreement source is not approved/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /display immutable document/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /record pendingverification evidence/i })).not.toBeInTheDocument()
+    expect(snapshotMutate).not.toHaveBeenCalled()
+    expect(evidenceMutate).not.toHaveBeenCalled()
+  })
+
+  it('keeps the approved-future source path explicit and submits every required attestation field as pending verification evidence', async () => {
     const user = userEvent.setup()
     snapshotMutate.mockImplementation((_request, options) => options.onSuccess({ id: 'snapshot-1', draftId: 'draft-1', draftVersion: 4, documentJson: '{\n  "complete": true\n}', documentHash: 'abc123', status: 'PendingVerification' }))
-    render(<ElectronicSigningEvidencePanel participantId="p-1" draft={draft} />)
+    render(<ElectronicSigningEvidencePanel participantId="p-1" draft={{ ...draft, status: 'ApprovedForElectronicSigning' }} />)
     await user.click(screen.getByRole('button', { name: /display immutable document/i }))
     expect(screen.getByLabelText('Complete immutable document JSON')).toHaveTextContent('"complete": true')
     expect(screen.getByText('SHA-256: abc123')).toBeInTheDocument()

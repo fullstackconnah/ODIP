@@ -51,39 +51,40 @@ public class ElectronicSigningEvidenceServiceTests
     }
 
     [Fact]
-    public async Task Submit_IsIdempotent_AndLeavesEvidencePendingVerificationOnly()
+    public async Task CreateSnapshot_RejectsUnapprovedSource_WithoutSnapshotOrEvidenceWrites()
     {
         var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
         {
             var (participant, draft) = AddDraft(db, tenantId); await db.SaveChangesAsync();
             var service = new ElectronicSigningEvidenceService(db);
             var (snapshot, snapshotError) = await service.CreateSnapshotAsync(tenantId, participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
-            Assert.Null(snapshotError);
-            var (first, firstError) = await service.SubmitAsync(tenantId, participant.Id, snapshot!.Id, Attestation(), CancellationToken.None);
-            var (second, secondError) = await service.SubmitAsync(tenantId, participant.Id, snapshot.Id, Attestation(), CancellationToken.None);
-            Assert.Null(firstError); Assert.Null(secondError); Assert.Equal(first!.Id, second!.Id); Assert.Equal("PendingVerification", first.Status);
-            Assert.Single(db.ElectronicSigningEvidence.IgnoreQueryFilters());
-            Assert.Null(typeof(ServiceAgreementDraft).GetProperty("IsSigned"));
-            Assert.Null(typeof(ServiceAgreementDraft).GetProperty("SignedAt"));
+            Assert.Null(snapshot);
+            Assert.Equal("Electronic signing evidence is unavailable because the selected agreement source is not approved.", snapshotError);
+            Assert.Empty(db.ElectronicSigningSnapshots.IgnoreQueryFilters());
+            Assert.Empty(db.ElectronicSigningEvidence.IgnoreQueryFilters());
         }
     }
 
     [Fact]
-    public async Task Submit_RejectsForeignTenantAndMissingConsent_AndAcceptsRepresentativeCapacity()
+    public async Task Submit_RejectsPreExistingSnapshotForUnapprovedSource_WithoutEvidenceWrites()
     {
-        var owner = Guid.NewGuid(); var foreign = Guid.NewGuid(); var (db, _) = CreateDb(owner); using (db)
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
         {
-            var (participant, draft) = AddDraft(db, owner); await db.SaveChangesAsync();
+            var (participant, draft) = AddDraft(db, tenantId); await db.SaveChangesAsync();
+            var snapshot = db.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, DraftId = draft.Id,
+                DraftVersion = draft.Version, DocumentJson = "pre-existing", DocumentHash = "not-checked-before-source-gate"
+            }).Entity;
+            await db.SaveChangesAsync();
+
             var service = new ElectronicSigningEvidenceService(db);
-            var (snapshot, _) = await service.CreateSnapshotAsync(owner, participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
-            var foreignResult = await service.SubmitAsync(foreign, participant.Id, snapshot!.Id, Attestation(), CancellationToken.None);
-            Assert.Null(foreignResult.Evidence); Assert.Equal("Document snapshot not found.", foreignResult.Error);
-            var noConsent = Attestation("no-consent") with { ConsentToElectronicMethod = false };
-            var missing = await service.SubmitAsync(owner, participant.Id, snapshot.Id, noConsent, CancellationToken.None);
-            Assert.Null(missing.Evidence); Assert.Contains("consent", missing.Error!);
-            var representative = Attestation("representative") with { IsAuthorisedRepresentative = true, SignerCapacity = "Appointed guardian" };
-            var accepted = await service.SubmitAsync(owner, participant.Id, snapshot.Id, representative, CancellationToken.None);
-            Assert.Null(accepted.Error); Assert.True(accepted.Evidence!.IsAuthorisedRepresentative); Assert.Equal("Appointed guardian", accepted.Evidence.SignerCapacity);
+            var (evidence, error) = await service.SubmitAsync(tenantId, participant.Id, snapshot.Id, Attestation(), CancellationToken.None);
+
+            Assert.Null(evidence);
+            Assert.Equal("Electronic signing evidence is unavailable because the selected agreement source is not approved.", error);
+            Assert.Single(db.ElectronicSigningSnapshots.IgnoreQueryFilters());
+            Assert.Empty(db.ElectronicSigningEvidence.IgnoreQueryFilters());
         }
     }
 

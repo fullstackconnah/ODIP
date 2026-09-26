@@ -3,3 +3,4 @@
 *.jpg binary
 *.xlsx binary
 *.zip binary
+odip-prototype/odip/backend/Odip.Infrastructure/SeedData/AgreementTemplates/*.pdf binary

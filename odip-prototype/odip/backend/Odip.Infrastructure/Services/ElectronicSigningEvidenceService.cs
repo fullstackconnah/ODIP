@@ -18,6 +18,7 @@ public sealed class ElectronicSigningEvidenceService
     {
         var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).SingleOrDefaultAsync(x => x.Id == request.DraftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null || draft.Version != request.DraftVersion) return (null, "The selected document version is unavailable or stale.");
+        if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         var existing = await _db.ElectronicSigningSnapshots.SingleOrDefaultAsync(x => x.DraftId == draft.Id && x.DraftVersion == draft.Version, ct);
         if (existing != null) return (existing, null);
         var document = JsonSerializer.Serialize(new { draft.Id, draft.Version, draft.ParticipantId, draft.ParticipantNameSnapshot, draft.PlanStartDate, draft.PlanEndDate, draft.AgreementStartDate, draft.AgreementEndDate, draft.State, draft.ServiceTypesJson, Lines = draft.Lines.OrderBy(x => x.Id).Select(x => new { x.ServiceType, x.ItemCode, x.Hours, x.UnitPrice, x.CatalogueVersion, x.CatalogueEffectiveFrom, x.CatalogueEffectiveTo }) });
@@ -31,6 +32,7 @@ public sealed class ElectronicSigningEvidenceService
     {
         var snapshot = await _db.ElectronicSigningSnapshots.Include(x => x.Evidence).SingleOrDefaultAsync(x => x.Id == snapshotId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (snapshot == null) return (null, "Document snapshot not found.");
+        if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         if (Hash(snapshot.DocumentJson) != snapshot.DocumentHash) return (null, "Document integrity check failed.");
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
             return (null, "Signer name, capacity and idempotency key are required.");
