@@ -1706,7 +1706,15 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
-        var createDto = MinimalCreateDto() with { PreferredStaffId = oldStaff.Id };
+        // The profile update below finalises this participant, so establish completion
+        // evidence through the server-owned intake transition rather than bypassing the
+        // lifecycle guard with a directly seeded timestamp.
+        var createDto = MinimalCreateDto() with
+        {
+            PreferredStaffId = oldStaff.Id,
+            IsDraft = true,
+            CompleteIntake = true,
+        };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
 
@@ -2565,6 +2573,18 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        // Completion evidence is issued only by the server's explicit intake transition.
+        // A later profile finalisation must not rely on a client-supplied timestamp.
+        var completeIntake = new UpdateParticipantDto
+        {
+            FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true, CompleteIntake = true,
+        };
+        var completionResult = await controller.Update(draft.Id, completeIntake, CancellationToken.None);
+        var completionBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(completionResult.Result).Value);
+        Assert.NotNull(completionBody.Data!.IntakeCompletedAt);
+
         var finalDto = new UpdateParticipantDto
         {
             FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
