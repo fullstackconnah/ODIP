@@ -22,6 +22,7 @@ const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizard
 // cg03: the public, session-free caregiver profile form — see its route placement below.
 const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
+const ServiceAgreementDraftPage = React.lazy(() => import('./pages/ServiceAgreementDraftPage'))
 // cg04: admin review surfaces for caregiver-submitted forms — see route placement below.
 const CaregiverSubmissionsPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionsPage'))
 const CaregiverSubmissionReviewPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionReviewPage'))
@@ -105,6 +106,7 @@ const router = createBrowserRouter(
         <Route path="/inquiries" element={<PrivateRoute page="participants" requiresWrite><InquiriesPage /></PrivateRoute>} />
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
+        <Route path="/participants/:id/agreement-draft" element={<PrivateRoute page="participants" requiresWrite><ServiceAgreementDraftPage /></PrivateRoute>} />
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />

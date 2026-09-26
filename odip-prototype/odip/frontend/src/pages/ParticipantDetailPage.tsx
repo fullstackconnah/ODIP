@@ -152,6 +152,11 @@ export default function ParticipantDetailPage() {
               downloads above — see B15 in the discovery fact sheet. */}
           <CaregiverLinkControl participantId={id!} />
           {canWrite && (
+            <Link to={`/participants/${id}/agreement-draft`} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-all">
+              <FileText className="w-4 h-4" /> Agreement draft
+            </Link>
+          )}
+          {canWrite && (
             // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
             // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
             // now-redirecting /edit route.
