@@ -77,10 +77,16 @@ public class RosteringControllerTests
         return staff;
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng")
+    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng", bool ready = true)
     {
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IntakeCompletedAt = ready ? DateTime.UtcNow : null };
         db.Participants.Add(participant);
+        if (ready)
+        {
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ServiceTypeConfirmed = true };
+            typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!.SetValue(onboarding, true);
+            db.ParticipantOnboardings.Add(onboarding);
+        }
         db.SaveChanges();
         return participant;
     }
@@ -124,8 +130,48 @@ public class RosteringControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("profile")]
+    [InlineData("service-type")]
+    [InlineData("agreement")]
+    public async Task CreateShift_IncompleteOnboarding_ReturnsBadRequest(string missing)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        if (missing == "profile") onboarding.ProfileComplete = false;
+        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "agreement") typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!.SetValue(onboarding, false);
+        await db.SaveChangesAsync();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetBoard_ExcludesParticipantAndLegacyShift_WhenReadinessIsLost()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.Shifts.Add(new Shift { Id = Guid.NewGuid(), ParticipantId = participant.Id, ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None });
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        onboarding.ProfileComplete = false;
+        await db.SaveChangesAsync();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.DoesNotContain(board.ParticipantRows!, row => row.ParticipantId == participant.Id);
+        Assert.Empty(board.ParticipantRows!);
     }
 
     [Fact]

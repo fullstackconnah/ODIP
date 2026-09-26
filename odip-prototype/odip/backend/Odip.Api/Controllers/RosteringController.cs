@@ -14,6 +14,7 @@ using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
+using Odip.Api.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -91,8 +92,9 @@ public class RosteringController : ControllerBase
 
         // ── Bulk-load everything the week needs once, then compute findings in memory
         // for every shift — avoids one roster-check query set per shift (N+1). ──
+        var readyParticipantIds = ParticipantReadinessGate.ActiveReadyParticipants(_db).Select(p => p.Id);
         var weekShifts = await _db.Shifts
-            .Where(s => s.ServiceDate >= start && s.ServiceDate <= end)
+            .Where(s => s.ServiceDate >= start && s.ServiceDate <= end && readyParticipantIds.Contains(s.ParticipantId))
             .ToListAsync(ct);
 
         // Design spec §4.2: the board shows every active tenant user, of any role — no role
@@ -122,10 +124,9 @@ public class RosteringController : ControllerBase
         // referencing a participant outside that active set (edge case) still need a name
         // for their ShiftDto/exception, so top up with whichever ids weekShifts references
         // that the active set didn't already cover — still just two queries total. ──
-        // INTAKE-08: drafts never appear on the board — same exclusion as every other roster
-        // surface (see ValidateRefsAsync/CreatePattern/UpdatePattern/UpsertCompatibility below).
-        var activeParticipants = await _db.Participants
-            .Where(p => p.IsActive && !p.IsDraft)
+        // Operational roster rows are fail-closed: no draft, incomplete intake, missing
+        // onboarding row, or incomplete agreement workflow is visible as active coverage.
+        var activeParticipants = await ParticipantReadinessGate.ActiveReadyParticipants(_db)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToListAsync(ct);
         var participantById = activeParticipants.ToDictionary(p => p.Id);
@@ -359,7 +360,7 @@ public class RosteringController : ControllerBase
     [HttpGet("/api/v1/participants/{id:guid}/rostering")]
     public async Task<ActionResult<ApiResponse<ParticipantRosteringDto>>> GetParticipantRostering(Guid id, CancellationToken ct)
     {
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == id, ct);
+        var participant = await ParticipantReadinessGate.ActiveReadyParticipants(_db).FirstOrDefaultAsync(p => p.Id == id, ct);
         if (participant == null)
             return NotFound(ApiResponse<ParticipantRosteringDto>.Fail("Participant not found."));
 
@@ -1024,10 +1025,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
-        // INTAKE-08: a shift pattern is recurring shift assignment — same draft exclusion as a
-        // one-off shift (ValidateRefsAsync above).
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
-            return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
 
@@ -1053,10 +1052,8 @@ public class RosteringController : ControllerBase
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
 
-        // INTAKE-08: a shift pattern is recurring shift assignment — same draft exclusion as a
-        // one-off shift (ValidateRefsAsync above).
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
-            return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Participant not found."));
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
 
@@ -1094,6 +1091,8 @@ public class RosteringController : ControllerBase
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<GeneratePatternResultDto>.Fail("Pattern not found."));
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, pattern.ParticipantId, ct))
+            return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var occurrences = _expander.Occurrences(pattern, from, to);
         if (occurrences.Count == 0)
@@ -1146,10 +1145,8 @@ public class RosteringController : ControllerBase
     {
         if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
-        // INTAKE-08: the compatibility matrix is a roster surface — drafts excluded, same as
-        // shift/pattern assignment above.
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
-            return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Participant not found."));
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+            return BadRequest(ApiResponse<CompatibilityRowDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var row = await _db.StaffParticipantCompatibilities
             .FirstOrDefaultAsync(c => c.UserId == dto.StaffId && c.ParticipantId == dto.ParticipantId, ct);
@@ -1362,10 +1359,10 @@ public class RosteringController : ControllerBase
     /// </summary>
     private async Task<string?> ValidateRefsAsync(Guid participantId, Guid? staffId, CancellationToken ct)
     {
-        // INTAKE-08: a draft can't be shift-assigned (create/update/check-conflicts all funnel
-        // through this one validator) — reads the same as "not found" from the caller's side.
-        if (!await _db.Participants.AnyAsync(p => p.Id == participantId && !p.IsDraft, ct))
-            return "Participant not found.";
+        // Every one-off creation/update/assignment validation funnels through this readiness
+        // gate. It also blocks incomplete intake and a missing/incomplete onboarding record.
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, participantId, ct))
+            return ParticipantReadinessGate.NotReadyMessage;
         if (staffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == staffId.Value && s.IsActive, ct))
             return "Staff member not found.";
         return null;

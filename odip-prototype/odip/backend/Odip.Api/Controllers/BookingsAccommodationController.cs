@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Npgsql;
+using Odip.Api.Services;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -113,10 +114,10 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Create([FromBody] CreateBookingDto dto, CancellationToken ct)
     {
-        // INTAKE-08: trip/booking pickers exclude drafts — a draft can't be booked onto a trip.
-        // Also closes a pre-existing gap: ParticipantId wasn't validated to exist at all before.
-        if (!await _db.Participants.AnyAsync(p => p.Id == dto.ParticipantId && !p.IsDraft, ct))
-            return BadRequest(ApiResponse<BookingDetailDto>.Fail("Participant not found"));
+        // A booking is operational work. The participant must pass the derived onboarding gate;
+        // client-supplied booking fields can never assert readiness.
+        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+            return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var booking = new ParticipantBooking
         {
