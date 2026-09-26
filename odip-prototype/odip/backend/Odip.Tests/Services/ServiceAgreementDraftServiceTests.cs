@@ -200,7 +200,8 @@ public class ServiceAgreementDraftServiceTests
             var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(list.Result);
             var response = Assert.IsType<Odip.Application.Common.ApiResponse<List<ServiceAgreementDraftDto>>>(ok.Value);
             Assert.Empty(response.Data!);
-            Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(controller.Pdf(ownParticipant.Id, Guid.NewGuid()).Result);
+            var pdf = await controller.Pdf(ownParticipant.Id, Guid.NewGuid(), CancellationToken.None);
+            Assert.IsType<Microsoft.AspNetCore.Mvc.NotFoundObjectResult>(pdf);
             Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(controller.AttachSignedEvidence(ownParticipant.Id, Guid.NewGuid()).Result);
         }
     }
