@@ -92,9 +92,15 @@ public class RosteringController : ControllerBase
 
         // ── Bulk-load everything the week needs once, then compute findings in memory
         // for every shift — avoids one roster-check query set per shift (N+1). ──
-        var readyParticipantIds = ParticipantReadinessGate.ActiveReadyParticipants(_db).Select(p => p.Id);
+        var readyParticipantIds = await ParticipantReadinessGate.ActiveReadyParticipants(_db)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        var readyParticipantIdSet = readyParticipantIds.ToHashSet();
         var weekShifts = await _db.Shifts
-            .Where(s => s.ServiceDate >= start && s.ServiceDate <= end && readyParticipantIds.Contains(s.ParticipantId))
+            // Existing shifts remain visible even when a participant subsequently becomes
+            // incomplete. Read paths must not make scheduled work disappear; readiness gates
+            // creation and new assignments below instead.
+            .Where(s => s.ServiceDate >= start && s.ServiceDate <= end)
             .ToListAsync(ct);
 
         // Design spec §4.2: the board shows every active tenant user, of any role — no role
@@ -124,8 +130,9 @@ public class RosteringController : ControllerBase
         // referencing a participant outside that active set (edge case) still need a name
         // for their ShiftDto/exception, so top up with whichever ids weekShifts references
         // that the active set didn't already cover — still just two queries total. ──
-        // Operational roster rows are fail-closed: no draft, incomplete intake, missing
-        // onboarding row, or incomplete agreement workflow is visible as active coverage.
+        // Only ready participants get an otherwise-empty operational row. Participants who
+        // became incomplete are topped up below when they have a legacy scheduled shift, so
+        // existing work cannot silently vanish from the board.
         var activeParticipants = await ParticipantReadinessGate.ActiveReadyParticipants(_db)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToListAsync(ct);
@@ -140,6 +147,10 @@ public class RosteringController : ControllerBase
             foreach (var extra in extraParticipants) participantById[extra.Id] = extra;
         }
         var allParticipantIds = participantById.Keys.ToList();
+        var displayParticipants = participantById.Values
+            .Where(p => p.IsActive && !p.IsDraft)
+            .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
+            .ToList();
 
         var compatByPair = await _db.StaffParticipantCompatibilities
             .Where(c => staffIds.Contains(c.UserId) && allParticipantIds.Contains(c.ParticipantId))
@@ -147,10 +158,16 @@ public class RosteringController : ControllerBase
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
-            if (shift.UserId is null || !staffById.TryGetValue(shift.UserId.Value, out var staff))
-                return new List<RosterFinding>();
             if (!participantById.TryGetValue(shift.ParticipantId, out var participant))
                 return new List<RosterFinding>();
+            var readinessFinding = !readyParticipantIdSet.Contains(shift.ParticipantId)
+                ? new RosterFinding(
+                    "PARTICIPANT_NOT_READY",
+                    RosterFindingSeverity.Warning,
+                    "Participant is not ready for new booking or rostering assignments.")
+                : null;
+            if (shift.UserId is null || !staffById.TryGetValue(shift.UserId.Value, out var staff))
+                return readinessFinding is null ? new List<RosterFinding>() : new List<RosterFinding> { readinessFinding };
 
             var staffShiftsInWeek = weekShifts.Where(s => s.UserId == shift.UserId && s.Id != shift.Id).ToList();
             var participantShiftsOnDate = weekShifts
@@ -164,7 +181,9 @@ public class RosteringController : ControllerBase
             var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
                 tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
                 weekPublicHolidays);
-            return _conflictService.Check(shift, ctx).ToList();
+            var findings = _conflictService.Check(shift, ctx).ToList();
+            if (readinessFinding is not null) findings.Add(readinessFinding);
+            return findings;
         }
 
         // ── Task 5 (connection map item 5): reuses weekWindows — already loaded above for the
@@ -261,7 +280,7 @@ public class RosteringController : ControllerBase
             };
 
             var participantRows = new List<RosterParticipantRowDto>();
-            foreach (var participant in activeParticipants)
+            foreach (var participant in displayParticipants)
             {
                 var participantShifts = weekShifts.Where(s => s.ParticipantId == participant.Id).ToList();
                 var shiftDtos = participantShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
@@ -360,7 +379,9 @@ public class RosteringController : ControllerBase
     [HttpGet("/api/v1/participants/{id:guid}/rostering")]
     public async Task<ActionResult<ApiResponse<ParticipantRosteringDto>>> GetParticipantRostering(Guid id, CancellationToken ct)
     {
-        var participant = await ParticipantReadinessGate.ActiveReadyParticipants(_db).FirstOrDefaultAsync(p => p.Id == id, ct);
+        // This is a read-only history/roster view. A participant who later becomes incomplete
+        // must still have their existing scheduled work visible to authorised coordinators.
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (participant == null)
             return NotFound(ApiResponse<ParticipantRosteringDto>.Fail("Participant not found."));
 
@@ -486,8 +507,15 @@ public class RosteringController : ControllerBase
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
 
-        var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
-        if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
+        // An existing legacy shift can still be status-managed after readiness is lost. Moving
+        // it to another participant or assigning/reassigning staff is a new placement and must
+        // remain fail-closed.
+        var changesPlacement = dto.ParticipantId != shift.ParticipantId || dto.StaffId != shift.UserId;
+        if (changesPlacement)
+        {
+            var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
+            if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
+        }
 
         // Un-cancelling is allowed (critique P2 — pre-PR this was reachable and the spec's own
         // matrix left it a product-ruling gap): Cancelled -> Draft/Published passes, alongside the
@@ -567,6 +595,12 @@ public class RosteringController : ControllerBase
 
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
+
+        // Clearing an old assignment is safe management, but assigning or reassigning staff
+        // is a new operational placement and requires participant readiness.
+        if (dto.StaffId != shift.UserId && dto.StaffId.HasValue
+            && !await ParticipantReadinessGate.IsActiveReadyAsync(_db, shift.ParticipantId, ct))
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var candidate = new Shift
         {

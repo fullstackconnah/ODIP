@@ -158,7 +158,7 @@ public class RosteringControllerTests
     }
 
     [Fact]
-    public async Task GetBoard_ExcludesParticipantAndLegacyShift_WhenReadinessIsLost()
+    public async Task GetBoard_KeepsLegacyShiftVisibleAndFlagsParticipant_WhenReadinessIsLost()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
@@ -170,8 +170,26 @@ public class RosteringControllerTests
         var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
 
         var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
-        Assert.DoesNotContain(board.ParticipantRows!, row => row.ParticipantId == participant.Id);
-        Assert.Empty(board.ParticipantRows!);
+        var row = Assert.Single(board.ParticipantRows!, row => row.ParticipantId == participant.Id);
+        var shift = Assert.Single(row.Shifts);
+        Assert.Contains(board.Exceptions!, exception => exception.ShiftId == shift.Id
+            && exception.Finding.Code == "PARTICIPANT_NOT_READY");
+
+        // Read-only history remains accessible and a status-only cancellation must not be
+        // mistaken for a new assignment after the participant's readiness is lost.
+        var participantRostering = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .GetParticipantRostering(participant.Id, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(participantRostering.Result);
+
+        var statusOnlyUpdate = new UpdateShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Cancelled,
+        };
+        var update = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .UpdateShift(shift.Id, statusOnlyUpdate, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(update.Result);
     }
 
     [Fact]
