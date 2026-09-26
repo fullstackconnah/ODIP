@@ -41,15 +41,31 @@ public sealed class ParticipantIntakeSnapshotService
         var completedAt = DateTime.UtcNow;
         var revision = (await _db.ParticipantIntakeSnapshots.Where(x => x.ParticipantId == participant.Id).MaxAsync(x => (int?)x.Revision, ct) ?? 0) + 1;
         var fields = IntakeFieldNames.ToDictionary(name => char.ToLowerInvariant(name[0]) + name[1..], name => participant.GetType().GetProperty(name)!.GetValue(participant));
-        // Query collections explicitly so callers do not need a fragile Include graph. These are
-        // projected now, including human-readable role/risk labels, into immutable evidence.
-        var contactRoleRows = await _db.ParticipantContactRoles.Where(x => x.ParticipantId == participant.Id).Include(x => x.Person).ToListAsync(ct);
+        // Start with the tenant-filtered persisted projection, then overlay tracked final state.
+        // Completion is deliberately prepared before the caller's only SaveChangesAsync call, so
+        // a just-submitted contact/risk (and a just-added Person) must not be lost merely because
+        // it is not queryable from the database yet. Conversely, tracked deletes must not survive
+        // in the evidence. Do not flush early: snapshot and completion remain atomic.
+        var persistedContactRoles = await _db.ParticipantContactRoles
+            .Where(x => x.ParticipantId == participant.Id)
+            .Include(x => x.Person)
+            .ToListAsync(ct);
+        var contactRoleRows = MergeFinalState(
+            persistedContactRoles,
+            _db.ChangeTracker.Entries<ParticipantContactRole>()
+                .Where(entry => entry.Entity.ParticipantId == participant.Id && entry.Entity.TenantId == participant.TenantId),
+            row => row.Id);
         var contactRoles = contactRoleRows.Select(x => new
         {
-            label = "Contact role", roleType = x.RoleType.ToString(), personName = x.Person == null ? "Unknown contact" : (x.Person.FirstName + " " + x.Person.LastName).Trim(),
+            label = "Contact role", roleType = x.RoleType.ToString(), personName = ResolvePersonName(x),
             x.RelationshipToParticipant, x.IsPrimary, x.PriorityOrder, x.AuthorisedForMedicalInfo, x.OrganisationName, x.RegistrationNumber, x.Status, x.Notes
         }).ToList();
-        var riskEntryRows = await _db.ParticipantRiskEntries.Where(x => x.ParticipantId == participant.Id).ToListAsync(ct);
+        var persistedRiskEntries = await _db.ParticipantRiskEntries.Where(x => x.ParticipantId == participant.Id).ToListAsync(ct);
+        var riskEntryRows = MergeFinalState(
+            persistedRiskEntries,
+            _db.ChangeTracker.Entries<ParticipantRiskEntry>()
+                .Where(entry => entry.Entity.ParticipantId == participant.Id && entry.Entity.TenantId == participant.TenantId),
+            row => row.Id);
         var riskEntries = riskEntryRows.Select(x => new
         {
             label = "Risk entry", atRiskParty = x.AtRiskParty.ToString(), x.Description, x.MitigationNotes, x.IsActive
@@ -86,4 +102,26 @@ public sealed class ParticipantIntakeSnapshotService
 
     public Task<ParticipantIntakeSnapshot?> FindAsync(Guid participantId, int revision, CancellationToken ct) =>
         _db.ParticipantIntakeSnapshots.FirstOrDefaultAsync(x => x.ParticipantId == participantId && x.Revision == revision, ct);
+
+    private string ResolvePersonName(ParticipantContactRole role)
+    {
+        var tracked = _db.ChangeTracker.Entries<Person>()
+            .FirstOrDefault(entry => entry.Entity.Id == role.PersonId && entry.Entity.TenantId == role.TenantId && entry.State != EntityState.Deleted)
+            ?.Entity;
+        var person = tracked ?? role.Person;
+        return person == null ? "Unknown contact" : person.FullName;
+    }
+
+    private static List<T> MergeFinalState<T>(IEnumerable<T> persisted, IEnumerable<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<T>> tracked, Func<T, Guid> id)
+        where T : class
+    {
+        var final = persisted.ToDictionary(id);
+        foreach (var entry in tracked)
+        {
+            if (entry.State == EntityState.Detached || entry.State == EntityState.Unchanged) continue;
+            if (entry.State == EntityState.Deleted) final.Remove(id(entry.Entity));
+            else final[id(entry.Entity)] = entry.Entity;
+        }
+        return final.Values.OrderBy(id).ToList();
+    }
 }
