@@ -45,7 +45,7 @@ public sealed class ShiftRateCalculator
             if (unitRate <= 0m)
                 throw new ShiftRateCalculationException($"Catalogue item '{item.ItemNumber}' has no available positive rate for state '{request.ServiceState}'.");
 
-            var hours = (decimal)(segmentEnd - cursor).TotalHours;
+            var hours = (segmentEnd.Ticks - cursor.Ticks) / (decimal)TimeSpan.TicksPerHour;
             if (hours <= 0m)
                 throw new ShiftRateCalculationException("Shift segmentation produced a non-positive duration.");
 
@@ -116,35 +116,72 @@ public sealed class ShiftRateCalculator
         TimeZoneInfo timeZone)
     {
         var date = localCursor.Date;
-        var candidates = timeBands.BoundariesOn(date)
-            .Append(date.AddDays(1));
-
-        var next = candidates
-            .Select(boundary => LocalBoundaryToUtc(boundary, timeZone))
+        var nextLocalBoundary = timeBands.BoundariesOn(date)
+            .Append(date.AddDays(1))
+            .SelectMany(boundary => LocalBoundaryToUtc(boundary, timeZone))
             .Where(boundary => boundary > cursorUtc)
             .DefaultIfEmpty(DateTime.MaxValue)
             .Min();
 
-        if (next == DateTime.MaxValue)
+        if (nextLocalBoundary == DateTime.MaxValue)
             throw new ShiftRateCalculationException("Unable to determine the next local shift boundary.");
-        return next;
+
+        // The local clock can move backwards between configured boundaries. The offset change is
+        // itself a rate boundary: it can return the local time to an earlier daypart.
+        var offsetTransition = NextUtcOffsetTransition(cursorUtc, nextLocalBoundary, timeZone);
+        return offsetTransition < nextLocalBoundary ? offsetTransition : nextLocalBoundary;
     }
 
-    private static DateTime LocalBoundaryToUtc(DateTime localBoundary, TimeZoneInfo timeZone)
+    private static IEnumerable<DateTime> LocalBoundaryToUtc(DateTime localBoundary, TimeZoneInfo timeZone)
     {
         // A skipped local boundary (for example 02:00 at spring-forward) takes effect at the
-        // first real local instant after it. At fall-back, select the first occurrence so the
-        // local daypart changes when it first appears, rather than an hour late.
+        // first real local instant after it. At fall-back, both occurrences are candidates: the
+        // first one may already be past the cursor while the repeated one is still ahead.
         while (timeZone.IsInvalidTime(localBoundary))
             localBoundary = localBoundary.AddMinutes(1);
 
         if (timeZone.IsAmbiguousTime(localBoundary))
         {
-            var firstOffset = timeZone.GetAmbiguousTimeOffsets(localBoundary).Max();
-            return DateTime.SpecifyKind(localBoundary - firstOffset, DateTimeKind.Utc);
+            foreach (var offset in timeZone.GetAmbiguousTimeOffsets(localBoundary))
+                yield return DateTime.SpecifyKind(localBoundary - offset, DateTimeKind.Utc);
+            yield break;
         }
 
-        return TimeZoneInfo.ConvertTimeToUtc(localBoundary, timeZone);
+        yield return TimeZoneInfo.ConvertTimeToUtc(localBoundary, timeZone);
+    }
+
+    private static DateTime NextUtcOffsetTransition(DateTime startUtc, DateTime limitUtc, TimeZoneInfo timeZone)
+    {
+        var offset = timeZone.GetUtcOffset(startUtc);
+        var lower = startUtc;
+        var upper = startUtc;
+
+        while (upper < limitUtc)
+        {
+            lower = upper;
+            upper = upper.AddHours(1);
+            if (upper > limitUtc)
+                upper = limitUtc;
+
+            if (timeZone.GetUtcOffset(upper) != offset)
+                return FindOffsetTransition(lower, upper, offset, timeZone);
+        }
+
+        return DateTime.MaxValue;
+    }
+
+    private static DateTime FindOffsetTransition(DateTime lower, DateTime upper, TimeSpan lowerOffset, TimeZoneInfo timeZone)
+    {
+        while (upper.Ticks - lower.Ticks > 1)
+        {
+            var midpoint = new DateTime(lower.Ticks + ((upper.Ticks - lower.Ticks) / 2), DateTimeKind.Utc);
+            if (timeZone.GetUtcOffset(midpoint) == lowerOffset)
+                lower = midpoint;
+            else
+                upper = midpoint;
+        }
+
+        return upper;
     }
 
     internal static decimal GetRateForState(SupportCatalogueItem item, string state) => NormalizeState(state) switch

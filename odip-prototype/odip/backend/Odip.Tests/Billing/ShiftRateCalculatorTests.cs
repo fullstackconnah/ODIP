@@ -149,10 +149,14 @@ public class ShiftRateCalculatorTests
 
         var quote = _calculator.Calculate(request);
 
-        Assert.Single(quote.Segments);
-        Assert.Equal(new DateOnly(2026, 10, 4), quote.Segments[0].ServiceDate);
-        Assert.Equal(ClaimDayType.PublicHoliday, quote.Segments[0].DayType);
-        Assert.Equal(3m, quote.Segments[0].Hours);
+        Assert.Equal(2, quote.Segments.Count);
+        Assert.All(quote.Segments, segment =>
+        {
+            Assert.Equal(new DateOnly(2026, 10, 4), segment.ServiceDate);
+            Assert.Equal(ClaimDayType.PublicHoliday, segment.DayType);
+            Assert.Equal(ShiftTimeBand.Night, segment.TimeBand);
+        });
+        Assert.Equal(new[] { 0.5m, 2.5m }, quote.Segments.Select(s => s.Hours));
     }
 
     [Fact]
@@ -169,8 +173,28 @@ public class ShiftRateCalculatorTests
 
         var quote = _calculator.Calculate(request);
 
-        Assert.Equal(new[] { ShiftTimeBand.Night, ShiftTimeBand.Am }, quote.Segments.Select(s => s.TimeBand));
-        Assert.Equal(new[] { 0.5m, 1.5m }, quote.Segments.Select(s => s.Hours));
+        Assert.Equal(new[] { ShiftTimeBand.Night, ShiftTimeBand.Am, ShiftTimeBand.Am }, quote.Segments.Select(s => s.TimeBand));
+        Assert.Equal(new[] { 0.5m, 1m, 0.5m }, quote.Segments.Select(s => s.Hours));
+        Assert.Equal(2m, quote.Segments.Sum(s => s.Hours));
+    }
+
+    [Fact]
+    public void Calculate_SydneyFallBack_RepeatsDaypartsAtOffsetTransition()
+    {
+        var night = new ShiftRateBandKey(ClaimDayType.Sunday, ShiftTimeBand.Night);
+        var am = new ShiftRateBandKey(ClaimDayType.Sunday, ShiftTimeBand.Am);
+        var request = Request(
+            new DateTime(2026, 4, 4, 14, 45, 0), // 01:45 AEDT
+            new DateTime(2026, 4, 4, 16, 45, 0), // 02:45 AEST
+            Rows((night, "NIGHT", 10m, "fall"), (am, "AM", 20m, "fall")),
+            Map(night, "NIGHT", am, "AM"), bands: new ShiftRateTimeBands(new TimeOnly(2, 30), new TimeOnly(12, 0), new TimeOnly(20, 0)),
+            timeZone: "Australia/Sydney");
+
+        var quote = _calculator.Calculate(request);
+
+        Assert.Equal(new[] { ShiftTimeBand.Night, ShiftTimeBand.Am, ShiftTimeBand.Night, ShiftTimeBand.Am },
+            quote.Segments.Select(s => s.TimeBand));
+        Assert.Equal(new[] { 0.75m, 0.5m, 0.5m, 0.25m }, quote.Segments.Select(s => s.Hours));
         Assert.Equal(2m, quote.Segments.Sum(s => s.Hours));
     }
 
