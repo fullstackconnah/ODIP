@@ -48,10 +48,16 @@ public class BookingsControllerTests
         return trip;
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, bool isDraft = false, string firstName = "Sophie", string lastName = "Brown")
+    private static Participant SeedParticipant(OdipDbContext db, bool isDraft = false, string firstName = "Sophie", string lastName = "Brown", bool ready = true)
     {
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IsDraft = isDraft };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IsDraft = isDraft, IntakeCompletedAt = ready ? DateTime.UtcNow : null };
         db.Participants.Add(participant);
+        if (ready)
+        {
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ServiceTypeConfirmed = true };
+            typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!.SetValue(onboarding, true);
+            db.ParticipantOnboardings.Add(onboarding);
+        }
         db.SaveChanges();
         return participant;
     }
@@ -73,7 +79,7 @@ public class BookingsControllerTests
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
         Assert.False(body.Success);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
@@ -89,8 +95,75 @@ public class BookingsControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("profile")]
+    [InlineData("service-type")]
+    [InlineData("agreement")]
+    public async Task Create_IncompleteOnboarding_ReturnsBadRequest(string missing)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var participant = SeedParticipant(db);
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        if (missing == "profile") onboarding.ProfileComplete = false;
+        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "agreement") typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!.SetValue(onboarding, false);
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_CompletedIntakeButNoOnboardingRecord_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var participant = SeedParticipant(db, ready: false);
+        participant.IntakeCompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_ForeignTenantReadyParticipant_ReturnsBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        Guid foreignParticipantId;
+        Guid foreignTripId;
+        using (var tenantBdb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            foreignTripId = SeedTrip(tenantBdb).Id;
+            foreignParticipantId = SeedParticipant(tenantBdb).Id;
+        }
+
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var tenantAdb = new OdipDbContext(options, tenantAContext.Object);
+
+        var result = await new BookingsController(tenantAdb).Create(BookingDto(foreignTripId, foreignParticipantId), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await tenantAdb.ParticipantBookings.ToListAsync());
     }
 
     [Fact]
