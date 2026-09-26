@@ -1527,7 +1527,6 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId }).IsUnique();
         });
-<<<<<<< HEAD
         modelBuilder.Entity<ParticipantIntakeSnapshot>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -1540,7 +1539,7 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Revision }).IsUnique();
             entity.HasIndex(e => new { e.ParticipantId, e.RequestId }).IsUnique();
-=======
+        });
         modelBuilder.Entity<ServiceAgreementDraft>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -1563,7 +1562,6 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.UnitPrice).HasPrecision(12, 2);
             entity.HasOne(e => e.Draft).WithMany(e => e.Lines).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.DraftId);
->>>>>>> bundles/agreement
         });
 
         // ── ParticipantAdlAssessment (INTAKE sub-wave C2) ───────────
