@@ -168,6 +168,9 @@ public class ParticipantsControllerTests
         Assert.True(createdBody.Data!.IsDraft);
         Assert.NotNull(createdBody.Data.IntakeCompletedAt);
         Assert.InRange(createdBody.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(createdBody.Data.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -223,6 +226,9 @@ public class ParticipantsControllerTests
         Assert.True(body.Data!.IsDraft);
         Assert.NotNull(body.Data.IntakeCompletedAt);
         Assert.InRange(body.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(participant.Id, CancellationToken.None);
         var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -255,6 +261,9 @@ public class ParticipantsControllerTests
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
 
         Assert.Equal(existingStamp, body.Data!.IntakeCompletedAt);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
     }
 
     /// <summary>

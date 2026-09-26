@@ -16,7 +16,12 @@ public sealed class ParticipantIntakeSnapshotService
     private readonly OdipDbContext _db;
     public ParticipantIntakeSnapshotService(OdipDbContext db) { _db = db; QuestPDF.Settings.License = LicenseType.Community; }
 
-    public async Task<ParticipantIntakeSnapshot> CaptureAsync(Participant participant, string actor, string? requestId, CancellationToken ct)
+    /// <summary>
+    /// Builds and tracks a completion snapshot without saving it.  Callers completing intake use
+    /// this before their one SaveChangesAsync call so a PDF-render failure cannot persist the
+    /// participant's completion timestamp without its corresponding audit record.
+    /// </summary>
+    public async Task<ParticipantIntakeSnapshot> PrepareCaptureAsync(Participant participant, string actor, string? requestId, CancellationToken ct)
     {
         requestId = string.IsNullOrWhiteSpace(requestId) ? Guid.NewGuid().ToString("N") : requestId;
         var existing = await _db.ParticipantIntakeSnapshots.FirstOrDefaultAsync(x => x.ParticipantId == participant.Id && x.RequestId == requestId, ct);
@@ -44,6 +49,13 @@ public sealed class ParticipantIntakeSnapshotService
         })).GeneratePdf();
         var snapshot = new ParticipantIntakeSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Revision = revision, CompletedAtUtc = completedAt, CompletedBy = actor, RequestId = requestId, SnapshotJson = snapshotJson, ContentHash = hash, PdfContent = pdf };
         _db.ParticipantIntakeSnapshots.Add(snapshot);
+        return snapshot;
+    }
+
+    /// <summary>Creates and persists a completion snapshot for standalone callers.</summary>
+    public async Task<ParticipantIntakeSnapshot> CaptureAsync(Participant participant, string actor, string? requestId, CancellationToken ct)
+    {
+        var snapshot = await PrepareCaptureAsync(participant, actor, requestId, ct);
         await _db.SaveChangesAsync(ct);
         return snapshot;
     }

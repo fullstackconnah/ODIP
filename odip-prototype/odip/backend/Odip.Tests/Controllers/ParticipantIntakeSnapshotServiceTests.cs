@@ -39,6 +39,22 @@ public class ParticipantIntakeSnapshotServiceTests
     }
 
     [Fact]
+    public async Task PrepareCapture_DoesNotPersistUntilTheCallersSaveChanges()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var p = new Participant { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), FirstName = "Synthetic", LastName = "Participant" };
+        db.Participants.Add(p); await db.SaveChangesAsync();
+
+        var snapshot = await new ParticipantIntakeSnapshotService(db).PrepareCaptureAsync(p, "actor", "request", default);
+
+        Assert.Equal(EntityState.Added, db.Entry(snapshot).State);
+        Assert.Empty(await db.ParticipantIntakeSnapshots.AsNoTracking().ToListAsync());
+
+        await db.SaveChangesAsync();
+        Assert.Single(await db.ParticipantIntakeSnapshots.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
     public async Task Find_IsTenantScoped()
     {
         var tenantA = Guid.NewGuid(); var tenantB = Guid.NewGuid(); var database = Guid.NewGuid().ToString();

@@ -43,6 +43,11 @@ public class ParticipantsController : ControllerBase
     private Task<bool> IsValidPreferredUserRefAsync(Guid? userId, CancellationToken ct) =>
         ParticipantPatchApplier.IsValidPreferredUserRefAsync(_db, userId, ct);
 
+    // Direct controller tests do not construct an HttpContext, while authenticated requests do.
+    // Keep audit attribution deterministic in both cases rather than dereferencing a null User.
+    private string CompletionActor() =>
+        User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
+
     /// <summary>
     /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
     /// row submitted with a create/update payload, keyed by
@@ -325,7 +330,7 @@ public class ParticipantsController : ControllerBase
             // SPEC-05 (PF-10.3) — stamped server-side, never client-supplied, only when the
             // Intake wizard's own final-step create call sets CompleteIntake; a mid-intake
             // "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must not stamp it.
-            IntakeCompletedAt = dto.CompleteIntake ? DateTime.UtcNow : null,
+            IntakeCompletedAt = null,
             // INTAKE sub-wave B — Cultural & Consent step.
             IsCald = dto.IsCald, IsLgbtqi = dto.IsLgbtqi, IsFamilyCommunity = dto.IsFamilyCommunity,
             IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander,
@@ -453,9 +458,12 @@ public class ParticipantsController : ControllerBase
         // the RiskEntries loop's just-added, not-yet-persisted rows above — closes the
         // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
         await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
-        await _db.SaveChangesAsync(ct);
         if (dto.CompleteIntake)
-            await _intakeSnapshots.CaptureAsync(participant, User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "unknown", dto.CompletionRequestId, ct);
+        {
+            participant.IntakeCompletedAt = DateTime.UtcNow;
+            await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
+        }
+        await _db.SaveChangesAsync(ct);
         // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
         // inserted above, in the same SaveChangesAsync), not from dto.ContactRoles — a role row
         // that failed some other validation and never persisted can't produce a false "satisfied"
@@ -651,9 +659,9 @@ public class ParticipantsController : ControllerBase
         await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
-        await _db.SaveChangesAsync(ct);
         if (dto.CompleteIntake)
-            await _intakeSnapshots.CaptureAsync(p, User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "unknown", dto.CompletionRequestId, ct);
+            await _intakeSnapshots.PrepareCaptureAsync(p, CompletionActor(), dto.CompletionRequestId, ct);
+        await _db.SaveChangesAsync(ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
         var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);

@@ -1528,6 +1528,7 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantIntakeSnapshot>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.CompletedAtUtc).HasColumnType("timestamp with time zone");
             entity.Property(e => e.CompletedBy).HasMaxLength(200).IsRequired();
             entity.Property(e => e.RequestId).HasMaxLength(100).IsRequired();
             entity.Property(e => e.ContentHash).HasMaxLength(64).IsRequired();
