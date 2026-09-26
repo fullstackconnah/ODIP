@@ -168,6 +168,9 @@ public class ParticipantsControllerTests
         Assert.True(createdBody.Data!.IsDraft);
         Assert.NotNull(createdBody.Data.IntakeCompletedAt);
         Assert.InRange(createdBody.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(createdBody.Data.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -223,6 +226,9 @@ public class ParticipantsControllerTests
         Assert.True(body.Data!.IsDraft);
         Assert.NotNull(body.Data.IntakeCompletedAt);
         Assert.InRange(body.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(participant.Id, CancellationToken.None);
         var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -255,6 +261,9 @@ public class ParticipantsControllerTests
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
 
         Assert.Equal(existingStamp, body.Data!.IntakeCompletedAt);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
     }
 
     /// <summary>
@@ -287,6 +296,49 @@ public class ParticipantsControllerTests
         var getResult = await controller.GetById(participant.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
         Assert.True(body.Data!.IsDraft);
+    }
+
+    [Fact]
+    public async Task Update_ValidNamesButIncompleteIntake_IgnoresActivationFlagsAndBookingRemainsBlocked()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Inquiry", LastName = "Draft",
+            IsActive = false, IsDraft = true, IntakeCompletedAt = null,
+        };
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Test trip", StartDate = new DateOnly(2026, 9, 1),
+            DurationDays = 2, Status = Domain.Enums.TripStatus.Planning,
+        };
+        db.AddRange(participant, trip);
+        await db.SaveChangesAsync();
+
+        var participants = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var update = new UpdateParticipantDto
+        {
+            FirstName = "Valid", LastName = "Names", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None,
+            OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne,
+            IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await participants.Update(participant.Id, update, CancellationToken.None);
+        var updated = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.False(updated.Data!.IsActive);
+        Assert.True(updated.Data.IsDraft);
+        Assert.Null(updated.Data.IntakeCompletedAt);
+
+        var booking = new global::Odip.Api.Controllers.BookingsController(db);
+        var bookingResult = await booking.Create(new CreateBookingDto
+        {
+            TripInstanceId = trip.Id, ParticipantId = participant.Id,
+        }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(bookingResult.Result);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
     [Fact]
@@ -1654,7 +1706,15 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
-        var createDto = MinimalCreateDto() with { PreferredStaffId = oldStaff.Id };
+        // The profile update below finalises this participant, so establish completion
+        // evidence through the server-owned intake transition rather than bypassing the
+        // lifecycle guard with a directly seeded timestamp.
+        var createDto = MinimalCreateDto() with
+        {
+            PreferredStaffId = oldStaff.Id,
+            IsDraft = true,
+            CompleteIntake = true,
+        };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
 
@@ -2513,6 +2573,18 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        // Completion evidence is issued only by the server's explicit intake transition.
+        // A later profile finalisation must not rely on a client-supplied timestamp.
+        var completeIntake = new UpdateParticipantDto
+        {
+            FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true, CompleteIntake = true,
+        };
+        var completionResult = await controller.Update(draft.Id, completeIntake, CancellationToken.None);
+        var completionBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(completionResult.Result).Value);
+        Assert.NotNull(completionBody.Data!.IntakeCompletedAt);
+
         var finalDto = new UpdateParticipantDto
         {
             FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,

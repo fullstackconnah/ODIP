@@ -263,6 +263,9 @@ public record CreateParticipantDto
     /// existing draft row rather than creating a second Participant.
     /// </summary>
     public bool CompleteIntake { get; init; }
+    /// <summary>Stable client request key: retries of one completion reuse its immutable evidence revision.</summary>
+    [StringLength(100)]
+    public string? CompletionRequestId { get; init; }
     [StringLength(100)]
     public string? PreferredName { get; init; }
     /// <summary>INTAKE sub-wave A, PID-004.</summary>
@@ -600,6 +603,37 @@ public record CreateParticipantDto
 public record UpdateParticipantDto : CreateParticipantDto
 {
     public bool IsActive { get; init; } = true;
+}
+
+/// <summary>
+/// The deliberately small write contract used by the intake flow.  It is not an alias for the
+/// profile DTO: operational state, funding/plan administration, staff assignment and every other
+/// profile-only field are intentionally absent, so an intake save cannot erase them.
+/// </summary>
+public record SaveParticipantIntakeDto
+{
+    [Required, StringLength(100)] public string FirstName { get; init; } = string.Empty;
+    [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
+    [StringLength(100)] public string? PreferredName { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    [StringLength(50)] public string? Phone { get; init; }
+    [EmailAddress, StringLength(200)] public string? Email { get; init; }
+    [StringLength(500)] public string? AddressStreet { get; init; }
+    [StringLength(100)] public string? AddressSuburb { get; init; }
+    [StringLength(10)] public string? AddressState { get; init; }
+    [StringLength(10)] public string? AddressPostcode { get; init; }
+    [StringLength(200)] public string? PrimaryDiagnosis { get; init; }
+    [StringLength(2000)] public string? MedicalSummary { get; init; }
+    [StringLength(2000)] public string? MobilityNotes { get; init; }
+    [StringLength(2000)] public string? BehaviourRiskSummary { get; init; }
+    [StringLength(2000)] public string? Notes { get; init; }
+}
+
+/// <summary>Immutable intake-completion evidence available to the participant's tenant.</summary>
+public record ParticipantIntakeSnapshotDto
+{
+    public int Revision { get; init; }
+    public DateTime CompletedAtUtc { get; init; }
 }
 
 public record SupportProfileDto

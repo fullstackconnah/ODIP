@@ -34,7 +34,7 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import {
   useCreateParticipant, useUpdateParticipant, useParticipant, usePersons,
@@ -62,6 +62,7 @@ import { SupportNeedsStep } from './steps/SupportNeedsStep'
 import { MedicalSummaryStep } from './steps/MedicalSummaryStep'
 import { BehaviourSummaryStep } from './steps/BehaviourSummaryStep'
 import { RisksHazardsStep } from './steps/RisksHazardsStep'
+import { PrefilledIntakeForm } from './PrefilledIntakeForm'
 
 const CULTURAL_TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
@@ -125,6 +126,7 @@ export default function IntakeWizardPage() {
   const contactRoleFieldArray = useFieldArray({ control, name: 'contactRoles' })
 
   const [focusRequest, setFocusRequest] = useState<{ field: string } | null>(null)
+  const completionRequestId = useRef<string | null>(null)
   const requestFocus = (fieldName: string) => setFocusRequest({ field: fieldName })
   useEffect(() => {
     if (focusRequest) focusField(focusRequest.field)
@@ -266,6 +268,8 @@ export default function IntakeWizardPage() {
     }
     payload.isDraft = draft
     payload.completeIntake = completeIntake
+    // Keep the key after a rejected request so retry does not create duplicate evidence.
+    if (completeIntake) payload.completionRequestId = completionRequestId.current ??= crypto.randomUUID()
     return payload
   }
 
@@ -407,6 +411,9 @@ export default function IntakeWizardPage() {
   if (isEditMode && (participantLoading || !participant)) {
     return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   }
+
+  // Converted inquiries use only the narrow, server-enforced intake contract.
+  if (isEditMode && participant) return <PrefilledIntakeForm participant={participant} />
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">

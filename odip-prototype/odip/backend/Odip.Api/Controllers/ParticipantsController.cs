@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -23,12 +24,14 @@ public class ParticipantsController : ControllerBase
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly ParticipantDocumentService _documentService;
     private readonly SafetyNoteSyncService _safetyNoteSync;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync)
+    private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null)
     {
         _db = db;
         _compatLink = compatLink;
         _documentService = documentService;
         _safetyNoteSync = safetyNoteSync;
+        _intakeSnapshots = intakeSnapshots ?? new ParticipantIntakeSnapshotService(db);
     }
 
     /// <summary>
@@ -39,6 +42,11 @@ public class ParticipantsController : ControllerBase
     /// </summary>
     private Task<bool> IsValidPreferredUserRefAsync(Guid? userId, CancellationToken ct) =>
         ParticipantPatchApplier.IsValidPreferredUserRefAsync(_db, userId, ct);
+
+    // Direct controller tests do not construct an HttpContext, while authenticated requests do.
+    // Keep audit attribution deterministic in both cases rather than dereferencing a null User.
+    private string CompletionActor() =>
+        User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
 
     /// <summary>
     /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
@@ -322,7 +330,7 @@ public class ParticipantsController : ControllerBase
             // SPEC-05 (PF-10.3) — stamped server-side, never client-supplied, only when the
             // Intake wizard's own final-step create call sets CompleteIntake; a mid-intake
             // "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must not stamp it.
-            IntakeCompletedAt = dto.CompleteIntake ? DateTime.UtcNow : null,
+            IntakeCompletedAt = null,
             // INTAKE sub-wave B — Cultural & Consent step.
             IsCald = dto.IsCald, IsLgbtqi = dto.IsLgbtqi, IsFamilyCommunity = dto.IsFamilyCommunity,
             IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander,
@@ -450,6 +458,12 @@ public class ParticipantsController : ControllerBase
         // the RiskEntries loop's just-added, not-yet-persisted rows above — closes the
         // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
         await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
+        if (dto.CompleteIntake)
+        {
+            var snapshot = await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
+            // Completion metadata and its immutable evidence share one server-issued UTC instant.
+            participant.IntakeCompletedAt = snapshot.CompletedAtUtc;
+        }
         await _db.SaveChangesAsync(ct);
         // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
         // inserted above, in the same SaveChangesAsync), not from dto.ContactRoles — a role row
@@ -553,7 +567,9 @@ public class ParticipantsController : ControllerBase
         p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.IsRepeatClient = dto.IsRepeatClient;
-        p.IsActive = dto.IsActive; p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
+        // Lifecycle flags are deliberately not copied from the full-profile DTO. They are derived
+        // below from the server-owned intake completion evidence and the permitted draft state.
+        p.MobilityAidWheelchair = dto.MobilityAidWheelchair; p.MobilityAidWalker = dto.MobilityAidWalker;
         p.MobilitySupportOptions = dto.MobilitySupportOptions;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.OtherDiagnoses = dto.OtherDiagnoses.Select(d => d.Trim()).ToList(); p.HidpaSupportCategories = dto.HidpaSupportCategories;
         p.IsHighSupport = dto.IsHighSupport; p.IsIntensiveSupport = dto.IsIntensiveSupport;
@@ -609,14 +625,6 @@ public class ParticipantsController : ControllerBase
         p.SupportsLookLikeMorning = dto.SupportsLookLikeMorning; p.SupportsLookLikeDay = dto.SupportsLookLikeDay;
         p.SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening; p.SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight;
         p.OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating;
-        // INTAKE-08: the caller declares intent per-call — true keeps/re-marks the participant a
-        // draft (another "Save as draft" click, from any wizard step), false is a full save,
-        // including the final Review-step submission that's meant to clear a draft off for good.
-        // SPEC-05 PF-10.5: this is also "profile complete"'s single server-side flip point — every
-        // one of the field validators above (ValidateNames et al.) already ran, so an incomplete
-        // payload never reaches here with IsDraft=false; the client requests the transition, the
-        // server only ever honours it after its own validation passes, in this one place.
-        p.IsDraft = dto.IsDraft;
         // SPEC-05 PF-10.5: resuming an existing Intake draft (IntakeCompletedAt still null) routes
         // back through this same Update endpoint rather than a second Create — the resumed Intake
         // wizard's own final-step call sets CompleteIntake=true to stamp IntakeCompletedAt here,
@@ -625,22 +633,36 @@ public class ParticipantsController : ControllerBase
         // Never overwrites an already-set value (set once, never cleared — see
         // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
         // does not finalise the participant; only a subsequent Profile completion does that.
-        if (dto.CompleteIntake && p.IntakeCompletedAt == null)
-            p.IntakeCompletedAt = DateTime.UtcNow;
         p.UpdatedAt = DateTime.UtcNow;
 
+        if (dto.CompleteIntake)
+        {
+            var intakeSnapshot = await _intakeSnapshots.PrepareCaptureAsync(p, CompletionActor(), dto.CompletionRequestId, ct);
+            // Preserve the first completion stamp but create a separate immutable revision for an
+            // intentional later completion with a new idempotency key.
+            p.IntakeCompletedAt ??= intakeSnapshot.CompletedAtUtc;
+        }
+
+        // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
+        // participant. In particular, a raw client cannot turn IsActive=true/IsDraft=false into
+        // booking eligibility without the server-issued intake completion timestamp. Once intake
+        // evidence exists, finalising the validated profile derives the active state; callers do
+        // not set IsActive directly.
+        p.IsDraft = !p.IntakeCompletedAt.HasValue || dto.IsDraft;
+        p.IsActive = p.IntakeCompletedAt.HasValue && !p.IsDraft;
+
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
-        // compatibility row, in the same transaction as the participant update.
-        // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
-        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
+        // compatibility row, in the same transaction as the participant update. Draft state is
+        // the derived state above, not the client-supplied flag.
+        await _compatLink.SyncFromParticipantPreferredStaffAsync(p.Id, previousPreferredStaffId, dto.PreferredStaffId, ct, isDraft: p.IsDraft);
         // INTAKE sub-wave B — see CreateParticipantDto.Consents' doc for why, unlike RiskEntries/
         // ContactRoles, this is read on Update too (not create-mode-only).
         await ParticipantPatchApplier.UpsertConsentsAsync(_db, p.Id, dto.Consents, ct);
         // INTAKE sub-wave C1 — same read-on-both-paths convention as Consents above.
         await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, p.Id, dto.HealthConditions, ct);
-        // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions above.
+        // INTAKE sub-wave C2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
         await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, p.Id, dto.AdlAssessments, ct);
-        // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments above.
+        // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
         await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, p.Id, dto.ChecklistItems, ct);
         // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
         await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
@@ -651,6 +673,40 @@ public class ParticipantsController : ControllerBase
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
         var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = updatePlanTypeComplianceWarning }));
+    }
+
+    /// <summary>
+    /// Saves the participant-owned intake subset. This endpoint is intentionally separate from
+    /// full profile PUT: it never accepts or changes activation, draft state, plan/funding or
+    /// staff fields. An incomplete save therefore cannot activate a draft participant or make it
+    /// available to booking surfaces (which already exclude <c>IsDraft</c> participants).
+    /// </summary>
+    [HttpPut("{id:guid}/intake")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> SaveIntake(Guid id, [FromBody] SaveParticipantIntakeDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FirstName) || string.IsNullOrWhiteSpace(dto.LastName))
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("First name and last name are required."));
+
+        // Query filters enforce the authenticated tenant boundary; foreign IDs are indistinguishable
+        // from missing IDs, including when the API is called by ordinary tenant users.
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim(); p.PreferredName = dto.PreferredName;
+        p.DateOfBirth = dto.DateOfBirth; p.Phone = dto.Phone; p.Email = dto.Email;
+        p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
+        p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
+        p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
+        p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
+        p.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
+        {
+            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
+            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt,
+            UpdatedAt = p.UpdatedAt
+        }));
     }
 
     /// <summary>
@@ -749,6 +805,29 @@ public class ParticipantsController : ControllerBase
         var result = await _documentService.GenerateIntakeFormAsync(id, ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
+    }
+
+    /// <summary>Lists immutable intake-completion revisions for the authenticated participant tenant.</summary>
+    [HttpGet("{id:guid}/intake-snapshots")]
+    public async Task<ActionResult<ApiResponse<List<ParticipantIntakeSnapshotDto>>>> ListIntakeSnapshots(Guid id, CancellationToken ct)
+    {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var snapshots = await _db.ParticipantIntakeSnapshots
+            .Where(x => x.ParticipantId == id)
+            .OrderByDescending(x => x.Revision)
+            .Select(x => new ParticipantIntakeSnapshotDto { Revision = x.Revision, CompletedAtUtc = x.CompletedAtUtc })
+            .ToListAsync(ct);
+        return Ok(ApiResponse<List<ParticipantIntakeSnapshotDto>>.Ok(snapshots));
+    }
+
+    /// <summary>Downloads the immutable dated PDF produced by an explicit intake completion.</summary>
+    [HttpGet("{id:guid}/intake-snapshots/{revision:int}/download")]
+    public async Task<IActionResult> DownloadIntakeSnapshotPdf(Guid id, int revision, CancellationToken ct)
+    {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var snapshot = await _intakeSnapshots.FindAsync(id, revision, ct);
+        if (snapshot == null) return NotFound(ApiResponse<bool>.Fail("Intake snapshot not found"));
+        return File(snapshot.PdfContent, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
     }
 
     /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>

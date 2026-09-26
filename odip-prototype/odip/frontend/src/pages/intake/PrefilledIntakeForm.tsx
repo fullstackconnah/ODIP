@@ -1,0 +1,163 @@
+import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import type { ParticipantDetailDto, SaveParticipantIntakeDto, UpdateParticipantDto } from '@/api/types'
+import { useDownloadParticipantIntakeSnapshotPdf, useParticipantIntakeSnapshots, useSaveParticipantIntake, useUpdateParticipant } from '@/api/hooks'
+import { extractErrorMessage } from './intakeFormat'
+
+type PrefilledIntakeFormProps = {
+  participant: ParticipantDetailDto
+}
+
+const fields: Array<{ key: keyof SaveParticipantIntakeDto; label: string; type?: string }> = [
+  { key: 'firstName', label: 'First name' },
+  { key: 'lastName', label: 'Last name' },
+  { key: 'preferredName', label: 'Preferred name' },
+  { key: 'dateOfBirth', label: 'Date of birth', type: 'date' },
+  { key: 'phone', label: 'Phone', type: 'tel' },
+  { key: 'email', label: 'Email', type: 'email' },
+  { key: 'addressStreet', label: 'Street address' },
+  { key: 'addressSuburb', label: 'Suburb' },
+  { key: 'addressState', label: 'State' },
+  { key: 'addressPostcode', label: 'Postcode' },
+  { key: 'primaryDiagnosis', label: 'Primary diagnosis' },
+]
+
+function nullable(value: string | null | undefined) {
+  return value?.trim() || null
+}
+
+function initialValues(participant: ParticipantDetailDto): SaveParticipantIntakeDto {
+  return {
+    firstName: participant.firstName ?? '',
+    lastName: participant.lastName ?? '',
+    preferredName: participant.preferredName ?? '',
+    dateOfBirth: participant.dateOfBirth ? participant.dateOfBirth.split('T')[0] : '',
+    phone: participant.phone ?? '', email: participant.email ?? '',
+    addressStreet: participant.addressStreet ?? '', addressSuburb: participant.addressSuburb ?? '',
+    addressState: participant.addressState ?? '', addressPostcode: participant.addressPostcode ?? '',
+    primaryDiagnosis: participant.primaryDiagnosis ?? '', medicalSummary: participant.medicalSummary ?? '',
+    mobilityNotes: participant.mobilityNotes ?? '', behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
+  }
+}
+
+function intakePayload(values: SaveParticipantIntakeDto): SaveParticipantIntakeDto {
+  return {
+    ...values,
+    preferredName: nullable(values.preferredName), dateOfBirth: nullable(values.dateOfBirth),
+    phone: nullable(values.phone), email: nullable(values.email), addressStreet: nullable(values.addressStreet),
+    addressSuburb: nullable(values.addressSuburb), addressState: nullable(values.addressState), addressPostcode: nullable(values.addressPostcode),
+    primaryDiagnosis: nullable(values.primaryDiagnosis), medicalSummary: nullable(values.medicalSummary), mobilityNotes: nullable(values.mobilityNotes),
+    behaviourRiskSummary: nullable(values.behaviourRiskSummary), notes: nullable(values.notes),
+  }
+}
+
+function newCompletionRequestId() {
+  return crypto.randomUUID()
+}
+
+/**
+ * An inquiry-converted participant remains the same participant record. This deliberately uses the
+ * narrow endpoint for incomplete work; completion is the existing full-record PUT contract, which
+ * captures an immutable audit snapshot only when CompleteIntake is explicitly set.
+ */
+export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
+  const saveIntake = useSaveParticipantIntake()
+  const completeIntake = useUpdateParticipant()
+  const snapshots = useParticipantIntakeSnapshots(participant.id)
+  const downloadSnapshot = useDownloadParticipantIntakeSnapshotPdf()
+  const { register, handleSubmit, reset, getValues, formState: { errors, isDirty } } = useForm<SaveParticipantIntakeDto>({ defaultValues: initialValues(participant) })
+  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [completionRequestId, setCompletionRequestId] = useState(newCompletionRequestId)
+
+  useEffect(() => {
+    reset(initialValues(participant))
+    setCompletionRequestId(newCompletionRequestId())
+  }, [participant, reset])
+
+  const onSave = async (values: SaveParticipantIntakeDto) => {
+    setError(null)
+    setNotice(null)
+    try {
+      await saveIntake.mutateAsync({ id: participant.id, data: intakePayload(values) })
+      reset(values)
+      setNotice('Saved as incomplete intake. This participant remains a draft and is not active or bookable.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : extractErrorMessage(err, 'Could not save the intake. Your changes are still on this page; please try again.'))
+    }
+  }
+
+  const onComplete = async () => {
+    setError(null)
+    setNotice(null)
+    // Completion is intentionally a separate, full record update. The current participant provides
+    // required non-intake values; only the narrow form values are overlaid before completion.
+    const data = {
+      ...participant,
+      ...intakePayload(getValues()),
+      isDraft: true,
+      completeIntake: true,
+      completionRequestId,
+    } as unknown as UpdateParticipantDto
+    try {
+      await completeIntake.mutateAsync({ id: participant.id, data })
+      reset(getValues())
+      await snapshots.refetch()
+      setNotice('Intake completed. A dated immutable audit PDF has been recorded; the participant remains a draft until profile completion.')
+      // A deliberate later completion must create a new revision, so only rotate after success.
+      setCompletionRequestId(newCompletionRequestId())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : extractErrorMessage(err, 'Could not complete the intake. Please retry; the same completion request will be used to avoid duplicate audit records.'))
+    }
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold">Complete intake</h1>
+        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Review the inquiry details and add only intake information. Full profile editing is completed separately.</p>
+      </div>
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)]/40 p-4 text-sm">
+        <p className="font-medium">Draft participant</p>
+        <p className="mt-1 text-[var(--color-muted-foreground)]">Saving or completing intake does not activate the participant: they are not active or bookable.</p>
+      </div>
+      {snapshots.data && snapshots.data.length > 0 && (
+        <section aria-label="Immutable intake PDFs" className="rounded-lg border border-[var(--color-border)] p-4 text-sm">
+          <h2 className="font-medium">Immutable intake PDFs</h2>
+          <ul className="mt-2 space-y-1">
+            {snapshots.data.map((snapshot) => (
+              <li key={snapshot.revision}>
+                <button type="button" className="text-[var(--color-primary)] underline" onClick={() => downloadSnapshot.mutate({ id: participant.id, revision: snapshot.revision })}>
+                  Download intake completion revision {snapshot.revision} ({new Date(snapshot.completedAtUtc).toLocaleDateString()})
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {notice && <div role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-800">{notice}</div>}
+      {error && <div role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</div>}
+      <form onSubmit={handleSubmit(onSave)} noValidate className="space-y-6">
+        <section className="grid gap-4 md:grid-cols-2">
+          {fields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
+            {label}{(key === 'firstName' || key === 'lastName') && <span aria-hidden="true"> *</span>}
+            <input type={type} className="rounded-md border bg-transparent px-3 py-2" {...register(key, { required: key === 'firstName' || key === 'lastName' ? `${label} is required` : false })} />
+            {errors[key]?.message && <span role="alert" className="text-[var(--color-destructive)]">{errors[key]?.message}</span>}
+          </label>)}
+        </section>
+        {([
+          ['medicalSummary', 'Medical summary'], ['mobilityNotes', 'Mobility notes'], ['behaviourRiskSummary', 'Behaviour risk summary'], ['notes', 'Intake notes'],
+        ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={saveIntake.isPending || completeIntake.isPending || !isDirty} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-60">
+            {saveIntake.isPending ? 'Saving intake…' : 'Save incomplete intake'}
+          </button>
+          <button type="button" onClick={onComplete} disabled={saveIntake.isPending || completeIntake.isPending} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary)] disabled:opacity-60">
+            {completeIntake.isPending ? 'Completing intake…' : 'Complete intake'}
+          </button>
+          <span className="text-xs text-[var(--color-muted-foreground)]">Completion saves a dated immutable audit record. If it fails, retrying uses the same request key.</span>
+        </div>
+      </form>
+    </div>
+  )
+}
