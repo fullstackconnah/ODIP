@@ -654,6 +654,40 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
+    /// Saves the participant-owned intake subset. This endpoint is intentionally separate from
+    /// full profile PUT: it never accepts or changes activation, draft state, plan/funding or
+    /// staff fields. An incomplete save therefore cannot activate a draft participant or make it
+    /// available to booking surfaces (which already exclude <c>IsDraft</c> participants).
+    /// </summary>
+    [HttpPut("{id:guid}/intake")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> SaveIntake(Guid id, [FromBody] SaveParticipantIntakeDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FirstName) || string.IsNullOrWhiteSpace(dto.LastName))
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("First name and last name are required."));
+
+        // Query filters enforce the authenticated tenant boundary; foreign IDs are indistinguishable
+        // from missing IDs, including when the API is called by ordinary tenant users.
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim(); p.PreferredName = dto.PreferredName;
+        p.DateOfBirth = dto.DateOfBirth; p.Phone = dto.Phone; p.Email = dto.Email;
+        p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
+        p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
+        p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
+        p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
+        p.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
+        {
+            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
+            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt,
+            UpdatedAt = p.UpdatedAt
+        }));
+    }
+
+    /// <summary>
     /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>
     /// (16 scalar + 4 collection groups — see PatchParticipantDto's doc for the full partition);
     /// every absent group's columns are left completely untouched. Presence is all-or-nothing at
