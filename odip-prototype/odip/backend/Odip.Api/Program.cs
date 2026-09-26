@@ -163,6 +163,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
 // DOC-01 — Intake Form / Participant Profile PDF exports.
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 

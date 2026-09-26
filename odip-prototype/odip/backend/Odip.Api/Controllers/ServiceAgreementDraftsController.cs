@@ -19,7 +19,8 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly ServiceAgreementDraftService _service;
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service) => (_db, _tenant, _service) = (db, tenant, service);
+    private readonly ElectronicSigningEvidenceService _evidence;
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null) => (_db, _tenant, _service, _evidence) = (db, tenant, service, evidence ?? new ElectronicSigningEvidenceService(db));
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
@@ -48,8 +49,26 @@ public class ServiceAgreementDraftsController : ControllerBase
         return File(pdf!, "application/pdf", $"service-agreement-draft-v{id}.pdf");
     }
 
+    [HttpPost("signing-snapshots")]
+    public async Task<ActionResult<ApiResponse<ElectronicSigningSnapshotDto>>> CreateSigningSnapshot(Guid participantId, CreateElectronicSigningSnapshotDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ElectronicSigningSnapshotDto>.Fail("A tenant context is required."));
+        var (snapshot, error) = await _evidence.CreateSnapshotAsync(tenantId, participantId, dto, ct);
+        if (error != null) return BadRequest(ApiResponse<ElectronicSigningSnapshotDto>.Fail(error));
+        return Ok(ApiResponse<ElectronicSigningSnapshotDto>.Ok(new(snapshot!.Id, snapshot.DraftId, snapshot.DraftVersion, snapshot.DocumentJson, snapshot.DocumentHash, "PendingVerification")));
+    }
+
+    [HttpPost("signing-snapshots/{snapshotId:guid}/evidence")]
+    public async Task<ActionResult<ApiResponse<ElectronicSigningEvidenceDto>>> SubmitSigningEvidence(Guid participantId, Guid snapshotId, SubmitElectronicSigningEvidenceDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ElectronicSigningEvidenceDto>.Fail("A tenant context is required."));
+        var (evidence, error) = await _evidence.SubmitAsync(tenantId, participantId, snapshotId, dto, ct);
+        if (error != null) return BadRequest(ApiResponse<ElectronicSigningEvidenceDto>.Fail(error));
+        return Ok(ApiResponse<ElectronicSigningEvidenceDto>.Ok(new(evidence!.Id, evidence.Status, evidence.EvidenceHash, evidence.CreatedAt)));
+    }
+
     [HttpPost("{id:guid}/signed-evidence")]
-    public ActionResult<ApiResponse<object>> AttachSignedEvidence(Guid participantId, Guid id) => Conflict(ApiResponse<object>.Fail("Signed-evidence storage is not configured. A draft cannot be marked signed by this API."));
+    public ActionResult<ApiResponse<object>> AttachSignedEvidence(Guid participantId, Guid id) => Conflict(ApiResponse<object>.Fail("Deprecated: use in-app evidence capture. Evidence remains pending verification and cannot approve scheduling."));
 
     private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => new()
     {

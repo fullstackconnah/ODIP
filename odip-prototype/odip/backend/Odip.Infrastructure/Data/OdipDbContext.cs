@@ -32,6 +32,8 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
     public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
+    public DbSet<ElectronicSigningSnapshot> ElectronicSigningSnapshots => Set<ElectronicSigningSnapshot>();
+    public DbSet<ElectronicSigningEvidence> ElectronicSigningEvidence => Set<ElectronicSigningEvidence>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ParticipantContact> ParticipantContacts => Set<ParticipantContact>();
     // CONTACT-01/02/03 — see Person/ParticipantContactRole's type docs for why this is a separate
@@ -1563,6 +1565,25 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Draft).WithMany(e => e.Lines).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.DraftId);
         });
+        modelBuilder.Entity<ElectronicSigningSnapshot>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DocumentJson).IsRequired();
+            entity.Property(e => e.DocumentHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => new { e.TenantId, e.DraftId, e.DraftVersion }).IsUnique();
+        });
+        modelBuilder.Entity<ElectronicSigningEvidence>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.SignerName).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.SignerCapacity).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.EvidenceHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.PreviousEvidenceHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.HasOne(e => e.Snapshot).WithMany(e => e.Evidence).HasForeignKey(e => e.SnapshotId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.SnapshotId, e.IdempotencyKey }).IsUnique();
+        });
 
         // ── ParticipantAdlAssessment (INTAKE sub-wave C2) ───────────
         modelBuilder.Entity<ParticipantAdlAssessment>(entity =>
@@ -1670,6 +1691,10 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantIntakeSnapshot>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraft>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ElectronicSigningSnapshot>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ElectronicSigningEvidence>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // TenantId index for CaregiverProfileSubmission is declared on its own configuration
