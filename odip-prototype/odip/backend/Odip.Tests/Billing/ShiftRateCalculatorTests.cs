@@ -132,15 +132,81 @@ public class ShiftRateCalculatorTests
         Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(Request(start, start.AddHours(1), rows,
             new Dictionary<ShiftRateBandKey, SupportItemMapping> { [key] = new(GroupId, " ") })));
         Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(new ShiftRateRequest(
-            start, start.AddHours(1), "VIC", new HashSet<DateOnly>(), null, Map(key, "CODE"), rows)));
+            Utc(start), Utc(start.AddHours(1)), "Etc/UTC", "VIC", new HashSet<DateOnly>(), null, Map(key, "CODE"), rows)));
         Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(Request(start, start.AddHours(1),
             Rows((key, "CODE", 0m, "zero")), Map(key, "CODE"))));
     }
 
+    [Fact]
+    public void Calculate_SydneySpringForward_UsesLocalHolidayAndElapsedUtcDuration()
+    {
+        var key = new ShiftRateBandKey(ClaimDayType.PublicHoliday, ShiftTimeBand.Night);
+        var request = Request(
+            new DateTime(2026, 10, 3, 15, 30, 0), // 01:30 AEST, Sunday 4 October
+            new DateTime(2026, 10, 3, 18, 30, 0), // 05:30 AEDT: three elapsed hours
+            Rows((key, "HOL-NIGHT", 10m, "syd")), Map(key, "HOL-NIGHT"),
+            holidays: new HashSet<DateOnly> { new(2026, 10, 4) }, timeZone: "Australia/Sydney");
+
+        var quote = _calculator.Calculate(request);
+
+        Assert.Single(quote.Segments);
+        Assert.Equal(new DateOnly(2026, 10, 4), quote.Segments[0].ServiceDate);
+        Assert.Equal(ClaimDayType.PublicHoliday, quote.Segments[0].DayType);
+        Assert.Equal(3m, quote.Segments[0].Hours);
+    }
+
+    [Fact]
+    public void Calculate_SydneyFallBack_ChangesDaypartAtFirstAmbiguousLocalBoundary()
+    {
+        var night = new ShiftRateBandKey(ClaimDayType.Sunday, ShiftTimeBand.Night);
+        var am = new ShiftRateBandKey(ClaimDayType.Sunday, ShiftTimeBand.Am);
+        var request = Request(
+            new DateTime(2026, 4, 4, 14, 30, 0), // 01:30 AEDT
+            new DateTime(2026, 4, 4, 16, 30, 0), // 02:30 AEST
+            Rows((night, "NIGHT", 10m, "fall"), (am, "AM", 20m, "fall")),
+            Map(night, "NIGHT", am, "AM"), bands: new ShiftRateTimeBands(new TimeOnly(2, 0), new TimeOnly(12, 0), new TimeOnly(20, 0)),
+            timeZone: "Australia/Sydney");
+
+        var quote = _calculator.Calculate(request);
+
+        Assert.Equal(new[] { ShiftTimeBand.Night, ShiftTimeBand.Am }, quote.Segments.Select(s => s.TimeBand));
+        Assert.Equal(new[] { 0.5m, 1.5m }, quote.Segments.Select(s => s.Hours));
+        Assert.Equal(2m, quote.Segments.Sum(s => s.Hours));
+    }
+
+    [Fact]
+    public void Calculate_Queensland_DoesNotApplySydneyDaylightSaving()
+    {
+        var key = new ShiftRateBandKey(ClaimDayType.Sunday, ShiftTimeBand.Night);
+        var request = Request(new DateTime(2026, 10, 3, 15, 30, 0), new DateTime(2026, 10, 3, 18, 30, 0),
+            Rows((key, "QLD-NIGHT", 10m, "qld")), Map(key, "QLD-NIGHT"), timeZone: "Australia/Brisbane");
+
+        var quote = _calculator.Calculate(request);
+
+        Assert.Single(quote.Segments);
+        Assert.Equal(new DateOnly(2026, 10, 4), quote.Segments[0].ServiceDate);
+        Assert.Equal(3m, quote.Segments[0].Hours);
+    }
+
+    [Fact]
+    public void Calculate_FailsClosedForInvalidTimeZoneAndNonUtcInstants()
+    {
+        var key = new ShiftRateBandKey(ClaimDayType.Weekday, ShiftTimeBand.Am);
+        var rows = Rows((key, "CODE", 10m, "v1"));
+        var start = new DateTime(2026, 8, 24, 7, 0, 0);
+
+        Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(Request(start, start.AddHours(1), rows, Map(key, "CODE"), timeZone: "Australia/Not-A-Zone")));
+        Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(Request(start, start.AddHours(1), rows, Map(key, "CODE"), timeZone: "AUS Eastern Standard Time")));
+        Assert.Throws<ShiftRateCalculationException>(() => _calculator.Calculate(new ShiftRateRequest(
+            start, start.AddHours(1), "Etc/UTC", "VIC", new HashSet<DateOnly>(), Bands, Map(key, "CODE"), rows)));
+    }
+
     private static ShiftRateRequest Request(DateTime start, DateTime end, IReadOnlyCollection<SupportCatalogueItem> rows,
         IReadOnlyDictionary<ShiftRateBandKey, SupportItemMapping> mappings, string state = "VIC",
-        IReadOnlySet<DateOnly>? holidays = null, ShiftRateTimeBands? bands = null) =>
-        new(start, end, state, holidays ?? new HashSet<DateOnly>(), bands ?? Bands, mappings, rows);
+        IReadOnlySet<DateOnly>? holidays = null, ShiftRateTimeBands? bands = null, string timeZone = "Etc/UTC") =>
+        new(Utc(start), Utc(end), timeZone, state, holidays ?? new HashSet<DateOnly>(), bands ?? Bands, mappings, rows);
+
+    private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
     private static IReadOnlyDictionary<ShiftRateBandKey, SupportItemMapping> Map(params object[] values)
     {

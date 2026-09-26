@@ -4,9 +4,10 @@ using Odip.Domain.Enums;
 namespace Odip.Domain.Billing.Services;
 
 /// <summary>
-/// Pure, fail-closed calculation of an actual local shift interval. This is deliberately not a
-/// claim writer: callers supply their approved code/group mapping, state-scoped holiday set, time
-/// bands, and catalogue snapshot, then decide separately whether a quotation may be presented.
+/// Pure, fail-closed calculation of actual UTC shift instants. This is deliberately not a claim
+/// writer: callers supply their approved IANA time zone, code/group mapping, state-scoped holiday
+/// set, time bands, and catalogue snapshot, then decide separately whether a quotation may be
+/// presented. Day classification is local to the supplied zone; elapsed duration is always UTC.
 /// </summary>
 public sealed class ShiftRateCalculator
 {
@@ -20,22 +21,20 @@ public sealed class ShiftRateCalculator
         ArgumentNullException.ThrowIfNull(request);
         ValidateRequest(request);
 
+        var timeZone = ResolveTimeZone(request.TimeZoneId);
+        var timeBands = request.TimeBands!;
         var segments = new List<ShiftRateSegment>();
         var cursor = request.ActualStart;
         while (cursor < request.ActualEnd)
         {
-            var date = DateOnly.FromDateTime(cursor);
-            var nextMidnight = cursor.Date.AddDays(1);
-            var segmentEnd = request.ActualEnd < nextMidnight ? request.ActualEnd : nextMidnight;
-
-            foreach (var boundary in request.TimeBands!.BoundariesOn(cursor.Date))
-            {
-                if (boundary > cursor && boundary < segmentEnd)
-                    segmentEnd = boundary;
-            }
+            var localCursor = TimeZoneInfo.ConvertTimeFromUtc(cursor, timeZone);
+            var date = DateOnly.FromDateTime(localCursor);
+            var segmentEnd = NextLocalBoundaryUtc(localCursor, cursor, timeBands, timeZone);
+            if (segmentEnd > request.ActualEnd)
+                segmentEnd = request.ActualEnd;
 
             var dayType = DayTypeResolver.Resolve(date, request.PublicHolidays!);
-            var timeBand = request.TimeBands.GetBand(cursor.TimeOfDay);
+            var timeBand = timeBands.GetBand(localCursor.TimeOfDay);
             var key = new ShiftRateBandKey(dayType, timeBand);
             if (!request.SupportItems!.TryGetValue(key, out var mapping) || !mapping.IsValid)
                 throw new ShiftRateCalculationException($"No valid explicit support-item mapping is configured for {dayType}/{timeBand}.");
@@ -73,6 +72,12 @@ public sealed class ShiftRateCalculator
     {
         if (request.ActualStart >= request.ActualEnd)
             throw new ShiftRateCalculationException("Actual shift end must be after start.");
+        if (request.ActualStart.Kind != DateTimeKind.Utc || request.ActualEnd.Kind != DateTimeKind.Utc)
+            throw new ShiftRateCalculationException("Actual shift start and end must be UTC instants.");
+        if (string.IsNullOrWhiteSpace(request.TimeZoneId))
+            throw new ShiftRateCalculationException("An IANA service time zone is required.");
+        if (!request.TimeZoneId.Contains('/', StringComparison.Ordinal) || request.TimeZoneId != request.TimeZoneId.Trim())
+            throw new ShiftRateCalculationException("Service time zone must be an exact IANA identifier, such as 'Australia/Sydney'.");
         if (string.IsNullOrWhiteSpace(request.ServiceState))
             throw new ShiftRateCalculationException("A service location state is required.");
         if (!KnownStates.Contains(NormalizeState(request.ServiceState)))
@@ -86,6 +91,60 @@ public sealed class ShiftRateCalculator
             throw new ShiftRateCalculationException("Explicit support item group/code mappings are required.");
         if (request.CatalogueItems is null)
             throw new ShiftRateCalculationException("A catalogue snapshot is required.");
+    }
+
+    private static TimeZoneInfo ResolveTimeZone(string timeZoneId)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            throw new ShiftRateCalculationException($"Unknown IANA service time zone '{timeZoneId}'.");
+        }
+        catch (InvalidTimeZoneException)
+        {
+            throw new ShiftRateCalculationException($"Invalid IANA service time zone '{timeZoneId}'.");
+        }
+    }
+
+    private static DateTime NextLocalBoundaryUtc(
+        DateTime localCursor,
+        DateTime cursorUtc,
+        ShiftRateTimeBands timeBands,
+        TimeZoneInfo timeZone)
+    {
+        var date = localCursor.Date;
+        var candidates = timeBands.BoundariesOn(date)
+            .Append(date.AddDays(1));
+
+        var next = candidates
+            .Select(boundary => LocalBoundaryToUtc(boundary, timeZone))
+            .Where(boundary => boundary > cursorUtc)
+            .DefaultIfEmpty(DateTime.MaxValue)
+            .Min();
+
+        if (next == DateTime.MaxValue)
+            throw new ShiftRateCalculationException("Unable to determine the next local shift boundary.");
+        return next;
+    }
+
+    private static DateTime LocalBoundaryToUtc(DateTime localBoundary, TimeZoneInfo timeZone)
+    {
+        // A skipped local boundary (for example 02:00 at spring-forward) takes effect at the
+        // first real local instant after it. At fall-back, select the first occurrence so the
+        // local daypart changes when it first appears, rather than an hour late.
+        while (timeZone.IsInvalidTime(localBoundary))
+            localBoundary = localBoundary.AddMinutes(1);
+
+        if (timeZone.IsAmbiguousTime(localBoundary))
+        {
+            var firstOffset = timeZone.GetAmbiguousTimeOffsets(localBoundary).Max();
+            return DateTime.SpecifyKind(localBoundary - firstOffset, DateTimeKind.Utc);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(localBoundary, timeZone);
     }
 
     internal static decimal GetRateForState(SupportCatalogueItem item, string state) => NormalizeState(state) switch
@@ -175,6 +234,7 @@ public readonly record struct ShiftRateBandKey(ClaimDayType DayType, ShiftTimeBa
 public sealed record ShiftRateRequest(
     DateTime ActualStart,
     DateTime ActualEnd,
+    string TimeZoneId,
     string ServiceState,
     IReadOnlySet<DateOnly>? PublicHolidays,
     ShiftRateTimeBands? TimeBands,
