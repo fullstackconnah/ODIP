@@ -42,6 +42,14 @@ public sealed class ServiceAgreementDraftService
         return (draft, null);
     }
 
+    public async Task<(byte[]? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
+    {
+        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines)
+            .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
+        if (draft == null) return (null, "Draft not found.");
+        return (ServiceAgreementDraftPdfRenderer.Render(draft), null);
+    }
+
     private static decimal PriceForState(SupportCatalogueItem item, string state) => state switch
     {
         "ACT" => item.PriceLimit_ACT, "NSW" => item.PriceLimit_NSW, "NT" => item.PriceLimit_NT, "QLD" => item.PriceLimit_QLD,

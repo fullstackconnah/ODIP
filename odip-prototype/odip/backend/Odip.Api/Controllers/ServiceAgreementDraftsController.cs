@@ -40,7 +40,13 @@ public class ServiceAgreementDraftsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/pdf")]
-    public ActionResult<ApiResponse<object>> Pdf(Guid participantId, Guid id) => Conflict(ApiResponse<object>.Fail("PDF generation is unavailable until an owner-approved legal template is configured. Drafts are not agreements and cannot be signed."));
+    public async Task<IActionResult> Pdf(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<object>.Fail("A tenant context is required."));
+        var (pdf, error) = await _service.RenderPdfAsync(tenantId, participantId, id, ct);
+        if (error != null) return NotFound(ApiResponse<object>.Fail(error));
+        return File(pdf!, "application/pdf", $"service-agreement-draft-v{id}.pdf");
+    }
 
     [HttpPost("{id:guid}/signed-evidence")]
     public ActionResult<ApiResponse<object>> AttachSignedEvidence(Guid participantId, Guid id) => Conflict(ApiResponse<object>.Fail("Signed-evidence storage is not configured. A draft cannot be marked signed by this API."));
