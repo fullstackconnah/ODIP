@@ -29,7 +29,7 @@ public class ParticipantIntakeSnapshotServiceTests
         var p = new Participant
         {
             Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), FirstName = "Synthetic", LastName = "Participant",
-            PrimaryDiagnosis = "Synthetic diagnosis", MobilityNotes = "Synthetic mobility", NdisNumber = "profile-only"
+            MedicalSummary = "Synthetic medical", MiddleName = "profile-only"
         };
         db.Participants.Add(p); await db.SaveChangesAsync();
         var service = new ParticipantIntakeSnapshotService(db);
@@ -45,10 +45,43 @@ public class ParticipantIntakeSnapshotServiceTests
         Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.SnapshotJson))).ToLowerInvariant(), first.ContentHash);
         Assert.Equal(DateTimeKind.Utc, first.CompletedAtUtc.Kind);
         Assert.Contains("Synthetic", first.SnapshotJson);
-        Assert.Contains("Synthetic diagnosis", first.SnapshotJson);
-        Assert.Contains("Synthetic mobility", first.SnapshotJson);
+        Assert.Contains("Synthetic medical", first.SnapshotJson);
         Assert.DoesNotContain("profile-only", first.SnapshotJson);
         Assert.DoesNotContain("Changed later", first.SnapshotJson);
+    }
+
+    [Fact]
+    public async Task Capture_FreezesIntakeCollectionsWithHumanReadableLabels()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Synthetic", LastName = "Participant", NdisNumber = "123456789" };
+        var person = new Person { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Synthetic", LastName = "Contact" };
+        db.AddRange(participant, person,
+            new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, PersonId = person.Id, RoleType = Odip.Domain.Enums.ContactRoleType.NextOfKin, RelationshipToParticipant = "Sibling", IsPrimary = true },
+            new ParticipantRiskEntry { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, AtRiskParty = Odip.Domain.Enums.AtRiskParty.Participant, Description = "Synthetic transfer risk", MitigationNotes = "Use transfer plan" });
+        await db.SaveChangesAsync();
+
+        var first = await new ParticipantIntakeSnapshotService(db).CaptureAsync(participant, "actor", "collection-request", default);
+        participant.NdisNumber = "changed after completion";
+        db.ParticipantRiskEntries.Single().Description = "changed after completion";
+        await db.SaveChangesAsync();
+        var retry = await new ParticipantIntakeSnapshotService(db).CaptureAsync(participant, "actor", "collection-request", default);
+
+        Assert.Equal(first.Id, retry.Id);
+        Assert.Equal(first.ContentHash, retry.ContentHash);
+        Assert.Equal(first.PdfContent, retry.PdfContent);
+        Assert.Contains("contactRoles", first.SnapshotJson);
+        Assert.Contains("Contact role", first.SnapshotJson);
+        Assert.Contains("NextOfKin", first.SnapshotJson);
+        Assert.Contains("Synthetic Contact", first.SnapshotJson);
+        Assert.Contains("riskEntries", first.SnapshotJson);
+        Assert.Contains("Risk entry", first.SnapshotJson);
+        Assert.Contains("Participant", first.SnapshotJson);
+        Assert.Contains("Synthetic transfer risk", first.SnapshotJson);
+        Assert.Contains("123456789", first.SnapshotJson);
+        Assert.DoesNotContain("changed after completion", first.SnapshotJson);
+        Assert.DoesNotContain("profile-only", first.SnapshotJson);
     }
 
     [Fact]

@@ -14,6 +14,17 @@ namespace Odip.Infrastructure.Services;
 public sealed class ParticipantIntakeSnapshotService
 {
     private readonly OdipDbContext _db;
+    // Kept in lockstep with documentMapping.ts's entryPhase: 'intake' contract. Do not replace
+    // this with all Participant properties: that would leak profile-only data into evidence.
+    private static readonly string[] IntakeFieldNames =
+    [
+        nameof(Participant.FirstName), nameof(Participant.LastName), nameof(Participant.PreferredName), nameof(Participant.DateOfBirth), nameof(Participant.Phone), nameof(Participant.Email),
+        nameof(Participant.AddressStreet), nameof(Participant.AddressSuburb), nameof(Participant.AddressState), nameof(Participant.AddressPostcode),
+        nameof(Participant.LivingArrangement), nameof(Participant.MainSupportPersonName), nameof(Participant.MainSupportPersonRelationship), nameof(Participant.OthersLivingInAccommodation), nameof(Participant.ResidentialInfo), nameof(Participant.LivesWithOthers), nameof(Participant.WhoLivesWith), nameof(Participant.SilProviderName), nameof(Participant.SilProviderContactPhone), nameof(Participant.AccommodationType), nameof(Participant.OnSiteSupportHours), nameof(Participant.LivingArrangementNotes),
+        nameof(Participant.NdisNumber), nameof(Participant.PlanStartDate), nameof(Participant.PlanEndDate), nameof(Participant.PlanType), nameof(Participant.FundingSource), nameof(Participant.FundingOrganisation), nameof(Participant.Region), nameof(Participant.IsRepeatClient), nameof(Participant.ServiceStreams),
+        nameof(Participant.MobilityAidWheelchair), nameof(Participant.MobilityAidWalker), nameof(Participant.IsHighSupport), nameof(Participant.IsIntensiveSupport), nameof(Participant.OvernightSupport), nameof(Participant.OvernightRatio), nameof(Participant.RequiresHiLoBed), nameof(Participant.RequiresHoist), nameof(Participant.RequiresShowerChair), nameof(Participant.RequiresCommode), nameof(Participant.RequiresStandingMachine), nameof(Participant.SupportRatio),
+        nameof(Participant.MedicalSummary), nameof(Participant.IsCald), nameof(Participant.IsLgbtqi), nameof(Participant.IsFamilyCommunity), nameof(Participant.IsAboriginalOrTorresStraitIslander), nameof(Participant.ReceivedRightsAndResponsibilitiesInfo), nameof(Participant.ReceivedPrivacyAndConfidentialityInfo), nameof(Participant.ReceivedFeedbackInfo), nameof(Participant.ReceivedBeingSafeInfo), nameof(Participant.ReceivedAdvocacyInfo), nameof(Participant.BehavioursOfConcernCurrent), nameof(Participant.BehavioursOfConcernFiveYearHistory), nameof(Participant.ExpressiveSkills), nameof(Participant.HidpaNotes), nameof(Participant.BehaviourRiskSummary), nameof(Participant.Notes)
+    ];
     public ParticipantIntakeSnapshotService(OdipDbContext db) { _db = db; QuestPDF.Settings.License = LicenseType.Community; }
 
     /// <summary>
@@ -29,19 +40,21 @@ public sealed class ParticipantIntakeSnapshotService
 
         var completedAt = DateTime.UtcNow;
         var revision = (await _db.ParticipantIntakeSnapshots.Where(x => x.ParticipantId == participant.Id).MaxAsync(x => (int?)x.Revision, ct) ?? 0) + 1;
-        // This is deliberately the intake write contract, not the mutable full Participant profile.
-        // Keep the projection explicit: later additions to profile-only fields must not silently alter
-        // the meaning (or hash) of historical intake evidence.
-        var fields = new
+        var fields = IntakeFieldNames.ToDictionary(name => char.ToLowerInvariant(name[0]) + name[1..], name => participant.GetType().GetProperty(name)!.GetValue(participant));
+        // Query collections explicitly so callers do not need a fragile Include graph. These are
+        // projected now, including human-readable role/risk labels, into immutable evidence.
+        var contactRoleRows = await _db.ParticipantContactRoles.Where(x => x.ParticipantId == participant.Id).Include(x => x.Person).ToListAsync(ct);
+        var contactRoles = contactRoleRows.Select(x => new
         {
-            participant.Id, participant.TenantId,
-            participant.FirstName, participant.LastName, participant.PreferredName,
-            participant.DateOfBirth, participant.Phone, participant.Email,
-            participant.AddressStreet, participant.AddressSuburb, participant.AddressState, participant.AddressPostcode,
-            participant.PrimaryDiagnosis, participant.MedicalSummary, participant.MobilityNotes,
-            participant.BehaviourRiskSummary, participant.Notes
-        };
-        var snapshotJson = JsonSerializer.Serialize(new { completedAtUtc = completedAt, actor, revision, fields });
+            label = "Contact role", roleType = x.RoleType.ToString(), personName = x.Person == null ? "Unknown contact" : (x.Person.FirstName + " " + x.Person.LastName).Trim(),
+            x.RelationshipToParticipant, x.IsPrimary, x.PriorityOrder, x.AuthorisedForMedicalInfo, x.OrganisationName, x.RegistrationNumber, x.Status, x.Notes
+        }).ToList();
+        var riskEntryRows = await _db.ParticipantRiskEntries.Where(x => x.ParticipantId == participant.Id).ToListAsync(ct);
+        var riskEntries = riskEntryRows.Select(x => new
+        {
+            label = "Risk entry", atRiskParty = x.AtRiskParty.ToString(), x.Description, x.MitigationNotes, x.IsActive
+        }).ToList();
+        var snapshotJson = JsonSerializer.Serialize(new { completedAtUtc = completedAt, actor, revision, participantId = participant.Id, tenantId = participant.TenantId, fields, contactRoles, riskEntries });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson))).ToLowerInvariant();
         var pdf = Document.Create(container => container.Page(page =>
         {
