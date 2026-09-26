@@ -19,8 +19,8 @@ public static class ServiceAgreementDraftPdfRenderer
             page.DefaultTextStyle(style => style.FontSize(10));
             page.Header().Column(column =>
             {
-                column.Item().AlignCenter().Text("DRAFT — NO LEGAL TERMS").Bold().FontSize(18).FontColor(Colors.Red.Darken2);
-                column.Item().PaddingTop(4).Text("Non-binding service-agreement planning summary only. Not signed. Not a billing authority.").AlignCenter().FontColor(Colors.Grey.Darken1);
+                column.Item().AlignCenter().Text("UNAPPROVED / NOT FOR SIGNING OR LIVE USE").Bold().FontSize(18).FontColor(Colors.Red.Darken2);
+                column.Item().PaddingTop(4).Text("ODIP Service Agreement — provisional blank draft. Legal review required; not signed, active, roster-ready, an invoice, claim authority, or billing authority.").AlignCenter().FontColor(Colors.Grey.Darken1);
                 column.Item().PaddingTop(8).LineHorizontal(1);
             });
             page.Content().PaddingTop(16).Column(column =>
@@ -44,11 +44,27 @@ public static class ServiceAgreementDraftPdfRenderer
                         table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {line.CatalogueEffectiveFrom:dd MMM yyyy})");
                     }
                 });
-                column.Item().PaddingTop(18).AlignCenter().Text("DRAFT / NO LEGAL TERMS / NOT SIGNED / NO BILLING AUTHORITY").Bold().FontColor(Colors.Red.Darken2);
+                column.Item().PaddingTop(18).Text("Agreement review sections (all fields require approved, participant-specific completion)").Bold().FontSize(12);
+                Section(column, "1. Parties and representatives", "Participant, authorised representative authority, provider legal entity, ABN, registration status and notices contacts are placeholders pending review.");
+                Section(column, "2. Supports, delivery and schedule", "Select eligible support code, arrangement/ratio, service delivery state or territory, location, dates, times, recurrence, exceptions and accessibility requirements per line. Standard 1:1 community access is only a suggestion, never a default charge.");
+                Section(column, "3. Proposed fees, travel and other costs", "Catalogue values are development snapshots, not agreed ODIP prices. Complete approved rate, pricing source/version, GST, travel, non-face-to-face work, transport, expenses, limits, approval, receipts and refund details before any use.");
+                Section(column, "4. Funding and payment", "Funding route, plan manager, invoice, claim and payment process remain placeholders. This draft cannot trigger invoice or claim transitions.");
+                Section(column, "5. Communication, privacy and records", "Complete accessible-format, interpreter/support-person, information sharing, access/correction, retention and withdrawal details under approved policy.");
+                Section(column, "6. Responsibilities, cancellation and service changes", "Complete approved responsibilities, cancellation, late-change, provider cancellation, emergency, replacement, variation, review, termination and transition terms. No notice period or fee is agreed here.");
+                Section(column, "7. Concerns and complaints", "Insert approved provider contact, response and escalation pathway; confirm any external reference at use time.");
+                Section(column, "8. Signatures — non-operative layout only", "A signature block is a future layout placeholder. This revision rejects signing and evidence approval; it does not establish identity, authority, informed consent or acceptance.");
+                column.Item().PaddingTop(18).AlignCenter().Text("UNAPPROVED / NOT FOR SIGNING OR LIVE USE / NOT ACTIVE / NO ROSTER, INVOICE OR CLAIM AUTHORITY").Bold().FontColor(Colors.Red.Darken2);
             });
-            page.Footer().AlignCenter().Text(text => { text.Span("DRAFT — NO LEGAL TERMS — Page "); text.CurrentPageNumber(); });
+            page.Footer().AlignCenter().Text(text => { text.Span("UNAPPROVED — NOT FOR SIGNING OR LIVE USE — Page "); text.CurrentPageNumber(); });
         })).GeneratePdf();
     }
+
+    private static void Section(ColumnDescriptor column, string heading, string body) =>
+        column.Item().PaddingTop(8).Column(section =>
+        {
+            section.Item().Text(heading).SemiBold();
+            section.Item().Text(body);
+        });
 
     private static void Field(ColumnDescriptor column, string label, string value) => column.Item().PaddingTop(4).Row(row => { row.ConstantItem(150).Text(label).SemiBold(); row.RelativeItem().Text(value); });
 }

@@ -58,8 +58,8 @@ export default function ServiceAgreementDraftPage() {
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p className="text-sm text-[var(--color-muted-foreground)]"><Link className="underline" to={`/participants/${participantId}`}>Participant</Link> / Agreement draft</p>
-        <h1 className="text-2xl font-bold mt-1">Non-binding agreement draft</h1>
-        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">This is a draft only. It has no legal terms, is not signed, and does not authorise billing.</p>
+        <h1 className="text-2xl font-bold mt-1">Unapproved ODIP agreement draft</h1>
+        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">UNAPPROVED / NOT FOR SIGNING OR LIVE USE. This provisional version cannot authorise evidence approval, active readiness, roster, invoice or claim transitions.</p>
       </div>
       <Link to={`/participants/${participantId}`} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)]">Back to participant</Link>
     </div>
