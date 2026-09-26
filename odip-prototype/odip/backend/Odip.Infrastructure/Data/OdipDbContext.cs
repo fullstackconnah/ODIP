@@ -30,6 +30,8 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantInquiry> ParticipantInquiries => Set<ParticipantInquiry>();
     public DbSet<ParticipantOnboarding> ParticipantOnboardings => Set<ParticipantOnboarding>();
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
+    public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
+    public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ParticipantContact> ParticipantContacts => Set<ParticipantContact>();
     // CONTACT-01/02/03 — see Person/ParticipantContactRole's type docs for why this is a separate
@@ -1525,6 +1527,7 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId }).IsUnique();
         });
+<<<<<<< HEAD
         modelBuilder.Entity<ParticipantIntakeSnapshot>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -1537,6 +1540,30 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Revision }).IsUnique();
             entity.HasIndex(e => new { e.ParticipantId, e.RequestId }).IsUnique();
+=======
+        modelBuilder.Entity<ServiceAgreementDraft>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.State).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.ServiceTypesJson).HasMaxLength(4000).IsRequired();
+            entity.Property(e => e.Representative).HasMaxLength(500);
+            entity.Property(e => e.ParticipantNameSnapshot).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.NdisNumberSnapshot).HasMaxLength(100);
+            entity.Property(e => e.CreatedBy).HasMaxLength(200).IsRequired();
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Version }).IsUnique();
+        });
+        modelBuilder.Entity<ServiceAgreementDraftLine>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ServiceType).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ItemCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CatalogueVersion).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Hours).HasPrecision(12, 2);
+            entity.Property(e => e.UnitPrice).HasPrecision(12, 2);
+            entity.HasOne(e => e.Draft).WithMany(e => e.Lines).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.DraftId);
+>>>>>>> bundles/agreement
         });
 
         // ── ParticipantAdlAssessment (INTAKE sub-wave C2) ───────────
@@ -1642,7 +1669,11 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+<<<<<<< HEAD
         modelBuilder.Entity<ParticipantIntakeSnapshot>()
+=======
+        modelBuilder.Entity<ServiceAgreementDraft>()
+>>>>>>> bundles/agreement
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // TenantId index for CaregiverProfileSubmission is declared on its own configuration
