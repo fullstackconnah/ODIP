@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { ParticipantDetailDto, SaveParticipantIntakeDto, UpdateParticipantDto } from '@/api/types'
-import { useSaveParticipantIntake, useUpdateParticipant } from '@/api/hooks'
+import { useDownloadParticipantIntakeSnapshotPdf, useParticipantIntakeSnapshots, useSaveParticipantIntake, useUpdateParticipant } from '@/api/hooks'
 import { extractErrorMessage } from './intakeFormat'
 
 type PrefilledIntakeFormProps = {
@@ -63,6 +63,8 @@ function newCompletionRequestId() {
 export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
   const saveIntake = useSaveParticipantIntake()
   const completeIntake = useUpdateParticipant()
+  const snapshots = useParticipantIntakeSnapshots(participant.id)
+  const downloadSnapshot = useDownloadParticipantIntakeSnapshotPdf()
   const { register, handleSubmit, reset, getValues, formState: { errors, isDirty } } = useForm<SaveParticipantIntakeDto>({ defaultValues: initialValues(participant) })
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +102,7 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
     try {
       await completeIntake.mutateAsync({ id: participant.id, data })
       reset(getValues())
+      await snapshots.refetch()
       setNotice('Intake completed. A dated immutable audit PDF has been recorded; the participant remains a draft until profile completion.')
       // A deliberate later completion must create a new revision, so only rotate after success.
       setCompletionRequestId(newCompletionRequestId())
@@ -118,6 +121,20 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
         <p className="font-medium">Draft participant</p>
         <p className="mt-1 text-[var(--color-muted-foreground)]">Saving or completing intake does not activate the participant: they are not active or bookable.</p>
       </div>
+      {snapshots.data && snapshots.data.length > 0 && (
+        <section aria-label="Immutable intake PDFs" className="rounded-lg border border-[var(--color-border)] p-4 text-sm">
+          <h2 className="font-medium">Immutable intake PDFs</h2>
+          <ul className="mt-2 space-y-1">
+            {snapshots.data.map((snapshot) => (
+              <li key={snapshot.revision}>
+                <button type="button" className="text-[var(--color-primary)] underline" onClick={() => downloadSnapshot.mutate({ id: participant.id, revision: snapshot.revision })}>
+                  Download intake completion revision {snapshot.revision} ({new Date(snapshot.completedAtUtc).toLocaleDateString()})
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {notice && <div role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-800">{notice}</div>}
       {error && <div role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</div>}
       <form onSubmit={handleSubmit(onSave)} noValidate className="space-y-6">
