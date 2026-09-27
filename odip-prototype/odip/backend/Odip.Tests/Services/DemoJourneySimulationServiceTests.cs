@@ -28,8 +28,9 @@ public class DemoJourneySimulationServiceTests
 
     private static (Tenant Tenant, User User, Participant Participant, ServiceAgreementDraft Draft) SeedDemo(OdipDbContext db, Guid tenantId)
     {
-        var tenant = db.Tenants.Add(new Tenant { Id = tenantId, Name = "Demo", EmailDomain = "demo.local" }).Entity;
-        var user = db.Users.Add(new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = "tester@demo.local", Username = "tester", FirstName = "Demo", LastName = "Tester", Role = UserRole.Admin, IsActive = true }).Entity;
+        // Match DbSeeder's synthetic Demo tenant and active tenant-owned dev-auth identity.
+        var tenant = db.Tenants.Add(new Tenant { Id = tenantId, Name = "Demo", EmailDomain = "demo.odip.com.au", IsActive = true }).Entity;
+        var user = db.Users.Add(new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = "tester@demo.odip.com.au", Username = "tester", FirstName = "Demo", LastName = "Tester", Role = UserRole.Admin, IsActive = true }).Entity;
         var participant = db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Synthetic", LastName = "Demo", IsDraft = true, IsActive = false }).Entity;
         var draft = db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Version = 1, State = "VIC", ParticipantNameSnapshot = participant.FullName, CreatedBy = user.Email }).Entity;
         return (tenant, user, participant, draft);
@@ -58,10 +59,11 @@ public class DemoJourneySimulationServiceTests
     }
 
     [Theory]
-    [InlineData(false, "tester@demo.local", "Demo", "demo.local", true, "dev-auth")]
+    [InlineData(false, "tester@demo.odip.com.au", "Demo", "demo.odip.com.au", true, "dev-auth")]
     [InlineData(true, "tester@demo.local", "Real Tenant", "real.example", true, "Demo tenant")]
-    [InlineData(true, "tester@real.example", "Demo", "demo.local", true, "Demo dev-auth")]
-    [InlineData(true, "tester@demo.local", "Demo", "demo.local", false, "draft participant")]
+    [InlineData(true, "tester@real.example", "Demo", "demo.odip.com.au", true, "Demo dev-auth")]
+    [InlineData(true, "tester@demo.local", "Demo", "demo.local", true, "Demo tenant")]
+    [InlineData(true, "tester@demo.odip.com.au", "Demo", "demo.odip.com.au", false, "draft participant")]
     public async Task SimulateAsync_RejectsRealTenantForeignIdentityOrExistingParticipant(bool devAuth, string actorEmail, string tenantName, string domain, bool isDraft, string expected)
     {
         var (db, tenantId) = CreateDb();
@@ -99,6 +101,36 @@ public class DemoJourneySimulationServiceTests
             Assert.Null(stale); Assert.Contains("newest", staleError!);
             Assert.Null(foreign); Assert.Contains("current", foreignError!);
             Assert.NotNull(newer);
+        }
+    }
+
+    [Fact]
+    public async Task SimulateAsync_RejectsInactiveSeededDemoTenantOrIdentity()
+    {
+        var (db, tenantId) = CreateDb();
+        using (db)
+        {
+            var (tenant, user, participant, draft) = SeedDemo(db, tenantId);
+            tenant.IsActive = false;
+            await db.SaveChangesAsync();
+
+            var (inactiveTenantResult, inactiveTenantError) = await new DemoJourneySimulationService(db)
+                .SimulateAsync(tenantId, participant.Id, draft.Id, user.Email, true, CancellationToken.None);
+
+            Assert.Null(inactiveTenantResult);
+            Assert.Contains("Demo tenant", inactiveTenantError!, StringComparison.OrdinalIgnoreCase);
+            tenant.IsActive = true;
+            user.IsActive = false;
+            await db.SaveChangesAsync();
+
+            var (inactiveUserResult, inactiveUserError) = await new DemoJourneySimulationService(db)
+                .SimulateAsync(tenantId, participant.Id, draft.Id, user.Email, true, CancellationToken.None);
+
+            Assert.Null(inactiveUserResult);
+            Assert.Contains("active tenant-owned", inactiveUserError!, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(db.ElectronicSigningEvidence);
+            Assert.Empty(db.ElectronicSigningSnapshots);
+            Assert.False((await db.Participants.SingleAsync(x => x.Id == participant.Id)).IsActive);
         }
     }
 
