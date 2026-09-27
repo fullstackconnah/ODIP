@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import * as React from 'react'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
 const { createMutate, drafts, snapshotMutate, evidenceMutate, simulationMutate } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn() }))
@@ -12,7 +13,21 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
   useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
-  useDemoJourneySimulation: () => ({ mutate: simulationMutate, isPending: false, isError: false }),
+  useDemoJourneySimulation: () => {
+    const [result, setResult] = React.useState<{ data?: { banner: string; signing: string; activation: string; booking: string; rateLabel: string }; error?: { response: { data: { message: string } } } }>({})
+    return {
+      mutate: ({ participantId, draftId }: { participantId: string; draftId: string }) => {
+        simulationMutate({ participantId, draftId })
+        setResult(draftId === 'd-old'
+          ? { error: { response: { data: { message: 'Only the newest draft can run the simulation.' } } } }
+          : { data: { banner: 'Simulation complete for newest', signing: 'Synthetic signing', activation: 'Synthetic activation', booking: 'Synthetic booking', rateLabel: 'Synthetic rate $72.34' } })
+      },
+      isPending: false,
+      isError: !!result.error,
+      error: result.error,
+      data: result.data,
+    }
+  },
 }))
 
 function renderPage() {
@@ -53,5 +68,25 @@ describe('ServiceAgreementDraftPage', () => {
     expect(screen.getByText('SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Run Demo-only simulation' }))
     expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-1' })
+  })
+
+  it('attributes demo simulation success and rejection to their respective draft cards', () => {
+    drafts.mockReturnValue([
+      { id: 'd-old', version: 1, status: 'UnapprovedDraft', templateVersion: 'draft-v1', templateDocxSha256: 'old-docx', templatePdfSha256: 'old-pdf', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] },
+      { id: 'd-new', version: 2, status: 'UnapprovedDraft', templateVersion: 'draft-v2', templateDocxSha256: 'new-docx', templatePdfSha256: 'new-pdf', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] },
+    ])
+    render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+    const oldCard = screen.getByLabelText('Demo-only journey simulation for draft d-old')
+    const newCard = screen.getByLabelText('Demo-only journey simulation for draft d-new')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Run Demo-only simulation' })[0])
+    expect(oldCard).toHaveTextContent('Only the newest draft can run the simulation.')
+    expect(newCard).not.toHaveTextContent('Only the newest draft can run the simulation.')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Run Demo-only simulation' })[1])
+    expect(newCard).toHaveTextContent('Simulation complete for newest')
+    expect(oldCard).not.toHaveTextContent('Simulation complete for newest')
+    expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-old' })
+    expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-new' })
   })
 })
