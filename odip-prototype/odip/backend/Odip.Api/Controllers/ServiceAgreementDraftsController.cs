@@ -21,13 +21,11 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly ServiceAgreementDraftService _service;
     private readonly ElectronicSigningEvidenceService _evidence;
     private readonly DemoJourneySimulationService _simulation;
-    private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IWebHostEnvironment? environment = null, IConfiguration? configuration = null)
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null)
     {
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
-        _environment = environment ?? new Microsoft.AspNetCore.Hosting.HostingEnvironment { EnvironmentName = Environments.Production };
         _configuration = configuration ?? new ConfigurationBuilder().Build();
     }
 

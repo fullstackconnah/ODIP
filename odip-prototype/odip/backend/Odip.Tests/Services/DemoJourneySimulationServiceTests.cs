@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
@@ -113,11 +112,9 @@ public class DemoJourneySimulationServiceTests
             var currentTenant = new Mock<ICurrentTenant>();
             currentTenant.SetupGet(x => x.TenantId).Returns(tenantId);
             currentTenant.SetupGet(x => x.IsSuperAdmin).Returns(false);
-            var production = new Microsoft.AspNetCore.Hosting.HostingEnvironment { EnvironmentName = Environments.Production };
-
             ServiceAgreementDraftsController ControllerWithDevAuth(string enabled) => new(
                 db, currentTenant.Object, new ServiceAgreementDraftService(db),
-                simulation: new DemoJourneySimulationService(db), environment: production,
+                simulation: new DemoJourneySimulationService(db),
                 configuration: new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["DEV_AUTH_ENABLED"] = enabled
