@@ -463,6 +463,40 @@ public class ParticipantsControllerTests
         Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
     }
 
+    [Fact]
+    public async Task ApprovedSourcePredicate_NewestTenantOwnedVerifiedEvidenceWorks_ButOldSnapshotFailsAfterNewerDraft()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Current", LastName = "Draft",
+            IsActive = false, IsDraft = false, IntakeCompletedAt = DateTime.UtcNow,
+        };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant);
+        await db.SaveChangesAsync();
+
+        // This internal test seam evaluates only the approved-source predicate. It is not a
+        // runtime approval switch: the production wrapper remains closed for UnapprovedDraft.
+        Assert.True(await ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db)
+            .AnyAsync(p => p.Id == participant.Id));
+        Assert.False(await ParticipantReadinessGate.HasActivationEvidenceAsync(db, participant.Id, CancellationToken.None));
+
+        var oldDraft = await db.ServiceAgreementDrafts.SingleAsync();
+        db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
+            Version = oldDraft.Version + 1, State = ProvisionalAgreementTemplate.State,
+            ParticipantNameSnapshot = participant.FullName,
+            PlanStartDate = oldDraft.PlanStartDate, PlanEndDate = oldDraft.PlanEndDate,
+            AgreementStartDate = oldDraft.AgreementStartDate, AgreementEndDate = oldDraft.AgreementEndDate,
+        });
+        await db.SaveChangesAsync();
+
+        Assert.False(await ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db)
+            .AnyAsync(p => p.Id == participant.Id));
+    }
+
     [Theory]
     [InlineData("stale")]
     [InlineData("foreign")]

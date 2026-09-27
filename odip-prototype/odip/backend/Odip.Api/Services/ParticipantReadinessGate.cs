@@ -32,7 +32,19 @@ public static class ParticipantReadinessGate
         !ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence
             || ProvisionalAgreementTemplate.State != "ApprovedForElectronicSigning"
             ? db.Participants.Where(_ => false)
-            : db.Participants.Where(p =>
+            : ActivationEvidenceParticipantsForApprovedSource(db);
+
+    /// <summary>
+    /// Test-only pure query for exercising the immutable-evidence predicates as they would run
+    /// after a separately approved source is introduced. It does not alter the production source
+    /// decision: the public activation and active-ready wrappers always use the hard-closed
+    /// <see cref="ProvisionalAgreementTemplate"/> guard above.
+    /// </summary>
+    internal static IQueryable<Participant> ActivationEvidenceParticipantsForApprovedSourceForTesting(OdipDbContext db) =>
+        ActivationEvidenceParticipantsForApprovedSource(db);
+
+    private static IQueryable<Participant> ActivationEvidenceParticipantsForApprovedSource(OdipDbContext db) =>
+        db.Participants.Where(p =>
             p.IntakeCompletedAt != null
             && db.ParticipantOnboardings.Any(o =>
                 o.ParticipantId == p.Id
