@@ -86,9 +86,8 @@ public class ParticipantInquiriesController : ControllerBase
     [HttpGet("{id:guid}/onboarding")]
     public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> GetOnboarding(Guid id, CancellationToken ct)
     {
-        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == id, ct);
-        var participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (onboarding == null || participant == null || onboarding.TenantId != participant.TenantId) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
+        var (participant, onboarding) = await FindOwnedAsync(id, ct);
+        if (onboarding == null || participant == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
     }
 

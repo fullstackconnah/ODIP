@@ -128,6 +128,23 @@ public class ParticipantIntakeControllerTests
     }
 
     [Fact]
+    public async Task SaveIntake_InvalidLinkedInquirySource_IsRejectedAtomically()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Inquiry", LastName = "Prefill", Phone = "old", IsDraft = true };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, FirstName = "Inquiry", LastName = "Prefill", Phone = "old", Source = "Phone" };
+        db.AddRange(participant, inquiry);
+        await db.SaveChangesAsync();
+
+        var result = await Controller(db).SaveIntake(participant.Id, Intake("Corrected", "Name") with { InquiryId = inquiry.Id, InquirySource = "Walk-in" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Inquiry", (await db.Participants.SingleAsync()).FirstName);
+        Assert.Equal("Phone", (await db.ParticipantInquiries.SingleAsync()).Source);
+    }
+
+    [Fact]
     public async Task SaveIntake_ForeignTenantParticipant_ReturnsNotFoundAndDoesNotModifyRow()
     {
         var ownerTenant = Guid.NewGuid();

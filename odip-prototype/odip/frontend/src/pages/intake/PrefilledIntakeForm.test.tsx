@@ -38,6 +38,21 @@ describe('PrefilledIntakeForm', () => {
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
   })
 
+  it('uses the constrained Web, Email, or Phone source control and saves its correction with the linked inquiry', async () => {
+    mockSave.mockResolvedValue({ success: true })
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+
+    const source = screen.getByLabelText(/inquiry source/i)
+    expect(source.tagName).toBe('SELECT')
+    await user.selectOptions(source, 'Phone')
+    await user.click(screen.getByRole('button', { name: /save incomplete intake/i }))
+
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ inquiryId: 'inquiry-1', inquirySource: 'Phone' }),
+    }))
+  })
+
   it('saves only the subset DTO and confirms the incomplete draft state', async () => {
     mockSave.mockResolvedValue({ success: true })
     const user = userEvent.setup()

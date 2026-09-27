@@ -138,6 +138,26 @@ public class ParticipantInquiriesControllerTests
     }
 
     [Fact]
+    public async Task GetOnboarding_ForeignParticipant_ReturnsNonEnumeratingNotFound()
+    {
+        var ownTenant = Guid.NewGuid();
+        var foreignTenant = Guid.NewGuid();
+        var (db, tenant) = CreateDb(ownTenant);
+        using (db)
+        {
+            var foreignParticipant = new Participant { Id = Guid.NewGuid(), TenantId = foreignTenant, FirstName = "Foreign", LastName = "Participant", IsDraft = false };
+            var foreignOnboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = foreignTenant, ParticipantId = foreignParticipant.Id };
+            db.AddRange(foreignParticipant, foreignOnboarding);
+            await db.SaveChangesAsync();
+            var controller = new ParticipantInquiriesController(db, tenant.Object);
+
+            var result = await controller.GetOnboarding(foreignParticipant.Id, CancellationToken.None);
+
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+    }
+
+    [Fact]
     public async Task Convert_SuperAdminCannotLinkSameRequestToForeignTenantParticipant()
     {
         var ownTenant = Guid.NewGuid();

@@ -171,7 +171,8 @@ public class ParticipantsController : ControllerBase
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
         [FromQuery] string? search, [FromQuery] string? region, [FromQuery] bool? isActive,
         [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default,
+        [FromQuery] bool operationalOnly = false)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -182,10 +183,18 @@ public class ParticipantsController : ControllerBase
         if (isActive.HasValue) query = query.Where(p => p.IsActive == isActive.Value);
         if (wheelchairRequired.HasValue) query = query.Where(p => p.MobilityAidWheelchair == wheelchairRequired.Value);
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
-        // INTAKE-08: unfiltered by default (the plain participants list shows drafts, badged) —
-        // every picker/aggregate surface that must exclude drafts passes isDraft=false explicitly
-        // (see the report's enumerated surface list for every frontend call site that does).
+        // A caller can still explicitly select drafts for back-office work.
         if (isDraft.HasValue) query = query.Where(p => p.IsDraft == isDraft.Value);
+        if (operationalOnly)
+        {
+            // The register is a stage boundary, not a presentation-only draft filter. A record
+            // introduced through the new onboarding workflow has an onboarding row and must not
+            // enter operational read surfaces until the fail-closed readiness gate accepts it.
+            // Older non-draft records have no onboarding row, so retain their historic visibility.
+            query = query.Where(p => !p.IsDraft &&
+                (!_db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id && o.TenantId == p.TenantId)
+                 || ParticipantReadinessGate.ActiveReadyParticipants(_db).Any(ready => ready.Id == p.Id)));
+        }
 
         var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .Select(p => new ParticipantListDto
@@ -704,6 +713,15 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        ParticipantInquiry? linkedInquiry = null;
+        if (dto.InquiryId is Guid inquiryId)
+        {
+            linkedInquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == inquiryId && x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
+            if (linkedInquiry == null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry is not linked to this participant."));
+            if (string.IsNullOrWhiteSpace(dto.InquirySource) || !new[] { "Web", "Email", "Phone" }.Contains(dto.InquirySource, StringComparer.Ordinal))
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry source must be Web, Email, or Phone."));
+        }
+
         var identityChanged = p.FirstName != dto.FirstName.Trim() || p.LastName != dto.LastName.Trim()
             || p.DateOfBirth != dto.DateOfBirth
             || (dto.GenderSpecified && p.Gender != dto.Gender)
@@ -717,15 +735,11 @@ public class ParticipantsController : ControllerBase
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
         p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
-        if (dto.InquiryId is Guid inquiryId)
+        if (linkedInquiry != null)
         {
-            var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == inquiryId && x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            if (inquiry == null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry is not linked to this participant."));
-            if (string.IsNullOrWhiteSpace(dto.InquirySource) || !new[] { "Web", "Email", "Phone" }.Contains(dto.InquirySource, StringComparer.Ordinal))
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry source must be Web, Email, or Phone."));
             // Keep the inquiry's identity/contact projection coherent with the canonical intake.
-            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone; inquiry.Email = p.Email;
-            inquiry.Source = dto.InquirySource; inquiry.Provenance = dto.InquiryProvenance?.Trim(); inquiry.UpdatedAt = DateTime.UtcNow;
+            linkedInquiry.FirstName = p.FirstName; linkedInquiry.LastName = p.LastName; linkedInquiry.Phone = p.Phone; linkedInquiry.Email = p.Email;
+            linkedInquiry.Source = dto.InquirySource!; linkedInquiry.Provenance = dto.InquiryProvenance?.Trim(); linkedInquiry.UpdatedAt = DateTime.UtcNow;
         }
         p.UpdatedAt = DateTime.UtcNow;
         if (identityChanged)

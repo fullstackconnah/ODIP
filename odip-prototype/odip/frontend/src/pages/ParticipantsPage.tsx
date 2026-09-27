@@ -48,9 +48,10 @@ export default function ParticipantsPage() {
 
   const queryParams = { ...params }
   if (search) queryParams.search = search
-  // This is the operational participant register. New incomplete intake records belong in
-  // Onboarding, while legacy non-draft records remain visible regardless of readiness.
+  // This is the operational participant register. The server owns the stage predicate so a
+  // non-draft payload cannot bypass onboarding merely by altering a browser filter.
   queryParams.isDraft = 'false'
+  queryParams.operationalOnly = 'true'
 
   const { data: participants = [], isLoading } = useParticipants(queryParams)
 

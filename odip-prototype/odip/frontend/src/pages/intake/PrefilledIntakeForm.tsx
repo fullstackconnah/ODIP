@@ -22,7 +22,6 @@ const fields: Array<{ key: keyof SaveParticipantIntakeDto; label: string; type?:
   { key: 'addressState', label: 'State' },
   { key: 'addressPostcode', label: 'Postcode' },
   { key: 'primaryDiagnosis', label: 'Primary diagnosis' },
-  { key: 'inquirySource', label: 'Inquiry source' },
 ]
 
 function nullable(value: string | null | undefined) {
@@ -153,6 +152,14 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
             {errors[key]?.message && <span role="alert" className="text-[var(--color-destructive)]">{errors[key]?.message}</span>}
           </label>)}
         </section>
+        <label className="grid gap-1 text-sm font-medium">Inquiry source
+          <select className="rounded-md border bg-transparent px-3 py-2" {...register('inquirySource')}>
+            <option value="">Select source</option>
+            <option value="Web">Web</option>
+            <option value="Email">Email</option>
+            <option value="Phone">Phone</option>
+          </select>
+        </label>
         {([
           ['medicalSummary', 'Medical summary'], ['mobilityNotes', 'Mobility notes'], ['behaviourRiskSummary', 'Behaviour risk summary'], ['notes', 'Intake notes'],
           ['inquiryProvenance', 'Inquiry provenance'],

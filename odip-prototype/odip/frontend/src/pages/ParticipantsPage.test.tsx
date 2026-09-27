@@ -185,40 +185,30 @@ describe('ParticipantsPage — alerts badge column', () => {
   })
 })
 
-describe('ParticipantsPage — INTAKE-08 draft badge and filter', () => {
-  it('shows a Draft badge only for a draft participant', () => {
-    mockUseParticipants.mockReturnValue({
-      data: [
-        baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isDraft: false }),
-        baseParticipant({ id: 'p2', fullName: 'Priya Sharma', isDraft: true }),
-      ],
-      isLoading: false,
-    })
-    renderPage()
-
-    expect(screen.getByText('Draft')).toBeInTheDocument()
-    // Exactly one badge — not on the non-draft row.
-    expect(screen.getAllByText('Draft')).toHaveLength(1)
-  })
-
-  it('the "Drafts" filter re-fetches with isDraft=true', async () => {
-    const user = userEvent.setup()
+describe('ParticipantsPage — operational register stage boundary', () => {
+  it('does not render a client-side Draft control because incomplete records belong to Onboarding', () => {
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
-    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
-
-    expect(mockUseParticipants).toHaveBeenLastCalledWith(
-      expect.objectContaining({ isDraft: 'true' })
-    )
+    expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
   })
 
-  it('defaults to unfiltered — no isDraft param sent, so drafts show alongside everyone else', () => {
+  it('requests the server-owned operational stage predicate as well as non-drafts', () => {
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
-    const lastCallParams = mockUseParticipants.mock.calls.at(-1)?.[0]
-    expect(lastCallParams).not.toHaveProperty('isDraft')
+    expect(mockUseParticipants).toHaveBeenLastCalledWith(expect.objectContaining({
+      isDraft: 'false',
+      operationalOnly: 'true',
+    }))
+  })
+
+  it('renders legacy records returned by the server while incomplete onboarding records are absent', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ fullName: 'Legacy visible participant' })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Legacy visible participant')).toBeInTheDocument()
+    expect(screen.queryByText('Incomplete onboarding participant')).not.toBeInTheDocument()
   })
 })
 

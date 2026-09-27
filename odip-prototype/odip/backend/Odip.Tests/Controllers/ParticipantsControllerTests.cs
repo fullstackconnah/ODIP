@@ -165,6 +165,29 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task GetAll_OperationalOnly_HidesNewIncompleteNonDraftButRetainsLegacyAndIgnoresForeignOnboarding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var foreignTenantId = Guid.NewGuid();
+        var legacy = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Legacy", LastName = "Visible", IsActive = true, IsDraft = false };
+        var incomplete = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "New", LastName = "Incomplete", IsActive = true, IsDraft = false };
+        var foreignOnly = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Foreign", LastName = "Onboarding", IsActive = true, IsDraft = false };
+        db.AddRange(legacy, incomplete, foreignOnly,
+            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = incomplete.Id },
+            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = foreignTenantId, ParticipantId = foreignOnly.Id });
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.GetAll(null, null, null, null, null, false, 1, 50, CancellationToken.None, operationalOnly: true);
+        var items = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
+
+        Assert.Contains(items, p => p.Id == legacy.Id);
+        Assert.Contains(items, p => p.Id == foreignOnly.Id);
+        Assert.DoesNotContain(items, p => p.Id == incomplete.Id);
+    }
+
+    [Fact]
     public async Task Create_ServiceStreamsFlags_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
