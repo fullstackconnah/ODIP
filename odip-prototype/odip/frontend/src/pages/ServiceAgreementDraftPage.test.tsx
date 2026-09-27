@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, drafts, snapshotMutate, evidenceMutate } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn() }))
+const { createMutate, drafts, snapshotMutate, evidenceMutate, simulationMutate } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => ({ data: { id: 'p-1', ndisNumber: '430000001', dateOfBirth: '1990-01-02' }, isLoading: false }),
   useServiceAgreementDrafts: () => ({ data: drafts(), isLoading: false }),
@@ -12,6 +12,7 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
   useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
+  useDemoJourneySimulation: () => ({ mutate: simulationMutate, isPending: false, isError: false }),
 }))
 
 function renderPage() {
@@ -49,5 +50,8 @@ describe('ServiceAgreementDraftPage', () => {
     expect(screen.getByText(/not signed and not billing authority/i)).toBeInTheDocument()
     expect(screen.getByText(/Selected source: ODIP-Service-Agreement-Blank-DRAFT-2026-09-27/)).toBeInTheDocument()
     expect(screen.getByText(/DOCX SHA-256 docx-hash · PDF SHA-256 pdf-hash/)).toBeInTheDocument()
+    expect(screen.getByText('SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Run Demo-only simulation' }))
+    expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-1' })
   })
 })

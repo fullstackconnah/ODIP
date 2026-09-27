@@ -20,7 +20,16 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly ICurrentTenant _tenant;
     private readonly ServiceAgreementDraftService _service;
     private readonly ElectronicSigningEvidenceService _evidence;
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null) => (_db, _tenant, _service, _evidence) = (db, tenant, service, evidence ?? new ElectronicSigningEvidenceService(db));
+    private readonly DemoJourneySimulationService _simulation;
+    private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IWebHostEnvironment? environment = null, IConfiguration? configuration = null)
+    {
+        _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
+        _simulation = simulation ?? new DemoJourneySimulationService(db);
+        _environment = environment ?? new Microsoft.AspNetCore.Hosting.HostingEnvironment { EnvironmentName = Environments.Production };
+        _configuration = configuration ?? new ConfigurationBuilder().Build();
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
@@ -69,6 +78,18 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     [HttpPost("{id:guid}/signed-evidence")]
     public ActionResult<ApiResponse<object>> AttachSignedEvidence(Guid participantId, Guid id) => Conflict(ApiResponse<object>.Fail("Deprecated: use in-app evidence capture. Evidence remains pending verification and cannot approve scheduling."));
+
+    [HttpPost("{id:guid}/demo-journey-simulation")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<DemoJourneySimulationDto>>> SimulateDemoJourney(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<DemoJourneySimulationDto>.Fail("A tenant context is required."));
+        var actorEmail = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+        var devAuthEnabled = _environment.IsDevelopment() && string.Equals(_configuration["DEV_AUTH_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
+        var (result, error) = await _simulation.SimulateAsync(tenantId, participantId, id, actorEmail, devAuthEnabled, ct);
+        if (error != null) return BadRequest(ApiResponse<DemoJourneySimulationDto>.Fail(error));
+        return Ok(ApiResponse<DemoJourneySimulationDto>.Ok(result!));
+    }
 
     private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => new()
     {

@@ -46,3 +46,9 @@ public record ServiceAgreementDraftLineDto
     public DateOnly CatalogueEffectiveFrom { get; init; }
     public DateOnly? CatalogueEffectiveTo { get; init; }
 }
+
+/// <summary>
+/// A deliberately non-persistent walkthrough result. It is not evidence, an activation, a
+/// booking, a billable event, or a claim.
+/// </summary>
+public record DemoJourneySimulationDto(string Banner, string Signing, string Activation, string Booking, string RateLabel);

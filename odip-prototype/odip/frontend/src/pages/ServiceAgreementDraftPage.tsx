@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
-import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
+import { useCreateServiceAgreementDraft, useDemoJourneySimulation, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
 import ElectronicSigningEvidencePanel from './ElectronicSigningEvidencePanel'
 
@@ -23,6 +23,7 @@ export default function ServiceAgreementDraftPage() {
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
+  const simulation = useDemoJourneySimulation()
   const [error, setError] = useState<string | null>(null)
   const [state, setState] = useState<AgreementState>('NSW')
   const [planStartDate, setPlanStartDate] = useState('')
@@ -100,6 +101,13 @@ export default function ServiceAgreementDraftPage() {
       {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map(draft => <article key={draft.id} className="rounded-lg border border-[var(--color-border)] p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>Version {draft.version}</strong> <span className="ml-2 text-sm">{draft.status}</span><p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {draft.agreementStartDate} to {draft.agreementEndDate}</p><p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Selected source: {draft.templateVersion} · DOCX SHA-256 {draft.templateDocxSha256} · PDF SHA-256 {draft.templatePdfSha256}</p></div><button type="button" onClick={() => download.mutate({ participantId, id: draft.id })} disabled={download.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm disabled:opacity-50">{download.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</button></div>
         <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
+        <section className="rounded-lg border-2 border-[var(--color-warning)] bg-[var(--color-warning-container)]/20 p-4 space-y-3" aria-label="Demo-only journey simulation">
+          <h3 className="font-semibold">SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM</h3>
+          <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
+          <button type="button" onClick={() => simulation.mutate({ participantId, draftId: draft.id })} disabled={simulation.isPending} className="rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
+          {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
+          {simulation.isError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{messageFor(simulation.error)}</p>}
+        </section>
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[var(--color-muted-foreground)]"><th>Support type</th><th>Code</th><th>Hours</th><th>Server unit price</th><th>Catalogue provenance</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={`${line.itemCode}-${i}`} className="border-t border-[var(--color-border)]"><td className="py-2">{line.serviceType}</td><td>{line.itemCode}</td><td>{line.hours}</td><td>${line.unitPrice}</td><td>{line.catalogueVersion} · effective {line.catalogueEffectiveFrom}{line.catalogueEffectiveTo ? ` to ${line.catalogueEffectiveTo}` : ''}</td></tr>)}</tbody></table></div>
       </article>)}
       {download.isError && <p role="alert" className="text-sm text-[var(--color-destructive)]">Could not download this draft PDF. Try again.</p>}

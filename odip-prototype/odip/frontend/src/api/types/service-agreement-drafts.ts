@@ -68,3 +68,12 @@ export interface ElectronicSigningEvidenceDto {
   evidenceHash: string
   createdAt: string
 }
+
+/** A server-validated, non-persistent manual-test walkthrough. */
+export interface DemoJourneySimulationDto {
+  banner: 'SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM'
+  signing: string
+  activation: string
+  booking: string
+  rateLabel: string
+}

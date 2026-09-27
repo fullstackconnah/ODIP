@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
-import type { CreateServiceAgreementDraftDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
+import type { CreateServiceAgreementDraftDto, DemoJourneySimulationDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -51,5 +51,12 @@ export function useSubmitElectronicSigningEvidence() {
   return useMutation({
     mutationFn: ({ participantId, snapshotId, data }: { participantId: string; snapshotId: string; data: SubmitElectronicSigningEvidenceDto }) =>
       apiPost<ElectronicSigningEvidenceDto>(`${path(participantId)}/signing-snapshots/${snapshotId}/evidence`, data),
+  })
+}
+
+export function useDemoJourneySimulation() {
+  return useMutation({
+    mutationFn: ({ participantId, draftId }: { participantId: string; draftId: string }) =>
+      apiPost<DemoJourneySimulationDto>(`${path(participantId)}/${draftId}/demo-journey-simulation`, {}),
   })
 }
