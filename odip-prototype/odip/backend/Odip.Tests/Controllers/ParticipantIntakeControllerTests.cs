@@ -105,6 +105,29 @@ public class ParticipantIntakeControllerTests
     }
 
     [Fact]
+    public async Task SaveIntake_UpdatesOnlyTheLinkedTenantInquiryProvenanceAlongsideCanonicalContact()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Inquiry", LastName = "Prefill", IsDraft = true };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, FirstName = "Inquiry", LastName = "Prefill", Source = "Phone", Provenance = "Initial call" };
+        db.AddRange(participant, inquiry);
+        await db.SaveChangesAsync();
+
+        var result = await Controller(db).SaveIntake(participant.Id, Intake("Corrected", "Name") with
+        {
+            InquiryId = inquiry.Id, InquirySource = "Email", InquiryProvenance = "Referral confirmed"
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Corrected", inquiry.FirstName);
+        Assert.Equal("Name", inquiry.LastName);
+        Assert.Equal("0400000000", inquiry.Phone);
+        Assert.Equal("Email", inquiry.Source);
+        Assert.Equal("Referral confirmed", inquiry.Provenance);
+    }
+
+    [Fact]
     public async Task SaveIntake_ForeignTenantParticipant_ReturnsNotFoundAndDoesNotModifyRow()
     {
         var ownerTenant = Guid.NewGuid();

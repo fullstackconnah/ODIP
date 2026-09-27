@@ -38,10 +38,16 @@ internal static class ParticipantDetailMapper
         var hasActiveMedications = await db.ParticipantMedications
             .AnyAsync(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased, ct);
         var planTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(db, p.Id, p.PlanType, ct);
+        // A participant can retain historical inquiries, so the intake explicitly edits the most
+        // recently updated linked inquiry rather than guessing from a copied participant field.
+        var inquiry = await db.ParticipantInquiries
+            .Where(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId)
+            .OrderByDescending(x => x.UpdatedAt).FirstOrDefaultAsync(ct);
 
         return new ParticipantDetailDto
         {
             Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName,
+            InquiryId = inquiry?.Id, InquirySource = inquiry?.Source, InquiryProvenance = inquiry?.Provenance,
             MiddleName = p.MiddleName,
             FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,

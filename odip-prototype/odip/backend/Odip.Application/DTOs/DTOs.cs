@@ -40,6 +40,10 @@ public record ParticipantListDto
 
 public record ParticipantDetailDto : ParticipantListDto
 {
+    /// <summary>The tenant-owned inquiry selected for converted-intake continuity, if any.</summary>
+    public Guid? InquiryId { get; init; }
+    public string? InquirySource { get; init; }
+    public string? InquiryProvenance { get; init; }
     /// <summary>INTAKE sub-wave A, PID-004.</summary>
     public string? MiddleName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
@@ -634,6 +638,10 @@ public record SaveParticipantIntakeDto
     [StringLength(2000)] public string? MobilityNotes { get; init; }
     [StringLength(2000)] public string? BehaviourRiskSummary { get; init; }
     [StringLength(2000)] public string? Notes { get; init; }
+    /// <summary>Must identify an inquiry already linked to this tenant's participant.</summary>
+    public Guid? InquiryId { get; init; }
+    [StringLength(50)] public string? InquirySource { get; init; }
+    [StringLength(2000)] public string? InquiryProvenance { get; init; }
 }
 
 /// <summary>Immutable intake-completion evidence available to the participant's tenant.</summary>

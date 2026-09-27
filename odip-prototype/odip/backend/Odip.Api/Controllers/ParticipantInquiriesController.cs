@@ -135,6 +135,7 @@ public class ParticipantInquiriesController : ControllerBase
         if (!intakeComplete) reasons.Add("Intake PDF completion is required.");
         if (!onboarding.ProfileComplete) reasons.AddRange(ProfileMissing(participant).DefaultIfEmpty("Profile essentials need server validation."));
         var newestDraft = await CurrentValidDraftAsync(participant, ct);
+        // Drafts are immutable revisions, so a confirmation predating the current revision is stale.
         var serviceNeedsCurrent = newestDraft != null && onboarding.ServiceTypeConfirmed && onboarding.ServiceTypeConfirmedAt >= newestDraft.CreatedAt;
         if (!serviceNeedsCurrent) reasons.Add(newestDraft != null ? "Service needs require server confirmation for the current draft revision." : "A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.");
         var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
@@ -151,8 +152,9 @@ public class ParticipantInquiriesController : ControllerBase
         if (draft == null || draft.PlanStartDate == default || draft.PlanEndDate == default || draft.AgreementStartDate == default || draft.AgreementEndDate == default
             || draft.PlanEndDate < draft.PlanStartDate || draft.AgreementEndDate < draft.AgreementStartDate
             || draft.AgreementStartDate < draft.PlanStartDate || draft.AgreementEndDate > draft.PlanEndDate
-            || !draft.Lines.Any(line => line.Hours > 0 && line.UnitPrice > 0 && !string.IsNullOrWhiteSpace(line.ItemCode) && !string.IsNullOrWhiteSpace(line.CatalogueVersion)
-                && line.CatalogueEffectiveFrom <= draft.AgreementStartDate && (line.CatalogueEffectiveTo == null || line.CatalogueEffectiveTo >= draft.AgreementStartDate)))
+            || draft.Lines.Count == 0
+            || draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode) || string.IsNullOrWhiteSpace(line.CatalogueVersion)
+                || line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate)))
             return null;
         return draft;
     }

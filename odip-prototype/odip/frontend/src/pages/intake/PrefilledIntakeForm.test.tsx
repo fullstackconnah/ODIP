@@ -18,6 +18,7 @@ const participant = {
   addressSuburb: 'Fremantle', addressState: 'WA', addressPostcode: '6160',
   primaryDiagnosis: 'Autism Spectrum Disorder', medicalSummary: 'Synthetic medical summary',
   mobilityNotes: 'Synthetic mobility note', behaviourRiskSummary: 'Synthetic behaviour note', notes: 'Synthetic note',
+  inquiryId: 'inquiry-1', inquirySource: 'Email', inquiryProvenance: 'Hospital referral',
 } as never
 
 describe('PrefilledIntakeForm', () => {
@@ -30,6 +31,8 @@ describe('PrefilledIntakeForm', () => {
     render(<PrefilledIntakeForm participant={participant} />)
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
     expect(screen.getByLabelText(/primary diagnosis/i)).toHaveValue('Autism Spectrum Disorder')
+    expect(screen.getByLabelText(/inquiry source/i)).toHaveValue('Email')
+    expect(screen.getByLabelText(/inquiry provenance/i)).toHaveValue('Hospital referral')
     expect(screen.getByLabelText(/ndis number/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/preferred staff/i)).not.toBeInTheDocument()
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
@@ -45,7 +48,7 @@ describe('PrefilledIntakeForm', () => {
 
     expect(mockSave).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', medicalSummary: 'Updated synthetic summary' }),
+      data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', medicalSummary: 'Updated synthetic summary', inquiryId: 'inquiry-1', inquirySource: 'Email', inquiryProvenance: 'Hospital referral' }),
     })
     expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isActive')
     expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isDraft')

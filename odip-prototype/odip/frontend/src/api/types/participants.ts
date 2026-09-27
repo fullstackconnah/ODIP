@@ -259,6 +259,9 @@ export interface ParticipantListDto {
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
+  inquiryId?: string | null
+  inquirySource?: string | null
+  inquiryProvenance?: string | null
   /** INTAKE sub-wave A, Master Data Dictionary PID-004. */
   middleName: string | null
   dateOfBirth: string | null
@@ -711,6 +714,9 @@ export interface SaveParticipantIntakeDto {
   mobilityNotes?: string | null
   behaviourRiskSummary?: string | null
   notes?: string | null
+  inquiryId?: string | null
+  inquirySource?: 'Web' | 'Email' | 'Phone' | null
+  inquiryProvenance?: string | null
 }
 
 /** Tenant-scoped immutable intake evidence; use its exact revision for the PDF download route. */

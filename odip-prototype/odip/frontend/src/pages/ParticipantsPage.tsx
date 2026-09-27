@@ -6,8 +6,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
-import { StatusBadge } from '@/components/StatusBadge'
-import { ToggleGroup } from '@/components/ToggleGroup'
+
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
@@ -30,9 +29,7 @@ export default function ParticipantsPage() {
   const { canWrite, canViewAlerts } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  // INTAKE-08: unfiltered ('all') shows drafts alongside normal participants, badged — 'drafts'
-  // isolates just the drafts a coordinator needs to resume.
-  const [draftFilter, setDraftFilter] = useState<'all' | 'drafts'>('all')
+
   const deleteParticipant = useDeleteParticipant()
   const updateParticipant = useUpdateParticipant()
   const { data: alertsAggregate, isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
@@ -51,7 +48,9 @@ export default function ParticipantsPage() {
 
   const queryParams = { ...params }
   if (search) queryParams.search = search
-  if (draftFilter === 'drafts') queryParams.isDraft = 'true'
+  // This is the operational participant register. New incomplete intake records belong in
+  // Onboarding, while legacy non-draft records remain visible regardless of readiness.
+  queryParams.isDraft = 'false'
 
   const { data: participants = [], isLoading } = useParticipants(queryParams)
 
@@ -65,9 +64,7 @@ export default function ParticipantsPage() {
           <span className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors">
             {p.fullName}
           </span>
-          {p.isDraft && (
-            <StatusBadge status="Draft" colorMap={{ draft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]' }} />
-          )}
+
         </span>
       ),
     },
@@ -181,14 +178,7 @@ export default function ParticipantsPage() {
         )}
       >
         {toggleButtons}
-        <ToggleGroup
-          options={[
-            { key: 'all', label: 'All' },
-            { key: 'drafts', label: 'Drafts' },
-          ]}
-          value={draftFilter}
-          onChange={(key) => setDraftFilter(key as 'all' | 'drafts')}
-        />
+
         <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." />
       </PageHeader>
 

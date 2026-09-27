@@ -22,6 +22,7 @@ const fields: Array<{ key: keyof SaveParticipantIntakeDto; label: string; type?:
   { key: 'addressState', label: 'State' },
   { key: 'addressPostcode', label: 'Postcode' },
   { key: 'primaryDiagnosis', label: 'Primary diagnosis' },
+  { key: 'inquirySource', label: 'Inquiry source' },
 ]
 
 function nullable(value: string | null | undefined) {
@@ -40,6 +41,9 @@ function initialValues(participant: ParticipantDetailDto): SaveParticipantIntake
     addressState: participant.addressState ?? '', addressPostcode: participant.addressPostcode ?? '',
     primaryDiagnosis: participant.primaryDiagnosis ?? '', medicalSummary: participant.medicalSummary ?? '',
     mobilityNotes: participant.mobilityNotes ?? '', behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
+    inquiryId: participant.inquiryId ?? null,
+    inquirySource: participant.inquirySource === 'Web' || participant.inquirySource === 'Email' || participant.inquirySource === 'Phone' ? participant.inquirySource : null,
+    inquiryProvenance: participant.inquiryProvenance ?? '',
   }
 }
 
@@ -51,6 +55,7 @@ function intakePayload(values: SaveParticipantIntakeDto): SaveParticipantIntakeD
     addressSuburb: nullable(values.addressSuburb), addressState: nullable(values.addressState), addressPostcode: nullable(values.addressPostcode),
     primaryDiagnosis: nullable(values.primaryDiagnosis), medicalSummary: nullable(values.medicalSummary), mobilityNotes: nullable(values.mobilityNotes),
     behaviourRiskSummary: nullable(values.behaviourRiskSummary), notes: nullable(values.notes),
+    inquiryProvenance: nullable(values.inquiryProvenance),
   }
 }
 
@@ -150,6 +155,7 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
         </section>
         {([
           ['medicalSummary', 'Medical summary'], ['mobilityNotes', 'Mobility notes'], ['behaviourRiskSummary', 'Behaviour risk summary'], ['notes', 'Intake notes'],
+          ['inquiryProvenance', 'Inquiry provenance'],
         ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
         <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={saveIntake.isPending || completeIntake.isPending || !isDirty} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-60">

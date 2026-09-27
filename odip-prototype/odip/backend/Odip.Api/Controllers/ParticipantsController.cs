@@ -717,6 +717,16 @@ public class ParticipantsController : ControllerBase
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
         p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
+        if (dto.InquiryId is Guid inquiryId)
+        {
+            var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == inquiryId && x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
+            if (inquiry == null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry is not linked to this participant."));
+            if (string.IsNullOrWhiteSpace(dto.InquirySource) || !new[] { "Web", "Email", "Phone" }.Contains(dto.InquirySource, StringComparer.Ordinal))
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry source must be Web, Email, or Phone."));
+            // Keep the inquiry's identity/contact projection coherent with the canonical intake.
+            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone; inquiry.Email = p.Email;
+            inquiry.Source = dto.InquirySource; inquiry.Provenance = dto.InquiryProvenance?.Trim(); inquiry.UpdatedAt = DateTime.UtcNow;
+        }
         p.UpdatedAt = DateTime.UtcNow;
         if (identityChanged)
         {
