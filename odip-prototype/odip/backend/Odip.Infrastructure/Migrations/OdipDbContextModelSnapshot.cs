@@ -1058,6 +1058,109 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("Contacts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ConsentToElectronicMethod")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("DocumentWasDisplayed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EvidenceHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IntendsToSign")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAuthorisedRepresentative")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PreviousEvidenceHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SignerCapacity")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SignerName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.ToTable("ElectronicSigningEvidence");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DocumentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DraftVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "DraftId", "DraftVersion")
+                        .IsUnique();
+
+                    b.ToTable("ElectronicSigningSnapshots");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.EventTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2453,6 +2556,114 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ParticipantHealthConditions");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Provenance")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "ParticipantId");
+
+                    b.ToTable("ParticipantInquiries");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantIntakeSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompletedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("PdfContent")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ParticipantId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("ParticipantIntakeSnapshots");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantMedication", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2671,6 +2882,65 @@ namespace Odip.Infrastructure.Migrations
                         .HasFilter("\"SourceKey\" IS NOT NULL");
 
                     b.ToTable("ParticipantNotes");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantOnboarding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ProfileComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ProfileCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ProfileCompletedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("ServiceAgreementSigned")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ServiceAgreementSignedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ServiceAgreementSignedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("ServiceTypeConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ServiceTypeConfirmedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ServiceTypeConfirmedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ParticipantId")
+                        .IsUnique();
+
+                    b.ToTable("ParticipantOnboardings");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantRiskEntry", b =>
@@ -3072,6 +3342,122 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TripDayId");
 
                     b.ToTable("ScheduledActivities");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AgreementEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("AgreementStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("DateOfBirthSnapshot")
+                        .HasColumnType("date");
+
+                    b.Property<string>("NdisNumberSnapshot")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParticipantNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateOnly>("PlanEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PlanStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Representative")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ServiceTypesJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("TenantId", "ParticipantId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ServiceAgreementDrafts");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("CatalogueEffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("CatalogueEffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CatalogueVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Hours")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("ItemCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ServiceType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId");
+
+                    b.ToTable("ServiceAgreementDraftLines");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.StaffAssignment", b =>
@@ -4723,6 +5109,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripClaim");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningEvidence", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ElectronicSigningSnapshot", "Snapshot")
+                        .WithMany("Evidence")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.EventTemplate", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
@@ -5066,6 +5463,35 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantIntakeSnapshot", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantMedication", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -5102,6 +5528,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantOnboarding", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantRiskEntry", b =>
@@ -5206,6 +5643,28 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Activity");
 
                     b.Navigation("TripDay");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraft", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftLine", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
+                        .WithMany("Lines")
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.StaffAssignment", b =>
@@ -5552,6 +6011,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("ParticipantContacts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningSnapshot", b =>
+                {
+                    b.Navigation("Evidence");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.EventTemplate", b =>
                 {
                     b.Navigation("Activities");
@@ -5604,6 +6068,11 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.Person", b =>
                 {
                     b.Navigation("ContactRoles");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraft", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.StaffAssignment", b =>
