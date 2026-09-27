@@ -1,9 +1,12 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 namespace Odip.Infrastructure.Migrations;
 
+[DbContext(typeof(OdipDbContext))]
 [Migration("20260926003000_AddElectronicSigningEvidence")]
 public partial class AddElectronicSigningEvidence : Migration
 {
