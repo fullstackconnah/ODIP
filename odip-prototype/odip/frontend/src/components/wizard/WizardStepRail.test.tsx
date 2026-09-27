@@ -28,4 +28,23 @@ describe('WizardStepRail', () => {
     await user.click(screen.getByRole('button', { name: /beta/i }))
     expect(onSelect).toHaveBeenCalledWith('b')
   })
+
+  it('keeps the rail inside its container while preserving an independently scrollable touch target', () => {
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} />)
+
+    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
+    expect(nav).toHaveClass('w-full', 'min-w-0', 'max-w-full', 'overflow-x-auto', 'touch-pan-x')
+    expect(within(nav).getByRole('list')).toHaveClass('w-max', 'min-w-full')
+  })
+
+  it('keeps visited buttons keyboard-operable while unvisited steps stay disabled', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={onSelect} />)
+
+    await user.tab()
+    await user.keyboard('{Enter}')
+    expect(onSelect).toHaveBeenCalledWith('a')
+    expect(screen.getByRole('button', { name: /gamma/i })).toBeDisabled()
+  })
 })

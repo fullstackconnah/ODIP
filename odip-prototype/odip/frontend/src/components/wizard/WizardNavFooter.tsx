@@ -31,8 +31,8 @@ export function WizardNavFooter({
   isSubmitting,
 }: WizardNavFooterProps) {
   return (
-    <div className="md:col-span-2 flex flex-wrap justify-between items-center gap-3 mt-6">
-      <div className="flex items-center gap-3">
+    <div className="md:col-span-2 mt-6 flex w-full min-w-0 flex-col gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:pb-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         {showBack && (
           <button
             type="button"
@@ -54,7 +54,7 @@ export function WizardNavFooter({
           </button>
         ))}
       </div>
-      <div className="flex justify-end gap-3">
+      <div className="flex min-w-0 flex-wrap justify-end gap-3">
         {!isReviewStep && (
           <button
             type="button"
