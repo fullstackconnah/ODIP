@@ -1,0 +1,96 @@
+name: Pull request validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'odip-prototype/odip/backend/**'
+      - 'odip-prototype/odip/frontend/**'
+      - '.github/workflows/pr-validation.yml'
+
+# PR validation only needs to read its source. It never receives deployment or cloud credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (.NET 8, EF, PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '0'
+      POSTGRES_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=odip_ci;Username=postgres;Password=postgres
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: odip_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d odip_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    defaults:
+      run:
+        working-directory: odip-prototype/odip/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify real ICU globalization support
+        run: |
+          set -euo pipefail
+          test "${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT}" = '0'
+          dotnet --info
+          ldconfig -p | grep -q 'libicu'
+
+      - name: Restore and run complete backend suite
+        run: |
+          set -euo pipefail
+          dotnet restore Odip.sln
+          dotnet test Odip.Tests/Odip.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=normal"
+
+      - name: Verify EF model and migrations on a fresh PostgreSQL database
+        run: |
+          set -euo pipefail
+          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 8.0.11
+          "$RUNNER_TEMP/dotnet-tools/dotnet-ef" migrations has-pending-model-changes --configuration Release --no-build --project Odip.Infrastructure --startup-project Odip.Api
+          "$RUNNER_TEMP/dotnet-tools/dotnet-ef" database update --configuration Release --no-build --project Odip.Infrastructure --startup-project Odip.Api
+
+  frontend:
+    name: Frontend (Node 20)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: odip-prototype/odip/frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: odip-prototype/odip/frontend/package-lock.json
+
+      - name: Install, test, and build frontend
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build

@@ -13,6 +13,9 @@ const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
 const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
 const ParticipantsPage = React.lazy(() => import('./pages/ParticipantsPage'))
+const InquiriesPage = React.lazy(() => import('./pages/InquiriesPage'))
+const OnboardingPage = React.lazy(() => import('./pages/OnboardingPage'))
+const OnboardingDetailPage = React.lazy(() => import('./pages/OnboardingDetailPage'))
 // PF-10.3 (SPEC-05): the new Intake wizard takes over the create route.
 const IntakeWizardPage = React.lazy(() => import('./pages/intake/IntakeWizardPage'))
 // PF-10.4 (SPEC-05): the new Profile wizard, second half of the intake/profile split. Edits an
@@ -21,6 +24,7 @@ const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizard
 // cg03: the public, session-free caregiver profile form — see its route placement below.
 const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
+const ServiceAgreementDraftPage = React.lazy(() => import('./pages/ServiceAgreementDraftPage'))
 // cg04: admin review surfaces for caregiver-submitted forms — see route placement below.
 const CaregiverSubmissionsPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionsPage'))
 const CaregiverSubmissionReviewPage = React.lazy(() => import('./pages/caregiver-admin/CaregiverSubmissionReviewPage'))
@@ -101,8 +105,12 @@ const router = createBrowserRouter(
         <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
         <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
         <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
+        <Route path="/inquiries" element={<PrivateRoute page="participants" requiresWrite><InquiriesPage /></PrivateRoute>} />
+        <Route path="/onboarding" element={<PrivateRoute page="participants" requiresWrite><OnboardingPage /></PrivateRoute>} />
+        <Route path="/onboarding/:id" element={<PrivateRoute page="participants" requiresWrite><OnboardingDetailPage /></PrivateRoute>} />
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
+        <Route path="/participants/:id/agreement-draft" element={<PrivateRoute page="participants" requiresWrite><ServiceAgreementDraftPage /></PrivateRoute>} />
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />

@@ -563,8 +563,24 @@ public class SameTenantWritePathTests
     {
         var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
         var foreignStaff = SeedUserInTenant(db, tenantBId, "Foreign", "Staff");
-        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Amy", LastName = "Ng", IsActive = true };
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Amy", LastName = "Ng",
+            IsActive = true, IntakeCompletedAt = DateTime.UtcNow
+        };
+        var onboarding = new ParticipantOnboarding
+        {
+            Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id,
+            ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow,
+            ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
+        };
+        // Internal verified immutable-evidence fixture, so this test reaches its intended
+        // cross-tenant staff validation without pretending a client payload approved anything.
+        var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+        var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
+        var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = tenantAId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
         db.Participants.Add(participant);
+        db.AddRange(onboarding, draft, snapshot, evidence);
         db.SaveChanges();
 
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
@@ -577,7 +593,9 @@ public class SameTenantWritePathTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
-        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        // The unapproved-source gate rejects a new placement before dereferencing the
+        // cross-tenant staff ID; no write is permitted.
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

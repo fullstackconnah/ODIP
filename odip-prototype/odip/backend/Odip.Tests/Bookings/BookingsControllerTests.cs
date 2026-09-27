@@ -48,10 +48,18 @@ public class BookingsControllerTests
         return trip;
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, bool isDraft = false, string firstName = "Sophie", string lastName = "Brown")
+    private static Participant SeedParticipant(OdipDbContext db, bool isDraft = false, string firstName = "Sophie", string lastName = "Brown", bool ready = true)
     {
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IsDraft = isDraft };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IsDraft = isDraft, IntakeCompletedAt = ready ? DateTime.UtcNow : null };
         db.Participants.Add(participant);
+        if (ready)
+        {
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow };
+            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+            var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
+            var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = participant.TenantId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
+            db.AddRange(onboarding, draft, snapshot, evidence);
+        }
         db.SaveChanges();
         return participant;
     }
@@ -73,7 +81,7 @@ public class BookingsControllerTests
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
         Assert.False(body.Success);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
@@ -89,12 +97,79 @@ public class BookingsControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("profile")]
+    [InlineData("service-type")]
+    [InlineData("agreement")]
+    public async Task Create_IncompleteOnboarding_ReturnsBadRequest(string missing)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var participant = SeedParticipant(db);
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        if (missing == "profile") onboarding.ProfileComplete = false;
+        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "agreement") (await db.ElectronicSigningEvidence.SingleAsync()).Status = "PendingVerification";
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
     [Fact]
-    public async Task Create_ValidParticipant_Succeeds()
+    public async Task Create_CompletedIntakeButNoOnboardingRecord_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var participant = SeedParticipant(db, ready: false);
+        participant.IntakeCompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_ForeignTenantReadyParticipant_ReturnsBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+
+        var tenantBContext = new Mock<ICurrentTenant>();
+        tenantBContext.Setup(t => t.TenantId).Returns(tenantB);
+        tenantBContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        Guid foreignParticipantId;
+        Guid foreignTripId;
+        using (var tenantBdb = new OdipDbContext(options, tenantBContext.Object))
+        {
+            foreignTripId = SeedTrip(tenantBdb).Id;
+            foreignParticipantId = SeedParticipant(tenantBdb).Id;
+        }
+
+        var tenantAContext = new Mock<ICurrentTenant>();
+        tenantAContext.Setup(t => t.TenantId).Returns(tenantA);
+        tenantAContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var tenantAdb = new OdipDbContext(options, tenantAContext.Object);
+
+        var result = await new BookingsController(tenantAdb).Create(BookingDto(foreignTripId, foreignParticipantId), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await tenantAdb.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_PreExistingVerifiedEvidenceFromUnapprovedSource_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var trip = SeedTrip(db);
@@ -103,11 +178,10 @@ public class BookingsControllerTests
 
         var result = await controller.Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(created.Value);
-        Assert.True(body.Success);
-        Assert.Equal(participant.Id, body.Data!.ParticipantId);
-        Assert.Single(await db.ParticipantBookings.ToListAsync());
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
     // ── GetAll ordering: BookingDate tiebreaker ────────────────────────────
@@ -130,8 +204,12 @@ public class BookingsControllerTests
         var controller = new BookingsController(db);
 
         var tiedDate = new DateOnly(2026, 9, 1);
-        await controller.Create(BookingDto(trip.Id, participantA.Id) with { BookingDate = tiedDate }, CancellationToken.None);
-        await controller.Create(BookingDto(trip.Id, participantB.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+        // These are pre-existing history rows. The current agreement source is intentionally
+        // unapproved, so Create must remain fail-closed; listing legacy records must not.
+        db.ParticipantBookings.AddRange(
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participantA.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate },
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participantB.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate });
+        await db.SaveChangesAsync();
 
         var tiedBookings = await db.ParticipantBookings.Where(b => b.BookingDate == tiedDate).ToListAsync();
         Assert.Equal(2, tiedBookings.Count);
@@ -167,8 +245,15 @@ public class BookingsControllerTests
         for (var i = 0; i < 3; i++)
         {
             var participant = SeedParticipant(db, firstName: $"Participant{i}", lastName: "Brown");
-            await controller.Create(BookingDto(trip.Id, participant.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+            // Seed a legacy record directly: this test exercises stable read paging, not the
+            // fail-closed new-booking command.
+            db.ParticipantBookings.Add(new ParticipantBooking
+            {
+                Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id,
+                BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate
+            });
         }
+        await db.SaveChangesAsync();
 
         var page1Call = await controller.GetAll(tripId: null, status: null, page: 1, pageSize: 2, ct: CancellationToken.None);
         var page1 = Assert.IsType<ApiResponse<PagedResult<BookingListDto>>>(Assert.IsType<OkObjectResult>(page1Call.Result).Value).Data!;

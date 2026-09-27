@@ -27,6 +27,13 @@ public class OdipDbContext : DbContext
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Participant> Participants => Set<Participant>();
+    public DbSet<ParticipantInquiry> ParticipantInquiries => Set<ParticipantInquiry>();
+    public DbSet<ParticipantOnboarding> ParticipantOnboardings => Set<ParticipantOnboarding>();
+    public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
+    public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
+    public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
+    public DbSet<ElectronicSigningSnapshot> ElectronicSigningSnapshots => Set<ElectronicSigningSnapshot>();
+    public DbSet<ElectronicSigningEvidence> ElectronicSigningEvidence => Set<ElectronicSigningEvidence>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ParticipantContact> ParticipantContacts => Set<ParticipantContact>();
     // CONTACT-01/02/03 — see Person/ParticipantContactRole's type docs for why this is a separate
@@ -1498,6 +1505,86 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ParticipantId, e.ConditionType }).IsUnique();
         });
 
+        // ── Participant lifecycle foundation ───────────────────────
+        modelBuilder.Entity<ParticipantInquiry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(50);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Source).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Provenance).HasMaxLength(2000);
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+        });
+        modelBuilder.Entity<ParticipantOnboarding>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ProfileCompletedBy).HasMaxLength(200);
+            entity.Property(e => e.ServiceTypeConfirmedBy).HasMaxLength(200);
+            entity.Property(e => e.ServiceAgreementSignedBy).HasMaxLength(200);
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.ParticipantId).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId }).IsUnique();
+        });
+        modelBuilder.Entity<ParticipantIntakeSnapshot>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CompletedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CompletedBy).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.RequestId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ContentHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.SnapshotJson).IsRequired();
+            entity.Property(e => e.PdfContent).IsRequired();
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Revision }).IsUnique();
+            entity.HasIndex(e => new { e.ParticipantId, e.RequestId }).IsUnique();
+        });
+        modelBuilder.Entity<ServiceAgreementDraft>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.State).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.ServiceTypesJson).HasMaxLength(4000).IsRequired();
+            entity.Property(e => e.Representative).HasMaxLength(500);
+            entity.Property(e => e.ParticipantNameSnapshot).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.NdisNumberSnapshot).HasMaxLength(100);
+            entity.Property(e => e.CreatedBy).HasMaxLength(200).IsRequired();
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Version }).IsUnique();
+        });
+        modelBuilder.Entity<ServiceAgreementDraftLine>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ServiceType).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ItemCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CatalogueVersion).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Hours).HasPrecision(12, 2);
+            entity.Property(e => e.UnitPrice).HasPrecision(12, 2);
+            entity.HasOne(e => e.Draft).WithMany(e => e.Lines).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.DraftId);
+        });
+        modelBuilder.Entity<ElectronicSigningSnapshot>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DocumentJson).IsRequired();
+            entity.Property(e => e.DocumentHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => new { e.TenantId, e.DraftId, e.DraftVersion }).IsUnique();
+        });
+        modelBuilder.Entity<ElectronicSigningEvidence>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.SignerName).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.SignerCapacity).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.EvidenceHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.PreviousEvidenceHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.HasOne(e => e.Snapshot).WithMany(e => e.Evidence).HasForeignKey(e => e.SnapshotId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.SnapshotId, e.IdempotencyKey }).IsUnique();
+        });
+
         // ── ParticipantAdlAssessment (INTAKE sub-wave C2) ───────────
         modelBuilder.Entity<ParticipantAdlAssessment>(entity =>
         {
@@ -1596,6 +1683,19 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Participant>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ParticipantInquiry>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantOnboarding>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ParticipantIntakeSnapshot>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ServiceAgreementDraft>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ElectronicSigningSnapshot>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ElectronicSigningEvidence>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // TenantId index for CaregiverProfileSubmission is declared on its own configuration
         // block above, so only the query filter is added here.

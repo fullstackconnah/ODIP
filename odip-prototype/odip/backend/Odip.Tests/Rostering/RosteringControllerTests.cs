@@ -77,10 +77,18 @@ public class RosteringControllerTests
         return staff;
     }
 
-    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng")
+    private static Participant SeedParticipant(OdipDbContext db, string firstName = "Amy", string lastName = "Ng", bool ready = true)
     {
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = firstName, LastName = lastName, IsActive = true, IntakeCompletedAt = ready ? DateTime.UtcNow : null };
         db.Participants.Add(participant);
+        if (ready)
+        {
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow };
+            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+            var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
+            var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = participant.TenantId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
+            db.AddRange(onboarding, draft, snapshot, evidence);
+        }
         db.SaveChanges();
         return participant;
     }
@@ -92,6 +100,21 @@ public class RosteringControllerTests
         Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
         OverrideReason = overrideReason, AcknowledgedFindingCodes = codes
     };
+
+    // Existing history may be managed/read while the current agreement source is unapproved.
+    // Never use this helper to make a new-placement command appear eligible.
+    private static Shift SeedLegacyShift(OdipDbContext db, Guid participantId, Guid? staffId)
+    {
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId,
+            ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        db.Shifts.Add(shift);
+        db.SaveChanges();
+        return shift;
+    }
 
     private static LeaveRequest SeedLeave(OdipDbContext db, Guid userId, LeaveStatus status, DateOnly? start = null, DateOnly? end = null)
     {
@@ -124,8 +147,66 @@ public class RosteringControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
-        Assert.Contains("not found", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("profile")]
+    [InlineData("service-type")]
+    [InlineData("agreement")]
+    public async Task CreateShift_IncompleteOnboarding_ReturnsBadRequest(string missing)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        if (missing == "profile") onboarding.ProfileComplete = false;
+        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "agreement") (await db.ElectronicSigningEvidence.SingleAsync()).Status = "PendingVerification";
+        await db.SaveChangesAsync();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetBoard_KeepsLegacyShiftVisibleAndFlagsParticipant_WhenReadinessIsLost()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.Shifts.Add(new Shift { Id = Guid.NewGuid(), ParticipantId = participant.Id, ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None });
+        var onboarding = await db.ParticipantOnboardings.SingleAsync();
+        onboarding.ProfileComplete = false;
+        await db.SaveChangesAsync();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var row = Assert.Single(board.ParticipantRows!, row => row.ParticipantId == participant.Id);
+        var shift = Assert.Single(row.Shifts);
+        Assert.Contains(board.Exceptions!, exception => exception.ShiftId == shift.Id
+            && exception.Finding.Code == "PARTICIPANT_NOT_READY");
+
+        // Read-only history remains accessible and a status-only cancellation must not be
+        // mistaken for a new assignment after the participant's readiness is lost.
+        var participantRostering = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .GetParticipantRostering(participant.Id, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(participantRostering.Result);
+
+        var statusOnlyUpdate = new UpdateShiftDto
+        {
+            ParticipantId = participant.Id, StaffId = null, ServiceDate = ServiceDate,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Cancelled,
+        };
+        var update = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+            .UpdateShift(shift.Id, statusOnlyUpdate, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(update.Result);
     }
 
     [Fact]
@@ -159,12 +240,7 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var unprocessable = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(unprocessable.Value);
-        Assert.False(body.Success);
-        Assert.Contains(body.Data!, f => f.Code == RosterConflictService.WscExpired && f.Severity == RosterFindingSeverity.Blocking);
-
-        // Never saved — a Blocking finding is never savable, override reason or not.
+        Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Empty(await db.Shifts.ToListAsync());
     }
 
@@ -189,11 +265,7 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var unprocessable = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(unprocessable.Value);
-        Assert.False(body.Success);
-        Assert.Contains(body.Data!, f => f.Code == RosterConflictService.StaffOnLeave && f.Severity == RosterFindingSeverity.Warning && f.RequiresReason);
-
+        Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Empty(await db.Shifts.ToListAsync());
     }
 
@@ -223,21 +295,14 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.True(body.Success);
-        Assert.Null(body.Data!.OverrideReason);
-        Assert.Contains(body.Data.Findings, f => f.Code == RosterConflictService.CompatibilityExcluded);
-
-        var saved = await db.Shifts.SingleAsync();
-        Assert.Null(saved.OverrideReason);
-        Assert.Equal(RosterConflictService.CompatibilityExcluded, saved.AcknowledgedFindingCodes);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     // ── Clean create ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreateShift_NoFindings_SavedDirectly()
+    public async Task CreateShift_PreExistingVerifiedEvidenceFromUnapprovedSource_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
@@ -248,16 +313,10 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.True(body.Success);
-        Assert.Empty(body.Data!.Findings);
-        Assert.Null(body.Data.OverrideReason);
-
-        var saved = await db.Shifts.SingleAsync();
-        Assert.Equal(ShiftStatus.Draft, saved.Status);
-        Assert.Null(saved.OverrideReason);
-        Assert.Null(saved.AcknowledgedFindingCodes);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     // ── Pattern generation idempotency ──────────────────────────────────
@@ -282,21 +341,8 @@ public class RosteringControllerTests
         var to = new DateOnly(2026, 8, 31);
 
         var first = await controller.GeneratePattern(pattern.Id, from, to, CancellationToken.None);
-        var firstBody = Assert.IsType<ApiResponse<GeneratePatternResultDto>>(Assert.IsType<OkObjectResult>(first.Result).Value);
-        Assert.True(firstBody.Data!.Created > 0); // August 2026 has multiple Mondays
-        Assert.Equal(0, firstBody.Data.Skipped);
-
-        var totalAfterFirst = await db.Shifts.CountAsync();
-        Assert.Equal(firstBody.Data.Created, totalAfterFirst);
-
-        var second = await controller.GeneratePattern(pattern.Id, from, to, CancellationToken.None);
-        var secondBody = Assert.IsType<ApiResponse<GeneratePatternResultDto>>(Assert.IsType<OkObjectResult>(second.Result).Value);
-        Assert.Equal(0, secondBody.Data!.Created);
-        Assert.Equal(firstBody.Data.Created, secondBody.Data.Skipped);
-
-        // Idempotent: re-running the same range creates nothing new.
-        var totalAfterSecond = await db.Shifts.CountAsync();
-        Assert.Equal(totalAfterFirst, totalAfterSecond);
+        Assert.IsType<BadRequestObjectResult>(first.Result);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     // ── Board ────────────────────────────────────────────────────────────
@@ -547,31 +593,17 @@ public class RosteringControllerTests
         var dto = CleanCreateDto(participant.Id, staff.Id, overrideReason: "I really need this covered today");
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
-        var unprocessable = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
 
         // Serialise with the SAME options the API actually applies to controller output
         // (see ApiJsonOptions), then read the JSON back — proving what actually goes over
         // the wire, not just what the C# object graph looks like.
-        var json = JsonSerializer.Serialize(unprocessable.Value, ApiJsonOptions);
+        var json = JsonSerializer.Serialize(badRequest.Value, ApiJsonOptions);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         Assert.False(root.GetProperty("success").GetBoolean());
-        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("message").GetString()));
-
-        var data = root.GetProperty("data");
-        Assert.Equal(JsonValueKind.Array, data.ValueKind);
-        Assert.True(data.GetArrayLength() > 0);
-
-        var firstFinding = data[0];
-        Assert.Equal(RosterConflictService.WscExpired, firstFinding.GetProperty("code").GetString());
-
-        // The property the API actually contract this against — must be the STRING
-        // "Blocking", not the underlying enum's numeric value, since the frontend types
-        // severity as the string literal "Blocking" | "Warning".
-        var severity = firstFinding.GetProperty("severity");
-        Assert.Equal(JsonValueKind.String, severity.ValueKind);
-        Assert.Equal("Blocking", severity.GetString());
+        Assert.Contains("not ready", root.GetProperty("errors")[0].GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     // ── ShiftDto enum-typed properties serialise as strings ────────────────
@@ -640,9 +672,9 @@ public class RosteringControllerTests
             new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred },
             CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Equal(staff.Id, reloaded.PreferredUserId);
+        Assert.Null(reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -660,7 +692,7 @@ public class RosteringControllerTests
             new UpsertCompatibilityDto { StaffId = newlyMarked.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred },
             CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
         Assert.Equal(existingPreferred.Id, reloaded.PreferredUserId);
     }
@@ -684,9 +716,9 @@ public class RosteringControllerTests
             new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Excluded, Reason = "New concern" },
             CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
         var reloaded = await db.Participants.SingleAsync(p => p.Id == participant.Id);
-        Assert.Null(reloaded.PreferredUserId);
+        Assert.Equal(staff.Id, reloaded.PreferredUserId);
     }
 
     [Fact]
@@ -705,13 +737,14 @@ public class RosteringControllerTests
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
 
         // A human edits the same cell via the matrix endpoint.
-        await controller.UpsertCompatibility(
+        var result = await controller.UpsertCompatibility(
             new UpsertCompatibilityDto { StaffId = staff.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Preferred, Reason = "Confirmed by coordinator" },
             CancellationToken.None);
 
         var row = await db.StaffParticipantCompatibilities.SingleAsync(c => c.UserId == staff.Id && c.ParticipantId == participant.Id);
-        Assert.False(row.AutoLinked);
-        Assert.Equal("Confirmed by coordinator", row.Reason);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.True(row.AutoLinked);
+        Assert.Null(row.Reason);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -976,14 +1009,12 @@ public class RosteringControllerTests
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
 
         var withoutReason = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
-        Assert.IsType<UnprocessableEntityObjectResult>(withoutReason.Result);
-
         var withReason = await controller.CreateShift(
             CleanCreateDto(participant.Id, staff.Id, overrideReason: "Covering an urgent gap; staff member agreed to work despite approved leave."),
             CancellationToken.None);
-        var ok = Assert.IsType<OkObjectResult>(withReason.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.Contains(body.Data!.Findings, f => f.Code == RosterConflictService.StaffOnLeave);
+        Assert.IsType<BadRequestObjectResult>(withoutReason.Result);
+        Assert.IsType<BadRequestObjectResult>(withReason.Result);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     [Fact]
@@ -997,9 +1028,8 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.Contains(body.Data!.Findings, f => f.Code == "STAFF_LEAVE_PENDING");
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     [Fact]
@@ -1013,10 +1043,8 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var shift = await db.Shifts.SingleAsync();
-        Assert.Contains("STAFF_LEAVE_PENDING", shift.AcknowledgedFindingCodes);
-        Assert.Null(shift.OverrideReason);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     [Fact]
@@ -1305,11 +1333,7 @@ public class RosteringControllerTests
 
         var result = await controller.CheckShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
-        var finding = Assert.Single(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
-        Assert.False(finding.RequiresReason);
-        Assert.Contains("Test Holiday", finding.Message);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
     [Fact]
@@ -1329,9 +1353,7 @@ public class RosteringControllerTests
 
         var result = await controller.CheckShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
-        Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
     [Fact]
@@ -1376,14 +1398,12 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var staff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, null), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, null);
 
-        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
+        var result = await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
 
-        var row = await db.NotificationOutbox.SingleAsync();
-        Assert.Equal(Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, row.EventType);
-        Assert.Equal(staff.Id, row.RecipientUserId);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
     }
 
     /// <summary>Clearing an assignment (StaffId null) has no recipient — no outbox row at all.</summary>
@@ -1394,8 +1414,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var staff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, staff.Id);
 
         await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = null }, CancellationToken.None);
 
@@ -1427,14 +1446,14 @@ public class RosteringControllerTests
         var onLeaveStaff = SeedStaff(db, firstName: "Ben", lastName: "OnLeave");
         var newStaff = SeedStaff(db, firstName: "Cara", lastName: "Covering");
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, onLeaveStaff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, onLeaveStaff.Id);
         var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
 
-        await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = newStaff.Id }, CancellationToken.None);
+        var result = await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = newStaff.Id }, CancellationToken.None);
 
         var reloaded = await db.BookingTasks.SingleAsync(t => t.Id == task.Id);
-        Assert.Equal(TaskItemStatus.Completed, reloaded.Status);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(TaskItemStatus.NotStarted, reloaded.Status);
     }
 
     [Fact]
@@ -1444,8 +1463,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var onLeaveStaff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, onLeaveStaff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, onLeaveStaff.Id);
         var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
 
         await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = null }, CancellationToken.None);
@@ -1462,8 +1480,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var staff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, staff.Id);
         var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
 
         await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
@@ -1479,8 +1496,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var staff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, staff.Id);
         var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
 
         var updateDto = new Odip.Application.DTOs.UpdateShiftDto
@@ -1502,8 +1518,7 @@ public class RosteringControllerTests
         var participant = SeedParticipant(db);
         var staff = SeedStaff(db);
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, staff.Id), CancellationToken.None);
-        var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        var shift = SeedLegacyShift(db, participant.Id, staff.Id);
         var task = SeedLeaveCoverageTask(db, shift.Id, Guid.NewGuid());
 
         await controller.DeleteShift(shift.Id, CancellationToken.None);

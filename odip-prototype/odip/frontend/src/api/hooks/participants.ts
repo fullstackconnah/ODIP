@@ -6,12 +6,14 @@ import type {
   ParticipantDetailDto,
   CreateParticipantDto,
   UpdateParticipantDto,
+  SaveParticipantIntakeDto,
   PatchParticipantDto,
   SupportProfileDto,
   UpdateSupportProfileDto,
   BookingListDto,
   PagedResult,
   ParticipantRosteringDto,
+  ParticipantIntakeSnapshotDto,
 } from '../types'
 
 /**
@@ -110,6 +112,47 @@ export function useUpdateParticipant() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+    },
+  })
+}
+
+/** Saves only the approved intake subset for an already-created participant. */
+export function useSaveParticipantIntake() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: SaveParticipantIntakeDto }) =>
+      apiPutRaw<ParticipantDetailDto>(`/participants/${id}/intake`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+    },
+  })
+}
+
+/** Discovers immutable intake-completion revisions; never infer a revision client-side. */
+export function useParticipantIntakeSnapshots(id: string | undefined) {
+  return useQuery({
+    queryKey: ['participant-intake-snapshots', id],
+    queryFn: () => apiGet<ParticipantIntakeSnapshotDto[]>(`/participants/${id}/intake-snapshots`),
+    enabled: !!id,
+  })
+}
+
+/** Downloads one discovered immutable intake PDF through the authenticated API client. */
+export function useDownloadParticipantIntakeSnapshotPdf() {
+  return useMutation({
+    mutationFn: async ({ id, revision }: { id: string; revision: number }) => {
+      const response = await apiClient.get<Blob>(`/participants/${id}/intake-snapshots/${revision}/download`, { responseType: 'blob' })
+      const disposition = response.headers['content-disposition'] as string | undefined
+      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
+      const url = window.URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = match?.[1] ? decodeURIComponent(match[1]) : `Intake-Completion-r${revision}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
     },
   })
 }

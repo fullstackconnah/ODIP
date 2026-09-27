@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Api.Services;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -52,6 +53,42 @@ public class ParticipantsControllerTests
         OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
         SupportRatio = Domain.Enums.SupportRatio.OneToOne,
     };
+
+    // Internal fixture only: models the downstream approval workflow's persisted, immutable
+    // evidence. It does not invoke or emulate a legal-approval endpoint.
+    private static void SeedVerifiedAgreementEvidence(OdipDbContext db, Participant participant, Guid? evidenceTenantId = null, int draftVersion = 1)
+    {
+        var tenantId = evidenceTenantId ?? participant.TenantId;
+        var onboarding = new ParticipantOnboarding
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
+            ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow,
+            ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
+        };
+        var draft = new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Version = draftVersion,
+            // The only repository source is an unapproved draft. This fixture models a
+            // pre-existing tampered "Verified" record; it must never emulate approval.
+            State = ProvisionalAgreementTemplate.State, ParticipantNameSnapshot = participant.FullName,
+            PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
+            AgreementStartDate = new DateOnly(2026, 1, 1), AgreementEndDate = new DateOnly(2026, 12, 31),
+        };
+        var snapshot = new ElectronicSigningSnapshot
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id,
+            DraftId = draft.Id, DraftVersion = draftVersion, DocumentJson = "{\"immutable\":true}",
+            DocumentHash = new string('a', 64),
+        };
+        var evidence = new ElectronicSigningEvidence
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(),
+            SignerName = "Internal fixture", SignerCapacity = "Authorised representative",
+            IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true,
+            DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified",
+        };
+        db.AddRange(onboarding, draft, snapshot, evidence);
+    }
 
     [Fact]
     public async Task GetById_NoRegisterRows_HasRestrictivePracticeFlagIsFalse()
@@ -128,6 +165,29 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task GetAll_OperationalOnly_HidesNewIncompleteNonDraftButRetainsLegacyAndIgnoresForeignOnboarding()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var foreignTenantId = Guid.NewGuid();
+        var legacy = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Legacy", LastName = "Visible", IsActive = true, IsDraft = false };
+        var incomplete = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "New", LastName = "Incomplete", IsActive = true, IsDraft = false };
+        var foreignOnly = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Foreign", LastName = "Onboarding", IsActive = true, IsDraft = false };
+        db.AddRange(legacy, incomplete, foreignOnly,
+            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = incomplete.Id },
+            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = foreignTenantId, ParticipantId = foreignOnly.Id });
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.GetAll(null, null, null, null, null, false, 1, 50, CancellationToken.None, operationalOnly: true);
+        var items = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
+
+        Assert.Contains(items, p => p.Id == legacy.Id);
+        Assert.Contains(items, p => p.Id == foreignOnly.Id);
+        Assert.DoesNotContain(items, p => p.Id == incomplete.Id);
+    }
+
+    [Fact]
     public async Task Create_ServiceStreamsFlags_RoundTripThroughGetById()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
@@ -168,6 +228,9 @@ public class ParticipantsControllerTests
         Assert.True(createdBody.Data!.IsDraft);
         Assert.NotNull(createdBody.Data.IntakeCompletedAt);
         Assert.InRange(createdBody.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(createdBody.Data.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -223,6 +286,9 @@ public class ParticipantsControllerTests
         Assert.True(body.Data!.IsDraft);
         Assert.NotNull(body.Data.IntakeCompletedAt);
         Assert.InRange(body.Data.IntakeCompletedAt!.Value, before, after);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
 
         var getResult = await controller.GetById(participant.Id, CancellationToken.None);
         var getBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
@@ -255,6 +321,9 @@ public class ParticipantsControllerTests
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
 
         Assert.Equal(existingStamp, body.Data!.IntakeCompletedAt);
+        var snapshot = await db.ParticipantIntakeSnapshots.SingleAsync();
+        Assert.Equal("unknown", snapshot.CompletedBy);
+        Assert.Equal(DateTimeKind.Utc, snapshot.CompletedAtUtc.Kind);
     }
 
     /// <summary>
@@ -287,6 +356,215 @@ public class ParticipantsControllerTests
         var getResult = await controller.GetById(participant.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
         Assert.True(body.Data!.IsDraft);
+    }
+
+    [Fact]
+    public async Task Update_ValidNamesButIncompleteIntake_IgnoresActivationFlagsAndBookingRemainsBlocked()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Inquiry", LastName = "Draft",
+            IsActive = false, IsDraft = true, IntakeCompletedAt = null,
+        };
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Test trip", StartDate = new DateOnly(2026, 9, 1),
+            DurationDays = 2, Status = Domain.Enums.TripStatus.Planning,
+        };
+        db.AddRange(participant, trip);
+        await db.SaveChangesAsync();
+
+        var participants = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var update = new UpdateParticipantDto
+        {
+            FirstName = "Valid", LastName = "Names", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None,
+            OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne,
+            IsActive = true, IsDraft = false,
+        };
+
+        var updateResult = await participants.Update(participant.Id, update, CancellationToken.None);
+        var updated = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.False(updated.Data!.IsActive);
+        Assert.True(updated.Data.IsDraft);
+        Assert.Null(updated.Data.IntakeCompletedAt);
+
+        var booking = new global::Odip.Api.Controllers.BookingsController(db);
+        var bookingResult = await booking.Create(new CreateBookingDto
+        {
+            TripInstanceId = trip.Id, ParticipantId = participant.Id,
+        }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(bookingResult.Result);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_ObservedCompleteIntakeAndClientActivationPayload_RemainsInactiveWithoutEvidence()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Audit", LastName = "Synthetic", IsActive = false, IsDraft = true };
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = "Audit", LastName = "Synthetic", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, CompleteIntake = true, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(body.Data!.IsActive);
+        Assert.False(body.Data.IsDraft); // profile completion is retained; activation is separately gated.
+        Assert.NotNull(body.Data.IntakeCompletedAt);
+    }
+
+    [Fact]
+    public async Task Create_ClientActivationAndCompleteIntakePayload_RemainsInactive()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Create(MinimalCreateDto() with { IsDraft = false, CompleteIntake = true }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        Assert.False(body.Data!.IsActive);
+        Assert.False((await db.Participants.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_PreExistingVerifiedEvidenceFromUnapprovedSource_CannotActivate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Approved", LastName = "Evidence", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant);
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = false, IsDraft = false,
+        }, CancellationToken.None);
+
+        Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_OldRowSnapshotAfterNewerDraft_CannotActivate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Stale", LastName = "Revision", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant);
+        await db.SaveChangesAsync();
+        var oldDraft = await db.ServiceAgreementDrafts.SingleAsync();
+        db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
+            Version = oldDraft.Version + 1, State = ProvisionalAgreementTemplate.State,
+            ParticipantNameSnapshot = participant.FullName,
+            PlanStartDate = oldDraft.PlanStartDate, PlanEndDate = oldDraft.PlanEndDate,
+            AgreementStartDate = oldDraft.AgreementStartDate, AgreementEndDate = oldDraft.AgreementEndDate,
+        });
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+    }
+
+    [Fact]
+    public async Task ApprovedSourcePredicate_NewestTenantOwnedVerifiedEvidenceWorks_ButOldSnapshotFailsAfterNewerDraft()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Current", LastName = "Draft",
+            IsActive = false, IsDraft = false, IntakeCompletedAt = DateTime.UtcNow,
+        };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant);
+        await db.SaveChangesAsync();
+
+        // This internal test seam evaluates only the approved-source predicate. It is not a
+        // runtime approval switch: the production wrapper remains closed for UnapprovedDraft.
+        Assert.True(await ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db)
+            .AnyAsync(p => p.Id == participant.Id));
+        Assert.False(await ParticipantReadinessGate.HasActivationEvidenceAsync(db, participant.Id, CancellationToken.None));
+
+        var oldDraft = await db.ServiceAgreementDrafts.SingleAsync();
+        db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
+            Version = oldDraft.Version + 1, State = ProvisionalAgreementTemplate.State,
+            ParticipantNameSnapshot = participant.FullName,
+            PlanStartDate = oldDraft.PlanStartDate, PlanEndDate = oldDraft.PlanEndDate,
+            AgreementStartDate = oldDraft.AgreementStartDate, AgreementEndDate = oldDraft.AgreementEndDate,
+        });
+        await db.SaveChangesAsync();
+
+        Assert.False(await ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db)
+            .AnyAsync(p => p.Id == participant.Id));
+    }
+
+    [Theory]
+    [InlineData("stale")]
+    [InlineData("foreign")]
+    public async Task Update_StaleOrForeignEvidence_CannotActivate(string caseName)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "No", LastName = "Bypass", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant, caseName == "foreign" ? Guid.NewGuid() : null, caseName == "stale" ? 1 : 1);
+        await db.SaveChangesAsync();
+        if (caseName == "stale")
+        {
+            (await db.ServiceAgreementDrafts.SingleAsync()).Version = 2;
+            await db.SaveChangesAsync();
+        }
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_PreExistingActiveSnapshot_IsPreservedButNoNewReadinessIsGranted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Legacy", LastName = "Record", IsActive = true, IsDraft = false, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        Assert.True(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+        Assert.False(await ParticipantReadinessGate.IsActiveReadyAsync(db, participant.Id, CancellationToken.None));
     }
 
     [Fact]
@@ -1654,7 +1932,15 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
-        var createDto = MinimalCreateDto() with { PreferredStaffId = oldStaff.Id };
+        // The profile update below finalises this participant, so establish completion
+        // evidence through the server-owned intake transition rather than bypassing the
+        // lifecycle guard with a directly seeded timestamp.
+        var createDto = MinimalCreateDto() with
+        {
+            PreferredStaffId = oldStaff.Id,
+            IsDraft = true,
+            CompleteIntake = true,
+        };
         var created = await controller.Create(createDto, CancellationToken.None);
         var participantId = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
 
@@ -2513,6 +2799,18 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        // Completion evidence is issued only by the server's explicit intake transition.
+        // A later profile finalisation must not rely on a client-supplied timestamp.
+        var completeIntake = new UpdateParticipantDto
+        {
+            FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true, CompleteIntake = true,
+        };
+        var completionResult = await controller.Update(draft.Id, completeIntake, CancellationToken.None);
+        var completionBody = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(completionResult.Result).Value);
+        Assert.NotNull(completionBody.Data!.IntakeCompletedAt);
+
         var finalDto = new UpdateParticipantDto
         {
             FirstName = "Priya", LastName = "Sharma", PlanType = Domain.Enums.PlanType.SelfManaged,
