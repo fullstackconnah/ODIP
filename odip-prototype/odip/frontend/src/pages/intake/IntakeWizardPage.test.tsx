@@ -243,7 +243,7 @@ describe('IntakeWizardPage', () => {
     expect(screen.getByRole('heading', { name: /^complete intake$/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
     expect(screen.getByLabelText(/primary diagnosis/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/ndis number/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/ndis number/i)).toBeInTheDocument()
   })
 
   it('saves an inquiry-converted edit through the narrowed endpoint, never a full profile update', async () => {
@@ -258,7 +258,7 @@ describe('IntakeWizardPage', () => {
       data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', medicalSummary: 'Synthetic update' }),
     })
     expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isActive')
-    expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('ndisNumber')
+    expect(mockSave.mock.calls[0][0].data).toHaveProperty('ndisNumber')
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

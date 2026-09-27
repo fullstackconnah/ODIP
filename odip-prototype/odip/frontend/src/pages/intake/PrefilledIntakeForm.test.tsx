@@ -26,11 +26,11 @@ describe('PrefilledIntakeForm', () => {
     mockComplete.mockReset()
   })
 
-  it('hydrates inquiry-prefilled values and exposes only the narrowed intake fields', () => {
+  it('hydrates inquiry-prefilled values and exposes every editable intake identity field', () => {
     render(<PrefilledIntakeForm participant={participant} />)
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
     expect(screen.getByLabelText(/primary diagnosis/i)).toHaveValue('Autism Spectrum Disorder')
-    expect(screen.queryByLabelText(/ndis number/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/ndis number/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/preferred staff/i)).not.toBeInTheDocument()
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
   })
@@ -49,7 +49,7 @@ describe('PrefilledIntakeForm', () => {
     })
     expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isActive')
     expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isDraft')
-    expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('ndisNumber')
+    expect(mockSave.mock.calls[0][0].data).toHaveProperty('ndisNumber')
     expect(await screen.findByRole('status')).toHaveTextContent(/saved as incomplete intake/i)
   })
 

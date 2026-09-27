@@ -704,13 +704,25 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        var identityChanged = p.FirstName != dto.FirstName.Trim() || p.LastName != dto.LastName.Trim()
+            || p.DateOfBirth != dto.DateOfBirth
+            || (dto.GenderSpecified && p.Gender != dto.Gender)
+            || (dto.NdisNumberSpecified && p.NdisNumber != dto.NdisNumber?.Trim());
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim(); p.PreferredName = dto.PreferredName;
-        p.DateOfBirth = dto.DateOfBirth; p.Gender = dto.Gender; p.NdisNumber = dto.NdisNumber?.Trim(); p.Phone = dto.Phone; p.Email = dto.Email;
+        p.DateOfBirth = dto.DateOfBirth;
+        if (dto.GenderSpecified) p.Gender = dto.Gender;
+        if (dto.NdisNumberSpecified) p.NdisNumber = dto.NdisNumber?.Trim();
+        p.Phone = dto.Phone; p.Email = dto.Email;
         p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
         p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
         p.UpdatedAt = DateTime.UtcNow;
+        if (identityChanged)
+        {
+            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
+            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
+        }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {

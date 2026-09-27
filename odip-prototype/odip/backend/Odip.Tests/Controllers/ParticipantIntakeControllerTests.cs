@@ -85,6 +85,26 @@ public class ParticipantIntakeControllerTests
     }
 
     [Fact]
+    public async Task SaveIntake_ExplicitNullClearsNdis_WhileOmissionPreservesIt_AndIdentityCorrectionInvalidatesProfileAttestation()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ava", LastName = "Synthetic", NdisNumber = "431234567", IsDraft = true };
+        var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ProfileCompletedBy = "tester" };
+        db.AddRange(participant, onboarding);
+        await db.SaveChangesAsync();
+
+        await Controller(db).SaveIntake(participant.Id, Intake(), CancellationToken.None);
+        Assert.Equal("431234567", participant.NdisNumber);
+        Assert.True(onboarding.ProfileComplete);
+
+        await Controller(db).SaveIntake(participant.Id, Intake() with { NdisNumber = null, FirstName = "Corrected" }, CancellationToken.None);
+        Assert.Null(participant.NdisNumber);
+        Assert.False(onboarding.ProfileComplete);
+        Assert.Null(onboarding.ProfileCompletedAt);
+    }
+
+    [Fact]
     public async Task SaveIntake_ForeignTenantParticipant_ReturnsNotFoundAndDoesNotModifyRow()
     {
         var ownerTenant = Guid.NewGuid();

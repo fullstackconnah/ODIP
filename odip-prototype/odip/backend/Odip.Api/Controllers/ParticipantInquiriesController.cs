@@ -30,7 +30,7 @@ public class ParticipantInquiriesController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<ParticipantOnboardingWorklistDto>>>> GetOnboardingWorklist(CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Fail("A tenant context is required."));
-        var rows = await (from p in _db.Participants join o in _db.ParticipantOnboardings on p.Id equals o.ParticipantId where p.TenantId == tenantId && p.IsDraft orderby p.UpdatedAt descending select new { p, o }).ToListAsync(ct);
+        var rows = await (from p in _db.Participants join o in _db.ParticipantOnboardings on p.Id equals o.ParticipantId where p.TenantId == tenantId && o.TenantId == tenantId orderby p.UpdatedAt descending select new { p, o }).ToListAsync(ct);
         var result = new List<ParticipantOnboardingWorklistDto>();
         foreach (var row in rows)
         {
@@ -113,8 +113,8 @@ public class ParticipantInquiriesController : ControllerBase
     {
         var (participant, onboarding) = await FindOwnedAsync(id, ct);
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
-        var hasDatedLines = await _db.ServiceAgreementDrafts.Include(x => x.Lines).AnyAsync(x => x.ParticipantId == id && x.AgreementStartDate != default && x.Lines.Any(), ct);
-        if (!hasDatedLines) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail("Create a dated provisional service-agreement draft with at least one catalogue-priced support line first."));
+        var currentDraft = await CurrentValidDraftAsync(participant, ct);
+        if (currentDraft == null) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail("Create a current dated provisional service-agreement draft with valid catalogue-priced support lines first."));
         onboarding.RecordServiceNeedsConfirmation(Actor(), DateTime.UtcNow);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
@@ -134,13 +134,27 @@ public class ParticipantInquiriesController : ControllerBase
         var intakeComplete = participant.IntakeCompletedAt != null;
         if (!intakeComplete) reasons.Add("Intake PDF completion is required.");
         if (!onboarding.ProfileComplete) reasons.AddRange(ProfileMissing(participant).DefaultIfEmpty("Profile essentials need server validation."));
-        var hasDatedLines = await _db.ServiceAgreementDrafts.Include(x => x.Lines).AnyAsync(x => x.ParticipantId == participant.Id && x.AgreementStartDate != default && x.Lines.Any(), ct);
-        if (!onboarding.ServiceTypeConfirmed) reasons.Add(hasDatedLines ? "Service needs require server confirmation." : "A dated provisional service-agreement draft with catalogue-priced support lines is required.");
-        var newestDraft = await _db.ServiceAgreementDrafts.Where(x => x.ParticipantId == participant.Id).OrderByDescending(x => x.Version).Select(x => new { x.Id, x.Version }).FirstOrDefaultAsync(ct);
+        var newestDraft = await CurrentValidDraftAsync(participant, ct);
+        var serviceNeedsCurrent = newestDraft != null && onboarding.ServiceTypeConfirmed && onboarding.ServiceTypeConfirmedAt >= newestDraft.CreatedAt;
+        if (!serviceNeedsCurrent) reasons.Add(newestDraft != null ? "Service needs require server confirmation for the current draft revision." : "A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.");
         var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
         if (!evidenceVerified || !onboarding.ServiceAgreementSigned) reasons.Add("Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.");
         reasons.Add("Schedule review is proposal-only; no schedule coverage has been approved and no shifts are created here.");
-        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = onboarding.ServiceTypeConfirmed, ServiceTypeConfirmedAt = onboarding.ServiceTypeConfirmedAt, ServiceTypeConfirmedBy = onboarding.ServiceTypeConfirmedBy, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, IsReady = false, Reasons = reasons };
+        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, IsReady = false, Reasons = reasons };
+    }
+
+    private async Task<ServiceAgreementDraft?> CurrentValidDraftAsync(Participant participant, CancellationToken ct)
+    {
+        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines)
+            .Where(x => x.ParticipantId == participant.Id && x.TenantId == participant.TenantId)
+            .OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
+        if (draft == null || draft.PlanStartDate == default || draft.PlanEndDate == default || draft.AgreementStartDate == default || draft.AgreementEndDate == default
+            || draft.PlanEndDate < draft.PlanStartDate || draft.AgreementEndDate < draft.AgreementStartDate
+            || draft.AgreementStartDate < draft.PlanStartDate || draft.AgreementEndDate > draft.PlanEndDate
+            || !draft.Lines.Any(line => line.Hours > 0 && line.UnitPrice > 0 && !string.IsNullOrWhiteSpace(line.ItemCode) && !string.IsNullOrWhiteSpace(line.CatalogueVersion)
+                && line.CatalogueEffectiveFrom <= draft.AgreementStartDate && (line.CatalogueEffectiveTo == null || line.CatalogueEffectiveTo >= draft.AgreementStartDate)))
+            return null;
+        return draft;
     }
 
     private static List<string> ProfileMissing(Participant p)

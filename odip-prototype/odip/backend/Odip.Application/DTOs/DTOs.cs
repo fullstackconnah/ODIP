@@ -616,8 +616,13 @@ public record SaveParticipantIntakeDto
     [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
     [StringLength(100)] public string? PreferredName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
-    public Gender? Gender { get; init; }
-    [StringLength(50)] public string? NdisNumber { get; init; }
+    private Gender? _gender;
+    // Presence matters: omission preserves existing canonical values; explicit JSON null clears.
+    public Gender? Gender { get => _gender; init { _gender = value; GenderSpecified = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool GenderSpecified { get; private set; }
+    private string? _ndisNumber;
+    [StringLength(50)] public string? NdisNumber { get => _ndisNumber; init { _ndisNumber = value; NdisNumberSpecified = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool NdisNumberSpecified { get; private set; }
     [StringLength(50)] public string? Phone { get; init; }
     [EmailAddress, StringLength(200)] public string? Email { get; init; }
     [StringLength(500)] public string? AddressStreet { get; init; }
