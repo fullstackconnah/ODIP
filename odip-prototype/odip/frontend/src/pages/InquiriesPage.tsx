@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardPlus } from 'lucide-react'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { useConvertParticipantInquiry, useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquirySource, ParticipantInquiryDto } from '@/api/types'
@@ -47,12 +48,12 @@ export default function InquiriesPage() {
     <PageHeader title="Inquiries" subtitle="Internal prospect capture. Intake starts one inactive draft participant and can safely be resumed." />
     {!canManageParticipantLifecycle && <p role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review inquiries, but your role cannot capture, edit, or start participant intake.</p>}
     {canManageParticipantLifecycle && <form className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border p-4" onSubmit={submit}>
-      <div><label htmlFor="inquiry-first-name" className="mb-1 block text-sm font-medium">First name</label><input id="inquiry-first-name" required autoComplete="given-name" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="w-full rounded border p-2" /></div>
-      <div><label htmlFor="inquiry-last-name" className="mb-1 block text-sm font-medium">Last name</label><input id="inquiry-last-name" required autoComplete="family-name" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="w-full rounded border p-2" /></div>
-      <div><label htmlFor="inquiry-phone" className="mb-1 block text-sm font-medium">Phone</label><input id="inquiry-phone" type="tel" autoComplete="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full rounded border p-2" /></div>
-      <div><label htmlFor="inquiry-email" className="mb-1 block text-sm font-medium">Email</label><input id="inquiry-email" type="email" autoComplete="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full rounded border p-2" /></div>
-      <div><label htmlFor="inquiry-source" className="mb-1 block text-sm font-medium">Source</label><select id="inquiry-source" value={form.source} onChange={e => setForm({ ...form, source: e.target.value as InquirySource })} className="w-full rounded border p-2"><option>Web</option><option>Email</option><option>Phone</option></select></div>
-      <div><label htmlFor="inquiry-provenance" className="mb-1 block text-sm font-medium">Provenance or referral notes</label><input id="inquiry-provenance" autoComplete="off" value={form.provenance} onChange={e => setForm({ ...form, provenance: e.target.value })} className="w-full rounded border p-2" /></div>
+      <FormField label="First name" required><input id="inquiry-first-name" required autoComplete="given-name" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></FormField>
+      <FormField label="Last name" required><input id="inquiry-last-name" required autoComplete="family-name" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></FormField>
+      <FormField label="Phone"><input id="inquiry-phone" type="tel" autoComplete="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></FormField>
+      <FormField label="Email"><input id="inquiry-email" type="email" autoComplete="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></FormField>
+      <FormField label="Source"><select id="inquiry-source" value={form.source} onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}><option>Web</option><option>Email</option><option>Phone</option></select></FormField>
+      <FormField label="Provenance or referral notes"><input id="inquiry-provenance" autoComplete="off" value={form.provenance} onChange={e => setForm({ ...form, provenance: e.target.value })} /></FormField>
       <div className="flex gap-2"><button disabled={isSaving} className="rounded bg-[var(--color-primary)] px-4 py-2 text-white">{editingId ? 'Save inquiry' : 'Capture inquiry'}</button>{editingId && <button type="button" className="rounded border px-4 py-2" onClick={() => { setEditingId(null); setForm(blank()) }}>Cancel</button>}</div>
       {error && <p role="alert" className="text-sm text-[var(--color-destructive)] md:col-span-2">{error}</p>}
     </form>}

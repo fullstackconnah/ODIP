@@ -18,11 +18,15 @@ function page() { return render(<MemoryRouter initialEntries={['/inquiries']}><R
 beforeEach(() => { localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' })); mocks.inquiries.mockReturnValue({ data: [], isLoading: false }); mocks.convert.mockReset() })
 
 describe('InquiriesPage lifecycle handoff', () => {
-  it('renders compact labelled capture controls and the empty state', () => {
+  it('renders FormField-labelled compact capture controls and the empty state', () => {
     page()
     expect(screen.getByText('No inquiries captured yet')).toBeInTheDocument()
-    expect(screen.getByLabelText('First name')).toHaveAttribute('autocomplete', 'given-name')
+    const firstName = screen.getByLabelText(/First name/)
+    expect(firstName).toHaveAttribute('autocomplete', 'given-name')
+    expect(firstName).toHaveAttribute('aria-required', 'true')
+    expect(firstName).toHaveClass('focus:ring-2', 'px-4', 'py-2.5')
     expect(screen.getByLabelText('Phone')).toHaveAttribute('autocomplete', 'tel')
+    expect(screen.getByLabelText('Source')).toHaveClass('focus:ring-2', 'px-4', 'py-2.5')
   })
 
   it('renders Start intake for an unconverted inquiry and routes to intake after successful conversion', async () => {
