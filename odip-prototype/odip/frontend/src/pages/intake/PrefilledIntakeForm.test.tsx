@@ -32,7 +32,7 @@ describe('PrefilledIntakeForm', () => {
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
     expect(screen.getByLabelText(/primary diagnosis/i)).toHaveValue('Autism Spectrum Disorder')
     expect(screen.getByLabelText(/inquiry source/i)).toHaveValue('Email')
-    expect(screen.getByLabelText(/inquiry provenance/i)).toHaveValue('Hospital referral')
+    expect(screen.getByLabelText(/^inquiry provenance$/i)).toHaveValue('Hospital referral')
     expect(screen.getByLabelText(/ndis number/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/preferred staff/i)).not.toBeInTheDocument()
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
@@ -111,5 +111,36 @@ describe('PrefilledIntakeForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/network unavailable/i)
     expect(screen.getByLabelText(/phone/i)).toHaveValue('0411111111')
+  })
+
+  it('groups all editable values into the four intake review sections', () => {
+    render(<PrefilledIntakeForm participant={participant} />)
+
+    expect(screen.getByRole('heading', { name: 'Identity and contact' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Address and living arrangements' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Clinical/support notes' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Inquiry provenance and operational notes' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/intake notes/i)).toHaveValue('Synthetic note')
+    expect(screen.getByLabelText(/behaviour risk summary/i)).toHaveValue('Synthetic behaviour note')
+  })
+
+  it('makes completion the first, primary keyboard action and describes incomplete saving as safe', async () => {
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+
+    const actions = screen.getByLabelText('Intake actions')
+    const [complete, save] = screen.getAllByRole('button', { name: /^(complete|save incomplete) intake$/i })
+    expect(actions).toContainElement(complete)
+    expect(actions).toContainElement(save)
+    expect(complete).toHaveClass('bg-[var(--color-primary)]')
+    expect(save).toHaveClass('border-[var(--color-primary)]')
+    expect(actions).toHaveTextContent(/safely preserves this draft for later/i)
+
+    await user.type(screen.getByLabelText(/intake notes/i), ' updated')
+    screen.getByLabelText(/intake notes/i).focus()
+    await user.tab()
+    expect(complete).toHaveFocus()
+    await user.tab()
+    expect(save).toHaveFocus()
   })
 })
