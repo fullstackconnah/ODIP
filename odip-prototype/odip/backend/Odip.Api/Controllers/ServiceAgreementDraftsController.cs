@@ -85,7 +85,12 @@ public class ServiceAgreementDraftsController : ControllerBase
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<DemoJourneySimulationDto>.Fail("A tenant context is required."));
         var actorEmail = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
-        var devAuthEnabled = _environment.IsDevelopment() && string.Equals(_configuration["DEV_AUTH_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
+        // The simulation service independently confines this non-persistent path to the exact
+        // Demo tenant, active Demo identity, draft participant, newest tenant-owned draft, and
+        // provisional source. DEV_AUTH_ENABLED is the deliberate operator gate; requiring the
+        // hosting environment to be Development would make the approved isolated Demo target
+        // unusable when it correctly runs ASPNETCORE_ENVIRONMENT=Production.
+        var devAuthEnabled = string.Equals(_configuration["DEV_AUTH_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
         var (result, error) = await _simulation.SimulateAsync(tenantId, participantId, id, actorEmail, devAuthEnabled, ct);
         if (error != null) return BadRequest(ApiResponse<DemoJourneySimulationDto>.Fail(error));
         return Ok(ApiResponse<DemoJourneySimulationDto>.Ok(result!));

@@ -1,11 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Moq;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
+using System.Security.Claims;
 
 namespace Odip.Tests.Services;
 
@@ -94,6 +99,53 @@ public class DemoJourneySimulationServiceTests
             Assert.Null(stale); Assert.Contains("newest", staleError!);
             Assert.Null(foreign); Assert.Contains("current", foreignError!);
             Assert.NotNull(newer);
+        }
+    }
+
+    [Fact]
+    public async Task Controller_AllowsDemoDevAuthInProductionButRejectsDevAuthOff()
+    {
+        var (db, tenantId) = CreateDb();
+        using (db)
+        {
+            var (_, user, participant, draft) = SeedDemo(db, tenantId);
+            await db.SaveChangesAsync();
+            var currentTenant = new Mock<ICurrentTenant>();
+            currentTenant.SetupGet(x => x.TenantId).Returns(tenantId);
+            currentTenant.SetupGet(x => x.IsSuperAdmin).Returns(false);
+            var production = new Microsoft.AspNetCore.Hosting.HostingEnvironment { EnvironmentName = Environments.Production };
+
+            ServiceAgreementDraftsController ControllerWithDevAuth(string enabled) => new(
+                db, currentTenant.Object, new ServiceAgreementDraftService(db),
+                simulation: new DemoJourneySimulationService(db), environment: production,
+                configuration: new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["DEV_AUTH_ENABLED"] = enabled
+                }).Build())
+            {
+                ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Email, user.Email) }, "test"))
+                    }
+                }
+            };
+
+            var disabled = await ControllerWithDevAuth("false").SimulateDemoJourney(participant.Id, draft.Id, CancellationToken.None);
+            var disabledResponse = Assert.IsType<ApiResponse<DemoJourneySimulationDto>>(
+                Assert.IsType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>(disabled.Result).Value);
+            Assert.False(disabledResponse.Success);
+            Assert.Contains("dev-auth", Assert.Single(disabledResponse.Errors!), StringComparison.OrdinalIgnoreCase);
+
+            var enabled = await ControllerWithDevAuth("true").SimulateDemoJourney(participant.Id, draft.Id, CancellationToken.None);
+            var enabledResponse = Assert.IsType<ApiResponse<DemoJourneySimulationDto>>(
+                Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(enabled.Result).Value);
+            Assert.True(enabledResponse.Success);
+            Assert.Equal(DemoJourneySimulationService.Banner, enabledResponse.Data!.Banner);
+            Assert.Empty(db.ElectronicSigningEvidence);
+            Assert.Empty(db.ElectronicSigningSnapshots);
+            Assert.False((await db.Participants.SingleAsync(x => x.Id == participant.Id)).IsActive);
         }
     }
 }
