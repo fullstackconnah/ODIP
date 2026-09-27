@@ -327,6 +327,10 @@ public class ParticipantsController : ControllerBase
             AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
             AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
             IsDraft = dto.IsDraft,
+            // A newly created participant cannot possess pre-existing, participant-bound
+            // approval evidence. Never inherit Participant.IsActive's legacy default and never
+            // accept an activation boolean from the client.
+            IsActive = false,
             // SPEC-05 (PF-10.3) — stamped server-side, never client-supplied, only when the
             // Intake wizard's own final-step create call sets CompleteIntake; a mid-intake
             // "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must not stamp it.
@@ -471,7 +475,7 @@ public class ParticipantsController : ControllerBase
         // reading.
         var createPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(participant.Id, participant.PlanType, ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
-            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = true, IsDraft = participant.IsDraft, IntakeCompletedAt = participant.IntakeCompletedAt, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt, PlanTypeComplianceWarning = createPlanTypeComplianceWarning }));
+            ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = participant.Id, FirstName = participant.FirstName, LastName = participant.LastName, FullName = participant.FullName, IsActive = participant.IsActive, IsDraft = participant.IsDraft, IntakeCompletedAt = participant.IntakeCompletedAt, CreatedAt = participant.CreatedAt, UpdatedAt = participant.UpdatedAt, PlanTypeComplianceWarning = createPlanTypeComplianceWarning }));
     }
 
     /// <summary>Update an existing participant.</summary>
@@ -644,12 +648,13 @@ public class ParticipantsController : ControllerBase
         }
 
         // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
-        // participant. In particular, a raw client cannot turn IsActive=true/IsDraft=false into
-        // booking eligibility without the server-issued intake completion timestamp. Once intake
-        // evidence exists, finalising the validated profile derives the active state; callers do
-        // not set IsActive directly.
+        // participant. More importantly, neither CompleteIntake nor raw IsActive/IsDraft values
+        // can bypass tenant-matched persisted onboarding and verified immutable agreement evidence.
+        // Preserve already-active legacy rows instead of mass-deactivating them; operational write
+        // gates independently fail closed when their evidence is absent.
         p.IsDraft = !p.IntakeCompletedAt.HasValue || dto.IsDraft;
-        p.IsActive = p.IntakeCompletedAt.HasValue && !p.IsDraft;
+        if (!p.IsActive)
+            p.IsActive = !p.IsDraft && await ParticipantReadinessGate.HasActivationEvidenceAsync(_db, p.Id, ct);
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update. Draft state is

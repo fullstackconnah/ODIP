@@ -571,14 +571,16 @@ public class SameTenantWritePathTests
         var onboarding = new ParticipantOnboarding
         {
             Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id,
-            ProfileComplete = true, ServiceTypeConfirmed = true
+            ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow,
+            ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
         };
-        // The production gate remains authoritative; this fixture persists all evidence it
-        // requires so the test reaches its intended cross-tenant staff validation.
-        typeof(ParticipantOnboarding).GetProperty(nameof(ParticipantOnboarding.ServiceAgreementSigned))!
-            .SetValue(onboarding, true);
+        // Internal verified immutable-evidence fixture, so this test reaches its intended
+        // cross-tenant staff validation without pretending a client payload approved anything.
+        var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+        var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = tenantAId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
+        var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = tenantAId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
         db.Participants.Add(participant);
-        db.ParticipantOnboardings.Add(onboarding);
+        db.AddRange(onboarding, draft, snapshot, evidence);
         db.SaveChanges();
 
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));

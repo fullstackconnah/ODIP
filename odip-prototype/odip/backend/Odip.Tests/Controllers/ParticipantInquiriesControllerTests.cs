@@ -60,6 +60,7 @@ public class ParticipantInquiriesControllerTests
         Assert.Equal(firstConvert.ParticipantId, participant.Id);
         Assert.Equal(tenantId, participant.TenantId);
         Assert.True(participant.IsDraft);
+        Assert.False(participant.IsActive);
         Assert.Equal("Ada", participant.FirstName);
         Assert.Equal("Lovelace", participant.LastName);
         Assert.Equal(payload.Phone, participant.Phone);

@@ -65,7 +65,10 @@ public class ParticipantInquiriesController : ControllerBase
             }
             else
             {
-                participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = true, IsDraft = true };
+                // Conversion is an alternate participant-create path. A prospect starts inactive;
+                // completing profile fields or sending client lifecycle booleans cannot promote it
+                // until the server observes all tenant-bound approval evidence.
+                participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = false, IsDraft = true };
                 _db.Participants.Add(participant);
             }
             inquiry.ParticipantId = participant.Id;
