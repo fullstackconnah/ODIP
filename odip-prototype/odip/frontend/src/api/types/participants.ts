@@ -698,6 +698,8 @@ export interface SaveParticipantIntakeDto {
   lastName: string
   preferredName?: string | null
   dateOfBirth?: string | null
+  gender?: Gender | null
+  ndisNumber?: string | null
   phone?: string | null
   email?: string | null
   addressStreet?: string | null

@@ -45,3 +45,14 @@ public record ParticipantOnboardingDto
     public bool ServiceAgreementSigned { get; init; }
     public bool IsReady { get; init; }
 }
+
+/// <summary>Server-derived worklist row; clients cannot choose a lifecycle stage.</summary>
+public record ParticipantOnboardingWorklistDto
+{
+    public Guid ParticipantId { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public string Stage { get; init; } = string.Empty;
+    public string NextAction { get; init; } = string.Empty;
+    public int CompletedSteps { get; init; }
+    public int TotalSteps { get; init; } = 4;
+}

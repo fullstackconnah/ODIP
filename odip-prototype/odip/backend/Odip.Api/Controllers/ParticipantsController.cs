@@ -699,7 +699,7 @@ public class ParticipantsController : ControllerBase
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim(); p.PreferredName = dto.PreferredName;
-        p.DateOfBirth = dto.DateOfBirth; p.Phone = dto.Phone; p.Email = dto.Email;
+        p.DateOfBirth = dto.DateOfBirth; p.Gender = dto.Gender; p.NdisNumber = dto.NdisNumber?.Trim(); p.Phone = dto.Phone; p.Email = dto.Email;
         p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
         p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
         p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;

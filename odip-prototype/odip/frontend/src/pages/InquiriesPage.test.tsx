@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import InquiriesPage from './InquiriesPage'
 
-const { createMutate, convertMutate, navigate, useInquiries } = vi.hoisted(() => ({
+const { createMutate, updateMutate, convertMutate, navigate, useInquiries } = vi.hoisted(() => ({
   createMutate: vi.fn(),
+  updateMutate: vi.fn(),
   convertMutate: vi.fn(),
   navigate: vi.fn(),
   useInquiries: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('react-router-dom', async importOriginal => ({
 vi.mock('@/api/hooks', () => ({
   useParticipantInquiries: useInquiries,
   useCreateParticipantInquiry: () => ({ mutate: createMutate, isPending: false }),
+  useUpdateParticipantInquiry: () => ({ mutate: updateMutate, isPending: false }),
   useConvertParticipantInquiry: () => ({ mutate: convertMutate, isPending: false }),
 }))
 
@@ -34,6 +36,7 @@ function renderPage(inquiries: unknown[] = []) {
 describe('InquiriesPage', () => {
   beforeEach(() => {
     createMutate.mockReset()
+    updateMutate.mockReset()
     convertMutate.mockReset()
     navigate.mockReset()
     useInquiries.mockReset()
@@ -61,7 +64,7 @@ describe('InquiriesPage', () => {
     const user = userEvent.setup()
     renderPage([{ id: 'inquiry-1', firstName: 'Ada', lastName: 'Lovelace', phone: null, email: null, source: 'Web', provenance: null, createdAt: '2026-09-26T00:00:00Z' }])
 
-    await user.click(screen.getByRole('button', { name: 'Convert to intake' }))
+    await user.click(screen.getByRole('button', { name: 'Start intake' }))
     expect(convertMutate).toHaveBeenCalledWith({ id: 'inquiry-1' }, expect.objectContaining({ onSuccess: expect.any(Function) }))
     const onSuccess = convertMutate.mock.calls[0][1].onSuccess as (inquiry: { participantId?: string }) => void
     await act(async () => { onSuccess({ participantId: 'participant-1' }) })
@@ -88,9 +91,9 @@ describe('InquiriesPage', () => {
     const user = userEvent.setup()
     renderPage([{ id: 'inquiry-1', firstName: 'Ada', lastName: 'Lovelace', phone: null, email: null, source: 'Web', provenance: null, createdAt: '2026-09-26T00:00:00Z' }])
 
-    await user.click(screen.getByRole('button', { name: 'Convert to intake' }))
+    await user.click(screen.getByRole('button', { name: 'Start intake' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not convert this inquiry to intake. Please try again.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not start intake. Please try again.')
     expect(navigate).not.toHaveBeenCalled()
   })
 })

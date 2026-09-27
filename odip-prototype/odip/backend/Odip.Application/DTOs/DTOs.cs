@@ -616,6 +616,8 @@ public record SaveParticipantIntakeDto
     [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
     [StringLength(100)] public string? PreferredName { get; init; }
     public DateOnly? DateOfBirth { get; init; }
+    public Gender? Gender { get; init; }
+    [StringLength(50)] public string? NdisNumber { get; init; }
     [StringLength(50)] public string? Phone { get; init; }
     [EmailAddress, StringLength(200)] public string? Email { get; init; }
     [StringLength(500)] public string? AddressStreet { get; init; }

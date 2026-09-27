@@ -22,7 +22,27 @@ public class ParticipantInquiriesController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct) =>
-        Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok((await _db.ParticipantInquiries.OrderByDescending(x => x.CreatedAt).ToListAsync(ct)).Select(ToDto).ToList()));
+        Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok((await _db.ParticipantInquiries
+            .Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync(ct)).Select(ToDto).ToList()));
+
+    [HttpGet("onboarding-worklist")]
+    public async Task<ActionResult<ApiResponse<List<ParticipantOnboardingWorklistDto>>>> GetOnboardingWorklist(CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Fail("A tenant context is required."));
+        var rows = await (from p in _db.Participants
+                          join o in _db.ParticipantOnboardings on p.Id equals o.ParticipantId
+                          where p.TenantId == tenantId && p.IsDraft && !o.IsReady
+                          orderby p.UpdatedAt descending
+                          select new { p, o }).ToListAsync(ct);
+        return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(rows.Select(x =>
+        {
+            var intakeDone = x.p.IntakeCompletedAt != null;
+            var completed = (intakeDone ? 1 : 0) + (x.o.ProfileComplete ? 1 : 0) + (x.o.ServiceTypeConfirmed ? 1 : 0) + (x.o.ServiceAgreementSigned ? 1 : 0);
+            var action = !intakeDone ? "Complete intake" : !x.o.ProfileComplete ? "Complete profile" : !x.o.ServiceTypeConfirmed ? "Confirm service type" : "Await signed service agreement";
+            return new ParticipantOnboardingWorklistDto { ParticipantId = x.p.Id, FullName = x.p.FullName, Stage = !intakeDone ? "Intake incomplete" : "Onboarding incomplete", NextAction = action, CompletedSteps = completed };
+        }).ToList()));
+    }
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -40,7 +60,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Update(Guid id, UpdateParticipantInquiryDto dto, CancellationToken ct)
     {
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         inquiry.FirstName = dto.FirstName.Trim(); inquiry.LastName = dto.LastName.Trim(); inquiry.Phone = dto.Phone; inquiry.Email = dto.Email; inquiry.Source = dto.Source; inquiry.Provenance = dto.Provenance; inquiry.UpdatedAt = DateTime.UtcNow;
@@ -52,7 +72,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Convert(Guid id, ConvertParticipantInquiryDto dto, CancellationToken ct)
     {
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ParticipantId is null)
         {
