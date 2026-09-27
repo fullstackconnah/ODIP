@@ -4,7 +4,7 @@ import {
   ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
   CalendarClock, Pill, CalendarCheck2, ClipboardCheck, CalendarOff, FileCheck
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
@@ -12,7 +12,7 @@ import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import { usePermissions, type PageKey } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
 
-type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey }
+type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey; requiresParticipantLifecycleMutation?: boolean }
 type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeaf[] }
 type NavEntry = NavLeaf | NavParent
 
@@ -52,9 +52,10 @@ const navItems: NavEntry[] = [
     icon: Users,
     msIcon: 'group',
     children: [
-      { to: '/participants', icon: Users, label: 'All Participants', msIcon: 'group', page: 'participants' },
       { to: '/inquiries', icon: ClipboardCheck, label: 'Inquiries', msIcon: 'contact_phone', page: 'participants' },
+      { to: '/participants/new', icon: Users, label: 'Draft intake', msIcon: 'person_add', page: 'participants', requiresParticipantLifecycleMutation: true },
       { to: '/onboarding', icon: ClipboardCheck, label: 'Onboarding', msIcon: 'checklist', page: 'participants' },
+      { to: '/participants', icon: Users, label: 'Active participants', msIcon: 'group', page: 'participants' },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
       // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
       // decides visibility for both (the route itself further requires write access — see App.tsx).
@@ -90,6 +91,7 @@ function isExactMatchOnly(to: string): boolean {
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const location = useLocation()
   const permissions = usePermissions()
   // Only relevant to staff who can see the portal at all — fetching it unconditionally is fine
@@ -112,6 +114,18 @@ export default function AppLayout() {
     })
     return initial
   })
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSidebarOpen(false)
+        menuButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [sidebarOpen])
 
   useEffect(() => {
     navItems.forEach(item => {
@@ -179,7 +193,10 @@ export default function AppLayout() {
         <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto">
           {navItems.map(item => {
             if ('children' in item) {
-              const visibleChildren = item.children.filter(child => permissions.canAccessPage(child.page))
+              const visibleChildren = item.children.filter(child =>
+                permissions.canAccessPage(child.page)
+                && (!child.requiresParticipantLifecycleMutation || permissions.canManageParticipantLifecycle),
+              )
               if (visibleChildren.length === 0) return null
 
               const isOpen = openGroups.has(item.label)
@@ -213,7 +230,7 @@ export default function AppLayout() {
                       isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
                     }`}
                   >
-                    <div className="min-h-0 space-y-0.5">
+                    <nav aria-label={item.label === 'Participants' ? 'Participant journey' : undefined} className="min-h-0 space-y-0.5">
                       {visibleChildren.map(({ to, label, msIcon }) => {
                         const showLeaveBadge = to === '/rostering/leave' && pendingLeaveCount > 0
                         const showCompletionBadge = to === '/rostering/completions' && pendingCompletionCount > 0
@@ -238,7 +255,7 @@ export default function AppLayout() {
                           </NavLink>
                         )
                       })}
-                    </div>
+                    </nav>
                   </div>
                 </div>
               )
@@ -294,6 +311,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
             <div className="flex items-center gap-4">
               <button
+                ref={menuButtonRef}
                 className="lg:hidden p-2 rounded-xl hover:bg-[#efeeea] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}

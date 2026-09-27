@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { PrivateRoute } from '../App'
 import { usePermissions, type PageKey, type UserRole } from './permissions'
 
 /** usePermissions reads localStorage synchronously and calls no React hooks itself, but it's
@@ -17,7 +19,7 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
@@ -25,6 +27,7 @@ function CapabilityProbe() {
       <li data-testid="can-complete-own-shifts">{String(canCompleteOwnShifts)}</li>
       <li data-testid="can-review-completions">{String(canReviewCompletions)}</li>
       <li data-testid="can-manage-notifications">{String(canManageNotifications)}</li>
+      <li data-testid="can-manage-participant-lifecycle">{String(canManageParticipantLifecycle)}</li>
     </ul>
   )
 }
@@ -178,5 +181,70 @@ describe('usePermissions.canAccessPage — leave pages', () => {
     setUserRole('Coordinator')
     render(<PermissionsProbe pages={['leave-approvals']} />)
     expect(screen.getByTestId('page-leave-approvals')).toHaveTextContent('true')
+  })
+})
+
+
+describe('usePermissions.canManageParticipantLifecycle', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('mirrors ParticipantInquiriesController mutation roles', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-participant-lifecycle')).toHaveTextContent('true')
+      unmount()
+    }
+    for (const role of ['ReadOnly', 'SupportWorker'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-participant-lifecycle')).toHaveTextContent('false')
+      unmount()
+    }
+  })
+})
+
+
+function renderLifecycleRoute(role: UserRole) {
+  localStorage.setItem('odip_user', JSON.stringify({ role }))
+  localStorage.setItem('odip_token', 'test-token')
+  return render(
+    <MemoryRouter initialEntries={['/participants/new']}>
+      <Routes>
+        <Route path="/" element={<div>Redirected</div>} />
+        <Route path="/participants/new" element={
+          <PrivateRoute page="participants" requiresParticipantLifecycleMutation>
+            <div>Draft intake route</div>
+          </PrivateRoute>
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe('PrivateRoute participant lifecycle admission', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('admits Admin, Coordinator, and SuperAdmin to Draft intake', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      const { unmount } = renderLifecycleRoute(role)
+      expect(screen.getByText('Draft intake route')).toBeInTheDocument()
+      unmount()
+      localStorage.clear()
+    }
+  })
+
+  it('redirects ReadOnly and SupportWorker away from Draft intake', () => {
+    for (const role of ['ReadOnly', 'SupportWorker'] as UserRole[]) {
+      const { unmount } = renderLifecycleRoute(role)
+      expect(screen.getByText('Redirected')).toBeInTheDocument()
+      unmount()
+      localStorage.clear()
+    }
   })
 })
