@@ -98,14 +98,17 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
     }
   }
 
-  const onComplete = async () => {
+  const onComplete = async (values: SaveParticipantIntakeDto) => {
+    // A completed intake creates an immutable audit revision. Keep this deliberate rather than
+    // allowing the irreversible action to be reached by an accidental primary-button click.
+    if (!window.confirm('Complete intake? This records a dated immutable audit PDF.')) return
     setError(null)
     setNotice(null)
     // Completion is intentionally a separate, full record update. The current participant provides
     // required non-intake values; only the narrow form values are overlaid before completion.
     const data = {
       ...participant,
-      ...intakePayload(getValues()),
+      ...intakePayload(values),
       isDraft: true,
       completeIntake: true,
       completionRequestId,
@@ -159,8 +162,8 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
             </label>)}
           </div>
         </section>
-        <section aria-labelledby="address-and-living-heading" className="space-y-4">
-          <h2 id="address-and-living-heading" className="text-base font-semibold">Address and living arrangements</h2>
+        <section aria-labelledby="address-heading" className="space-y-4">
+          <h2 id="address-heading" className="text-base font-semibold">Address</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {addressAndLivingArrangementFields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
               {label}
@@ -190,13 +193,13 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
           ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
         </section>
         <div className="flex flex-wrap items-center gap-3" aria-label="Intake actions">
-          <button type="button" onClick={onComplete} disabled={saveIntake.isPending || completeIntake.isPending} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-60">
-            {completeIntake.isPending ? 'Completing intake…' : 'Complete intake'}
-          </button>
-          <button type="submit" disabled={saveIntake.isPending || completeIntake.isPending || !isDirty} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary)] disabled:opacity-60">
+          <button type="submit" disabled={saveIntake.isPending || completeIntake.isPending || !isDirty} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-60">
             {saveIntake.isPending ? 'Saving intake…' : 'Save incomplete intake'}
           </button>
-          <span className="text-xs text-[var(--color-muted-foreground)]">Save incomplete intake safely preserves this draft for later; it does not activate or make the participant bookable. Completion saves a dated immutable audit record. If it fails, retrying uses the same request key.</span>
+          <button type="button" onClick={handleSubmit(onComplete)} disabled={saveIntake.isPending || completeIntake.isPending} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary)] disabled:opacity-60">
+            {completeIntake.isPending ? 'Completing intake…' : 'Complete intake'}
+          </button>
+          <span className="text-xs text-[var(--color-muted-foreground)]">Save incomplete intake safely preserves this draft for later; it does not activate or make the participant bookable. Completing intake validates the required fields, then asks for confirmation before recording a dated immutable audit PDF. If it fails, retrying uses the same request key.</span>
         </div>
       </form>
     </div>

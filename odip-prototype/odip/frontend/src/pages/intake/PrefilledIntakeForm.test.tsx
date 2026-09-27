@@ -25,6 +25,7 @@ describe('PrefilledIntakeForm', () => {
   beforeEach(() => {
     mockSave.mockReset()
     mockComplete.mockReset()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   it('hydrates inquiry-prefilled values and exposes every editable intake identity field', () => {
@@ -117,30 +118,51 @@ describe('PrefilledIntakeForm', () => {
     render(<PrefilledIntakeForm participant={participant} />)
 
     expect(screen.getByRole('heading', { name: 'Identity and contact' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Address and living arrangements' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Address' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Clinical/support notes' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Inquiry provenance and operational notes' })).toBeInTheDocument()
     expect(screen.getByLabelText(/intake notes/i)).toHaveValue('Synthetic note')
     expect(screen.getByLabelText(/behaviour risk summary/i)).toHaveValue('Synthetic behaviour note')
   })
 
-  it('makes completion the first, primary keyboard action and describes incomplete saving as safe', async () => {
+  it('makes safe draft saving the first primary keyboard action and keeps completion deliberate', async () => {
     const user = userEvent.setup()
     render(<PrefilledIntakeForm participant={participant} />)
 
     const actions = screen.getByLabelText('Intake actions')
-    const [complete, save] = screen.getAllByRole('button', { name: /^(complete|save incomplete) intake$/i })
-    expect(actions).toContainElement(complete)
+    const [save, complete] = screen.getAllByRole('button', { name: /^(complete|save incomplete) intake$/i })
     expect(actions).toContainElement(save)
-    expect(complete).toHaveClass('bg-[var(--color-primary)]')
-    expect(save).toHaveClass('border-[var(--color-primary)]')
-    expect(actions).toHaveTextContent(/safely preserves this draft for later/i)
+    expect(actions).toContainElement(complete)
+    expect(save).toHaveClass('bg-[var(--color-primary)]')
+    expect(complete).toHaveClass('border-[var(--color-primary)]')
+    expect(actions).toHaveTextContent(/asks for confirmation before recording a dated immutable audit pdf/i)
 
     await user.type(screen.getByLabelText(/intake notes/i), ' updated')
     screen.getByLabelText(/intake notes/i).focus()
     await user.tab()
-    expect(complete).toHaveFocus()
-    await user.tab()
     expect(save).toHaveFocus()
+    await user.tab()
+    expect(complete).toHaveFocus()
+  })
+
+  it('validates required fields before completion and does not create an audit revision when invalid', async () => {
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+    await user.clear(screen.getByLabelText(/first name/i))
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+
+    expect(mockComplete).not.toHaveBeenCalled()
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(await screen.findByText(/first name is required/i)).toBeInTheDocument()
+  })
+
+  it('does not complete when the immutable-audit confirmation is declined', async () => {
+    vi.mocked(window.confirm).mockReturnValue(false)
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+
+    expect(window.confirm).toHaveBeenCalledWith('Complete intake? This records a dated immutable audit PDF.')
+    expect(mockComplete).not.toHaveBeenCalled()
   })
 })
