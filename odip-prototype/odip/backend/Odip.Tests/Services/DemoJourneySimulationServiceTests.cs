@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
