@@ -204,8 +204,12 @@ public class BookingsControllerTests
         var controller = new BookingsController(db);
 
         var tiedDate = new DateOnly(2026, 9, 1);
-        await controller.Create(BookingDto(trip.Id, participantA.Id) with { BookingDate = tiedDate }, CancellationToken.None);
-        await controller.Create(BookingDto(trip.Id, participantB.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+        // These are pre-existing history rows. The current agreement source is intentionally
+        // unapproved, so Create must remain fail-closed; listing legacy records must not.
+        db.ParticipantBookings.AddRange(
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participantA.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate },
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participantB.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate });
+        await db.SaveChangesAsync();
 
         var tiedBookings = await db.ParticipantBookings.Where(b => b.BookingDate == tiedDate).ToListAsync();
         Assert.Equal(2, tiedBookings.Count);
@@ -241,8 +245,15 @@ public class BookingsControllerTests
         for (var i = 0; i < 3; i++)
         {
             var participant = SeedParticipant(db, firstName: $"Participant{i}", lastName: "Brown");
-            await controller.Create(BookingDto(trip.Id, participant.Id) with { BookingDate = tiedDate }, CancellationToken.None);
+            // Seed a legacy record directly: this test exercises stable read paging, not the
+            // fail-closed new-booking command.
+            db.ParticipantBookings.Add(new ParticipantBooking
+            {
+                Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id,
+                BookingStatus = BookingStatus.Confirmed, BookingDate = tiedDate
+            });
         }
+        await db.SaveChangesAsync();
 
         var page1Call = await controller.GetAll(tripId: null, status: null, page: 1, pageSize: 2, ct: CancellationToken.None);
         var page1 = Assert.IsType<ApiResponse<PagedResult<BookingListDto>>>(Assert.IsType<OkObjectResult>(page1Call.Result).Value).Data!;

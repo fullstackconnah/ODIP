@@ -130,10 +130,12 @@ public class RosteringController : ControllerBase
         // referencing a participant outside that active set (edge case) still need a name
         // for their ShiftDto/exception, so top up with whichever ids weekShifts references
         // that the active set didn't already cover — still just two queries total. ──
-        // Only ready participants get an otherwise-empty operational row. Participants who
-        // became incomplete are topped up below when they have a legacy scheduled shift, so
-        // existing work cannot silently vanish from the board.
-        var activeParticipants = await ParticipantReadinessGate.ActiveReadyParticipants(_db)
+        // This is a read-only coordinator surface. Active non-draft participants remain visible
+        // even when the current source is not approved (or their evidence later becomes stale),
+        // so legacy bookings and shifts do not disappear. Readiness is still enforced on every
+        // new placement and reported as a warning on existing shifts above.
+        var activeParticipants = await _db.Participants
+            .Where(p => p.IsActive && !p.IsDraft)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToListAsync(ct);
         var participantById = activeParticipants.ToDictionary(p => p.Id);

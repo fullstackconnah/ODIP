@@ -593,7 +593,9 @@ public class SameTenantWritePathTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
-        Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        // The unapproved-source gate rejects a new placement before dereferencing the
+        // cross-tenant staff ID; no write is permitted.
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
