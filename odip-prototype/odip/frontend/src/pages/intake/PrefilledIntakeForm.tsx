@@ -8,7 +8,9 @@ type PrefilledIntakeFormProps = {
   participant: ParticipantDetailDto
 }
 
-const fields: Array<{ key: keyof SaveParticipantIntakeDto; label: string; type?: string }> = [
+type IntakeField = { key: keyof SaveParticipantIntakeDto; label: string; type?: string }
+
+const identityAndContactFields: IntakeField[] = [
   { key: 'firstName', label: 'First name' },
   { key: 'lastName', label: 'Last name' },
   { key: 'preferredName', label: 'Preferred name' },
@@ -17,11 +19,13 @@ const fields: Array<{ key: keyof SaveParticipantIntakeDto; label: string; type?:
   { key: 'ndisNumber', label: 'NDIS number' },
   { key: 'phone', label: 'Phone', type: 'tel' },
   { key: 'email', label: 'Email', type: 'email' },
+]
+
+const addressAndLivingArrangementFields: IntakeField[] = [
   { key: 'addressStreet', label: 'Street address' },
   { key: 'addressSuburb', label: 'Suburb' },
   { key: 'addressState', label: 'State' },
   { key: 'addressPostcode', label: 'Postcode' },
-  { key: 'primaryDiagnosis', label: 'Primary diagnosis' },
 ]
 
 function nullable(value: string | null | undefined) {
@@ -94,14 +98,17 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
     }
   }
 
-  const onComplete = async () => {
+  const onComplete = async (values: SaveParticipantIntakeDto) => {
+    // A completed intake creates an immutable audit revision. Keep this deliberate rather than
+    // allowing the irreversible action to be reached by an accidental primary-button click.
+    if (!window.confirm('Complete intake? This records a dated immutable audit PDF.')) return
     setError(null)
     setNotice(null)
     // Completion is intentionally a separate, full record update. The current participant provides
     // required non-intake values; only the narrow form values are overlaid before completion.
     const data = {
       ...participant,
-      ...intakePayload(getValues()),
+      ...intakePayload(values),
       isDraft: true,
       completeIntake: true,
       completionRequestId,
@@ -145,33 +152,54 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
       {notice && <div role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-800">{notice}</div>}
       {error && <div role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</div>}
       <form onSubmit={handleSubmit(onSave)} noValidate className="space-y-6">
-        <section className="grid gap-4 md:grid-cols-2">
-          {fields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
-            {label}{(key === 'firstName' || key === 'lastName') && <span aria-hidden="true"> *</span>}
-            <input type={type} className="rounded-md border bg-transparent px-3 py-2" {...register(key, { required: key === 'firstName' || key === 'lastName' ? `${label} is required` : false })} />
-            {errors[key]?.message && <span role="alert" className="text-[var(--color-destructive)]">{errors[key]?.message}</span>}
-          </label>)}
+        <section aria-labelledby="identity-and-contact-heading" className="space-y-4">
+          <h2 id="identity-and-contact-heading" className="text-base font-semibold">Identity and contact</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {identityAndContactFields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
+              {label}{(key === 'firstName' || key === 'lastName') && <span aria-hidden="true"> *</span>}
+              <input type={type} className="rounded-md border bg-transparent px-3 py-2" {...register(key, { required: key === 'firstName' || key === 'lastName' ? `${label} is required` : false })} />
+              {errors[key]?.message && <span role="alert" className="text-[var(--color-destructive)]">{errors[key]?.message}</span>}
+            </label>)}
+          </div>
         </section>
-        <label className="grid gap-1 text-sm font-medium">Inquiry source
-          <select className="rounded-md border bg-transparent px-3 py-2" {...register('inquirySource')}>
-            <option value="">Select source</option>
-            <option value="Web">Web</option>
-            <option value="Email">Email</option>
-            <option value="Phone">Phone</option>
-          </select>
-        </label>
-        {([
-          ['medicalSummary', 'Medical summary'], ['mobilityNotes', 'Mobility notes'], ['behaviourRiskSummary', 'Behaviour risk summary'], ['notes', 'Intake notes'],
-          ['inquiryProvenance', 'Inquiry provenance'],
-        ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
-        <div className="flex flex-wrap items-center gap-3">
+        <section aria-labelledby="address-heading" className="space-y-4">
+          <h2 id="address-heading" className="text-base font-semibold">Address</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {addressAndLivingArrangementFields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
+              {label}
+              <input type={type} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} />
+            </label>)}
+          </div>
+        </section>
+        <section aria-labelledby="clinical-support-heading" className="space-y-4">
+          <h2 id="clinical-support-heading" className="text-base font-semibold">Clinical/support notes</h2>
+          <label className="grid gap-1 text-sm font-medium">Primary diagnosis<input type="text" className="rounded-md border bg-transparent px-3 py-2" {...register('primaryDiagnosis')} /></label>
+          {([
+            ['medicalSummary', 'Medical summary'], ['mobilityNotes', 'Mobility notes'], ['behaviourRiskSummary', 'Behaviour risk summary'],
+          ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
+        </section>
+        <section aria-labelledby="inquiry-provenance-heading" className="space-y-4">
+          <h2 id="inquiry-provenance-heading" className="text-base font-semibold">Inquiry provenance and operational notes</h2>
+          <label className="grid gap-1 text-sm font-medium">Inquiry source
+            <select className="rounded-md border bg-transparent px-3 py-2" {...register('inquirySource')}>
+              <option value="">Select source</option>
+              <option value="Web">Web</option>
+              <option value="Email">Email</option>
+              <option value="Phone">Phone</option>
+            </select>
+          </label>
+          {([
+            ['inquiryProvenance', 'Inquiry provenance'], ['notes', 'Intake notes'],
+          ] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-sm font-medium">{label}<textarea rows={4} className="rounded-md border bg-transparent px-3 py-2" {...register(key)} /></label>)}
+        </section>
+        <div className="flex flex-wrap items-center gap-3" aria-label="Intake actions">
           <button type="submit" disabled={saveIntake.isPending || completeIntake.isPending || !isDirty} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-60">
             {saveIntake.isPending ? 'Saving intake…' : 'Save incomplete intake'}
           </button>
-          <button type="button" onClick={onComplete} disabled={saveIntake.isPending || completeIntake.isPending} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary)] disabled:opacity-60">
+          <button type="button" onClick={handleSubmit(onComplete)} disabled={saveIntake.isPending || completeIntake.isPending} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary)] disabled:opacity-60">
             {completeIntake.isPending ? 'Completing intake…' : 'Complete intake'}
           </button>
-          <span className="text-xs text-[var(--color-muted-foreground)]">Completion saves a dated immutable audit record. If it fails, retrying uses the same request key.</span>
+          <span className="text-xs text-[var(--color-muted-foreground)]">Save incomplete intake safely preserves this draft for later; it does not activate or make the participant bookable. Completing intake validates the required fields, then asks for confirmation before recording a dated immutable audit PDF. If it fails, retrying uses the same request key.</span>
         </div>
       </form>
     </div>

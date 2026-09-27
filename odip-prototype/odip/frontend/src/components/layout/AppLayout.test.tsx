@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AppLayout from './AppLayout'
 
@@ -173,5 +173,47 @@ describe('AppLayout — pending-leave poll gated on canApproveLeave', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     renderAt('/rostering')
     expect(mockUsePendingLeaveCount).toHaveBeenCalledWith(true)
+  })
+})
+
+
+describe('AppLayout — participant lifecycle navigation', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('sequences the Participant journey and keeps Draft intake active only for lifecycle roles', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderAt('/participants/new')
+    const journey = screen.getByRole('navigation', { name: 'Participant journey' })
+    expect(Array.from(journey.querySelectorAll('a')).map(link => link.textContent?.trim())).toEqual([
+      'contact_phoneInquiries', 'person_addDraft intake', 'checklistOnboarding', 'groupActive participants',
+      'pillMedications', 'checklist_rtlCaregiver forms',
+    ])
+    expect(screen.getByRole('link', { name: /Draft intake$/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('keeps readable lifecycle destinations but hides the mutation-only Draft intake for ReadOnly and SupportWorker', () => {
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderAt('/inquiries')
+      expect(screen.getByRole('link', { name: /Inquiries$/ })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Onboarding$/ })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Active participants$/ })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
+      unmount()
+      localStorage.clear()
+    }
+  })
+
+  it('closes the mobile drawer on Escape and returns focus to its toggle', () => {
+    renderAt('/inquiries')
+    const toggle = screen.getByRole('button', { name: 'Open menu' })
+    toggle.focus()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open menu' }))
   })
 })

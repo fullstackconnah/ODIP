@@ -88,6 +88,14 @@ export function usePermissions() {
     canWrite: !isSupportWorker,
 
     /**
+     * Participant inquiry, draft-intake, and onboarding mutations are restricted by
+     * ParticipantInquiriesController to Admin, Coordinator, and SuperAdmin. This is
+     * deliberately separate from canWrite: ReadOnly historically satisfied canWrite
+     * even though the lifecycle API rejects its mutation requests.
+     */
+    canManageParticipantLifecycle: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * SupportWorker can create incidents (their only write action).
      * ReadOnly: true — button visible, backend blocks the save.
      */

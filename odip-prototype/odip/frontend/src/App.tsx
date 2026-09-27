@@ -77,12 +77,18 @@ function ParticipantEditRedirect() {
   return <Navigate to={`/participants/${id}/profile`} replace />
 }
 
-function PrivateRoute({ children, page, requiresWrite }: { children: React.ReactNode; page?: PageKey; requiresWrite?: boolean }) {
+export function PrivateRoute({ children, page, requiresWrite, requiresParticipantLifecycleMutation }: {
+  children: React.ReactNode
+  page?: PageKey
+  requiresWrite?: boolean
+  requiresParticipantLifecycleMutation?: boolean
+}) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
   if (!token) return <Navigate to="/login" replace />
   if (page && !permissions.canAccessPage(page)) return <Navigate to="/" replace />
   if (requiresWrite && !permissions.canWrite) return <Navigate to="/" replace />
+  if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -105,13 +111,13 @@ const router = createBrowserRouter(
         <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
         <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
         <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
-        <Route path="/inquiries" element={<PrivateRoute page="participants" requiresWrite><InquiriesPage /></PrivateRoute>} />
-        <Route path="/onboarding" element={<PrivateRoute page="participants" requiresWrite><OnboardingPage /></PrivateRoute>} />
-        <Route path="/onboarding/:id" element={<PrivateRoute page="participants" requiresWrite><OnboardingDetailPage /></PrivateRoute>} />
-        <Route path="/participants/new" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
+        <Route path="/inquiries" element={<PrivateRoute page="participants"><InquiriesPage /></PrivateRoute>} />
+        <Route path="/onboarding" element={<PrivateRoute page="participants"><OnboardingPage /></PrivateRoute>} />
+        <Route path="/onboarding/:id" element={<PrivateRoute page="participants"><OnboardingDetailPage /></PrivateRoute>} />
+        <Route path="/participants/new" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
         <Route path="/participants/:id/agreement-draft" element={<PrivateRoute page="participants" requiresWrite><ServiceAgreementDraftPage /></PrivateRoute>} />
-        <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresWrite><IntakeWizardPage /></PrivateRoute>} />
+        <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />
         {/* cg04 (design §5) — admin review surfaces for caregiver-submitted forms, gated the

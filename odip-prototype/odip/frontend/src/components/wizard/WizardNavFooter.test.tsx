@@ -50,4 +50,23 @@ describe('WizardNavFooter', () => {
     await user.click(btn)
     expect(onClick).toHaveBeenCalledTimes(1)
   })
+
+  it('uses a full-width, wrapping mobile layout with safe-area bottom clearance', () => {
+    renderFooter({ showBack: true })
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+
+    expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-col', 'sm:flex-row')
+    expect(footer).toHaveClass('pb-[max(0.75rem,env(safe-area-inset-bottom))]')
+  })
+
+  it('keeps the primary action keyboard-operable in the responsive footer', async () => {
+    const user = userEvent.setup()
+    const onNext = vi.fn()
+    renderFooter({ showBack: true, onNext })
+
+    await user.tab()
+    await user.tab()
+    await user.keyboard('{Enter}')
+    expect(onNext).toHaveBeenCalledTimes(1)
+  })
 })
