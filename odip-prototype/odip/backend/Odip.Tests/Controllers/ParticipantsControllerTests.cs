@@ -68,7 +68,9 @@ public class ParticipantsControllerTests
         var draft = new ServiceAgreementDraft
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Version = draftVersion,
-            State = "Approved", ParticipantNameSnapshot = participant.FullName,
+            // The only repository source is an unapproved draft. This fixture models a
+            // pre-existing tampered "Verified" record; it must never emulate approval.
+            State = ProvisionalAgreementTemplate.State, ParticipantNameSnapshot = participant.FullName,
             PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
             AgreementStartDate = new DateOnly(2026, 1, 1), AgreementEndDate = new DateOnly(2026, 12, 31),
         };
@@ -412,7 +414,7 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
-    public async Task Update_ActivatesOnlyWithInternalVerifiedImmutableEvidenceFixture()
+    public async Task Update_PreExistingVerifiedEvidenceFromUnapprovedSource_CannotActivate()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Approved", LastName = "Evidence", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
@@ -428,7 +430,37 @@ public class ParticipantsControllerTests
             SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = false, IsDraft = false,
         }, CancellationToken.None);
 
-        Assert.True(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+        Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_OldRowSnapshotAfterNewerDraft_CannotActivate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Stale", LastName = "Revision", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
+        db.Participants.Add(participant);
+        SeedVerifiedAgreementEvidence(db, participant);
+        await db.SaveChangesAsync();
+        var oldDraft = await db.ServiceAgreementDrafts.SingleAsync();
+        db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
+            Version = oldDraft.Version + 1, State = ProvisionalAgreementTemplate.State,
+            ParticipantNameSnapshot = participant.FullName,
+            PlanStartDate = oldDraft.PlanStartDate, PlanEndDate = oldDraft.PlanEndDate,
+            AgreementStartDate = oldDraft.AgreementStartDate, AgreementEndDate = oldDraft.AgreementEndDate,
+        });
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        Assert.False(Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.IsActive);
     }
 
     [Theory]

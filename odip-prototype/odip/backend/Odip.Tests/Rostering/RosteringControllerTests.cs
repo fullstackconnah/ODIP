@@ -303,7 +303,7 @@ public class RosteringControllerTests
     // ── Clean create ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreateShift_NoFindings_SavedDirectly()
+    public async Task CreateShift_PreExistingVerifiedEvidenceFromUnapprovedSource_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
@@ -314,16 +314,10 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.True(body.Success);
-        Assert.Empty(body.Data!.Findings);
-        Assert.Null(body.Data.OverrideReason);
-
-        var saved = await db.Shifts.SingleAsync();
-        Assert.Equal(ShiftStatus.Draft, saved.Status);
-        Assert.Null(saved.OverrideReason);
-        Assert.Null(saved.AcknowledgedFindingCodes);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(badRequest.Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     // ── Pattern generation idempotency ──────────────────────────────────

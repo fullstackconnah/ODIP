@@ -169,7 +169,7 @@ public class BookingsControllerTests
     }
 
     [Fact]
-    public async Task Create_ValidParticipant_Succeeds()
+    public async Task Create_PreExistingVerifiedEvidenceFromUnapprovedSource_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var trip = SeedTrip(db);
@@ -178,11 +178,10 @@ public class BookingsControllerTests
 
         var result = await controller.Create(BookingDto(trip.Id, participant.Id), CancellationToken.None);
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(created.Value);
-        Assert.True(body.Success);
-        Assert.Equal(participant.Id, body.Data!.ParticipantId);
-        Assert.Single(await db.ParticipantBookings.ToListAsync());
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<BookingDetailDto>>(badRequest.Value);
+        Assert.Contains("not ready", body.Errors![0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await db.ParticipantBookings.ToListAsync());
     }
 
     // ── GetAll ordering: BookingDate tiebreaker ────────────────────────────

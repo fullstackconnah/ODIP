@@ -26,7 +26,13 @@ public static class ParticipantReadinessGate
         ActivationEvidenceParticipants(db).Where(p => p.IsActive && !p.IsDraft);
 
     private static IQueryable<Participant> ActivationEvidenceParticipants(OdipDbContext db) =>
-        db.Participants.Where(p =>
+        // Evidence created from an unapproved source is never rehabilitated by a later status
+        // mutation. This source is currently an UnapprovedDraft, so all activation, booking,
+        // and roster eligibility must remain closed even for pre-existing "Verified" rows.
+        !ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence
+            || ProvisionalAgreementTemplate.State != "ApprovedForElectronicSigning"
+            ? db.Participants.Where(_ => false)
+            : db.Participants.Where(p =>
             p.IntakeCompletedAt != null
             && db.ParticipantOnboardings.Any(o =>
                 o.ParticipantId == p.Id
@@ -39,13 +45,18 @@ public static class ParticipantReadinessGate
                 snapshot.ParticipantId == p.Id
                 && snapshot.TenantId == p.TenantId
                 && snapshot.DocumentHash != ""
-                // The evidence is for this exact immutable draft revision. A later draft version
-                // makes an older snapshot stale for activation.
+                // The evidence must name the exact newest tenant/participant draft ID and
+                // version. CreateAsync appends a new row per revision, so matching only the
+                // snapshot's old row would otherwise leave stale evidence eligible.
                 && db.ServiceAgreementDrafts.Any(draft =>
                     draft.Id == snapshot.DraftId
                     && draft.TenantId == p.TenantId
                     && draft.ParticipantId == p.Id
-                    && draft.Version == snapshot.DraftVersion)
+                    && draft.Version == snapshot.DraftVersion
+                    && !db.ServiceAgreementDrafts.Any(newerDraft =>
+                        newerDraft.TenantId == p.TenantId
+                        && newerDraft.ParticipantId == p.Id
+                        && newerDraft.Version > draft.Version))
                 && db.ElectronicSigningEvidence.Any(evidence =>
                     evidence.SnapshotId == snapshot.Id
                     && evidence.TenantId == p.TenantId
