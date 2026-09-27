@@ -26,16 +26,13 @@ public record CreateParticipantInquiryDto
 }
 
 public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;
+public record ConvertParticipantInquiryDto { public Guid? ParticipantId { get; init; } }
 
-public record ConvertParticipantInquiryDto
-{
-    /// <summary>Optional same-tenant target. Omit to create exactly one draft Participant on first conversion.</summary>
-    public Guid? ParticipantId { get; init; }
-}
-
+/// <summary>Read-only, server-derived onboarding state; clients cannot set any step status.</summary>
 public record ParticipantOnboardingDto
 {
     public Guid ParticipantId { get; init; }
+    public bool IntakeComplete { get; init; }
     public bool ProfileComplete { get; init; }
     public DateTime? ProfileCompletedAt { get; init; }
     public string? ProfileCompletedBy { get; init; }
@@ -44,6 +41,7 @@ public record ParticipantOnboardingDto
     public string? ServiceTypeConfirmedBy { get; init; }
     public bool ServiceAgreementSigned { get; init; }
     public bool IsReady { get; init; }
+    public List<string> Reasons { get; init; } = [];
 }
 
 /// <summary>Server-derived worklist row; clients cannot choose a lifecycle stage.</summary>
@@ -54,5 +52,6 @@ public record ParticipantOnboardingWorklistDto
     public string Stage { get; init; } = string.Empty;
     public string NextAction { get; init; } = string.Empty;
     public int CompletedSteps { get; init; }
-    public int TotalSteps { get; init; } = 4;
+    public int TotalSteps { get; init; } = 5;
+    public List<string> Reasons { get; init; } = [];
 }

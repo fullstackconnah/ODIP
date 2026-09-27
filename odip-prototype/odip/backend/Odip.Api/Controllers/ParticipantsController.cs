@@ -656,6 +656,12 @@ public class ParticipantsController : ControllerBase
         if (!p.IsActive)
             p.IsActive = !p.IsDraft && await ParticipantReadinessGate.HasActivationEvidenceAsync(_db, p.Id, ct);
 
+        // A full profile submission can change identity, DOB, gender, or NDIS details. It never
+        // preserves a prior onboarding attestation: staff must re-run the separate server-side
+        // validation endpoint after saving corrected canonical data.
+        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
+        onboarding?.InvalidateProfileValidation(DateTime.UtcNow);
+
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update. Draft state is
         // the derived state above, not the client-supplied flag.

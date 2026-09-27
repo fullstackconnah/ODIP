@@ -13,7 +13,7 @@ export default function OnboardingPage() {
     { key: 'stage', header: 'Stage', sortable: true },
     { key: 'completedSteps', header: 'Progress', render: row => `${row.completedSteps} of ${row.totalSteps} steps` },
     { key: 'nextAction', header: 'Next action' },
-    { key: 'participantId', header: 'Action', type: 'custom', render: row => <button type="button" className="rounded bg-[var(--color-primary)] px-3 py-1 text-white" onClick={() => navigate(`/participants/${row.participantId}/${row.stage === 'Intake incomplete' ? 'intake' : 'profile'}`)}>{row.nextAction}</button> },
+    { key: 'participantId', header: 'Action', type: 'custom', render: row => <button type="button" className="rounded bg-[var(--color-primary)] px-3 py-1 text-white" onClick={() => navigate(`/onboarding/${row.participantId}`)}>{row.nextAction}</button> },
   ]
   return <div className="space-y-6"><div><h1 className="text-2xl font-semibold">Onboarding</h1><p className="text-sm text-[var(--color-muted-foreground)]">Tenant-scoped draft work only. Progress is calculated by the server and does not activate, book, roster, invoice, or claim.</p></div><DataTable data={worklist.data ?? []} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." /></div>
 }
