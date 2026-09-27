@@ -17,8 +17,11 @@ export type WizardStepRailProps<V> = {
 export function WizardStepRail<V>({ steps, visitedSteps, currentKey, onSelect }: WizardStepRailProps<V>) {
   const currentIndex = steps.findIndex((s) => s.key === currentKey)
   return (
-    <nav aria-label="Intake wizard steps" className="overflow-x-auto">
-      <ol className="flex items-center gap-2 md:gap-4 min-w-max pb-2">
+    <nav
+      aria-label="Intake wizard steps"
+      className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+    >
+      <ol className="flex w-max min-w-full items-center gap-2 pb-2 md:gap-4">
         {steps.map((step, idx) => {
           const isCurrent = step.key === currentKey
           const isCompleted = currentIndex !== -1 && idx < currentIndex
