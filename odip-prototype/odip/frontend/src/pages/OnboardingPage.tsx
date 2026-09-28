@@ -34,6 +34,30 @@ function stageBadge(row: WorklistRow): { status: string; label: string } {
 }
 
 export default function OnboardingPage() {
+  const screen = useOnboardingScreen()
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Onboarding"
+        subtitle={`${screen.allRowsCount} participant${screen.allRowsCount !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
+      >
+        {screen.allRowsCount > 0 && <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants, stages or gates..." />}
+      </PageHeader>
+      {screen.body}
+    </div>
+  )
+}
+
+/**
+ * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
+ * one PageHeader; the standalone /onboarding route keeps using OnboardingPage above.
+ */
+export function OnboardingTable() {
+  const screen = useOnboardingScreen()
+  return <>{screen.body}</>
+}
+
+function useOnboardingScreen() {
   const navigate = useNavigate()
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
@@ -97,28 +121,31 @@ export default function OnboardingPage() {
     },
   ]
 
-  return <div className="space-y-6">
-    <PageHeader
-      title="Onboarding"
-      subtitle={`${allRows.length} participant${allRows.length !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
-    >
-      {allRows.length > 0 && <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />}
-    </PageHeader>
-    {worklist.isError && (
-      <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3">
-        <span>Could not load the onboarding worklist. Please try again.</span>
-        <button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>
-      </div>
-    )}
-    {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
-      <EmptyState
-        icon={ClipboardCheck}
-        title="No participants in onboarding"
-        description="Participants appear here once their intake is completed. Capture and complete an enquiry's intake to start their onboarding checklist."
-        action={canAccessPage('participants') ? { label: 'View enquiries', to: '/inquiries' } : undefined}
-      />
-    ) : (
-      <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." />
-    ))}
-  </div>
+  const body = (
+    <>
+      {worklist.isError && (
+        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3">
+          <span>Could not load the onboarding worklist. Please try again.</span>
+          <button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>
+        </div>
+      )}
+      {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No participants in onboarding"
+          description="Participants appear here once their intake is completed. Capture and complete an enquiry's intake to start their onboarding checklist."
+          action={canAccessPage('participants') ? { label: 'View enquiries', to: '/inquiries' } : undefined}
+        />
+      ) : (
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." />
+      ))}
+    </>
+  )
+
+  return {
+    allRowsCount: allRows.length,
+    search,
+    setSearch,
+    body,
+  }
 }

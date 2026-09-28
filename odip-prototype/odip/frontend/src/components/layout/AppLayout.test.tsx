@@ -189,19 +189,25 @@ describe('AppLayout — participant lifecycle navigation', () => {
     // AppLayout's group rendering) — find it by its stable id rather than an ARIA landmark name.
     const journey = document.getElementById('nav-group-participants')!
     expect(Array.from(journey.querySelectorAll('a')).map(link => link.textContent?.trim())).toEqual([
-      'contact_phoneEnquiries', 'person_addDraft intake', 'checklistOnboarding', 'groupActive participants',
-      'pillMedications', 'checklist_rtlCaregiver forms',
+      // Lifecycle stages (Enquiries / Onboarding / Active participants) used to be three
+      // separate sidebar entries; the Participants hub now owns them behind a tab strip, so
+      // the sidebar surfaces one Participants leaf instead and keeps Draft intake / Medications /
+      // Caregiver forms as before.
+      'groupParticipants', 'person_addDraft intake', 'pillMedications', 'checklist_rtlCaregiver forms',
     ])
     expect(screen.getByRole('link', { name: /Draft intake$/ })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('keeps readable lifecycle destinations but hides the mutation-only Draft intake for ReadOnly and SupportWorker', () => {
+  it('surfaces a single Participants entry but keeps Draft intake hidden for ReadOnly and SupportWorker', () => {
     for (const role of ['ReadOnly', 'SupportWorker']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderAt('/inquiries')
-      expect(screen.getByRole('link', { name: /Enquiries$/ })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /Onboarding$/ })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /Active participants$/ })).toBeInTheDocument()
+      // Lifecycle stages (Enquiries, Onboarding, Active participants) collapsed into the
+      // Participants hub at /participants — see AppLayout's navItems.
+      expect(screen.getByRole('link', { name: /Participants$/ })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Enquiries$/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Onboarding$/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Active participants$/ })).not.toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
       unmount()
       localStorage.clear()
