@@ -43,6 +43,22 @@ describe('PrefilledIntakeForm', () => {
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
   })
 
+
+  it('keeps required marker text inline with its label and scopes focus clearance to intake controls', () => {
+    const { container } = render(<PrefilledIntakeForm participant={participant} />)
+
+    const firstName = screen.getByLabelText(/first name/i)
+    const firstNameLabel = firstName.closest('label')
+    expect(firstNameLabel).not.toBeNull()
+    expect(firstNameLabel!.firstElementChild).toHaveTextContent('First name *')
+    expect(firstNameLabel!.firstElementChild!.querySelector('[aria-hidden="true"]')).toHaveTextContent('*')
+
+    const intakeRoot = container.firstElementChild
+    expect(intakeRoot).toHaveClass('[&_input]:scroll-mt-20', '[&_input]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_textarea]:scroll-mt-20', '[&_textarea]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_select]:scroll-mt-20', '[&_select]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_button]:scroll-mt-20', '[&_button]:scroll-mb-24')
+  })
   it('uses the constrained Web, Email, or Phone source control and saves its correction with the linked inquiry', async () => {
     mockSave.mockResolvedValue({ success: true })
     const user = userEvent.setup()
