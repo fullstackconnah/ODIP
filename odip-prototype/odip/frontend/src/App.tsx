@@ -12,7 +12,10 @@ const DashboardPage = React.lazy(() => import('./pages/DashboardPage'))
 const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
 const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
-const ParticipantsPage = React.lazy(() => import('./pages/ParticipantsPage'))
+// ParticipantsPage is still imported lazily by its own test file (./pages/ParticipantsPage.test.tsx),
+// but in App routing the list-level /participants route now resolves to ParticipantsHubPage —
+// the three lifecycle stages share one PageHeader.
+const ParticipantsHubPage = React.lazy(() => import('./pages/ParticipantsHubPage'))
 const InquiriesPage = React.lazy(() => import('./pages/InquiriesPage'))
 const OnboardingPage = React.lazy(() => import('./pages/OnboardingPage'))
 const OnboardingDetailPage = React.lazy(() => import('./pages/OnboardingDetailPage'))
@@ -110,7 +113,7 @@ const router = createBrowserRouter(
         <Route path="/trips/new" element={<PrivateRoute page="trips" requiresWrite><TripCreatePage /></PrivateRoute>} />
         <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
         <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
-        <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsPage /></PrivateRoute>} />
+        <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsHubPage /></PrivateRoute>} />
         <Route path="/inquiries" element={<PrivateRoute page="participants"><InquiriesPage /></PrivateRoute>} />
         <Route path="/onboarding" element={<PrivateRoute page="participants"><OnboardingPage /></PrivateRoute>} />
         <Route path="/onboarding/:id" element={<PrivateRoute page="participants"><OnboardingDetailPage /></PrivateRoute>} />

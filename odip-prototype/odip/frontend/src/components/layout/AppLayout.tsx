@@ -13,7 +13,15 @@ import { usePermissions, type PageKey } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
 
 type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey; requiresParticipantLifecycleMutation?: boolean }
-type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeaf[] }
+/**
+ * Optional alternative active-match predicate for a leaf. When present, it OVERRIDES the
+ * default NavLink `isActive` (which would otherwise be exact/prefix matching). The Participants
+ * hub at /participants needs to highlight when the user is also on /inquiries or /onboarding,
+ * so the standalone routes for those lifecycle stages feel "owned" by the hub entry.
+ */
+type NavLeafMatch = (pathname: string) => boolean
+type NavLeafWithMatch = NavLeaf & { matchActive?: NavLeafMatch }
+type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeafWithMatch[] }
 type NavEntry = NavLeaf | NavParent
 
 const navItems: NavEntry[] = [
@@ -52,10 +60,25 @@ const navItems: NavEntry[] = [
     icon: Users,
     msIcon: 'group',
     children: [
-      { to: '/inquiries', icon: ClipboardCheck, label: 'Enquiries', msIcon: 'contact_phone', page: 'participants' },
+      // The Participants hub at /participants owns the Enquiries, Onboarding and Active stages
+      // behind a single tab strip, so the sidebar surfaces one Participants entry. The matchActive
+      // predicate keeps it highlighted while the user is on the legacy standalone routes too —
+      // we don't want a gap of "no nav item selected" just because they bookmarked /inquiries.
+      {
+        to: '/participants',
+        icon: Users,
+        label: 'Participants',
+        msIcon: 'group',
+        page: 'participants',
+        matchActive: (pathname) =>
+          pathname === '/participants'
+          || pathname.startsWith('/participants/')
+          || pathname === '/inquiries'
+          || pathname.startsWith('/inquiries/')
+          || pathname === '/onboarding'
+          || pathname.startsWith('/onboarding/'),
+      },
       { to: '/participants/new', icon: Users, label: 'Draft intake', msIcon: 'person_add', page: 'participants', requiresParticipantLifecycleMutation: true },
-      { to: '/onboarding', icon: ClipboardCheck, label: 'Onboarding', msIcon: 'checklist', page: 'participants' },
-      { to: '/participants', icon: Users, label: 'Active participants', msIcon: 'group', page: 'participants' },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
       // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
       // decides visibility for both (the route itself further requires write access — see App.tsx).
@@ -108,7 +131,7 @@ export default function AppLayout() {
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>()
     navItems.forEach(item => {
-      if ('children' in item && item.children.some(child => isRouteActive(child.to, location.pathname))) {
+      if ('children' in item && item.children.some(child => isLeafActive(child, location.pathname))) {
         initial.add(item.label)
       }
     })
@@ -129,11 +152,17 @@ export default function AppLayout() {
 
   useEffect(() => {
     navItems.forEach(item => {
-      if ('children' in item && item.children.some(child => isRouteActive(child.to, location.pathname))) {
+      if ('children' in item && item.children.some(child => isLeafActive(child, location.pathname))) {
         setOpenGroups(prev => (prev.has(item.label) ? prev : new Set(prev).add(item.label)))
       }
     })
   }, [location.pathname])
+
+/** Active-state resolver for nav leaves — matchActive takes precedence over default prefix matching. */
+function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
+  if (leaf.matchActive) return leaf.matchActive(pathname)
+  return isRouteActive(leaf.to, pathname)
+}
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev => {
@@ -200,7 +229,7 @@ export default function AppLayout() {
               if (visibleChildren.length === 0) return null
 
               const isOpen = openGroups.has(item.label)
-              const isGroupActive = visibleChildren.some(child => isRouteActive(child.to, location.pathname))
+              const isGroupActive = visibleChildren.some(child => isLeafActive(child, location.pathname))
               const groupId = `nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`
 
               return (
@@ -231,18 +260,23 @@ export default function AppLayout() {
                     }`}
                   >
                     <div className="min-h-0 space-y-0.5">
-                      {visibleChildren.map(({ to, label, msIcon }) => {
+                      {visibleChildren.map(({ to, label, msIcon, matchActive }) => {
                         const showLeaveBadge = to === '/rostering/leave' && pendingLeaveCount > 0
                         const showCompletionBadge = to === '/rostering/completions' && pendingCompletionCount > 0
                         const badgeCount = showLeaveBadge ? pendingLeaveCount : showCompletionBadge ? pendingCompletionCount : 0
                         const badgeNoun = showLeaveBadge ? 'leave request' : 'shift completion'
+                        // matchActive overrides NavLink's default active matcher when supplied
+                        // (see NavLeafMatch). Falls back to the standard exact/prefix logic.
+                        const computeActive = (navLinkActive: boolean) => matchActive
+                          ? matchActive(location.pathname)
+                          : navLinkActive
                         return (
                           <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                             tabIndex={isOpen ? undefined : -1}
                             aria-label={badgeCount > 0 ? navBadgeLabel(badgeCount, badgeNoun, label) : undefined}
                             className={({ isActive }) =>
                               `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
-                                isActive
+                                computeActive(isActive)
                                   ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
                                   : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
                               }`
@@ -418,7 +452,18 @@ export default function AppLayout() {
           </Link>
         )}
         {permissions.canAccessPage('participants') && (
-          <NavLink to="/participants" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+          // Match the desktop Participants entry's matchActive predicate so the mobile bottom
+          // nav stays highlighted when the user is on /inquiries or /onboarding too — the hub
+          // owns all three lifecycle stages.
+          <NavLink to="/participants" end className={({ isActive }) => `flex flex-col items-center gap-1 ${
+            isActive
+            || location.pathname === '/inquiries'
+            || location.pathname.startsWith('/inquiries/')
+            || location.pathname === '/onboarding'
+            || location.pathname.startsWith('/onboarding/')
+              ? 'text-[#396200]'
+              : 'text-[#515f74]'
+          }`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
             <span className="text-[10px] font-medium">People</span>
           </NavLink>

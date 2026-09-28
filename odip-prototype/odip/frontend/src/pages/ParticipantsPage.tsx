@@ -21,6 +21,38 @@ const ACTIVE_STATUS_COLORS: Record<string, string> = {
 }
 
 export default function ParticipantsPage() {
+  const screen = useParticipantsScreen()
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="Participants"
+        subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
+        action={!screen.showArchived && screen.canWrite && (
+          <Link to="/participants/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all">
+            <Plus className="w-4 h-4" /> New Participant
+          </Link>
+        )}
+      >
+        {screen.toggleButtons}
+
+        <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants..." />
+      </PageHeader>
+
+      {screen.body}
+    </div>
+  )
+}
+
+/**
+ * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
+ * one PageHeader; the standalone /participants route keeps using ParticipantsPage above.
+ */
+export function ParticipantsTable() {
+  const screen = useParticipantsScreen()
+  return <>{screen.body}</>
+}
+
+function useParticipantsScreen() {
   const { canWrite, canViewAlerts } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -199,22 +231,8 @@ export default function ParticipantsPage() {
     },
   ]
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="Participants"
-        subtitle={`${participants.length} participant${participants.length !== 1 ? 's' : ''}`}
-        action={!showArchived && canWrite && (
-          <Link to="/participants/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all">
-            <Plus className="w-4 h-4" /> New Participant
-          </Link>
-        )}
-      >
-        {toggleButtons}
-
-        <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." />
-      </PageHeader>
-
+  const body = (
+    <>
       {!isLoading && participants.length === 0 ? (
         search ? (
           <EmptyState
@@ -269,6 +287,16 @@ export default function ParticipantsPage() {
           }
         />
       )}
-    </div>
+    </>
   )
+
+  return {
+    canWrite,
+    showArchived,
+    toggleButtons,
+    participantsCount: participants.length,
+    search,
+    setSearch,
+    body,
+  }
 }
