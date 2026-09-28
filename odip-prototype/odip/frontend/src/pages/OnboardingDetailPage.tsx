@@ -1,8 +1,13 @@
 import type React from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
 import { apiGet, apiPost } from '@/api/client'
+import { useParticipant } from '@/api/hooks'
+import { PageHeader } from '@/components/PageHeader'
+import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 
 type Detail = {
   participantId: string
@@ -18,7 +23,7 @@ type Detail = {
   reasons: string[]
 }
 
-type Gate = { label: string; state: 'Needs attention' | 'Blocked' | 'Complete'; context?: React.ReactNode }
+type Gate = { label: string; state: 'Needs attention' | 'Blocked' | 'Complete'; context?: React.ReactNode; fixRoute?: { to: string; label: string } }
 
 function gateState(complete: boolean): Gate['state'] {
   return complete ? 'Complete' : 'Needs attention'
@@ -27,8 +32,11 @@ function gateState(complete: boolean): Gate['state'] {
 export default function OnboardingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const qc = useQueryClient()
-  const { canManageParticipantLifecycle } = usePermissions()
+  const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   const detail = useQuery({ queryKey: ['onboarding', id], enabled: !!id, queryFn: () => apiGet<Detail>(`/inquiries/${id}/onboarding`) })
+  // Participant identity for the heading — the onboarding gate payload above only carries the
+  // participantId (a raw GUID), never a name, so the display name is fetched separately.
+  const { data: participant, isLoading: participantLoading } = useParticipant(id)
   // These retain the existing server endpoints and empty payloads: server-side saved-record validation remains authoritative.
   const profile = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/profile-validation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
   const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
@@ -37,30 +45,56 @@ export default function OnboardingDetailPage() {
   if (detail.isLoading) return <div>Loading onboarding…</div>
   if (!d) return <div role="alert">Onboarding record was not found.</div>
 
+  const participantName = participant
+    ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim()
+    : undefined
+  const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
+
   const recommended = !d.intakeComplete
-    ? { label: 'Complete intake', reason: 'Complete the saved draft intake. Completing intake does not activate the participant.', action: <Link className="inline-flex rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/intake`}>Complete intake</Link> }
+    ? { label: 'Complete intake', reason: 'Complete the saved draft intake. Completing intake does not activate the participant.', action: <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/intake`}>Complete intake</Link> }
     : !d.profileComplete
-      ? { label: 'Validate saved profile', reason: 'The server validates the currently saved canonical profile fields before it records this gate.', action: <button type="button" className="rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={profile.isPending} onClick={() => profile.mutate()}>Validate saved profile</button> }
+      ? {
+          label: 'Validate saved profile', reason: 'Checks the saved profile is complete before marking this step done.',
+          action: <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={profile.isPending} onClick={() => profile.mutate()}>Validate saved profile</button>
+            <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={`/participants/${id}/profile`}>Edit profile</Link>
+          </div>,
+        }
       : !d.serviceTypeConfirmed
-        ? { label: 'Confirm saved service needs', reason: 'The server only records confirmation against a current dated provisional draft with valid catalogue-priced support lines.', action: <button type="button" className="rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</button> }
+        ? {
+            label: 'Confirm saved service needs', reason: 'Confirms the current draft service plan has valid, correctly priced support lines before marking this step done.',
+            action: <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</button>
+              <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={`/participants/${id}?tab=support`}>Edit service needs</Link>
+            </div>,
+          }
         : !d.serviceAgreementSigned
-          ? { label: 'Review agreement evidence', reason: 'Agreement evidence remains server-derived. This screen cannot sign or approve an agreement.', action: <Link className="inline-flex rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Link> }
-          : { label: 'Review schedule proposal', reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.', action: null }
+          ? { label: 'Review agreement evidence', reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.', action: <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Link> }
+          : {
+              label: 'Review schedule proposal', reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
+              action: canAccessPage('rostering') ? <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to="/rostering/patterns">Open shift patterns</Link> : null,
+            }
 
   const gates: Gate[] = [
-    { label: 'Intake PDF', state: gateState(d.intakeComplete) },
-    { label: 'Profile essentials', state: gateState(d.profileComplete) },
-    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed) },
-    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'This screen cannot sign or approve an agreement.' },
-    { label: 'Schedule review', state: 'Blocked', context: 'Proposal-only. This screen never creates shifts.' },
+    { label: 'Intake completed', state: gateState(d.intakeComplete) },
+    { label: 'Profile essentials', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
+    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
+    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } },
+    { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
 
   return <div className="space-y-6">
     <div className="space-y-3">
-      <Link to="/onboarding">← Onboarding</Link>
-      <div>
-        <p className="text-sm text-[var(--color-muted-foreground)]">Participant identity</p>
-        <h1 className="text-2xl font-semibold">Participant {d.participantId}</h1>
+      <div className="flex items-start gap-4">
+        <Link to="/onboarding" aria-label="Back to onboarding" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="flex-1">
+          <PageHeader
+            title={headingTitle}
+            subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
+          />
+        </div>
       </div>
       <div className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-4">
         <p className="text-sm text-[var(--color-muted-foreground)]">Current stage</p>
@@ -75,22 +109,35 @@ export default function OnboardingDetailPage() {
           {canManageParticipantLifecycle ? recommended.action : <p className="text-sm font-medium">Read-only access: lifecycle changes are unavailable for this role.</p>}
         </div>
       </section>
-      <p className="text-sm text-[var(--color-muted-foreground)]">All status is derived and server-owned. It does not activate a participant or permit booking, rostering, invoices, or claims.</p>
+      <p className="text-sm text-[var(--color-muted-foreground)]">Completing these steps doesn't activate the participant or allow bookings, rostering, invoicing or claims.</p>
     </div>
 
-    {profile.error || services.error ? <div role="alert">The server could not validate this step. Correct the saved record and retry.</div> : null}
+    {profile.error || services.error ? (
+      <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
+        {profile.error
+          ? extractErrorMessage(profile.error, 'Profile is incomplete — edit the profile, then validate again.')
+          : extractErrorMessage(services.error, 'Service needs are incomplete — edit the service needs, then confirm again.')}
+      </div>
+    ) : null}
 
     <section aria-labelledby="onboarding-gates-heading" className="space-y-3">
       <h2 id="onboarding-gates-heading" className="text-lg font-semibold">Onboarding gates</h2>
       {gates.map(gate => <article key={gate.label} className="rounded border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{gate.label}</h3><span className="rounded-full border px-2 py-1 text-sm">{gate.state}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-semibold">{gate.label}</h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={gate.state} />
+            {gate.state !== 'Complete' && gate.fixRoute && (
+              <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={gate.fixRoute.to}>{gate.fixRoute.label}</Link>
+            )}
+          </div>
+        </div>
         {gate.context ? <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
       </article>)}
     </section>
 
     {d.reasons.length > 0 ? <section aria-labelledby="readiness-reasons-heading" className="rounded border p-4">
-      <h2 id="readiness-reasons-heading" className="font-semibold">Server readiness notes</h2>
-      <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">The API supplies these as an overall readiness list, not as gate-specific associations.</p>
+      <h2 id="readiness-reasons-heading" className="font-semibold">What's still missing</h2>
       <ul className="mt-2 list-disc space-y-1 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
     </section> : null}
   </div>

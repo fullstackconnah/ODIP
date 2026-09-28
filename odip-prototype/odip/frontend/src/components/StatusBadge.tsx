@@ -47,6 +47,17 @@ const STATUS_COLORS: Record<string, string> = {
   ndiamanaged: 'bg-blue-100 text-blue-700',
   planmanaged: 'bg-purple-100 text-purple-700',
   selfmanaged: 'bg-orange-100 text-orange-700',
+
+  // Lifecycle worklists (Inquiries/Onboarding)
+  new: 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
+  draftintake: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  complete: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  needsattention: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  blocked: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+
+  // Service agreement drafts
+  unapproveddraft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  approvedforelectronicsigning: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
 }
 
 const DEFAULT_COLOR = 'bg-[#fef3c7] text-[#92400e]'

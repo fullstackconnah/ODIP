@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useCreateElectronicSigningSnapshot, useSubmitElectronicSigningEvidence } from '@/api/hooks'
 import type { ElectronicSigningSnapshotDto, ServiceAgreementDraftDto } from '@/api/types'
+import { FormField } from '@/components/FormField'
 
 type Props = { participantId: string; draft: ServiceAgreementDraftDto }
 
@@ -65,12 +66,12 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
     })
   }
 
-  return <section aria-labelledby={`signing-evidence-${draft.id}`} className="rounded-lg border border-[var(--color-warning)]/50 bg-[var(--color-warning-container)]/20 p-4 space-y-4">
+  return <section aria-labelledby={`signing-evidence-${draft.id}`} className="rounded-xl border border-[var(--color-warning)]/50 bg-[var(--color-warning-container)]/20 p-4 space-y-4">
     <div>
       <h3 id={`signing-evidence-${draft.id}`} className="font-semibold">In-app electronic signing evidence</h3>
-      <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Development-only evidence capture. It remains PendingVerification; it does not create a signed agreement, legal approval, billing authority, or scheduling permission.</p>
+      <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Records signing evidence for review. It stays pending verification and doesn't create a signed agreement, approval, billing authority or permission to schedule.</p>
     </div>
-    {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Electronic signing evidence is unavailable because this agreement source is not approved.</p>}
+    {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Signing evidence can't be recorded until this agreement template is approved.</p>}
     {evidencePermitted && !snapshot && <button type="button" onClick={showDocument} disabled={createSnapshot.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">
       {createSnapshot.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Display immutable document before recording evidence
     </button>}
@@ -83,19 +84,31 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
       <fieldset className="space-y-3" disabled={submitEvidence.isPending}>
         <legend className="text-sm font-medium">Signer attestation</legend>
         <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm">Signer full name<input aria-label="Signer full name" required value={signerName} onChange={event => setSignerName(event.target.value)} className="mt-1 w-full rounded border border-[var(--color-border)] bg-transparent p-2" /></label>
-          <label className="text-sm">Capacity or authority<input aria-label="Capacity or authority" required value={signerCapacity} onChange={event => setSignerCapacity(event.target.value)} className="mt-1 w-full rounded border border-[var(--color-border)] bg-transparent p-2" /></label>
+          <FormField label="Signer full name" required>
+            <input value={signerName} onChange={event => setSignerName(event.target.value)} />
+          </FormField>
+          <FormField label="Capacity or authority" required>
+            <input value={signerCapacity} onChange={event => setSignerCapacity(event.target.value)} />
+          </FormField>
         </div>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={isAuthorisedRepresentative} onChange={event => setIsAuthorisedRepresentative(event.target.checked)} /> I am an authorised representative rather than the participant.</label>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={documentWasDisplayed} onChange={event => setDocumentWasDisplayed(event.target.checked)} /> I acknowledge that the complete immutable document displayed above was shown to me.</label>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={consentToElectronicMethod} onChange={event => setConsentToElectronicMethod(event.target.checked)} /> I consent to using this electronic evidence method.</label>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={intendsToSign} onChange={event => setIntendsToSign(event.target.checked)} /> I intend this attestation to record my signing intent.</label>
+        <FormField label="I am an authorised representative rather than the participant." layout="checkbox">
+          <input type="checkbox" className="w-4 h-4 rounded border-[var(--color-border)]" checked={isAuthorisedRepresentative} onChange={event => setIsAuthorisedRepresentative(event.target.checked)} />
+        </FormField>
+        <FormField label="I acknowledge that the complete immutable document displayed above was shown to me." layout="checkbox">
+          <input type="checkbox" className="w-4 h-4 rounded border-[var(--color-border)]" checked={documentWasDisplayed} onChange={event => setDocumentWasDisplayed(event.target.checked)} />
+        </FormField>
+        <FormField label="I consent to using this electronic evidence method." layout="checkbox">
+          <input type="checkbox" className="w-4 h-4 rounded border-[var(--color-border)]" checked={consentToElectronicMethod} onChange={event => setConsentToElectronicMethod(event.target.checked)} />
+        </FormField>
+        <FormField label="I intend this attestation to record my signing intent." layout="checkbox">
+          <input type="checkbox" className="w-4 h-4 rounded border-[var(--color-border)]" checked={intendsToSign} onChange={event => setIntendsToSign(event.target.checked)} />
+        </FormField>
       </fieldset>
       <button type="button" onClick={submit} disabled={submitEvidence.isPending} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
         {submitEvidence.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Record PendingVerification evidence
       </button>
     </>}
-    {error && <p role="alert" className="text-sm text-[var(--color-destructive)]">{error}</p>}
+    {error && <p role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-sm text-[var(--color-destructive)]">{error}</p>}
     {success && <p role="status" className="text-sm">{success}</p>}
   </section>
 }

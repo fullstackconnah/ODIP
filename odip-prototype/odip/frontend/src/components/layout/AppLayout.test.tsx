@@ -185,9 +185,11 @@ describe('AppLayout — participant lifecycle navigation', () => {
   it('sequences the Participant journey and keeps Draft intake active only for lifecycle roles', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     renderAt('/participants/new')
-    const journey = screen.getByRole('navigation', { name: 'Participant journey' })
+    // The sub-group's link list is a plain, unlabelled container (no nested nav landmark — see
+    // AppLayout's group rendering) — find it by its stable id rather than an ARIA landmark name.
+    const journey = document.getElementById('nav-group-participants')!
     expect(Array.from(journey.querySelectorAll('a')).map(link => link.textContent?.trim())).toEqual([
-      'contact_phoneInquiries', 'person_addDraft intake', 'checklistOnboarding', 'groupActive participants',
+      'contact_phoneEnquiries', 'person_addDraft intake', 'checklistOnboarding', 'groupActive participants',
       'pillMedications', 'checklist_rtlCaregiver forms',
     ])
     expect(screen.getByRole('link', { name: /Draft intake$/ })).toHaveAttribute('aria-current', 'page')
@@ -197,7 +199,7 @@ describe('AppLayout — participant lifecycle navigation', () => {
     for (const role of ['ReadOnly', 'SupportWorker']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderAt('/inquiries')
-      expect(screen.getByRole('link', { name: /Inquiries$/ })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Enquiries$/ })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /Onboarding$/ })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /Active participants$/ })).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()

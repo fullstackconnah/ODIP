@@ -52,7 +52,7 @@ const navItems: NavEntry[] = [
     icon: Users,
     msIcon: 'group',
     children: [
-      { to: '/inquiries', icon: ClipboardCheck, label: 'Inquiries', msIcon: 'contact_phone', page: 'participants' },
+      { to: '/inquiries', icon: ClipboardCheck, label: 'Enquiries', msIcon: 'contact_phone', page: 'participants' },
       { to: '/participants/new', icon: Users, label: 'Draft intake', msIcon: 'person_add', page: 'participants', requiresParticipantLifecycleMutation: true },
       { to: '/onboarding', icon: ClipboardCheck, label: 'Onboarding', msIcon: 'checklist', page: 'participants' },
       { to: '/participants', icon: Users, label: 'Active participants', msIcon: 'group', page: 'participants' },
@@ -230,7 +230,7 @@ export default function AppLayout() {
                       isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
                     }`}
                   >
-                    <nav aria-label={item.label === 'Participants' ? 'Participant journey' : undefined} className="min-h-0 space-y-0.5">
+                    <div className="min-h-0 space-y-0.5">
                       {visibleChildren.map(({ to, label, msIcon }) => {
                         const showLeaveBadge = to === '/rostering/leave' && pendingLeaveCount > 0
                         const showCompletionBadge = to === '/rostering/completions' && pendingCompletionCount > 0
@@ -255,7 +255,7 @@ export default function AppLayout() {
                           </NavLink>
                         )
                       })}
-                    </nav>
+                    </div>
                   </div>
                 </div>
               )
