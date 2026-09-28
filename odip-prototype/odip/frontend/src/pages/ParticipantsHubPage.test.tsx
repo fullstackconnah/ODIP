@@ -122,4 +122,23 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
     renderHub('/participants?tab=not-a-stage')
     expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
   })
+
+  it('shows the New enquiry button in the PageHeader action slot on every tab for lifecycle roles', async () => {
+    const user = userEvent.setup()
+    renderHub()
+    // Visible on the default Active participants tab.
+    expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveAttribute('href', '/participants/new-inquiry')
+    // Visible on Enquiries.
+    await user.click(screen.getByRole('tab', { name: 'Enquiries' }))
+    expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveAttribute('href', '/participants/new-inquiry')
+    // Visible on Onboarding.
+    await user.click(screen.getByRole('tab', { name: 'Onboarding' }))
+    expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveAttribute('href', '/participants/new-inquiry')
+  })
+
+  it('hides the New enquiry button for roles that lack the lifecycle capability', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderHub()
+    expect(screen.queryByRole('link', { name: /New enquiry/i })).not.toBeInTheDocument()
+  })
 })

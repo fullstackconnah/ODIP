@@ -78,7 +78,6 @@ const navItems: NavEntry[] = [
           || pathname === '/onboarding'
           || pathname.startsWith('/onboarding/'),
       },
-      { to: '/participants/new', icon: Users, label: 'Draft intake', msIcon: 'person_add', page: 'participants', requiresParticipantLifecycleMutation: true },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
       // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
       // decides visibility for both (the route itself further requires write access — see App.tsx).

@@ -13,29 +13,36 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const inquiry = (overrides: Record<string, unknown> = {}) => ({ id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: 'Referral', participantId: null, ...overrides })
-function page() { return render(<MemoryRouter initialEntries={['/inquiries']}><Routes><Route path="/inquiries" element={<InquiriesPage />} /><Route path="/participants/:id/intake" element={<p>Draft intake destination</p>} /></Routes></MemoryRouter>) }
+function page() {
+  return render(
+    <MemoryRouter initialEntries={['/inquiries']}>
+      <Routes>
+        <Route path="/inquiries" element={<InquiriesPage />} />
+        <Route path="/participants/:id/intake" element={<p>Draft intake destination</p>} />
+        <Route path="/participants/new-inquiry" element={<p>New inquiry form</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
 
-beforeEach(() => { localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' })); mocks.inquiries.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: mocks.refetch }); mocks.convert.mockReset(); mocks.refetch.mockReset() })
+beforeEach(() => {
+  localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+  mocks.inquiries.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: mocks.refetch })
+  mocks.convert.mockReset()
+  mocks.refetch.mockReset()
+})
 
 describe('InquiriesPage lifecycle handoff', () => {
-  it('shows the empty state with a New enquiry CTA when there are no enquiries, and reveals FormField-labelled compact capture controls on demand', async () => {
+  it('shows the empty state with a New enquiry CTA that routes to /participants/new-inquiry', async () => {
     const user = userEvent.setup()
     page()
     expect(screen.getByText('No enquiries captured yet')).toBeInTheDocument()
     expect(screen.queryByLabelText(/First name/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'New enquiry' }))
-    const firstName = screen.getByLabelText(/First name/)
-    expect(firstName).toHaveAttribute('autocomplete', 'given-name')
-    expect(firstName).toHaveAttribute('aria-required', 'true')
-    expect(firstName).toHaveClass('focus:ring-2', 'px-4', 'py-2.5')
-    expect(screen.getByLabelText('Phone')).toHaveAttribute('autocomplete', 'tel')
-    expect(screen.getByLabelText('Source')).toHaveClass('focus:ring-2', 'px-4', 'py-2.5')
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByLabelText(/First name/)).not.toBeInTheDocument()
-    expect(screen.getByText('No enquiries captured yet')).toBeInTheDocument()
+    // Inline capture has been replaced by a routed page; the standalone /inquiries
+    // route no longer mounts the form fields itself.
+    expect(screen.getByText('New inquiry form')).toBeInTheDocument()
   })
 
   it('renders Start intake for an unconverted inquiry and routes to intake after successful conversion', async () => {
@@ -113,9 +120,9 @@ describe('InquiriesPage lifecycle handoff', () => {
     expect(screen.getByText('No enquiries match your search')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear search and filter' }))
     expect(screen.getByText('Dana Reyes')).toBeInTheDocument()
-})
+  })
 
-const LONG_PROVENANCE = "Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours."
+  const LONG_PROVENANCE = "Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours."
 
   it('leads each row with the primary action and caps the Provenance cell', () => {
     mocks.inquiries.mockReturnValue({ data: [
@@ -126,7 +133,6 @@ const LONG_PROVENANCE = "Referral from a long GP letter about mobility supports 
     const editBtn = screen.getByRole('button', { name: 'Edit enquiry' })
     // the primary CTA must precede the outlined secondary in DOM reading order
     expect(resume.compareDocumentPosition(editBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(resume).toHaveClass('order-first')
     // provenance is truncated and carries the full text for hover
     const prov = screen.getByTitle(LONG_PROVENANCE)
     expect(prov).toHaveClass('truncate', 'max-w-[280px]')

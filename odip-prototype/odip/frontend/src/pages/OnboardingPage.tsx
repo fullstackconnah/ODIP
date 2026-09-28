@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { apiGet } from '@/api/client'
+import { Button } from '@/components/Button'
 import { DataTable, type Column } from '@/components/DataTable'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -116,8 +117,8 @@ function useOnboardingScreen() {
       header: 'Action',
       type: 'custom',
       render: row => canManageParticipantLifecycle
-        ? <button type="button" aria-label={`Open onboarding for ${row.fullName}`} className="w-full rounded border px-3 py-2 sm:w-auto" onClick={() => navigate(`/onboarding/${row.participantId}`)}>Open</button>
-        : <button type="button" className="w-full rounded border px-3 py-2 sm:w-auto" onClick={() => navigate(`/onboarding/${row.participantId}`)}>View checklist</button>,
+        ? <Button size="sm" className="w-full sm:w-auto" aria-label={`Open onboarding for ${row.fullName}`} onClick={() => navigate(`/onboarding/${row.participantId}`)}>Open</Button>
+        : <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => navigate(`/onboarding/${row.participantId}`)}>View checklist</Button>,
     },
   ]
 
