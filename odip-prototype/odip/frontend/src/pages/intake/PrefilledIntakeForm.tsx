@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import type { ParticipantDetailDto, SaveParticipantIntakeDto, UpdateParticipantDto } from '@/api/types'
 import { useDownloadParticipantIntakeSnapshotPdf, useParticipantIntakeSnapshots, useSaveParticipantIntake, useUpdateParticipant } from '@/api/hooks'
 import { extractErrorMessage } from './intakeFormat'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 
 type PrefilledIntakeFormProps = {
   participant: ParticipantDetailDto
@@ -60,10 +61,6 @@ function intakePayload(values: SaveParticipantIntakeDto): SaveParticipantIntakeD
     behaviourRiskSummary: nullable(values.behaviourRiskSummary), notes: nullable(values.notes),
     inquiryProvenance: nullable(values.inquiryProvenance),
   }
-}
-
-function newCompletionRequestId() {
-  return crypto.randomUUID()
 }
 
 /**
@@ -126,7 +123,7 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 [&_input]:scroll-mt-20 [&_input]:scroll-mb-24 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-24 [&_select]:scroll-mt-20 [&_select]:scroll-mb-24 [&_button]:scroll-mt-20 [&_button]:scroll-mb-24">
       <div>
         <h1 className="text-xl md:text-2xl font-bold">Complete intake</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Review the inquiry details and add only intake information. Full profile editing is completed separately.</p>
@@ -156,7 +153,7 @@ export function PrefilledIntakeForm({ participant }: PrefilledIntakeFormProps) {
           <h2 id="identity-and-contact-heading" className="text-base font-semibold">Identity and contact</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {identityAndContactFields.map(({ key, label, type = 'text' }) => <label key={key} className="grid gap-1 text-sm font-medium">
-              {label}{(key === 'firstName' || key === 'lastName') && <span aria-hidden="true"> *</span>}
+              {(key === 'firstName' || key === 'lastName') ? <span>{label}<span aria-hidden="true"> *</span></span> : label}
               <input type={type} className="rounded-md border bg-transparent px-3 py-2" {...register(key, { required: key === 'firstName' || key === 'lastName' ? `${label} is required` : false })} />
               {errors[key]?.message && <span role="alert" className="text-[var(--color-destructive)]">{errors[key]?.message}</span>}
             </label>)}

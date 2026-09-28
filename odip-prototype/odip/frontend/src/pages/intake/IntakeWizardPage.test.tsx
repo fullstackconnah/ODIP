@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
@@ -77,9 +77,16 @@ beforeEach(() => {
   mockParticipant.mockReset(); mockParticipant.mockReturnValue({ data: undefined, isLoading: false })
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('IntakeWizardPage', () => {
   it('renders the create wizard with no profile-only identity fields', () => {
     renderPage()
+    expect(screen.getByText('Step 1 of 9')).toBeVisible()
+    expect(stepNav()).toHaveClass('[contain:inline-size]')
+    expect(stepNav().closest('.max-w-5xl')).toHaveClass('w-full', 'min-w-0', 'max-w-full')
     expect(screen.getByLabelText(/first name/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/middle name/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^gender$/i)).not.toBeInTheDocument()
@@ -127,7 +134,13 @@ describe('IntakeWizardPage', () => {
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
   })
 
-  it('completes create-mode intake with a draft payload and hands off to Profile', async () => {
+  it('completes create-mode intake with a CSPRNG UUID when randomUUID is unavailable and hands off to Profile', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(0)
+        return bytes
+      },
+    })
     const user = userEvent.setup()
     renderPage()
     await walkToReview(user)
@@ -135,6 +148,7 @@ describe('IntakeWizardPage', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({
       isDraft: true, completeIntake: true, firstName: 'Jamie', lastName: 'Rivers',
+      completionRequestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
     }))
     expect(await screen.findByText(/profile wizard/i)).toBeInTheDocument()
   })

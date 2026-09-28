@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrefilledIntakeForm } from './PrefilledIntakeForm'
@@ -28,6 +28,10 @@ describe('PrefilledIntakeForm', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('hydrates inquiry-prefilled values and exposes every editable intake identity field', () => {
     render(<PrefilledIntakeForm participant={participant} />)
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
@@ -39,6 +43,22 @@ describe('PrefilledIntakeForm', () => {
     expect(screen.getByText(/not active or bookable/i)).toBeInTheDocument()
   })
 
+
+  it('keeps required marker text inline with its label and scopes focus clearance to intake controls', () => {
+    const { container } = render(<PrefilledIntakeForm participant={participant} />)
+
+    const firstName = screen.getByLabelText(/first name/i)
+    const firstNameLabel = firstName.closest('label')
+    expect(firstNameLabel).not.toBeNull()
+    expect(firstNameLabel!.firstElementChild).toHaveTextContent('First name *')
+    expect(firstNameLabel!.firstElementChild!.querySelector('[aria-hidden="true"]')).toHaveTextContent('*')
+
+    const intakeRoot = container.firstElementChild
+    expect(intakeRoot).toHaveClass('[&_input]:scroll-mt-20', '[&_input]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_textarea]:scroll-mt-20', '[&_textarea]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_select]:scroll-mt-20', '[&_select]:scroll-mb-24')
+    expect(intakeRoot).toHaveClass('[&_button]:scroll-mt-20', '[&_button]:scroll-mb-24')
+  })
   it('uses the constrained Web, Email, or Phone source control and saves its correction with the linked inquiry', async () => {
     mockSave.mockResolvedValue({ success: true })
     const user = userEvent.setup()
@@ -97,6 +117,29 @@ describe('PrefilledIntakeForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/network unavailable/i)
     expect(screen.getByLabelText(/phone/i)).toHaveValue('0411111111')
     const retryKey = mockComplete.mock.calls[0][0].data.completionRequestId
+
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+    expect(mockComplete.mock.calls[1][0].data.completionRequestId).toBe(retryKey)
+  })
+
+  it('renders without randomUUID and keeps the CSPRNG completion key on failed retry', async () => {
+    let counter = 0
+    vi.stubGlobal('crypto', {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(0)
+        bytes[15] = counter++
+        return bytes
+      },
+    })
+    mockComplete.mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValueOnce({ success: true })
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+    expect(screen.getByRole('heading', { name: /complete intake/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/network unavailable/i)
+    const retryKey = mockComplete.mock.calls[0][0].data.completionRequestId
+    expect(retryKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 
     await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
     expect(mockComplete.mock.calls[1][0].data.completionRequestId).toBe(retryKey)

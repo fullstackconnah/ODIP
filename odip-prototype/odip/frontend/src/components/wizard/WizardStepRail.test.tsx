@@ -33,8 +33,22 @@ describe('WizardStepRail', () => {
     render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} />)
 
     const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
-    expect(nav).toHaveClass('w-full', 'min-w-0', 'max-w-full', 'overflow-x-auto', 'touch-pan-x')
+    expect(nav).toHaveClass('relative', 'w-full', 'min-w-0', 'max-w-full', '[contain:inline-size]', 'overflow-x-auto', 'touch-pan-x')
     expect(within(nav).getByRole('list')).toHaveClass('w-max', 'min-w-full')
+  })
+
+  it('shows a visible current-step summary while retaining every full step label in button names', () => {
+    const nineSteps = Array.from({ length: 9 }, (_, index) => ({
+      key: `step-${index + 1}`,
+      label: `Step label ${index + 1}`,
+      fields: [],
+    }))
+    render(<WizardStepRail steps={nineSteps} visitedSteps={new Set(['step-1', 'step-2'])} currentKey="step-2" onSelect={vi.fn()} />)
+
+    expect(screen.getByText('Step 2 of 9')).toBeVisible()
+    for (const step of nineSteps) {
+      expect(screen.getByRole('button', { name: new RegExp(step.label) })).toBeInTheDocument()
+    }
   })
 
   it('keeps visited buttons keyboard-operable while unvisited steps stay disabled', async () => {
