@@ -70,9 +70,24 @@ export default function InquiriesPage() {
     { key: 'firstName', header: 'Name', sortable: true, render: row => `${row.firstName} ${row.lastName}` },
     { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
     { key: 'source', header: 'Source', sortable: true },
-    { key: 'provenance', header: 'Provenance', render: row => row.provenance || '—' },
+    {
+      key: 'provenance',
+      header: 'Provenance',
+      render: row => {
+        const text = row.provenance || '—'
+        if (!row.provenance) return <span>{text}</span>
+        return (
+          <span
+            className="block max-w-[280px] truncate text-sm text-[var(--color-muted-foreground)]"
+            title={row.provenance}
+          >
+            {text}
+          </span>
+        )
+      },
+    },
     { key: 'participantId', header: 'Status', render: row => row.participantId ? <StatusBadge status="draftintake" label="Draft intake" /> : <StatusBadge status="new" label="New" /> },
-    { key: 'id', header: 'Actions', type: 'custom', render: row => canManageParticipantLifecycle ? <div className="flex flex-wrap gap-2"><button type="button" className="rounded border px-3 py-1" onClick={() => edit(row)}>Edit enquiry</button>{row.participantId ? <button type="button" className="rounded bg-[var(--color-primary)] px-3 py-1 text-white" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake</button> : <button type="button" disabled={convert.isPending} className="rounded bg-[var(--color-primary)] px-3 py-1 text-white disabled:opacity-60" onClick={() => startIntake(row.id)}>Start intake</button>}</div> : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span> },
+    { key: 'id', header: 'Actions', type: 'custom', render: row => canManageParticipantLifecycle ? <div className="flex flex-wrap gap-2">{row.participantId ? <button type="button" className="order-first rounded bg-[var(--color-primary)] px-3 py-1 text-white" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake</button> : <button type="button" disabled={convert.isPending} className="order-first rounded bg-[var(--color-primary)] px-3 py-1 text-white disabled:opacity-60" onClick={() => startIntake(row.id)}>Start intake</button>}<button type="button" className="rounded border px-3 py-1" onClick={() => edit(row)}>Edit enquiry</button></div> : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span> },
   ]
   const showEmptyState = !isError && !isLoading && inquiries.length === 0 && !showForm
   const showTable = !isError && !showEmptyState && (inquiries.length > 0 || isLoading)
