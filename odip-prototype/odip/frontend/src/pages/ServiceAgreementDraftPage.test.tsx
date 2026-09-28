@@ -70,6 +70,16 @@ describe('ServiceAgreementDraftPage', () => {
     expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-1' })
   })
 
+  it('keeps the demo simulation collapsed inside a details element, closed by default', () => {
+    drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'v', templateDocxSha256: 'a', templatePdfSha256: 'b', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] }])
+    render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+    const summary = screen.getByText('Demo-only simulation')
+    const details = summary.closest('details')
+    expect(details).not.toBeNull()
+    expect(details).not.toHaveAttribute('open')
+    expect(summary.tagName).toBe('SUMMARY')
+  })
+
   it('attributes demo simulation success and rejection to their respective draft cards', () => {
     drafts.mockReturnValue([
       { id: 'd-old', version: 1, status: 'UnapprovedDraft', templateVersion: 'draft-v1', templateDocxSha256: 'old-docx', templatePdfSha256: 'old-pdf', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] },

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import OnboardingDetailPage from './OnboardingDetailPage'
 
-const { mockUseQuery, mockUseMutation, mockInvalidate } = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(),
+const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant } = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(),
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: mockUseQuery,
@@ -13,11 +13,18 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }))
 vi.mock('@/api/client', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
+vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant }))
 
 const incomplete = {
   participantId: 'p-1', intakeComplete: true, profileComplete: false,
   serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
   reasons: ['Profile requires date of birth.', 'A current draft is required.'],
+}
+
+const readyForSchedule = {
+  participantId: 'p-1', intakeComplete: true, profileComplete: true,
+  serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false,
+  reasons: [],
 }
 
 function renderDetail() {
@@ -29,30 +36,55 @@ describe('OnboardingDetailPage', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
     mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
   })
 
-  it('leads with identity, current stage, compact progress and exactly one recommended primary action', () => {
+  it('shows the participant\'s name in the heading, never the raw participantId GUID', () => {
     renderDetail()
 
-    expect(screen.getByText('Participant p-1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
+    expect(screen.queryByText('Participant p-1')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^p-1$/)).not.toBeInTheDocument()
+  })
+
+  it('shows a Loading… placeholder in the heading while the participant is still loading, never the GUID', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true })
+    renderDetail()
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Loading…' })).toBeInTheDocument()
+    expect(screen.queryByText('Participant p-1')).not.toBeInTheDocument()
+  })
+
+  it('leads with identity, current stage, compact progress and exactly one recommended primary action plus its edit link', () => {
+    renderDetail()
+
     expect(screen.getByText('Onboarding in progress')).toBeInTheDocument()
     expect(screen.getByText('Progress: 1 of 5 gates complete')).toBeInTheDocument()
     const recommendation = screen.getByRole('heading', { name: 'Validate saved profile' }).closest('section')!
-    expect(recommendation.querySelectorAll('button, a')).toHaveLength(1)
+    expect(recommendation.querySelectorAll('button')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Validate saved profile' })).toBeInTheDocument()
+    expect(within(recommendation).getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/participants/p-1/profile')
   })
 
-  it('renders complete, needs-attention and blocked gates without fabricating server reason associations', () => {
+  it('renders complete, needs-attention and blocked gates via StatusBadge without fabricating reason associations', () => {
     renderDetail()
 
-    expect(screen.getByText('Intake PDF').parentElement).toHaveTextContent('Complete')
+    expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
     expect(screen.getByText('Profile essentials').parentElement).toHaveTextContent('Needs attention')
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
-    expect(screen.getByText('The API supplies these as an overall readiness list, not as gate-specific associations.')).toBeInTheDocument()
+    expect(screen.getByText("What's still missing")).toBeInTheDocument()
     expect(screen.getByText('Profile requires date of birth.')).toBeInTheDocument()
   })
 
-  it('uses the existing validation endpoint only when the lifecycle capability is present', async () => {
+  it('gives a Needs-attention profile gate row an Edit profile link', () => {
+    renderDetail()
+
+    const profileGate = screen.getByText('Profile essentials').closest('article')!
+    const editLink = within(profileGate).getByRole('link', { name: 'Edit profile' })
+    expect(editLink).toHaveAttribute('href', '/participants/p-1/profile')
+  })
+
+  it('uses the existing validation endpoint only when the lifecycle capability is present, and gives a remediation hint on failure', async () => {
     const profileMutate = vi.fn()
     mockUseMutation.mockReturnValueOnce({ mutate: profileMutate, error: new Error('validation failed'), isPending: false }).mockReturnValueOnce({ mutate: vi.fn(), error: null, isPending: false })
     const user = userEvent.setup()
@@ -60,14 +92,31 @@ describe('OnboardingDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Validate saved profile' }))
     expect(profileMutate).toHaveBeenCalledOnce()
-    expect(screen.getByRole('alert')).toHaveTextContent(/could not validate/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/edit the profile, then validate again/i)
+  })
+
+  it('gives a secondary "Edit service needs" link alongside the confirm button once the profile gate is complete', () => {
+    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true }, isLoading: false })
+    renderDetail()
+
+    const recommendation = screen.getByRole('heading', { name: 'Confirm saved service needs' }).closest('section')!
+    expect(within(recommendation).getByRole('button', { name: 'Confirm saved service needs' })).toBeInTheDocument()
+    expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1?tab=support')
+  })
+
+  it('gives the final "Review schedule proposal" gate a link into rostering instead of a dead end', () => {
+    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
+    renderDetail()
+
+    const recommendation = screen.getByRole('heading', { name: 'Review schedule proposal' }).closest('section')!
+    expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
   })
 
   it('preserves readable status but suppresses mutation controls when lifecycle capability is absent', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     renderDetail()
 
-    expect(screen.getByText('Participant p-1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
     expect(screen.getByText('Read-only access: lifecycle changes are unavailable for this role.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Validate saved profile' })).not.toBeInTheDocument()
   })

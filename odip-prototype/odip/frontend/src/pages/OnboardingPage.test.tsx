@@ -22,7 +22,7 @@ describe('OnboardingPage', () => {
     expect(screen.getByText('2 of 5 gates')).toBeInTheDocument()
     expect(screen.getByText('Confirm service needs')).toBeInTheDocument()
     expect(screen.getAllByRole('button')).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: 'Open: Confirm service needs' }))
+    await user.click(screen.getByRole('button', { name: 'Open onboarding for Jamie Rivers' }))
     expect(screen.getByText('Checklist route')).toBeInTheDocument()
   })
 
@@ -33,6 +33,26 @@ describe('OnboardingPage', () => {
 
     expect(screen.getByText('Avery Lee')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View checklist' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /open: complete intake/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /open onboarding for/i })).not.toBeInTheDocument()
+  })
+
+  it('shows an empty state with a link back to Enquiries when there is no onboarding work', () => {
+    mockUseQuery.mockReturnValue({ data: [], isLoading: false })
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+
+    expect(screen.getByText('No participants in onboarding')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View enquiries' })).toHaveAttribute('href', '/inquiries')
+  })
+
+  it('shows a retry-able error banner instead of the empty state when the worklist fails to load', async () => {
+    const refetch = vi.fn()
+    mockUseQuery.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
+    const user = userEvent.setup()
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not load the onboarding worklist/i)
+    expect(screen.queryByText('No participants in onboarding')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(refetch).toHaveBeenCalledOnce()
   })
 })
