@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { apiGet, apiPost } from '@/api/client'
 import { useParticipant } from '@/api/hooks'
+import { Button } from '@/components/Button'
+import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
@@ -51,28 +53,43 @@ export default function OnboardingDetailPage() {
   const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
 
   const recommended = !d.intakeComplete
-    ? { label: 'Complete intake', reason: 'Complete the saved draft intake. Completing intake does not activate the participant.', action: <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/intake`}>Complete intake</Link> }
+    ? {
+        label: 'Complete intake',
+        reason: 'Complete the saved draft intake. Completing intake does not activate the participant.',
+        action: <Button to={`/participants/${id}/intake`}>Complete intake</Button>,
+      }
     : !d.profileComplete
       ? {
-          label: 'Validate saved profile', reason: 'Checks the saved profile is complete before marking this step done.',
-          action: <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={profile.isPending} onClick={() => profile.mutate()}>Validate saved profile</button>
-            <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={`/participants/${id}/profile`}>Edit profile</Link>
-          </div>,
+          label: 'Validate saved profile',
+          reason: 'Checks the saved profile is complete before marking this step done.',
+          action: (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled={profile.isPending} onClick={() => profile.mutate()}>Validate saved profile</Button>
+              <Button variant="secondary" to={`/participants/${id}/profile`}>Edit profile</Button>
+            </div>
+          ),
         }
       : !d.serviceTypeConfirmed
         ? {
-            label: 'Confirm saved service needs', reason: 'Confirms the current draft service plan has valid, correctly priced support lines before marking this step done.',
-            action: <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white disabled:opacity-50" disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</button>
-              <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={`/participants/${id}?tab=support`}>Edit service needs</Link>
-            </div>,
+            label: 'Confirm saved service needs',
+            reason: 'Confirms the current draft service plan has valid, correctly priced support lines before marking this step done.',
+            action: (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</Button>
+                <Button variant="secondary" to={`/participants/${id}?tab=support`}>Edit service needs</Button>
+              </div>
+            ),
           }
         : !d.serviceAgreementSigned
-          ? { label: 'Review agreement evidence', reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.', action: <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Link> }
+          ? {
+              label: 'Review agreement evidence',
+              reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
+              action: <Button to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Button>,
+            }
           : {
-              label: 'Review schedule proposal', reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
-              action: canAccessPage('rostering') ? <Link className="inline-flex min-h-[44px] items-center rounded bg-[var(--color-primary)] px-4 py-2 text-white" to="/rostering/patterns">Open shift patterns</Link> : null,
+              label: 'Review schedule proposal',
+              reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
+              action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
             }
 
   const gates: Gate[] = [
@@ -82,13 +99,14 @@ export default function OnboardingDetailPage() {
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } },
     { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
+  const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
 
   return <div className="space-y-6">
     <div className="space-y-3">
       <div className="flex items-start gap-4">
-        <Link to="/onboarding" aria-label="Back to onboarding" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+        <Button variant="ghost" iconOnly to="/onboarding" aria-label="Back to onboarding">
           <ArrowLeft className="w-5 h-5" />
-        </Link>
+        </Button>
         <div className="flex-1">
           <PageHeader
             title={headingTitle}
@@ -96,12 +114,14 @@ export default function OnboardingDetailPage() {
           />
         </div>
       </div>
-      <div className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-        <p className="text-sm text-[var(--color-muted-foreground)]">Current stage</p>
+      <Card title="Current stage">
         <p className="font-semibold">{d.isReady ? 'Complete' : 'Onboarding in progress'}</p>
-        <p className="mt-2 text-sm">Progress: {gates.filter(gate => gate.state === 'Complete').length} of {gates.length} gates complete</p>
-      </div>
-      <section className="rounded border-2 border-[var(--color-primary)] bg-[var(--color-accent)] p-4" aria-labelledby="recommended-action-heading">
+        <p className="mt-2 text-sm">Progress: {completedGateCount} of {gates.length} gates complete</p>
+      </Card>
+      <section
+        aria-labelledby="recommended-action-heading"
+        className="!border-2 !border-[var(--color-primary)] !bg-[var(--color-accent)] bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5"
+      >
         <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Recommended next action</p>
         <h2 id="recommended-action-heading" className="mt-1 text-lg font-semibold">{recommended.label}</h2>
         <p className="mt-1 text-sm">{recommended.reason}</p>
@@ -122,23 +142,29 @@ export default function OnboardingDetailPage() {
 
     <section aria-labelledby="onboarding-gates-heading" className="space-y-3">
       <h2 id="onboarding-gates-heading" className="text-lg font-semibold">Onboarding gates</h2>
-      {gates.map(gate => <article key={gate.label} className="rounded border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold">{gate.label}</h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={gate.state} />
-            {gate.state !== 'Complete' && gate.fixRoute && (
-              <Link className="inline-flex min-h-[44px] items-center rounded border border-[var(--color-border)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-accent)]" to={gate.fixRoute.to}>{gate.fixRoute.label}</Link>
-            )}
+      {gates.map(gate => (
+        <article key={gate.label} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">{gate.label}</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusBadge status={gate.state} />
+              {gate.state !== 'Complete' && gate.fixRoute && (
+                <Button variant="secondary" to={gate.fixRoute.to}>{gate.fixRoute.label}</Button>
+              )}
+            </div>
           </div>
-        </div>
-        {gate.context ? <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
-      </article>)}
+          {gate.context ? <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
+        </article>
+      ))}
     </section>
 
-    {d.reasons.length > 0 ? <section aria-labelledby="readiness-reasons-heading" className="rounded border p-4">
-      <h2 id="readiness-reasons-heading" className="font-semibold">What's still missing</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
-    </section> : null}
+    {d.reasons.length > 0
+      ? (
+        <Card aria-labelledby="readiness-reasons-heading">
+          <h2 id="readiness-reasons-heading" className="font-semibold">What's still missing</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+        </Card>
+      )
+      : null}
   </div>
 }

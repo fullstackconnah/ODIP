@@ -1,19 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardPlus, Plus, Search } from 'lucide-react'
-import { Card } from '@/components/Card'
+import { ClipboardPlus, Search } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
-import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { useConvertParticipantInquiry, useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
-import type { CreateParticipantInquiryDto, InquirySource, ParticipantInquiryDto } from '@/api/types'
+import { useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
+import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
-
-const blank = (): CreateParticipantInquiryDto => ({ firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '' })
 
 export default function InquiriesPage() {
   const screen = useInquiriesScreen()
@@ -22,11 +19,6 @@ export default function InquiriesPage() {
       <PageHeader
         title="Enquiries"
         subtitle="Capture new enquiries and start their intake. Starting intake creates an inactive draft participant you can come back to."
-        action={screen.canManageParticipantLifecycle && !screen.showForm && !screen.showEmptyState ? (
-          <button type="button" onClick={screen.openNew} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all">
-            <Plus className="w-4 h-4" /> New enquiry
-          </button>
-        ) : undefined}
       >
         {screen.showTable && <ToggleGroup options={screen.statusOptions} value={screen.statusFilter} onChange={screen.setStatusFilter} ariaLabel="Filter enquiries by status" />}
         {screen.showTable && <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search enquiries..." />}
@@ -39,6 +31,9 @@ export default function InquiriesPage() {
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
  * one PageHeader; the standalone /inquiries route keeps using InquiriesPage above.
+ *
+ * Capture/edit lives on its own routed page at /participants/new-inquiry — see
+ * InquiryFormPage. Edit and Start-intake remain row-level actions here.
  */
 export function InquiriesTable() {
   const screen = useInquiriesScreen()
@@ -49,32 +44,23 @@ function useInquiriesScreen() {
   const navigate = useNavigate()
   const { canManageParticipantLifecycle } = usePermissions()
   const { data: inquiries = [], isLoading, isError, refetch } = useParticipantInquiries()
-  const create = useCreateParticipantInquiry()
-  const update = useUpdateParticipantInquiry()
   const convert = useConvertParticipantInquiry()
-  const [form, setForm] = useState<CreateParticipantInquiryDto>(blank)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const isSaving = create.isPending || update.isPending
-  const openNew = () => { setError(null); setEditingId(null); setForm(blank()); setShowForm(true) }
-  const closeForm = () => { setError(null); setEditingId(null); setForm(blank()); setShowForm(false) }
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault(); setError(null)
-    if (editingId) update.mutate({ id: editingId, data: form }, { onSuccess: () => { setEditingId(null); setForm(blank()); setShowForm(false) }, onError: () => setError('Could not update this enquiry. Check the details and try again.') })
-    else create.mutate(form, { onSuccess: () => { setForm(blank()); setShowForm(false) }, onError: () => setError('Could not capture this enquiry. Check the details and try again.') })
-  }
+  const openNew = () => navigate('/participants/new-inquiry')
+  const editExisting = (row: ParticipantInquiryDto) => navigate(`/participants/new-inquiry?id=${encodeURIComponent(row.id)}`)
   const startIntake = (id: string) => {
     setError(null)
-    convert.mutate({ id }, { onSuccess: (inquiry: ParticipantInquiryDto) => { if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`) }, onError: () => setError('Could not start intake. Please try again.') })
-  }
-  const edit = (inquiry: ParticipantInquiryDto) => {
-    setError(null)
-    setEditingId(inquiry.id)
-    setForm({ firstName: inquiry.firstName, lastName: inquiry.lastName, phone: inquiry.phone ?? '', email: inquiry.email ?? '', source: inquiry.source, provenance: inquiry.provenance ?? '' })
-    setShowForm(true)
+    convert.mutate(
+      { id },
+      {
+        onSuccess: (inquiry: ParticipantInquiryDto) => {
+          if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`)
+        },
+        onError: () => setError('Could not start intake. Please try again.'),
+      },
+    )
   }
   // The /inquiries endpoint takes no query parameters, so filtering is client-side over the
   // already-fetched tenant-scoped list (the server owns the tenant predicate).
@@ -117,9 +103,19 @@ function useInquiriesScreen() {
       },
     },
     { key: 'participantId', header: 'Status', render: row => row.participantId ? <StatusBadge status="draftintake" label="Draft intake" /> : <StatusBadge status="new" label="New" /> },
-    { key: 'id', header: 'Actions', type: 'custom', render: row => canManageParticipantLifecycle ? <div className="flex flex-wrap gap-2">{row.participantId ? <button type="button" className="order-first rounded bg-[var(--color-primary)] px-3 py-1 text-white" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake</button> : <button type="button" disabled={convert.isPending} className="order-first rounded bg-[var(--color-primary)] px-3 py-1 text-white disabled:opacity-60" onClick={() => startIntake(row.id)}>Start intake</button>}<button type="button" className="rounded border px-3 py-1" onClick={() => edit(row)}>Edit enquiry</button></div> : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span> },
+    {
+      key: 'id', header: 'Actions', type: 'custom',
+      render: row => canManageParticipantLifecycle ? (
+        <div className="flex flex-wrap gap-2">
+          {row.participantId
+            ? <Button size="sm" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake</Button>
+            : <Button size="sm" disabled={convert.isPending} onClick={() => startIntake(row.id)}>Start intake</Button>}
+          <Button size="sm" variant="secondary" onClick={() => editExisting(row)}>Edit enquiry</Button>
+        </div>
+      ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
+    },
   ]
-  const showEmptyState = !isError && !isLoading && inquiries.length === 0 && !showForm
+  const showEmptyState = !isError && !isLoading && inquiries.length === 0
   const showTable = !isError && !showEmptyState && (inquiries.length > 0 || isLoading)
 
   const body = (
@@ -127,17 +123,6 @@ function useInquiriesScreen() {
       {isError && <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3"><span>Could not load enquiries. Please try again.</span><button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button></div>}
       {!canManageParticipantLifecycle && <p role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <p role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</p>}
-      {canManageParticipantLifecycle && showForm && <Card title={editingId ? 'Edit enquiry' : 'New enquiry'}>
-        <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submit}>
-          <FormField label="First name" required><input id="inquiry-first-name" required autoComplete="given-name" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></FormField>
-          <FormField label="Last name" required><input id="inquiry-last-name" required autoComplete="family-name" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></FormField>
-          <FormField label="Phone"><input id="inquiry-phone" type="tel" autoComplete="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></FormField>
-          <FormField label="Email"><input id="inquiry-email" type="email" autoComplete="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></FormField>
-          <FormField label="Source"><select id="inquiry-source" value={form.source} onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}><option>Web</option><option>Email</option><option>Phone</option></select></FormField>
-          <FormField label="Provenance or referral notes"><input id="inquiry-provenance" autoComplete="off" value={form.provenance} onChange={e => setForm({ ...form, provenance: e.target.value })} /></FormField>
-          <div className="flex gap-2 md:col-span-2"><button disabled={isSaving} className="rounded bg-[var(--color-primary)] px-4 py-2 text-white">{editingId ? 'Save enquiry' : 'Capture enquiry'}</button><button type="button" className="rounded border px-4 py-2" onClick={closeForm}>Cancel</button></div>
-        </form>
-      </Card>}
       {showEmptyState && <EmptyState icon={ClipboardPlus} title="No enquiries captured yet" description="Capture a light enquiry when someone first contacts the service, then start their draft intake when ready." action={canManageParticipantLifecycle ? { label: 'New enquiry', onClick: openNew } : undefined} />}
       {showTable && !isLoading && filtered.length === 0
         ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term or filter, or clear the search to see all enquiries." action={{ label: 'Clear search and filter', onClick: () => { setSearch(''); setStatusFilter('all') } }} />
@@ -152,7 +137,6 @@ function useInquiriesScreen() {
     statusFilter,
     setStatusFilter,
     statusOptions,
-    showForm,
     showEmptyState,
     showTable,
     openNew,

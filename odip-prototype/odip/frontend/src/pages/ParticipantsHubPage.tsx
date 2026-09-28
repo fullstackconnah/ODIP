@@ -1,11 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { Tabs, type TabItem } from '@/components/Tabs'
 import { ParticipantsTable } from './ParticipantsPage'
 import { OnboardingTable } from './OnboardingPage'
 import { InquiriesTable } from './InquiriesPage'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { usePermissions } from '@/lib/permissions'
 
 /** Canonical order for the lifecycle-stage tabs. */
 type TabId = 'enquiries' | 'onboarding' | 'active'
@@ -43,12 +46,18 @@ function readTabFromUrl(search: string): TabId {
  * behind one shared PageHeader and one accessible Tabs primitive. Each tab mounts
  * the same body content as the corresponding standalone page; the standalone
  * /inquiries, /onboarding and /participants routes continue to work for deep links.
+ *
+ * The New enquiry button lives in the hub's PageHeader `action` slot so it's
+ * visible on every stage (enquiries / onboarding / active) for users with the
+ * participant-lifecycle mutation capability, and routes to the dedicated
+ * /participants/new-inquiry page.
  */
 export default function ParticipantsHubPage() {
   // Read the tab from the ROUTER's location, never window.location: this keeps the page correct
   // under MemoryRouter in tests and under BrowserRouter in the app, with no cross-test leakage.
   const location = useLocation()
   const navigate = useNavigate()
+  const { canManageParticipantLifecycle } = usePermissions()
   const [activeId, setActiveId] = useState<TabId>(() => readTabFromUrl(location.search))
   const activeMeta = TABS.find(t => t.id === activeId) ?? TABS[2]
 
@@ -92,6 +101,11 @@ export default function ParticipantsHubPage() {
       <PageHeader
         title="Participants"
         subtitle="Enquiries, onboarding and active participants — one view, three stages."
+        action={canManageParticipantLifecycle ? (
+          <Button to="/participants/new-inquiry" size="lg">
+            <Plus className="w-4 h-4" /> New enquiry
+          </Button>
+        ) : undefined}
       />
       <Tabs tabs={items} active={activeId} onChange={selectTab} ariaLabel="Lifecycle stages" />
     </div>

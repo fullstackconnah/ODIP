@@ -182,20 +182,20 @@ describe('AppLayout — participant lifecycle navigation', () => {
     localStorage.clear()
   })
 
-  it('sequences the Participant journey and keeps Draft intake active only for lifecycle roles', () => {
+  it('surfaces a single Participants entry and keeps Draft intake absent from the nav for lifecycle roles', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     renderAt('/participants/new')
     // The sub-group's link list is a plain, unlabelled container (no nested nav landmark — see
     // AppLayout's group rendering) — find it by its stable id rather than an ARIA landmark name.
     const journey = document.getElementById('nav-group-participants')!
     expect(Array.from(journey.querySelectorAll('a')).map(link => link.textContent?.trim())).toEqual([
-      // Lifecycle stages (Enquiries / Onboarding / Active participants) used to be three
-      // separate sidebar entries; the Participants hub now owns them behind a tab strip, so
-      // the sidebar surfaces one Participants leaf instead and keeps Draft intake / Medications /
-      // Caregiver forms as before.
-      'groupParticipants', 'person_addDraft intake', 'pillMedications', 'checklist_rtlCaregiver forms',
+      // The New inquiry button now lives inside the Participants hub PageHeader, not the
+      // sidebar — Draft intake is gone from the nav. Lifecycle roles still see the hub
+      // entry, Medications and Caregiver forms.
+      'groupParticipants', 'pillMedications', 'checklist_rtlCaregiver forms',
     ])
-    expect(screen.getByRole('link', { name: /Draft intake$/ })).toHaveAttribute('aria-current', 'page')
+    // Draft intake must NOT be present anywhere in the nav (sidebar or mobile drawer).
+    expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
   })
 
   it('surfaces a single Participants entry but keeps Draft intake hidden for ReadOnly and SupportWorker', () => {
@@ -208,10 +208,20 @@ describe('AppLayout — participant lifecycle navigation', () => {
       expect(screen.queryByRole('link', { name: /Enquiries$/ })).not.toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /Onboarding$/ })).not.toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /Active participants$/ })).not.toBeInTheDocument()
+      // Draft intake must remain absent from the nav regardless of role.
       expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
       unmount()
       localStorage.clear()
     }
+  })
+
+  it('does not surface Draft intake in the mobile bottom nav either', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderAt('/participants')
+    // The mobile bottom nav is its own labelled landmark with name "Mobile".
+    const mobileNav = screen.getByRole('navigation', { name: 'Mobile' })
+    expect(mobileNav.querySelector('a[href$="/participants/new"]')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
   })
 
   it('closes the mobile drawer on Escape and returns focus to its toggle', () => {
