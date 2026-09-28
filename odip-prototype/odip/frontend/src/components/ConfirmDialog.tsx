@@ -12,6 +12,8 @@ export type ConfirmDialogProps = {
   cancelLabel?: string
   variant?: 'default' | 'danger'
   loading?: boolean
+  /** Accessible name for the confirm button (overrides the visible label for screen readers). */
+  confirmAriaLabel?: string
   /**
    * Overrides the default Cancel/Confirm footer entirely — for flows that offer more than
    * one destructive choice (e.g. "Cancel record" vs "Delete permanently"). When provided,
@@ -23,7 +25,7 @@ export type ConfirmDialogProps = {
 
 export function ConfirmDialog({
   open, onConfirm, onCancel, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, footer,
+  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, footer, confirmAriaLabel,
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -44,6 +46,7 @@ export function ConfirmDialog({
             <button
               onClick={onConfirm}
               disabled={loading}
+              aria-label={confirmAriaLabel ?? confirmLabel}
               className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 ${
                 variant === 'danger'
                   ? 'bg-[var(--color-destructive)] hover:opacity-90'

@@ -3,7 +3,7 @@ import { maskNdisNumber } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
-import { Dropdown } from '@/components/Dropdown'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 
@@ -14,11 +14,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
-
-const ACTIVE_STATUS_ITEMS = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-]
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
@@ -55,18 +50,46 @@ export default function ParticipantsPage() {
 
   const { data: participants = [], isLoading } = useParticipants(queryParams)
 
+  // The status pill on each row is read-only; status changes go through an explicit
+  // confirmation flow so a coordinator can never flip a participant's active flag
+  // (or archive them) by mistake.
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    id: string
+    nextIsActive: boolean
+  } | null>(null)
+  const pendingParticipant = pendingStatusChange
+    ? participants.find((p: ParticipantListDto) => p.id === pendingStatusChange.id) ?? null
+    : null
+  const currentIsActive = pendingParticipant ? pendingParticipant.isActive : false
+  const pendingNextLabel = pendingStatusChange?.nextIsActive ? 'Active' : 'Inactive'
+  const pendingCurrentLabel = currentIsActive ? 'Active' : 'Inactive'
+
+  const closeStatusDialog = () => setPendingStatusChange(null)
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return
+    if (!pendingParticipant) return
+    // Send ONLY isActive: the endpoint is a partial patch, and a full list DTO would
+    // omit required CreateParticipantDto fields.
+    updateParticipant.mutate({
+      id: pendingParticipant.id,
+      data: { isActive: pendingStatusChange.nextIsActive },
+    })
+    setPendingStatusChange(null)
+  }
+
   const participantColumns: Column<any>[] = [
     {
       key: 'fullName',
       header: 'Name',
       sortable: true,
       render: (p) => (
-        <span className="flex items-center gap-2">
-          <span className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors">
-            {p.fullName}
-          </span>
-
-        </span>
+        <Link
+          to={`/participants/${p.id}`}
+          aria-label={`Open ${p.fullName} profile`}
+          className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm"
+        >
+          {p.fullName}
+        </Link>
       ),
     },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber || p.ndisNumber)}</span> },
@@ -96,15 +119,11 @@ export default function ParticipantsPage() {
       render: (p) => {
         const current = p.isActive ? 'Active' : 'Inactive'
         return (
-          <span onClick={e => e.stopPropagation()}>
-            <Dropdown
-              variant="pill"
-              value={current}
-              onChange={val => updateParticipant.mutate({ id: p.id, data: { ...p, isActive: val === 'Active' } })}
-              colorClass={ACTIVE_STATUS_COLORS[current]}
-              items={ACTIVE_STATUS_ITEMS}
-              disabled={!canWrite}
-            />
+          <span
+            aria-label={`Status: ${current}`}
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${ACTIVE_STATUS_COLORS[current]}`}
+          >
+            {current}
           </span>
         )
       },
@@ -160,6 +179,19 @@ export default function ParticipantsPage() {
               <Pill className="w-4 h-4" />
             </button>
           )}
+          {canWrite && (
+            <button
+              type="button"
+              aria-label={`Change status for ${p.fullName}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
+              }}
+              className="text-xs px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+            >
+              Change status
+            </button>
+          )}
           {canWrite && actionButtons(p)}
           <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
         </span>
@@ -205,12 +237,38 @@ export default function ParticipantsPage() {
           columns={participantColumns}
           keyField="id"
           sortable
-          onRowClick={(p: any) => navigate(`/participants/${p.id}`)}
           loading={isLoading}
           emptyMessage="No participants found"
         />
       )}
       {confirmDialog}
+      {pendingStatusChange && pendingParticipant && (
+        <ConfirmDialog
+          open
+          onConfirm={confirmStatusChange}
+          onCancel={closeStatusDialog}
+          title={`Set ${pendingParticipant.fullName} as ${pendingNextLabel}`}
+          confirmLabel={`Set as ${pendingNextLabel}`}
+          confirmAriaLabel={`Set ${pendingParticipant.fullName} as ${pendingNextLabel}`}
+          cancelLabel="Cancel"
+          variant={pendingStatusChange.nextIsActive ? 'default' : 'danger'}
+          loading={updateParticipant.isPending}
+          message={
+            <div className="space-y-2">
+              <p>
+                Change <span className="font-semibold text-[var(--color-foreground)]">{pendingParticipant.fullName}</span>'s status
+                from <span className="font-semibold">{pendingCurrentLabel}</span> to{' '}
+                <span className="font-semibold">{pendingNextLabel}</span>?
+              </p>
+              {pendingStatusChange.nextIsActive === false && (
+                <p className="text-[var(--color-destructive)]">
+                  Inactive participants are hidden from rostering, scheduling and the default register.
+                </p>
+              )}
+            </div>
+          }
+        />
+      )}
     </div>
   )
 }
