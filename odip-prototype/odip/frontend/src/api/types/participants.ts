@@ -247,6 +247,12 @@ export interface ParticipantListDto {
   /** Wire format: comma-separated ServiceStreams flag names, or "None" — see parseServiceStreams. */
   serviceStreams: string
   hasActiveMedications: boolean
+  /**
+   * Unmasked NDIS number. Some list endpoints return this instead of `maskedNdisNumber`
+   * (see ParticipantDetailDto.ndisNumber); the participants table masks whichever it gets.
+   * Optional because the common list response only carries the masked form.
+   */
+  ndisNumber?: string | null
   /** INTAKE-08. See CreateParticipantDto.isDraft's doc. */
   isDraft: boolean
   /**
