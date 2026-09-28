@@ -50,6 +50,7 @@ import {
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
 import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -269,7 +270,7 @@ export default function IntakeWizardPage() {
     payload.isDraft = draft
     payload.completeIntake = completeIntake
     // Keep the key after a rejected request so retry does not create duplicate evidence.
-    if (completeIntake) payload.completionRequestId = completionRequestId.current ??= crypto.randomUUID()
+    if (completeIntake) payload.completionRequestId = completionRequestId.current ??= newCompletionRequestId()
     return payload
   }
 

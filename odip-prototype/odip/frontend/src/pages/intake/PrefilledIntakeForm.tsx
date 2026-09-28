@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import type { ParticipantDetailDto, SaveParticipantIntakeDto, UpdateParticipantDto } from '@/api/types'
 import { useDownloadParticipantIntakeSnapshotPdf, useParticipantIntakeSnapshots, useSaveParticipantIntake, useUpdateParticipant } from '@/api/hooks'
 import { extractErrorMessage } from './intakeFormat'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 
 type PrefilledIntakeFormProps = {
   participant: ParticipantDetailDto
@@ -60,10 +61,6 @@ function intakePayload(values: SaveParticipantIntakeDto): SaveParticipantIntakeD
     behaviourRiskSummary: nullable(values.behaviourRiskSummary), notes: nullable(values.notes),
     inquiryProvenance: nullable(values.inquiryProvenance),
   }
-}
-
-function newCompletionRequestId() {
-  return crypto.randomUUID()
 }
 
 /**

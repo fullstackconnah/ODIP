@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PrefilledIntakeForm } from './PrefilledIntakeForm'
@@ -26,6 +26,10 @@ describe('PrefilledIntakeForm', () => {
     mockSave.mockReset()
     mockComplete.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('hydrates inquiry-prefilled values and exposes every editable intake identity field', () => {
@@ -97,6 +101,29 @@ describe('PrefilledIntakeForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/network unavailable/i)
     expect(screen.getByLabelText(/phone/i)).toHaveValue('0411111111')
     const retryKey = mockComplete.mock.calls[0][0].data.completionRequestId
+
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+    expect(mockComplete.mock.calls[1][0].data.completionRequestId).toBe(retryKey)
+  })
+
+  it('renders without randomUUID and keeps the CSPRNG completion key on failed retry', async () => {
+    let counter = 0
+    vi.stubGlobal('crypto', {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(0)
+        bytes[15] = counter++
+        return bytes
+      },
+    })
+    mockComplete.mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValueOnce({ success: true })
+    const user = userEvent.setup()
+    render(<PrefilledIntakeForm participant={participant} />)
+    expect(screen.getByRole('heading', { name: /complete intake/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/network unavailable/i)
+    const retryKey = mockComplete.mock.calls[0][0].data.completionRequestId
+    expect(retryKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 
     await user.click(screen.getByRole('button', { name: /^complete intake$/i }))
     expect(mockComplete.mock.calls[1][0].data.completionRequestId).toBe(retryKey)
