@@ -37,21 +37,38 @@ export type TabsProps = {
 export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: TabsProps) {
   const baseId = useId()
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  // Resolve the initial focus target before seeding state: if the parent passes an
+  // `active` id that doesn't correspond to a tab at all, or that corresponds to a disabled
+  // tab, the roving tabindex would otherwise strand every tab at -1 on first render (no tab
+  // in the page tab order until the user arrow-keys in). Falling back to the first enabled
+  // tab keeps the keyboard contract intact on first paint.
+  const initialFocusedId = (() => {
+    const match = tabs.find(t => t.id === active && !t.disabled)
+    if (match) return match.id
+    return tabs.find(t => !t.disabled)?.id ?? active
+  })()
+
   // `focusedId` tracks the tab that currently has DOM focus inside the tablist — this can
   // be ahead of `active` because arrow keys move focus first and the click/activation
   // commits the change. For automatic-activation mode the two stay in lockstep; the
   // explicit state is what drives the roving tabindex on each render.
-  const [focusedId, setFocusedId] = useState(active)
+  const [focusedId, setFocusedId] = useState(initialFocusedId)
 
   // Keep `focusedId` aligned with the controlled `active` when it changes from outside
   // (programmatic change, parent re-render) so the roving tabindex doesn't strand the focus
   // marker on a tab that is no longer active. Adjusting during render rather than in an
   // effect (React's "derive state from props" pattern) avoids a wasted commit and the
-  // `react-hooks/set-state-in-effect` error.
+  // `react-hooks/set-state-in-effect` error. If the new `active` is disabled or unknown,
+  // fall back to the first enabled tab (or keep the previous focus) so we never strand
+  // every tab at tabindex=-1.
   const [lastActive, setLastActive] = useState(active)
   if (active !== lastActive) {
     setLastActive(active)
-    setFocusedId(active)
+    const nextFocused = tabs.find(t => t.id === active && !t.disabled)?.id
+      ?? tabs.find(t => !t.disabled)?.id
+      ?? focusedId
+    setFocusedId(nextFocused)
   }
 
   const enabledTabs = tabs.filter(t => !t.disabled)
@@ -141,8 +158,12 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
           role="tabpanel"
           id={`${baseId}-panel-${tab.id}`}
           aria-labelledby={`${baseId}-tab-${tab.id}`}
-          tabIndex={0}
+          // Only the visible panel participates in the page tab order. Hidden panels are
+          // already removed from focus by the `hidden` attribute, but a conditional tabIndex
+          // keeps assistive tech from inferring a focusable hidden region.
           hidden={tab.id !== active}
+          tabIndex={tab.id === active ? 0 : -1}
+          className="mt-4 focus:outline-none"
         >
           {tab.id === active ? tab.content : null}
         </div>

@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { apiGet, apiPost } from '@/api/client'
 import { useParticipant } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -45,7 +46,7 @@ export default function OnboardingDetailPage() {
   const d = detail.data
 
   if (detail.isLoading) return <div>Loading onboarding…</div>
-  if (!d) return <div role="alert">Onboarding record was not found.</div>
+  if (!d) return <Callout tone="error">Onboarding record was not found.</Callout>
 
   const participantName = participant
     ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim()
@@ -133,11 +134,11 @@ export default function OnboardingDetailPage() {
     </div>
 
     {profile.error || services.error ? (
-      <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
+      <Callout tone="error">
         {profile.error
           ? extractErrorMessage(profile.error, 'Profile is incomplete — edit the profile, then validate again.')
           : extractErrorMessage(services.error, 'Service needs are incomplete — edit the service needs, then confirm again.')}
-      </div>
+      </Callout>
     ) : null}
 
     <section aria-labelledby="onboarding-gates-heading" className="space-y-3">
