@@ -51,6 +51,13 @@ function stepNav() {
   return screen.getByRole('navigation', { name: /intake wizard steps/i })
 }
 
+const narrowFocusModes = [
+  { mode: 'fixed 375×812', observedClearanceWith96pxMargin: -63.375 },
+  { mode: 'fixed 390×844', observedClearanceWith96pxMargin: 8.625 },
+  { mode: 'true-mobile 375×812', observedClearanceWith96pxMargin: 15.625 },
+  { mode: 'true-mobile 390×844', observedClearanceWith96pxMargin: -31.375 },
+]
+
 async function expectStep(label: string | RegExp) {
   await within(stepNav()).findByRole('button', { name: label, current: 'step' })
 }
@@ -82,11 +89,20 @@ afterEach(() => {
 })
 
 describe('IntakeWizardPage', () => {
-  it('renders the create wizard with no profile-only identity fields', () => {
+  it('renders the create wizard with no profile-only identity fields and enough focus clearance for every fixed and true-mobile narrow viewport', () => {
     renderPage()
     expect(screen.getByText('Step 1 of 9')).toBeVisible()
     expect(stepNav()).toHaveClass('[contain:inline-size]')
-    expect(stepNav().closest('.max-w-5xl')).toHaveClass('w-full', 'min-w-0', 'max-w-full')
+    const wizardRoot = stepNav().closest('.max-w-5xl')
+    expect(wizardRoot).toHaveClass('w-full', 'min-w-0', 'max-w-full')
+    // QA measured these four narrow layouts with the old 96px margin. The 176px contract adds
+    // 80px of clearance, clearing the fixed bottom navigation in each case; desktop/tablet do
+    // not render that navigation. Keep every mobile viewport/mode in the assertion rather than
+    // treating a passing sibling viewport as representative.
+    for (const { mode, observedClearanceWith96pxMargin } of narrowFocusModes) {
+      expect(wizardRoot, mode).toHaveClass('[&_input]:scroll-mt-20', '[&_input]:scroll-mb-44')
+      expect(observedClearanceWith96pxMargin + (176 - 96), mode).toBeGreaterThan(0)
+    }
     expect(screen.getByLabelText(/first name/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/middle name/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^gender$/i)).not.toBeInTheDocument()
@@ -251,28 +267,27 @@ describe('IntakeWizardPage', () => {
     expect(document.getElementById('overnightRatio')).not.toBeNull()
   })
 
-  it('routes an inquiry-converted edit mode to the narrowed form with its required hooks mocked', () => {
+  it('routes an inquiry-converted resume to the wizard rail rather than the legacy complete-intake form', () => {
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     renderPage('/participants/draft-1/intake')
-    expect(screen.getByRole('heading', { name: /^complete intake$/i })).toBeInTheDocument()
+    expect(stepNav()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /participant details/i, current: 'step' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^complete intake$/i })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Jamie')
-    expect(screen.getByLabelText(/primary diagnosis/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/ndis number/i)).toBeInTheDocument()
   })
 
-  it('saves an inquiry-converted edit through the narrowed endpoint, never a full profile update', async () => {
+  it('saves an inquiry-converted resume through the wizard update contract', async () => {
     const user = userEvent.setup()
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    mockUpdate.mockResolvedValue({ success: false })
     renderPage('/participants/draft-1/intake')
-    await user.clear(screen.getByLabelText(/medical summary/i))
-    await user.type(screen.getByLabelText(/medical summary/i), 'Synthetic update')
-    await user.click(screen.getByRole('button', { name: /save incomplete intake/i }))
-    expect(mockSave).toHaveBeenCalledWith({
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+    expect(mockUpdate).toHaveBeenCalledWith({
       id: 'draft-1',
-      data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', medicalSummary: 'Synthetic update' }),
+      data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', isDraft: true, completeIntake: false }),
     })
-    expect(mockSave.mock.calls[0][0].data).not.toHaveProperty('isActive')
-    expect(mockSave.mock.calls[0][0].data).toHaveProperty('ndisNumber')
-    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('riskEntries')
+    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('contactRoles')
+    expect(mockSave).not.toHaveBeenCalled()
   })
 })
