@@ -55,4 +55,28 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(refetch).toHaveBeenCalledOnce()
   })
+
+  it('renders gate progress as an accessible progressbar, not just a text fraction', () => {
+    mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-3', fullName: 'Rowan Vale', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5, nextAction: 'Confirm service needs' }], isLoading: false })
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+
+    const bar = screen.getByRole('progressbar', { name: '2 of 5 gates' })
+    expect(bar).toHaveAttribute('aria-valuenow', '2')
+    expect(bar).toHaveAttribute('aria-valuemax', '5')
+    // the numeric label stays visible, so progress is never colour-only
+    expect(screen.getByText('2 of 5 gates')).toBeInTheDocument()
+  })
+
+  it('derives a triage badge from the blocking reasons, and shows the remaining reasons', () => {
+    mockUseQuery.mockReturnValue({
+      data: [{ participantId: 'p-4', fullName: 'Sam Okafor', stage: 'Onboarding incomplete', completedSteps: 1, totalSteps: 5,
+        nextAction: 'Validate profile essentials', reasons: ['Ndis number missing', 'Consent not signed'] }],
+      isLoading: false,
+    })
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+
+    // first reason is the badge label; the rest are listed under the next action
+    expect(screen.getByText('Ndis number missing')).toBeInTheDocument()
+    expect(screen.getByText('Consent not signed')).toBeInTheDocument()
+  })
 })
