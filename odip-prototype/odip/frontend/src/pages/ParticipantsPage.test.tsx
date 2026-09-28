@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ParticipantsPage from './ParticipantsPage'
@@ -221,5 +221,130 @@ describe('ParticipantsPage — row click', () => {
     await user.click(screen.getByText('Jamie Smith'))
 
     expect(screen.getByText('Participant detail page')).toBeInTheDocument()
+  })
+})
+
+describe('ParticipantsPage — status change safety', () => {
+  it('renders the status pill as a read-only display, not an interactive control', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    // The Status cell shows the literal label and an accessible name, with no button/select.
+    // Scope the queries to the row so the page-level Active/Inactive/Archived toggle
+    // doesn't trip the "multiple elements" matcher.
+    const rows = screen.getAllByRole('row')
+    const jamieRow = rows.find(r => r.textContent?.includes('Jamie Smith'))!
+    expect(within(jamieRow).getByText('Active')).toBeInTheDocument()
+    expect(within(jamieRow).getByLabelText('Status: Active')).toBeInTheDocument()
+    expect(within(jamieRow).queryByRole('combobox', { name: /active/i })).not.toBeInTheDocument()
+    expect(within(jamieRow).queryByRole('button', { name: /^active$/i })).not.toBeInTheDocument()
+    // The pill itself must not be a button.
+    expect(within(jamieRow).queryByRole('button', { name: /status: active/i })).not.toBeInTheDocument()
+  })
+
+  it('opens a confirmation dialog that names the participant and the target status, and mutates only on confirm', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+
+    // The dialog names the participant, the current state and the consequence.
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    const dialog = screen.getByRole('alertdialog')
+    // The title is exposed via aria-labelledby and the body message splits across nested spans,
+    // so use the alertdialog's accessible name + textContent to assert the full copy.
+    expect(dialog).toHaveAccessibleName(/Set Jamie Smith as Inactive/i)
+    expect(dialog.textContent).toMatch(/Change\s+Jamie Smith.*status\s+from\s+Active\s+to\s+Inactive/is)
+
+    // The confirm button is not the default "Confirm" — it names the action and the person.
+    const confirmBtn = screen.getByRole('button', { name: /set jamie smith as inactive/i })
+    expect(confirmBtn).toHaveTextContent(/Set as Inactive/i)
+
+    await user.click(confirmBtn)
+
+    // Exactly one mutation, with the full participant payload and the flipped flag.
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutate).toHaveBeenCalledWith({
+      id: 'p1',
+      data: { isActive: false },
+    })
+    // Cancel-style false positives: must not mutate on Cancel and must not mutate the
+    // archive/restore path.
+    expect(mockDeleteMutate).not.toHaveBeenCalled()
+  })
+
+  it('cancelling the confirmation does not mutate', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(mockUpdateMutate).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('hides the change-status button for read-only roles', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /change status for jamie smith/i })).not.toBeInTheDocument()
+    // The status pill itself is still shown for everyone.
+    const rows2 = screen.getAllByRole('row')
+    const jamieRow2 = rows2.find(r => r.textContent?.includes('Jamie Smith'))!
+    expect(within(jamieRow2).getByText('Active')).toBeInTheDocument()
+  })
+
+  it('flipping the wrong row never changes a different participant', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [
+        baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true }),
+        baseParticipant({ id: 'p2', fullName: 'Alex Rivera', isActive: true }),
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for alex rivera/i }))
+    await user.click(screen.getByRole('button', { name: /set alex rivera as inactive/i }))
+
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutate).toHaveBeenCalledWith({
+      id: 'p2',
+      data: { isActive: false },
+    })
+  })
+
+  it('no longer navigates when clicking the Status cell itself (row click target is the Name link, not the whole row)', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    // Clicking the Status cell (the read-only pill) must not navigate nor mutate.
+    const rows3 = screen.getAllByRole('row')
+    const jamieRow3 = rows3.find(r => r.textContent?.includes('Jamie Smith'))!
+    await user.click(within(jamieRow3).getByText('Active'))
+
+    expect(screen.queryByText('Participant detail page')).not.toBeInTheDocument()
+    expect(mockUpdateMutate).not.toHaveBeenCalled()
   })
 })

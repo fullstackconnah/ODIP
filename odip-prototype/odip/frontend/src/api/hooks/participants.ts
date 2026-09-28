@@ -6,6 +6,7 @@ import type {
   ParticipantDetailDto,
   CreateParticipantDto,
   UpdateParticipantDto,
+  UpdateParticipantStatusDto,
   SaveParticipantIntakeDto,
   PatchParticipantDto,
   SupportProfileDto,
@@ -107,7 +108,7 @@ export function useCreateParticipant() {
 export function useUpdateParticipant() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto }) =>
+    mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto | UpdateParticipantStatusDto }) =>
       apiPutRaw<ParticipantDetailDto>(`/participants/${id}`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })

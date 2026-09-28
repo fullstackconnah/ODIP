@@ -695,6 +695,15 @@ export interface UpdateParticipantDto extends CreateParticipantDto {
   isActive: boolean
 }
 
+/**
+ * Narrow write contract for a lifecycle-only change. The participants endpoint applies a
+ * partial patch server-side (ParticipantPatchApplier), so a status flip must send ONLY
+ * `isActive` — never a whole list DTO, which omits CreateParticipantDto's required fields.
+ */
+export interface UpdateParticipantStatusDto {
+  isActive: boolean
+}
+
 /** Narrow write contract for a converted participant's incomplete intake. */
 export interface SaveParticipantIntakeDto {
   firstName: string
