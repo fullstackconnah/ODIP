@@ -20,7 +20,7 @@ export function WizardStepRail<V>({ steps, visitedSteps, currentKey, onSelect }:
   return (
     <nav
       aria-label="Intake wizard steps"
-      className="w-full min-w-0 max-w-full [contain:inline-size] overflow-x-auto overscroll-x-contain touch-pan-x"
+      className="relative w-full min-w-0 max-w-full [contain:inline-size] overflow-x-auto overscroll-x-contain touch-pan-x"
     >
       <p className="mb-2 text-sm font-medium text-[var(--color-muted-foreground)]">
         Step {stepNumber > 0 ? stepNumber : 1} of {steps.length}

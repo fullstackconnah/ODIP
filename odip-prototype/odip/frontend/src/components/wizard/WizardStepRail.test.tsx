@@ -33,7 +33,7 @@ describe('WizardStepRail', () => {
     render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} />)
 
     const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
-    expect(nav).toHaveClass('w-full', 'min-w-0', 'max-w-full', '[contain:inline-size]', 'overflow-x-auto', 'touch-pan-x')
+    expect(nav).toHaveClass('relative', 'w-full', 'min-w-0', 'max-w-full', '[contain:inline-size]', 'overflow-x-auto', 'touch-pan-x')
     expect(within(nav).getByRole('list')).toHaveClass('w-max', 'min-w-full')
   })
 
