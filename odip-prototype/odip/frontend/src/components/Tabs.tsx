@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 
 export type TabItem = {
   /** Stable identifier used by `active` / `onChange` and for the tab's id + aria-controls. */
@@ -44,11 +44,15 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
   const [focusedId, setFocusedId] = useState(active)
 
   // Keep `focusedId` aligned with the controlled `active` when it changes from outside
-  // (programmatic change, parent re-renders, etc.) so the roving tabindex doesn't strand
-  // the visual focus marker on a tab that is no longer active.
-  useEffect(() => {
+  // (programmatic change, parent re-render) so the roving tabindex doesn't strand the focus
+  // marker on a tab that is no longer active. Adjusting during render rather than in an
+  // effect (React's "derive state from props" pattern) avoids a wasted commit and the
+  // `react-hooks/set-state-in-effect` error.
+  const [lastActive, setLastActive] = useState(active)
+  if (active !== lastActive) {
+    setLastActive(active)
     setFocusedId(active)
-  }, [active])
+  }
 
   const enabledTabs = tabs.filter(t => !t.disabled)
   const move = (currentId: string, delta: number) => {
