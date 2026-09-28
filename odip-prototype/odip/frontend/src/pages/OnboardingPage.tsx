@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { apiGet } from '@/api/client'
 import { DataTable, type Column } from '@/components/DataTable'
+import { ProgressBar } from '@/components/ProgressBar'
+import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { usePermissions } from '@/lib/permissions'
@@ -17,6 +19,18 @@ type WorklistRow = {
   reasons?: string[]
 }
 
+/**
+ * The worklist API returns a coarse `stage` ("Intake incomplete" / "Onboarding
+ * incomplete"), which is too flat to triage on. The actionable signal is `reasons`
+ * (what is blocking) plus whether any gate has been completed, so the badge tone is
+ * derived from those instead of being echoed from the stage string.
+ */
+function stageBadge(row: WorklistRow): { status: string; label: string } {
+  if (row.reasons?.length) return { status: 'needsattention', label: row.reasons[0] }
+  if (row.completedSteps === 0) return { status: 'blocked', label: row.stage }
+  return { status: 'stalled', label: row.stage }
+}
+
 export default function OnboardingPage() {
   const navigate = useNavigate()
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
@@ -25,9 +39,42 @@ export default function OnboardingPage() {
   const rows = worklist.data ?? []
   const columns: Column<WorklistRow>[] = [
     { key: 'fullName', header: 'Participant', sortable: true },
-    { key: 'stage', header: 'Current stage', sortable: true },
-    { key: 'completedSteps', header: 'Progress', render: row => `${row.completedSteps} of ${row.totalSteps} gates` },
-    { key: 'nextAction', header: 'Recommended next action', render: row => <span className="font-medium">{row.nextAction}</span> },
+    {
+      key: 'stage',
+      header: 'Current stage',
+      sortable: true,
+      render: row => {
+        const badge = stageBadge(row)
+        return <StatusBadge status={badge.status} label={badge.label} />
+      },
+    },
+    {
+      key: 'completedSteps',
+      header: 'Progress',
+      render: row => (
+        <ProgressBar
+          value={row.completedSteps}
+          total={row.totalSteps}
+          label={`${row.completedSteps} of ${row.totalSteps} gates`}
+        />
+      ),
+    },
+    {
+      key: 'nextAction',
+      header: 'Recommended next action',
+      render: row => (
+        <div>
+          <span className="font-medium">{row.nextAction}</span>
+          {row.reasons && row.reasons.length > 1 && (
+            <ul className="mt-1 text-xs text-[var(--color-muted-foreground)] space-y-0.5">
+              {row.reasons.slice(1).map(reason => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ),
+    },
     {
       key: 'participantId',
       header: 'Action',

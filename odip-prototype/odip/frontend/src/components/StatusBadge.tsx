@@ -54,6 +54,8 @@ const STATUS_COLORS: Record<string, string> = {
   complete: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   needsattention: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   blocked: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  // Stalled: in progress but not moving (no progress, still open). Muted warning, not an error.
+  stalled: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
 
   // Service agreement drafts
   unapproveddraft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
