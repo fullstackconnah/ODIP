@@ -65,7 +65,7 @@ function useParticipantsScreen() {
     [alertsAggregate],
   )
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<ParticipantListDto>({
     deleteMutation: deleteParticipant,
     restoreMutation: updateParticipant,
     entityName: (p) => p.fullName,
@@ -109,7 +109,7 @@ function useParticipantsScreen() {
     setPendingStatusChange(null)
   }
 
-  const participantColumns: Column<any>[] = [
+  const participantColumns: Column<ParticipantListDto>[] = [
     {
       key: 'fullName',
       header: 'Name',
@@ -124,7 +124,7 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber || p.ndisNumber)}</span> },
+    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
     { key: 'planType', header: 'Plan Type' },
     { key: 'region', header: 'Region', sortable: true },
     { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px]', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
