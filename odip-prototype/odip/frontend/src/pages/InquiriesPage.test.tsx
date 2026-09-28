@@ -114,4 +114,21 @@ describe('InquiriesPage lifecycle handoff', () => {
     await user.click(screen.getByRole('button', { name: 'Clear search and filter' }))
     expect(screen.getByText('Dana Reyes')).toBeInTheDocument()
 })
+
+const LONG_PROVENANCE = "Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours."
+
+  it('leads each row with the primary action and caps the Provenance cell', () => {
+    mocks.inquiries.mockReturnValue({ data: [
+      { id: 'q-1', firstName: 'Row', lastName: 'Order', phone: '0400', source: 'Phone', provenance: LONG_PROVENANCE, participantId: 'p-1' },
+    ], isLoading: false })
+    page()
+    const resume = screen.getByRole('button', { name: 'Resume intake' })
+    const editBtn = screen.getByRole('button', { name: 'Edit enquiry' })
+    // the primary CTA must precede the outlined secondary in DOM reading order
+    expect(resume.compareDocumentPosition(editBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(resume).toHaveClass('order-first')
+    // provenance is truncated and carries the full text for hover
+    const prov = screen.getByTitle(LONG_PROVENANCE)
+    expect(prov).toHaveClass('truncate', 'max-w-[280px]')
+  })
 })
