@@ -16,11 +16,15 @@ export type WizardStepRailProps<V> = {
  */
 export function WizardStepRail<V>({ steps, visitedSteps, currentKey, onSelect }: WizardStepRailProps<V>) {
   const currentIndex = steps.findIndex((s) => s.key === currentKey)
+  const stepNumber = currentIndex + 1
   return (
     <nav
       aria-label="Intake wizard steps"
-      className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+      className="w-full min-w-0 max-w-full [contain:inline-size] overflow-x-auto overscroll-x-contain touch-pan-x"
     >
+      <p className="mb-2 text-sm font-medium text-[var(--color-muted-foreground)]">
+        Step {stepNumber > 0 ? stepNumber : 1} of {steps.length}
+      </p>
       <ol className="flex w-max min-w-full items-center gap-2 pb-2 md:gap-4">
         {steps.map((step, idx) => {
           const isCurrent = step.key === currentKey

@@ -84,6 +84,9 @@ afterEach(() => {
 describe('IntakeWizardPage', () => {
   it('renders the create wizard with no profile-only identity fields', () => {
     renderPage()
+    expect(screen.getByText('Step 1 of 9')).toBeVisible()
+    expect(stepNav()).toHaveClass('[contain:inline-size]')
+    expect(stepNav().closest('.max-w-5xl')).toHaveClass('w-full', 'min-w-0', 'max-w-full')
     expect(screen.getByLabelText(/first name/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/middle name/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^gender$/i)).not.toBeInTheDocument()
