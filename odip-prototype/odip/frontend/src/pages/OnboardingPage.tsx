@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
@@ -7,6 +8,7 @@ import { ProgressBar } from '@/components/ProgressBar'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 
 type WorklistRow = {
@@ -36,7 +38,17 @@ export default function OnboardingPage() {
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<WorklistRow[]>('/inquiries/onboarding-worklist') })
-  const rows = worklist.data ?? []
+  const [search, setSearch] = useState('')
+  const allRows = useMemo(() => worklist.data ?? [], [worklist.data])
+  // The onboarding worklist endpoint takes no query parameters, so search is client-side.
+  const rows = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return allRows
+    return allRows.filter(row =>
+      [row.fullName, row.stage, row.nextAction, ...(row.reasons ?? [])]
+        .filter(Boolean)
+        .some(field => String(field).toLowerCase().includes(term)))
+  }, [allRows, search])
   const columns: Column<WorklistRow>[] = [
     { key: 'fullName', header: 'Participant', sortable: true },
     {
@@ -88,8 +100,10 @@ export default function OnboardingPage() {
   return <div className="space-y-6">
     <PageHeader
       title="Onboarding"
-      subtitle={`${rows.length} participant${rows.length !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
-    />
+      subtitle={`${allRows.length} participant${allRows.length !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
+    >
+      {allRows.length > 0 && <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />}
+    </PageHeader>
     {worklist.isError && (
       <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3">
         <span>Could not load the onboarding worklist. Please try again.</span>

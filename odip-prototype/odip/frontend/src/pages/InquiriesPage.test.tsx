@@ -88,4 +88,30 @@ describe('InquiriesPage lifecycle handoff', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(mocks.refetch).toHaveBeenCalledOnce()
   })
+
+  it('filters enquiries by search term and by status, and offers a reset when nothing matches', async () => {
+    mocks.inquiries.mockReturnValue({ data: [
+      { id: 'e-1', firstName: 'Dana', lastName: 'Reyes', phone: '0400 000 111', email: 'dana@example.com', source: 'Phone', provenance: 'GP referral', participantId: null, createdAt: '2026-09-01' },
+      { id: 'e-2', firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 222', email: 'rowan@example.com', source: 'Web', provenance: '', participantId: 'p-9', createdAt: '2026-09-02' },
+    ], isLoading: false })
+    const user = userEvent.setup()
+    page()
+
+    expect(screen.getByText('Dana Reyes')).toBeInTheDocument()
+    expect(screen.getByText('Rowan Blake')).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: /search enquiries/i }), 'rowan')
+    expect(screen.queryByText('Dana Reyes')).not.toBeInTheDocument()
+    expect(screen.getByText('Rowan Blake')).toBeInTheDocument()
+
+    await user.clear(screen.getByRole('textbox', { name: /search enquiries/i }))
+    await user.click(screen.getByRole('radio', { name: /New/ }))
+    expect(screen.getByText('Dana Reyes')).toBeInTheDocument()
+    expect(screen.queryByText('Rowan Blake')).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: /search enquiries/i }), 'no such person')
+    expect(screen.getByText('No enquiries match your search')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear search and filter' }))
+    expect(screen.getByText('Dana Reyes')).toBeInTheDocument()
+})
 })

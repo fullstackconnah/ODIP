@@ -79,4 +79,26 @@ describe('OnboardingPage', () => {
     expect(screen.getByText('Ndis number missing')).toBeInTheDocument()
     expect(screen.getByText('Consent not signed')).toBeInTheDocument()
   })
+
+  it('filters the worklist by participant name, stage and gate reasons', async () => {
+    mockUseQuery.mockReturnValue({ data: [
+      { participantId: 'p-1', fullName: 'Jamie Rivers', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5, nextAction: 'Confirm service needs', reasons: ['Missing current NDIS plan'] },
+      { participantId: 'p-2', fullName: 'Avery Lee', stage: 'Intake incomplete', completedSteps: 0, totalSteps: 5, nextAction: 'Complete intake', reasons: [] },
+    ], isLoading: false })
+    const user = userEvent.setup()
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+
+    expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
+    expect(screen.getByText('Avery Lee')).toBeInTheDocument()
+
+    const box = () => screen.getByRole('textbox', { name: /search participants/i })
+    await user.type(box(), 'Avery')
+    expect(screen.queryByText('Jamie Rivers')).not.toBeInTheDocument()
+    expect(screen.getByText('Avery Lee')).toBeInTheDocument()
+
+    await user.clear(box())
+    await user.type(box(), 'NDIS plan')
+    expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
+    expect(screen.queryByText('Avery Lee')).not.toBeInTheDocument()
+  })
 })

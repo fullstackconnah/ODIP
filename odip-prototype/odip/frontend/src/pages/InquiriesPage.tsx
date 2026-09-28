@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardPlus, Plus } from 'lucide-react'
+import { ClipboardPlus, Plus, Search } from 'lucide-react'
 import { Card } from '@/components/Card'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SearchInput } from '@/components/SearchInput'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { useConvertParticipantInquiry, useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquirySource, ParticipantInquiryDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
@@ -24,6 +26,8 @@ export default function InquiriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const isSaving = create.isPending || update.isPending
   const openNew = () => { setError(null); setEditingId(null); setForm(blank()); setShowForm(true) }
   const closeForm = () => { setError(null); setEditingId(null); setForm(blank()); setShowForm(false) }
@@ -42,6 +46,26 @@ export default function InquiriesPage() {
     setForm({ firstName: inquiry.firstName, lastName: inquiry.lastName, phone: inquiry.phone ?? '', email: inquiry.email ?? '', source: inquiry.source, provenance: inquiry.provenance ?? '' })
     setShowForm(true)
   }
+  // The /inquiries endpoint takes no query parameters, so filtering is client-side over the
+  // already-fetched tenant-scoped list (the server owns the tenant predicate).
+  const STATUS_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'new', label: 'New' },
+    { key: 'draftintake', label: 'Draft intake' },
+  ]
+  const statusOf = (row: ParticipantInquiryDto) => (row.participantId ? 'draftintake' : 'new')
+  const matchesStatus = (row: ParticipantInquiryDto) => statusFilter === 'all' || statusOf(row) === statusFilter
+  const filtered = inquiries.filter(row => {
+    if (!matchesStatus(row)) return false
+    if (!search.trim()) return true
+    const term = search.trim().toLowerCase()
+    return [row.firstName, row.lastName, row.phone, row.email, row.source, row.provenance]
+      .filter(Boolean)
+      .some(field => String(field).toLowerCase().includes(term))
+  })
+  const countFor = (key: string) => inquiries.filter(row => key === 'all' || statusOf(row) === key).length
+  const statusOptions = STATUS_FILTERS.map(o => ({ key: o.key, label: `${o.label} (${countFor(o.key)})` }))
+
   const columns: Column<ParticipantInquiryDto>[] = [
     { key: 'firstName', header: 'Name', sortable: true, render: row => `${row.firstName} ${row.lastName}` },
     { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
@@ -57,7 +81,10 @@ export default function InquiriesPage() {
       title="Enquiries"
       subtitle="Capture new enquiries and start their intake. Starting intake creates an inactive draft participant you can come back to."
       action={canManageParticipantLifecycle && !showForm && !showEmptyState ? <button type="button" onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all"><Plus className="w-4 h-4" /> New enquiry</button> : undefined}
-    />
+    >
+      {showTable && <ToggleGroup options={statusOptions} value={statusFilter} onChange={setStatusFilter} ariaLabel="Filter enquiries by status" />}
+      {showTable && <SearchInput value={search} onChange={setSearch} placeholder="Search enquiries..." />}
+    </PageHeader>
     {isError && <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3"><span>Could not load enquiries. Please try again.</span><button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button></div>}
     {!canManageParticipantLifecycle && <p role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
     {error && <p role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</p>}
@@ -73,6 +100,8 @@ export default function InquiriesPage() {
       </form>
     </Card>}
     {showEmptyState && <EmptyState icon={ClipboardPlus} title="No enquiries captured yet" description="Capture a light enquiry when someone first contacts the service, then start their draft intake when ready." action={canManageParticipantLifecycle ? { label: 'New enquiry', onClick: openNew } : undefined} />}
-    {showTable && <DataTable data={inquiries} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No enquiries captured yet." />}
+    {showTable && !isLoading && filtered.length === 0
+      ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term or filter, or clear the search to see all enquiries." action={{ label: 'Clear search and filter', onClick: () => { setSearch(''); setStatusFilter('all') } }} />
+      : showTable && <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No enquiries captured yet." />}
   </div>
 }
