@@ -125,4 +125,110 @@ describe('Tabs primitive — accessibility and keyboard', () => {
     await user.click(screen.getByRole('tab', { name: 'Two' }))
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  // ---------- Three explicit defect-coverage tests (DS-01) ----------
+  // Each test below corresponds to one of the three defects called out in the
+  // primitives brief; the body is designed so a regression in the corresponding
+  // behaviour would be caught here.
+
+  it('Defect 1 — every tab aria-controls points at the panel id that actually renders', () => {
+    // The wiring must be reflexive: every tab button's aria-controls resolves to a panel id
+    // present in the same render. We assert each pair explicitly so a future id refactor
+    // can't quietly drop the linkage for one tab without breaking this test.
+    render(<Harness tabs={demoTabs} initial="one" />)
+    for (const tab of demoTabs) {
+      const t = screen.getByRole('tab', { name: tab.label as string })
+      const controlsId = t.getAttribute('aria-controls')
+      expect(controlsId, `tab "${tab.id}" must advertise an aria-controls id`).toBeTruthy()
+      const panel = document.getElementById(controlsId as string)
+      expect(panel, `aria-controls of "${tab.id}" must resolve to a real panel`).not.toBeNull()
+      expect(panel!.getAttribute('role')).toBe('tabpanel')
+      expect(panel!.getAttribute('aria-labelledby')).toMatch(new RegExp(`-tab-${tab.id}$`))
+    }
+  })
+
+  it('Defect 2 — roving tabindex follows when the parent changes the active prop from outside', async () => {
+    // External `active` change (e.g. router-driven query param, programmatic switch) must
+    // move the tabbable slot to the new active tab. The fix derives focusedId from active
+    // during render so the next paint already has the right tabindex.
+    function ExternalHarness() {
+      const [active, setActive] = useState('one')
+      return (
+        <div>
+          <button type="button" onClick={() => setActive('three')}>switch</button>
+          <Tabs tabs={demoTabs} active={active} onChange={setActive} ariaLabel="Demo tabs" />
+        </div>
+      )
+    }
+    const user = userEvent.setup()
+    render(<ExternalHarness />)
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('tab', { name: 'Three' })).toHaveAttribute('tabindex', '-1')
+
+    // Parent flips `active` programmatically — no focus event, no keydown.
+    await user.click(screen.getByRole('button', { name: 'switch' }))
+
+    expect(screen.getByRole('tab', { name: 'Three' })).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('Defect 3 — disabled tabs are skipped by Home/End and are not activatable by Enter or Space', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const tabs: TabItem[] = [
+      { id: 'one', label: 'One', content: <div>panel-one</div> },
+      { id: 'two', label: 'Two', content: <div>panel-two</div>, disabled: true },
+      { id: 'three', label: 'Three', content: <div>panel-three</div> },
+    ]
+    render(<Tabs tabs={tabs} active="one" onChange={onChange} />)
+    screen.getByRole('tab', { name: 'One' }).focus()
+
+    // Home would normally focus the first tab, but it's already the first — End must skip
+    // the disabled middle and land on Three.
+    await user.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'Three' })).toHaveFocus()
+    expect(onChange).toHaveBeenLastCalledWith('three')
+
+    // Home from Three lands back on One, again skipping the disabled Two.
+    await user.keyboard('{Home}')
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveFocus()
+    expect(onChange).toHaveBeenLastCalledWith('one')
+
+    // Re-focus the disabled tab and try Enter + Space — the button is `disabled`, so the
+    // browser itself blocks activation, and the click handler's early-return belt-and-braces
+    // it. We assert onChange was not invoked for a disabled tab id.
+    onChange.mockClear()
+    const disabledTab = screen.getByRole('tab', { name: 'Two' })
+    disabledTab.focus()
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
+    expect(onChange).not.toHaveBeenCalledWith('two')
+  })
+
+  it('falls back to the first enabled tab when the initial active prop points at a disabled tab', () => {
+    // Regression guard: previously, `useState(active)` seeded focusedId with the disabled id,
+    // so every tab rendered tabindex=-1 on first paint (nothing in the page tab order).
+    const tabs: TabItem[] = [
+      { id: 'one', label: 'One', content: <div>panel-one</div>, disabled: true },
+      { id: 'two', label: 'Two', content: <div>panel-two</div> },
+      { id: 'three', label: 'Three', content: <div>panel-three</div> },
+    ]
+    render(<Tabs tabs={tabs} active="one" onChange={() => {}} />)
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('tabindex', '0')
+  })
+
+  it('hides inactive panels from the page tab order (only the visible panel has tabindex=0)', () => {
+    render(<Harness tabs={demoTabs} initial="one" />)
+    // All three panels are in the DOM; hidden ones are removed from the a11y tree, so we
+    // must query with `{ hidden: true }` to inspect the inactive ones.
+    const panels = screen.getAllByRole('tabpanel', { hidden: true })
+    expect(panels).toHaveLength(3)
+    const active = panels.find(p => !p.hasAttribute('hidden'))!
+    const hidden = panels.filter(p => p.hasAttribute('hidden'))
+    expect(active).toHaveAttribute('tabindex', '0')
+    for (const p of hidden) expect(p).toHaveAttribute('tabindex', '-1')
+  })
 })

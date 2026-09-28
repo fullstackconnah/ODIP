@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
-import { FormField } from '@/components/FormField'
+import { TextField } from '@/components/TextField'
+import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquirySource } from '@/api/types/inquiries'
@@ -107,57 +109,49 @@ function InquiryFormBody({
 
   return (
     <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={handleSubmit} aria-label={editId ? 'Edit enquiry' : 'New enquiry'}>
-      <FormField label="First name" required>
-        <input
-          id="inquiry-first-name"
-          required
-          autoComplete="given-name"
-          value={form.firstName}
-          onChange={e => setForm({ ...form, firstName: e.target.value })}
-        />
-      </FormField>
-      <FormField label="Last name" required>
-        <input
-          id="inquiry-last-name"
-          required
-          autoComplete="family-name"
-          value={form.lastName}
-          onChange={e => setForm({ ...form, lastName: e.target.value })}
-        />
-      </FormField>
-      <FormField label="Phone">
-        <input
-          id="inquiry-phone"
-          type="tel"
-          autoComplete="tel"
-          value={form.phone}
-          onChange={e => setForm({ ...form, phone: e.target.value })}
-        />
-      </FormField>
-      <FormField label="Email">
-        <input
-          id="inquiry-email"
-          type="email"
-          autoComplete="email"
-          value={form.email}
-          onChange={e => setForm({ ...form, email: e.target.value })}
-        />
-      </FormField>
-      <FormField label="Source">
-        <select
-          id="inquiry-source"
-          value={form.source}
-          onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
-        >
-          <option>Web</option>
-          <option>Email</option>
-          <option>Phone</option>
-        </select>
-      </FormField>
+      <TextField
+        id="inquiry-first-name"
+        label="First name"
+        required
+        autoComplete="given-name"
+        value={form.firstName}
+        onChange={e => setForm({ ...form, firstName: e.target.value })}
+      />
+      <TextField
+        id="inquiry-last-name"
+        label="Last name"
+        required
+        autoComplete="family-name"
+        value={form.lastName}
+        onChange={e => setForm({ ...form, lastName: e.target.value })}
+      />
+      <TextField
+        id="inquiry-phone"
+        label="Phone"
+        type="tel"
+        autoComplete="tel"
+        value={form.phone}
+        onChange={e => setForm({ ...form, phone: e.target.value })}
+      />
+      <TextField
+        id="inquiry-email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        value={form.email}
+        onChange={e => setForm({ ...form, email: e.target.value })}
+      />
+      <SelectField
+        id="inquiry-source"
+        label="Source"
+        value={form.source}
+        onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
+        options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
+      />
       {error && (
-        <p role="alert" className="md:col-span-2 rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">
-          {error}
-        </p>
+        <div className="md:col-span-2">
+          <Callout tone="error">{error}</Callout>
+        </div>
       )}
       <div className="flex gap-2 md:col-span-2">
         <Button type="submit" disabled={isSaving}>{ctaLabel}</Button>

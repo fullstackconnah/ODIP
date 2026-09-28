@@ -44,6 +44,7 @@ import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
+import { Callout } from '@/components/Callout'
 import {
   type ParticipantFormData, intakeParticipantResolver, INTAKE_STEP_SCHEMAS_BY_KEY,
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
@@ -423,14 +424,14 @@ export default function IntakeWizardPage() {
       </div>
 
       {saveMutation.isError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
+        <Callout tone="error">
           Failed to save this participant's intake details. Please check your input and try again.
-        </div>
+        </Callout>
       )}
       {draftError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
+        <Callout tone="error">
           {draftError}
-        </div>
+        </Callout>
       )}
 
       <WizardStepRail

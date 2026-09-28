@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardPlus, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
@@ -120,9 +121,16 @@ function useInquiriesScreen() {
 
   const body = (
     <>
-      {isError && <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3"><span>Could not load enquiries. Please try again.</span><button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button></div>}
+      {isError && (
+        <Callout
+          tone="error"
+          actions={<button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button>}
+        >
+          Could not load enquiries. Please try again.
+        </Callout>
+      )}
       {!canManageParticipantLifecycle && <p role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
-      {error && <p role="alert" className="rounded-lg bg-[var(--color-destructive)]/10 p-3 text-sm text-[var(--color-destructive)]">{error}</p>}
+      {error && <Callout tone="error">{error}</Callout>}
       {showEmptyState && <EmptyState icon={ClipboardPlus} title="No enquiries captured yet" description="Capture a light enquiry when someone first contacts the service, then start their draft intake when ready." action={canManageParticipantLifecycle ? { label: 'New enquiry', onClick: openNew } : undefined} />}
       {showTable && !isLoading && filtered.length === 0
         ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term or filter, or clear the search to see all enquiries." action={{ label: 'Clear search and filter', onClick: () => { setSearch(''); setStatusFilter('all') } }} />

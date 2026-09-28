@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { apiGet } from '@/api/client'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -125,10 +126,12 @@ function useOnboardingScreen() {
   const body = (
     <>
       {worklist.isError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm flex flex-wrap items-center justify-between gap-3">
-          <span>Could not load the onboarding worklist. Please try again.</span>
-          <button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>
-        </div>
+        <Callout
+          tone="error"
+          actions={<button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>}
+        >
+          Could not load the onboarding worklist. Please try again.
+        </Callout>
       )}
       {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
         <EmptyState

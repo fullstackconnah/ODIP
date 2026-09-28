@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDemoJourneySimulation, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
+import { Callout } from '@/components/Callout'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -44,7 +45,7 @@ function DraftSimulationPanel({ participantId, draftId }: { participantId: strin
       <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
       <button type="button" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending} className="min-h-[44px] rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
       {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
-      {simulation.isError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{messageFor(simulation.error)}</p>}
+      {simulation.isError && <Callout tone="error">{messageFor(simulation.error)}</Callout>}
     </div>
   </details>
 }
@@ -70,7 +71,7 @@ export default function ServiceAgreementDraftPage() {
   }), [participant.data])
 
   if (participant.isLoading || drafts.isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (participant.isError || drafts.isError) return <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">Could not load this participant's service agreement drafts. Please try again.</div>
+  if (participant.isError || drafts.isError) return <Callout tone="error">Could not load this participant's service agreement drafts. Please try again.</Callout>
   if (!participantId || !participant.data) return <div className="text-center py-12">Participant not found</div>
 
   const updateLine = (index: number, patch: Partial<DraftLineForm>) => setLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line))
@@ -143,7 +144,7 @@ export default function ServiceAgreementDraftPage() {
         </div>)}
         <button type="button" onClick={() => setLines(current => [...current, { serviceType: '', itemCode: '', hours: '' }])} className="inline-flex items-center gap-2 text-sm font-medium"><Plus className="w-4 h-4" /> Add support line</button>
       </section>
-      {error && <p role="alert" className="text-sm text-[var(--color-destructive)]">{error}</p>}
+      {error && <Callout tone="error">{error}</Callout>}
       <button type="submit" disabled={create.isPending} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 font-medium text-white disabled:opacity-50">{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Pricing draft…' : 'Create priced draft'}</button>
     </form>
 
@@ -155,7 +156,7 @@ export default function ServiceAgreementDraftPage() {
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[var(--color-muted-foreground)]"><th>Support type</th><th>Code</th><th>Hours</th><th>Unit price</th><th>Catalogue provenance</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={`${line.itemCode}-${i}`} className="border-t border-[var(--color-border)]"><td className="py-2">{line.serviceType}</td><td>{line.itemCode}</td><td>{line.hours}</td><td>{formatCurrency(line.unitPrice)}</td><td>{line.catalogueVersion} · effective {line.catalogueEffectiveFrom}{line.catalogueEffectiveTo ? ` to ${line.catalogueEffectiveTo}` : ''}</td></tr>)}</tbody></table></div>
         <DraftSimulationPanel participantId={participantId} draftId={draft.id} />
       </article>)}
-      {download.isError && <p role="alert" className="text-sm text-[var(--color-destructive)]">Could not download this draft PDF. Try again.</p>}
+      {download.isError && <Callout tone="error">Could not download this draft PDF. Try again.</Callout>}
       <p className="text-xs text-[var(--color-muted-foreground)] flex gap-2"><FileText className="w-4 h-4 shrink-0" /> Draft PDFs are informational only — not signed and not billing authority.</p>
     </section>
   </div>
