@@ -63,7 +63,6 @@ import { SupportNeedsStep } from './steps/SupportNeedsStep'
 import { MedicalSummaryStep } from './steps/MedicalSummaryStep'
 import { BehaviourSummaryStep } from './steps/BehaviourSummaryStep'
 import { RisksHazardsStep } from './steps/RisksHazardsStep'
-import { PrefilledIntakeForm } from './PrefilledIntakeForm'
 
 const CULTURAL_TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
@@ -413,11 +412,8 @@ export default function IntakeWizardPage() {
     return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   }
 
-  // Converted inquiries use only the narrow, server-enforced intake contract.
-  if (isEditMode && participant) return <PrefilledIntakeForm participant={participant} />
-
   return (
-    <div className="w-full min-w-0 max-w-full max-w-5xl mx-auto space-y-6">
+    <div className="w-full min-w-0 max-w-full max-w-5xl mx-auto space-y-6 [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <Link to={isEditMode ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
