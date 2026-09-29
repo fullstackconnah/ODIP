@@ -86,8 +86,11 @@ export const __testHooks = {
 export function usePreviousAppPathTracker(): null {
   const location = useLocation()
   useEffect(() => {
-    recordCurrentPath(location.pathname)
-  }, [location.pathname])
+    // Record pathname + search, NOT pathname alone: the Participants hub keeps its active
+    // lifecycle tab in `?tab=…`, so a pathname-only record made "Back to Participants" drop the
+    // user on the default (Active participants) tab instead of the Onboarding tab they left.
+    recordCurrentPath(location.pathname + location.search)
+  }, [location.pathname, location.search])
   return null
 }
 
@@ -107,11 +110,12 @@ export function useBackTarget(fallbackTo: string): {
   const previousPath = usePreviousAppPath()
   const navigate = useNavigate()
   const location = useLocation()
-  const to = previousPath && previousPath !== location.pathname ? previousPath : fallbackTo
+  const here = location.pathname + location.search
+  const to = previousPath && previousPath !== here ? previousPath : fallbackTo
   const onBack = useCallback(() => {
     navigate(to)
   }, [navigate, to])
-  const ariaLabel = buildAriaLabel(to, location.pathname)
+  const ariaLabel = buildAriaLabel(to, here)
   return { to, onBack, ariaLabel }
 }
 

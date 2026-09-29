@@ -184,3 +184,48 @@ describe('usePreviousAppPath — renderHook', () => {
     expect(result.current).toBe('/first')
   })
 })
+
+function LocationProbe() {
+  const location = useLocation()
+  return <span data-testid="at">{location.pathname + location.search}</span>
+}
+
+function HubTabLink() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate('/onboarding/5')}>
+      View checklist
+    </button>
+  )
+}
+
+function BackProbe() {
+  const { onBack, ariaLabel } = useBackTarget('/participants?tab=onboarding')
+  return (
+    <button type="button" onClick={onBack} aria-label={ariaLabel}>
+      back
+    </button>
+  )
+}
+
+describe('useBackNavigation — query-string preservation', () => {
+  it('Back from a detail page returns to the hub tab it was opened from, not the default tab', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/participants?tab=onboarding']}>
+        <TrackerHarness />
+        <Routes>
+          <Route path="/participants" element={<><HubTabLink /><LocationProbe /></>} />
+          <Route path="/onboarding/:id" element={<><BackProbe /><LocationProbe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    // Start on the hub's Onboarding tab, then open a checklist row.
+    await user.click(screen.getByRole('button', { name: /view checklist/i }))
+    expect(screen.getByTestId('at')).toHaveTextContent('/onboarding/5')
+    await user.click(screen.getByRole('button', { name: /back to onboarding/i }))
+    // Regression guard: this used to land on /participants with no ?tab=, i.e. the default
+    // "Active participants" tab, because the tracker stored pathname without search.
+    expect(screen.getByTestId('at')).toHaveTextContent('/participants?tab=onboarding')
+  })
+})
