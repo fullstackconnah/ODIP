@@ -9,6 +9,7 @@ import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -95,19 +96,28 @@ export default function OnboardingDetailPage() {
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
-    { label: 'Profile essentials', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
+    { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } },
     { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
+  // The onboarding checklist is reached from the Participants hub's Onboarding tab. Honour real
+  // in-app history when the user got here via a non-hub route, and otherwise fall back to the
+  // hub's Onboarding tab so the user always lands on the right stage.
+  const back = useBackTarget('/participants?tab=onboarding')
 
   return <div className="space-y-6">
     <div className="space-y-3">
       <div className="flex items-start gap-4">
-        <Button variant="ghost" iconOnly to="/onboarding" aria-label="Back to onboarding">
+        <button
+          type="button"
+          onClick={back.onBack}
+          aria-label={back.ariaLabel}
+          className="p-1.5 rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)] transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
-        </Button>
+        </button>
         <div className="flex-1">
           <PageHeader
             title={headingTitle}

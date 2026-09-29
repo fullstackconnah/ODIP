@@ -41,7 +41,7 @@ describe('OnboardingPage', () => {
     render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
 
     expect(screen.getByText('No participants in onboarding')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'View enquiries' })).toHaveAttribute('href', '/inquiries')
+    expect(screen.getByRole('link', { name: 'View enquiries' })).toHaveAttribute('href', '/participants?tab=enquiries')
   })
 
   it('shows a retry-able error banner instead of the empty state when the worklist fails to load', async () => {

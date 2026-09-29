@@ -201,7 +201,7 @@ describe('AppLayout — participant lifecycle navigation', () => {
   it('surfaces a single Participants entry but keeps Draft intake hidden for ReadOnly and SupportWorker', () => {
     for (const role of ['ReadOnly', 'SupportWorker']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderAt('/inquiries')
+      const { unmount } = renderAt('/participants')
       // Lifecycle stages (Enquiries, Onboarding, Active participants) collapsed into the
       // Participants hub at /participants — see AppLayout's navItems.
       expect(screen.getByRole('link', { name: /Participants$/ })).toBeInTheDocument()

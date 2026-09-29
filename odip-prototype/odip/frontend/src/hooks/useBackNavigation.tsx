@@ -126,9 +126,22 @@ export function useBackTarget(fallbackTo: string): {
 const KNOWN_SCREEN_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/participants': 'Participants',
-  '/onboarding': 'Onboarding',
-  '/inquiries': 'Inquiries',
   '/trips': 'Trips',
+}
+
+/**
+ * Resolve the human label for the hub's lifecycle tabs (which live under the
+ * /participants URL with a `tab=` query param). The Participants hub mirrors its active
+ * tab into the URL — and the standalone /onboarding + /inquiries list pages now redirect
+ * there too — so a back target like `/participants?tab=onboarding` should still read as
+ * "Back to Onboarding" rather than the generic "Go back".
+ */
+function hubTabLabel(targetPath: string): string | null {
+  const tab = new URLSearchParams(targetPath.split('?')[1] ?? '').get('tab')
+  if (targetPath.split('?')[0] !== '/participants') return null
+  if (tab === 'onboarding') return 'Onboarding'
+  if (tab === 'enquiries') return 'Enquiries'
+  return null
 }
 
 function buildAriaLabel(targetPath: string, currentPath: string): string {
@@ -136,6 +149,9 @@ function buildAriaLabel(targetPath: string, currentPath: string): string {
   // Exact known screen.
   const known = KNOWN_SCREEN_LABELS[targetPath]
   if (known) return `Back to ${known}`
+  // Hub tab on /participants?tab=… → use the stage name.
+  const tabLabel = hubTabLabel(targetPath)
+  if (tabLabel) return `Back to ${tabLabel}`
   // Detail page patterns like /participants/5 or /onboarding/5 — we don't try to fetch the
   // record name from a hook here (that would couple this primitive to every page's data
   // fetching), so fall back to the resource noun.
