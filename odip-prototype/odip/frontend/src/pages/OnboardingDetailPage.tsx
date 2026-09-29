@@ -46,6 +46,8 @@ export default function OnboardingDetailPage() {
   const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
   const d = detail.data
 
+  const back = useBackTarget('/participants?tab=onboarding')
+
   if (detail.isLoading) return <div>Loading onboarding…</div>
   if (!d) return <Callout tone="error">Onboarding record was not found.</Callout>
 
@@ -105,7 +107,6 @@ export default function OnboardingDetailPage() {
   // The onboarding checklist is reached from the Participants hub's Onboarding tab. Honour real
   // in-app history when the user got here via a non-hub route, and otherwise fall back to the
   // hub's Onboarding tab so the user always lands on the right stage.
-  const back = useBackTarget('/participants?tab=onboarding')
 
   return <div className="space-y-6">
     <div className="space-y-3">

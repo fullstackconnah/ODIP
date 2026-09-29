@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 'react-router-dom'
 import OnboardingDetailPage from './OnboardingDetailPage'
@@ -139,5 +139,51 @@ describe('OnboardingDetailPage', () => {
     await userEvent.setup().click(back)
     expect(router.state.location.pathname).toBe('/participants')
     expect(router.state.location.search).toBe('?tab=onboarding')
+  })
+})
+
+
+// Regression (2026-09-29, found in live QA after the hub-back change): the page's
+// useBackTarget hook originally sat AFTER the `if (detail.isLoading) return` early return.
+// Every other test here renders with isLoading:false, so that path was never exercised and the
+// whole suite stayed green while the deployed page crashed with React error #310
+// ("rendered fewer hooks than expected") the moment the async detail query resolved in the real
+// app. This test drives the loading -> loaded transition, which is what the real app does.
+describe('OnboardingDetailPage — hook ordering across the loading transition', () => {
+  it('survives the loading -> loaded transition without a hooks-order crash', async () => {
+    // React only *warns* on a hooks-order change, so a bare render would still "pass" while the
+    // deployed app crashes with error #310. Fail loudly on that specific console.error instead.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      void args
+    })
+    const orderWarning = () =>
+      consoleError.mock.calls.some(c => String(c[0]).includes('order of Hooks'))
+    try {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+
+    // First render: the query is still in flight, so the page takes its early return.
+    mockUseQuery.mockReturnValue({ data: undefined, isLoading: true })
+    const { rerender } = renderDetail()
+    expect(screen.getByText('Loading onboarding\u2026')).toBeInTheDocument()
+
+    // Then the real transition: the query resolves and the full page renders.
+    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
+    rerender(
+      <MemoryRouter initialEntries={['/onboarding/p-1']}>
+        <Routes><Route path="/onboarding/:id" element={<OnboardingDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Loading onboarding\u2026')).not.toBeInTheDocument()
+    expect(screen.getByText('Participant Profile')).toBeInTheDocument()
+    expect(orderWarning()).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })
