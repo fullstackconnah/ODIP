@@ -47,6 +47,7 @@ import {
 } from '@/components/wizard'
 import { useBackTarget } from '@/hooks/useBackNavigation'
 import { Callout } from '@/components/Callout'
+import { Card } from '@/components/Card'
 import {
   type ParticipantFormData, intakeParticipantResolver, INTAKE_STEP_SCHEMAS_BY_KEY,
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
@@ -458,17 +459,18 @@ export default function IntakeWizardPage() {
         <form
           onSubmit={handleSubmit(onSubmit, wizard.handleInvalidSubmit)}
           noValidate
-          // max-w-3xl keeps the form's input measure readable on wide monitors while the rail
-          // (now in the WizardShell sidebar) uses the rest of the row. The scroll-margin
-          // utilities stay here — they were originally on the outer wrapper because of the
-          // fixed bottom nav, and they continue to apply to every form control inside this
-          // inner wrapper.
-          className="max-w-3xl [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44"
+          // The form now fills the full content-column width (no max-w cap) so the rail's
+          // sidebar and the form's step panel share the row; the step's heading + body sit
+          // inside a <Card> below to read as a distinct panel. The scroll-margin utilities
+          // stay here — they were originally on the outer wrapper because of the fixed
+          // bottom nav, and they continue to apply to every form control inside this form.
+          className="[&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44 space-y-6"
         >
-          <WizardStepHeading
-            stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-            label={isReviewStep ? 'Review' : currentStep.label}
-          />
+          <Card className="space-y-6">
+            <WizardStepHeading
+              stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+              label={isReviewStep ? 'Review' : currentStep.label}
+            />
         {!isReviewStep && currentStep.key === 'participantDetails' && (
           <ParticipantDetailsStep control={control} register={register} errors={errors} livingArrangementValue={livingArrangementValue} />
         )}
@@ -548,6 +550,7 @@ export default function IntakeWizardPage() {
             onEdit={wizard.goToStep}
           />
         )}
+          </Card>
 
         <WizardNavFooter
           showBack={wizard.stepIndex > 0}
