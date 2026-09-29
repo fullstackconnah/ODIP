@@ -1,4 +1,5 @@
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
+import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
   ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
@@ -423,6 +424,10 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           breakpoint's shorthand again.
         */}
         <main id="main" className="flex-1 px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8 pb-24 lg:pb-8">
+          {/* Track the previous in-app pathname once at the authenticated shell so any
+              page-header back control (e.g. the intake/profile wizards) can navigate to
+              where the user actually came from instead of a hardcoded fallback. */}
+          <BackPathTracker />
           <Outlet />
         </main>
       </div>
@@ -476,4 +481,11 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
       </nav>
     </div>
   )
+}
+
+function BackPathTracker(): null {
+  // Mount the previous-path tracker at the authenticated shell so every page-header back
+  // control can use real in-app history. See useBackNavigation.tsx.
+  usePreviousAppPathTracker()
+  return null
 }

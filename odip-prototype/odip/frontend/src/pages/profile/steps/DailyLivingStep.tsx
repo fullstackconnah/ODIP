@@ -8,6 +8,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister, UseFieldArrayReturn } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { CompactGridRow } from '@/components/wizard'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
@@ -65,12 +66,12 @@ export function DailyLivingStep({ control, register, adlFieldArray, watchedValue
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card title="Meals & Diet" className="space-y-4">
-          <FormField label="Meal Assistance"><textarea id="mealAssistanceDetail" rows={2} {...register('mealAssistanceDetail')} /></FormField>
-          <FormField label="Choking Risk — Meal Management"><textarea id="chokingRiskMealDetail" rows={2} {...register('chokingRiskMealDetail')} /></FormField>
+          <TextAreaField label="Meal Assistance" id="mealAssistanceDetail" rows={2} {...register('mealAssistanceDetail')} />
+          <TextAreaField label="Choking Risk — Meal Management" id="chokingRiskMealDetail" rows={2} {...register('chokingRiskMealDetail')} />
           <FormField label="Modified Diet"><input id="modifiedDietDetail" {...register('modifiedDietDetail')} /></FormField>
           <FormField label="PEG Regime"><input id="pegRegimeMealDetail" {...register('pegRegimeMealDetail')} /></FormField>
           <FormField label="Special Utensils"><input id="specialUtensilsDetail" {...register('specialUtensilsDetail')} /></FormField>
-          <FormField label="Special Dietary Needs"><textarea id="specialDietaryNeedsDetail" rows={2} {...register('specialDietaryNeedsDetail')} /></FormField>
+          <TextAreaField label="Special Dietary Needs" id="specialDietaryNeedsDetail" rows={2} {...register('specialDietaryNeedsDetail')} />
           <FormField label="Favourite Breakfast"><input id="favouriteBreakfast" {...register('favouriteBreakfast')} /></FormField>
           <FormField label="Favourite Lunch"><input id="favouriteLunch" {...register('favouriteLunch')} /></FormField>
           <FormField label="Favourite Dinner"><input id="favouriteDinner" {...register('favouriteDinner')} /></FormField>
@@ -79,12 +80,12 @@ export function DailyLivingStep({ control, register, adlFieldArray, watchedValue
         </Card>
 
         <Card title="About Me" className="space-y-4">
-          <FormField label="Goals"><textarea id="goals" rows={2} {...register('goals')} /></FormField>
-          <FormField label="Support Areas"><textarea id="supportAreas" rows={2} {...register('supportAreas')} /></FormField>
-          <FormField label="Strengths / Fears"><textarea id="strengthsFears" rows={2} {...register('strengthsFears')} /></FormField>
-          <FormField label="Things to Know"><textarea id="thingsToKnow" rows={2} {...register('thingsToKnow')} /></FormField>
-          <FormField label="Who/What Is Important"><textarea id="whoIsImportant" rows={2} {...register('whoIsImportant')} /></FormField>
-          <FormField label="Likes & Dislikes"><textarea id="likesDislikes" rows={2} {...register('likesDislikes')} /></FormField>
+          <TextAreaField label="Goals" id="goals" rows={2} {...register('goals')} />
+          <TextAreaField label="Support Areas" id="supportAreas" rows={2} {...register('supportAreas')} />
+          <TextAreaField label="Strengths / Fears" id="strengthsFears" rows={2} {...register('strengthsFears')} />
+          <TextAreaField label="Things to Know" id="thingsToKnow" rows={2} {...register('thingsToKnow')} />
+          <TextAreaField label="Who/What Is Important" id="whoIsImportant" rows={2} {...register('whoIsImportant')} />
+          <TextAreaField label="Likes & Dislikes" id="likesDislikes" rows={2} {...register('likesDislikes')} />
         </Card>
       </div>
     </div>

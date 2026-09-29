@@ -8,6 +8,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister, FieldErrors } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -88,9 +89,7 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
               />
             </FormField>
           )}
-          <FormField label="Disability Support for Older Australians (DSOA)" layout="checkbox">
-            <input type="checkbox" id="isDsoa" {...register('isDsoa')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+          <CheckboxField label="Disability Support for Older Australians (DSOA)" id="isDsoa" {...register('isDsoa')} />
         </Card>
 
         <Card title="Identification Cards" className="space-y-4">

@@ -7,6 +7,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
@@ -104,9 +105,9 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
         </Card>
 
         <Card title="Communication" className="space-y-4">
-          <FormField label="Receptive Skills"><textarea id="receptiveSkills" rows={2} {...register('receptiveSkills')} /></FormField>
-          <FormField label="Reading Ability"><textarea id="readingAbility" rows={2} {...register('readingAbility')} /></FormField>
-          <FormField label="Communication Aids"><textarea id="communicationAids" rows={2} {...register('communicationAids')} /></FormField>
+          <TextAreaField label="Receptive Skills" id="receptiveSkills" rows={2} {...register('receptiveSkills')} />
+          <TextAreaField label="Reading Ability" id="readingAbility" rows={2} {...register('readingAbility')} />
+          <TextAreaField label="Communication Aids" id="communicationAids" rows={2} {...register('communicationAids')} />
         </Card>
       </div>
     </div>

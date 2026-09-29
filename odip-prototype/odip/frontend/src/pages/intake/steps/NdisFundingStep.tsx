@@ -8,6 +8,7 @@ import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
 import { Controller } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import { FUNDING_SOURCES, SERVICE_STREAMS } from '@/api/types/enums'
 import { FUNDING_SOURCE_LABELS, SERVICE_STREAM_LABELS } from '@/api/types/participants'
@@ -134,9 +135,7 @@ export function NdisFundingStep({
           </FormField>
         )}
 
-        <FormField label="Repeat Client" layout="checkbox">
-          <input id="isRepeatClient" type="checkbox" {...register('isRepeatClient')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-        </FormField>
+        <CheckboxField label="Repeat Client" id="isRepeatClient" {...register('isRepeatClient')} />
       </Card>
     </div>
   )

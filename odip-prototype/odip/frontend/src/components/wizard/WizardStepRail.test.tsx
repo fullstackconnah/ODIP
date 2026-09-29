@@ -61,4 +61,58 @@ describe('WizardStepRail', () => {
     expect(onSelect).toHaveBeenCalledWith('a')
     expect(screen.getByRole('button', { name: /gamma/i })).toBeDisabled()
   })
+
+  it('still exposes nav aria-label "Intake wizard steps" with orientation="vertical"', () => {
+    render(
+      <WizardStepRail
+        steps={steps}
+        visitedSteps={new Set(['a', 'b'])}
+        currentKey="a"
+        onSelect={vi.fn()}
+        orientation="vertical"
+      />,
+    )
+    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
+    expect(nav).toBeInTheDocument()
+  })
+
+  it('with orientation="vertical" the <ol> carries the vertical layout classes and the buttons keep their step-label accessible name', () => {
+    render(
+      <WizardStepRail
+        steps={steps}
+        visitedSteps={new Set(['a', 'b'])}
+        currentKey="a"
+        onSelect={vi.fn()}
+        orientation="vertical"
+      />,
+    )
+
+    const list = screen.getByRole('list')
+    expect(list).toHaveClass('flex', 'flex-col', 'gap-2', 'w-full')
+    // No horizontal-scrolling class on a vertical rail.
+    expect(list).not.toHaveClass('w-max', 'min-w-full')
+
+    // Every step button still has its full label as accessible name in vertical mode (no DOM
+    // stripping of the label just because the layout changed).
+    expect(screen.getByRole('button', { name: /alpha/i, current: 'step' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /beta/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /gamma/i })).toBeInTheDocument()
+    // And no duplicate step buttons.
+    expect(screen.getAllByRole('button', { name: /alpha/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /beta/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /gamma/i })).toHaveLength(1)
+  })
+
+  it('does not render duplicated step buttons in either orientation (single rendered nav at every width)', () => {
+    const { rerender } = render(
+      <WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} orientation="horizontal" />,
+    )
+    expect(screen.getAllByRole('navigation', { name: /intake wizard steps/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /alpha/i })).toHaveLength(1)
+    rerender(
+      <WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} orientation="vertical" />,
+    )
+    expect(screen.getAllByRole('navigation', { name: /intake wizard steps/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /alpha/i })).toHaveLength(1)
+  })
 })

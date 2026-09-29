@@ -9,6 +9,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { MOBILITY_SUPPORT_OPTIONS, AMBULANT_STATUS_LABELS, RISK_RATING_LEVEL_LABELS, PERSONAL_CARE_LEVEL_LABELS } from '@/api/types/participants'
@@ -69,9 +70,9 @@ export function MobilityFunctionalStep({ control, register, participant }: {
               )}
             />
           </FormField>
-          <FormField label="Mobility Notes"><textarea id="mobilityNotes" rows={2} {...register('mobilityNotes')} /></FormField>
-          <FormField label="Equipment Requirements"><textarea id="equipmentRequirements" rows={2} {...register('equipmentRequirements')} /></FormField>
-          <FormField label="Transport Requirements"><textarea id="transportRequirements" rows={2} {...register('transportRequirements')} /></FormField>
+          <TextAreaField label="Mobility Notes" id="mobilityNotes" rows={2} {...register('mobilityNotes')} />
+          <TextAreaField label="Equipment Requirements" id="equipmentRequirements" rows={2} {...register('equipmentRequirements')} />
+          <TextAreaField label="Transport Requirements" id="transportRequirements" rows={2} {...register('transportRequirements')} />
         </Card>
 
         <Card title="Functional Detail" className="space-y-4">

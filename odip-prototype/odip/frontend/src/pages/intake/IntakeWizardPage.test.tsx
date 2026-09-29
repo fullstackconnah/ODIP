@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IntakeWizardPage from './IntakeWizardPage'
+import { __testHooks, usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { fieldsForEntry } from '@/lib/documentMapping'
 import {
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
@@ -34,6 +35,25 @@ function renderPage(path = '/participants/new') {
     { path: '/participants', element: <div>Participants list</div> },
   ], { initialEntries: [path] })
   return render(<RouterProvider router={router} />)
+}
+
+/** Like renderPage but mounts the back-navigation tracker alongside the page so the
+ *  history-aware back-control tests see a recorded previous path. */
+function renderPageWithTracker(path: string) {
+  __testHooks.reset()
+  const router = createMemoryRouter([
+    { path: '/participants/new', element: <><Tracker /><IntakeWizardPage /></> },
+    { path: '/participants/:id/intake', element: <><Tracker /><IntakeWizardPage /></> },
+    { path: '/participants/:id', element: <div>Participant detail</div> },
+    { path: '/participants/:id/profile', element: <div>Profile wizard</div> },
+    { path: '/participants', element: <div>Participants list</div> },
+  ], { initialEntries: [path] })
+  return render(<RouterProvider router={router} />)
+}
+
+function Tracker(): null {
+  usePreviousAppPathTracker()
+  return null
 }
 
 function draft(overrides: Record<string, unknown> = {}) {
@@ -93,16 +113,30 @@ describe('IntakeWizardPage', () => {
     renderPage()
     expect(screen.getByText('Step 1 of 9')).toBeVisible()
     expect(stepNav()).toHaveClass('[contain:inline-size]')
-    const wizardRoot = stepNav().closest('.max-w-5xl')
-    expect(wizardRoot).toHaveClass('w-full', 'min-w-0', 'max-w-full')
+    const wizardBody = stepNav().closest('.space-y-6')
+    expect(wizardBody).toBeTruthy()
+    expect(wizardBody).toHaveClass('w-full', 'min-w-0', 'max-w-full')
+    // The [&_input]:scroll-* utilities used to live on this outer div in the old layout; the
+    // refactor moved them to the <form> wrapper inside the WizardShell so they still cover every
+    // form control (and the form's own max-w-3xl keeps inputs at a readable measure). The contract
+    // is unchanged: every form control still clears the fixed bottom nav when focused.
+    // The rail now lives in a WizardShell <aside> that SIBLINGS the form, so the form must be
+    // anchored from one of its own controls — not reached by walking up from the rail.
+    const form = screen.getByLabelText(/first name/i).closest('form')
+    expect(form).toBeTruthy()
     // QA measured these four narrow layouts with the old 96px margin. The 176px contract adds
     // 80px of clearance, clearing the fixed bottom navigation in each case; desktop/tablet do
     // not render that navigation. Keep every mobile viewport/mode in the assertion rather than
     // treating a passing sibling viewport as representative.
     for (const { mode, observedClearanceWith96pxMargin } of narrowFocusModes) {
-      expect(wizardRoot, mode).toHaveClass('[&_input]:scroll-mt-20', '[&_input]:scroll-mb-44')
+      // 176px is the measured scroll-mt contract for every fixed/mobile narrow viewport — it
+      // adds 80px over the old 96px so the focused input clears the fixed bottom nav. Keep the
+      // assertion shape intact: assert each layout/mode by name to make a regression localise.
       expect(observedClearanceWith96pxMargin + (176 - 96), mode).toBeGreaterThan(0)
     }
+    // The form wrapper (where the scroll-margin utilities live now) still applies them at every
+    // breakpoint so a focused input clears the fixed bottom navigation.
+    expect(form).toHaveClass('[&_input]:scroll-mt-20', '[&_input]:scroll-mb-44')
     expect(screen.getByLabelText(/first name/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/middle name/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^gender$/i)).not.toBeInTheDocument()
@@ -132,9 +166,9 @@ describe('IntakeWizardPage', () => {
     const user = userEvent.setup()
     renderPage()
     await user.type(screen.getByLabelText(/first name/i), 'Jamie')
-    const backLink = screen.getAllByRole('link').find((el) => el.getAttribute('href') === '/participants')
-    expect(backLink).toBeTruthy()
-    await user.click(backLink!)
+    const backLink = screen.getByTestId('intake-header-back')
+    expect(backLink).toBeInTheDocument()
+    await user.click(backLink)
     expect(await screen.findByText(/leave without saving/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /leave page/i }))
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
@@ -143,9 +177,9 @@ describe('IntakeWizardPage', () => {
   it('does not warn before leaving an unchanged create wizard', async () => {
     const user = userEvent.setup()
     renderPage()
-    const backLink = screen.getAllByRole('link').find((el) => el.getAttribute('href') === '/participants')
-    expect(backLink).toBeTruthy()
-    await user.click(backLink!)
+    const backLink = screen.getByTestId('intake-header-back')
+    expect(backLink).toBeInTheDocument()
+    await user.click(backLink)
     expect(screen.queryByText(/leave without saving/i)).not.toBeInTheDocument()
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
   })
@@ -289,5 +323,72 @@ describe('IntakeWizardPage', () => {
     expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('riskEntries')
     expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('contactRoles')
     expect(mockSave).not.toHaveBeenCalled()
+  })
+})
+
+// CORE-01 + CORE-02 acceptance: rail sits in a WizardShell aside beside the form, and the page-header
+// back control is history-aware (uses real in-app history when available, fallback otherwise).
+describe('IntakeWizardPage — wizard shell + history-aware back', () => {
+  it('renders the WizardShell aside landmark containing the step rail and the form alongside it', () => {
+    renderPage()
+    const aside = screen.getByRole('complementary', { name: /wizard steps/i })
+    expect(aside).toBeInTheDocument()
+    expect(within(aside).getByRole('navigation', { name: /intake wizard steps/i })).toBeInTheDocument()
+    // The form still renders inside the same shell as the rail.
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument()
+  })
+
+  it('falls back to /participants when arriving at the create wizard via a deep link (no prior path)', async () => {
+    const user = userEvent.setup()
+    renderPageWithTracker('/participants/new')
+    const back = screen.getByTestId('intake-header-back')
+    expect(back).toBeInTheDocument()
+    await user.click(back)
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+  })
+
+  it('returns to the previous in-app screen when the user arrived from one (e.g. onboarding detail → Edit intake)', async () => {
+    const user = userEvent.setup()
+    // Seed module state to mimic two real route changes: /onboarding/draft-1 → /participants/draft-1/intake.
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/onboarding/draft-1')
+    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    const router = createMemoryRouter([
+      { path: '/participants/draft-1/intake', element: <><Tracker /><IntakeWizardPage /></> },
+      { path: '/participants', element: <div>Participants list</div> },
+      { path: '/onboarding/draft-1', element: <div>Onboarding screen</div> },
+    ], { initialEntries: ['/participants/draft-1/intake'] })
+    render(<RouterProvider router={router} />)
+    const back = await screen.findByTestId('intake-header-back')
+    await user.click(back)
+    // The back control navigates to the recorded previous path (/onboarding/draft-1) rather
+    // than the fallback /participants (which would have shown "Participants list").
+    expect(await screen.findByText('Onboarding screen')).toBeInTheDocument()
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
+  })
+
+  it('the back destination matches the recorded previous path, not the hardcoded fallback', async () => {
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/onboarding/draft-1')
+    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    // Render without an /onboarding/:id route so we can prove the back target was NOT the
+    // fallback. If we hardcoded the fallback, this would still find the /participants list.
+    // BOTH destinations are real routes: the assertion is that the recorded previous path
+    // wins, proven positively. Navigating to a path with no matching route instead made
+    // react-router throw an unhandled "no route matches" rejection inside the click.
+    const router = createMemoryRouter([
+      { path: '/participants/draft-1/intake', element: <><Tracker /><IntakeWizardPage /></> },
+      { path: '/onboarding/draft-1', element: <div>Onboarding screen</div> },
+      { path: '/participants', element: <div>Participants list</div> },
+    ], { initialEntries: ['/participants/draft-1/intake'] })
+    render(<RouterProvider router={router} />)
+    const back = screen.getByTestId('intake-header-back')
+    expect(back).toBeInTheDocument()
+    fireEvent.click(back)
+    // The recorded previous path is the onboarding screen, NOT the hardcoded fallback.
+    expect(await screen.findByText('Onboarding screen')).toBeInTheDocument()
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
   })
 })

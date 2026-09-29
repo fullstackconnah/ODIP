@@ -12,6 +12,7 @@ import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
 import { Controller } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS } from '@/api/types/enums'
 import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
@@ -27,13 +28,9 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card title="Support Needs" className="space-y-4">
-        <FormField label="High Support" layout="checkbox">
-          <input id="isHighSupport" type="checkbox" {...register('isHighSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-        </FormField>
+        <CheckboxField label="High Support" id="isHighSupport" {...register('isHighSupport')} />
 
-        <FormField label="Intensive Support (NDIS billing)" layout="checkbox">
-          <input id="isIntensiveSupport" type="checkbox" {...register('isIntensiveSupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-        </FormField>
+        <CheckboxField label="Intensive Support (NDIS billing)" id="isIntensiveSupport" {...register('isIntensiveSupport')} />
 
         <FormField label="Support Ratio" required error={errors.supportRatio?.message}>
           <Controller
@@ -62,12 +59,8 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
       <Card title="Mobility Aids" className="space-y-4">
         <fieldset className="m-0 p-0 border-0">
           <legend className="sr-only">Mobility Aids</legend>
-          <FormField label="Wheelchair" layout="checkbox">
-            <input id="mobilityAidWheelchair" type="checkbox" {...register('mobilityAidWheelchair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-          <FormField label="Walker" layout="checkbox">
-            <input id="mobilityAidWalker" type="checkbox" {...register('mobilityAidWalker')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+          <CheckboxField label="Wheelchair" id="mobilityAidWheelchair" {...register('mobilityAidWheelchair')} />
+          <CheckboxField label="Walker" id="mobilityAidWalker" {...register('mobilityAidWalker')} />
         </fieldset>
       </Card>
 
@@ -112,21 +105,11 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
       <Card title="Equipment" className="space-y-4">
         <fieldset className="m-0 p-0 border-0 space-y-4">
           <legend className="sr-only">Equipment</legend>
-          <FormField label="Hi-Lo Bed" layout="checkbox">
-            <input id="requiresHiLoBed" type="checkbox" {...register('requiresHiLoBed')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-          <FormField label="Hoist" layout="checkbox">
-            <input id="requiresHoist" type="checkbox" {...register('requiresHoist')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-          <FormField label="Shower Chair" layout="checkbox">
-            <input id="requiresShowerChair" type="checkbox" {...register('requiresShowerChair')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-          <FormField label="Commode" layout="checkbox">
-            <input id="requiresCommode" type="checkbox" {...register('requiresCommode')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-          <FormField label="Standing Machine" layout="checkbox">
-            <input id="requiresStandingMachine" type="checkbox" {...register('requiresStandingMachine')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+          <CheckboxField label="Hi-Lo Bed" id="requiresHiLoBed" {...register('requiresHiLoBed')} />
+          <CheckboxField label="Hoist" id="requiresHoist" {...register('requiresHoist')} />
+          <CheckboxField label="Shower Chair" id="requiresShowerChair" {...register('requiresShowerChair')} />
+          <CheckboxField label="Commode" id="requiresCommode" {...register('requiresCommode')} />
+          <CheckboxField label="Standing Machine" id="requiresStandingMachine" {...register('requiresStandingMachine')} />
         </fieldset>
       </Card>
     </div>

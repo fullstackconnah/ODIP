@@ -6,7 +6,7 @@
  */
 import type { Control, UseFormRegister } from 'react-hook-form'
 import { Card } from '@/components/Card'
-import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { YesNoToggleField } from '../intakeHelpers'
 
@@ -22,9 +22,7 @@ export function BehaviourSummaryStep({ control, register }: {
       </Card>
 
       <Card title="Communication" className="space-y-4">
-        <FormField label="Expressive Skills">
-          <textarea id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." />
-        </FormField>
+        <TextAreaField label="Expressive Skills" id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." />
       </Card>
     </div>
   )
