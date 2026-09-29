@@ -188,7 +188,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
                 isActive
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'

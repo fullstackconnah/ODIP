@@ -81,7 +81,7 @@ describe('FormField hint API', () => {
     )
 
     const label = screen.getByText('Ends the next day').closest('label')
-    expect(label).toHaveClass('min-h-[44px]')
+    expect(label).toHaveClass('min-h-[var(--control-h)]')
   })
 
   it('links a checkbox-layout hint to the checkbox via aria-describedby', () => {

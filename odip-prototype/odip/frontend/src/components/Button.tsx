@@ -24,10 +24,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   ghost: 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]',
 }
 
+// Heights come from the density tokens (h-[var(--control-h-sm)] = 24px / h-[var(--control-h)] =
+// 32px, both flipping to their Comfortable value automatically under `pointer: coarse`). `lg`
+// has no dedicated token in the spec's table, so it's derived as control-h + 4px, which lands on
+// the spec's 36px compact / 48px coarse values without hard-coding either.
 const SIZE: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1 text-xs',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-4 py-2.5 text-sm',
+  sm: 'h-[var(--control-h-sm)] px-3 text-xs',
+  md: 'h-[var(--control-h)] px-4 text-sm',
+  lg: 'h-[calc(var(--control-h)+4px)] px-4 text-sm',
 }
 
 function classes(variant: ButtonVariant, size: ButtonSize, iconOnly: boolean, className?: string): string {

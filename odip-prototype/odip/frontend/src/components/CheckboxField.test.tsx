@@ -71,6 +71,6 @@ describe('CheckboxField primitive', () => {
   it('gives the wrapping label a >=44px tall hit area so checkbox + text are one touch target', () => {
     render(<CheckboxField label="High support" />)
     const label = screen.getByText('High support').closest('label')
-    expect(label).toHaveClass('min-h-[44px]')
+    expect(label).toHaveClass('min-h-[var(--control-h)]')
   })
 })

@@ -9,8 +9,8 @@ export type StatCardProps = {
 export function StatCard({ label, value, className }: StatCardProps) {
   return (
     <Card compact className={className}>
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-1 font-medium">{label}</p>
-      <p className="text-2xl font-display font-bold text-[var(--color-primary)]">{value}</p>
+      <p className="text-xs font-medium text-[var(--color-muted-foreground)]">{label}</p>
+      <p className="text-xl font-display font-bold text-[var(--color-primary)]">{value}</p>
     </Card>
   )
 }

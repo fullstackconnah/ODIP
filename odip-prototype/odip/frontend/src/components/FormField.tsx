@@ -18,8 +18,8 @@ export type FormFieldProps = {
   children: ReactNode
 }
 
-export const inputClass = 'w-full px-4 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
-export const labelClass = 'block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]'
+export const inputClass = 'w-full h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+export const labelClass = 'block text-[13px] font-medium mb-1 text-[var(--color-muted-foreground)]'
 
 const NATIVE_INPUTS = ['input', 'select', 'textarea']
 
@@ -66,10 +66,11 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
       : children
     return (
       <div className={className}>
-        {/* min-h-[44px] gives the label — checkbox + text as one target — a WCAG 2.5.5-sized
-            hit area without inflating the visual checkbox (still w-4 h-4 via checkboxChild's own
+        {/* min-h-[var(--control-h)] gives the label — checkbox + text as one target — a
+            WCAG 2.5.5-sized hit area (32px on fine pointers, 44px under `pointer: coarse`)
+            without inflating the visual checkbox (still w-4 h-4 via checkboxChild's own
             className); the label wraps the input so the whole row remains one click/tap target. */}
-        <label className="flex items-center gap-3 py-1 min-h-[44px]">
+        <label className="flex items-center gap-3 py-1 min-h-[var(--control-h)]">
           {checkboxChild}
           <span className="text-sm text-[var(--color-foreground)]">
             {label}{required && ' *'}

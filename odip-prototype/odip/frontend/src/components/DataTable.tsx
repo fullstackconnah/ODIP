@@ -237,21 +237,29 @@ export function DataTable<T>({
     }
   }
 
-  const cellPadding = compact ? 'px-2 py-1.5' : 'p-3'
+  // Row height comes from the density tokens: --cell-px for horizontal padding shared by every
+  // cell, plus a vertical padding sized to land the header at 32px and body rows at --row-h's
+  // 34px (compact's default) with text-sm's 20px line-height. `compact` stays accepted for
+  // back-compat and now reads as extra-tight rather than a distinct size.
+  const cellPaddingX = 'px-[var(--cell-px)]'
+  const bodyRowPadding = compact ? 'py-1' : 'py-[7px]'
+  const headerRowPadding = 'py-[6px]'
+  const bodyCellPadding = `${cellPaddingX} ${bodyRowPadding}`
+  const headerCellPadding = `${cellPaddingX} ${headerRowPadding}`
   const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
-    <div className={className ?? 'relative bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-x-auto'}>
+    <div className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
       {loading && data.length > 0 && (
-        <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-2xl">
+        <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-md">
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <table className="w-full text-sm mobile-card-table">
-        <thead className="bg-[var(--color-accent)]">
+      <table className="w-full text-sm tabular-nums mobile-card-table">
+        <thead className="sticky top-0 z-[1] bg-[var(--color-card)]">
           <tr className={dividerClass}>
             {selectable && (
-              <th className={`${cellPadding} w-10`}>
+              <th className={`${headerCellPadding} w-10`}>
                 <input
                   ref={selectAllRef}
                   type="checkbox"
@@ -283,7 +291,7 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${alignClass} ${cellPadding} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`${alignClass} ${headerCellPadding} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${isSortable ? 'cursor-pointer select-none' : ''}`}
                   aria-sort={isSortable ? (isSorted ? (activeSort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
@@ -318,7 +326,7 @@ export function DataTable<T>({
         <tbody className="divide-y divide-[var(--color-border)]">
           {loading && data.length === 0 && (
             <tr>
-              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} py-8 text-center text-[var(--color-muted-foreground)]`}>
+              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} py-6 text-center text-[var(--color-muted-foreground)]`}>
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
                   Loading...
@@ -328,7 +336,7 @@ export function DataTable<T>({
           )}
           {!loading && sortedData.length === 0 && (
             <tr>
-              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} py-6 text-center text-[var(--color-muted-foreground)]`} aria-live="polite">
+              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} py-6 text-center text-[var(--color-muted-foreground)]`} aria-live="polite">
                 {emptyMessage}
               </td>
             </tr>
@@ -353,7 +361,7 @@ export function DataTable<T>({
                 >
                   {selectable && (
                     <td
-                      className={`${cellPadding} w-10`}
+                      className={`${bodyCellPadding} w-10`}
                       onClick={e => e.stopPropagation()}
                     >
                       <input
@@ -378,14 +386,14 @@ export function DataTable<T>({
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
+                        <td key={col.key} className={`${bodyCellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
 
                     return (
-                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
+                      <td key={col.key} className={`${bodyCellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                         {renderCell(row, col, rowIndex)}
                       </td>
                     )
@@ -393,7 +401,7 @@ export function DataTable<T>({
                 </tr>
                 {errorMessage && (
                   <tr className={dividerClass}>
-                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} pt-0`}>
+                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${bodyCellPadding} pt-0`}>
                       <p id={rowErrorId} role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
                     </td>
                   </tr>
@@ -409,7 +417,7 @@ export function DataTable<T>({
         )}
       </table>
       {pagination && pagination.totalCount > 0 && (
-        <div className={`flex items-center justify-between text-sm ${cellPadding} border-t border-[var(--color-border)]`}>
+        <div className={`flex items-center justify-between text-sm ${bodyCellPadding} border-t border-[var(--color-border)]`}>
           <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
             {Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
@@ -422,7 +430,7 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
               aria-label="Previous page"
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
@@ -430,7 +438,7 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= Math.ceil(pagination.totalCount / pagination.pageSize)}
               aria-label="Next page"
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>

@@ -84,7 +84,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.click(within(card).getByLabelText('High Support'))
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -108,7 +108,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isHighSupport: false }), isLoading: false })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     const checkbox = within(card).getByLabelText('High Support') as HTMLInputElement
     expect(checkbox.checked).toBe(false)
@@ -133,7 +133,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.click(within(card).getByLabelText('High Support'))
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -171,7 +171,7 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
     })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-xl') as HTMLElement
+    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.type(within(card).getByLabelText('Communication Notes'), 'Uses AAC device.')
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -192,7 +192,7 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
 
     expect(screen.getByText('Legacy PRN note.')).toBeInTheDocument()
 
-    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-xl') as HTMLElement
+    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
 
     // The text is still shown (and even labelled, for a11y) while the section is mid-edit, but

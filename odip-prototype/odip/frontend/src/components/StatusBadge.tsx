@@ -25,28 +25,28 @@ const STATUS_COLORS: Record<string, string> = {
   conflict: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 
   // Severity
-  low: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
-  medium: 'bg-[#fef3c7] text-[#92400e]',
+  low: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
+  medium: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   high: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   critical: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 
   // Claims
-  submitted: 'bg-blue-100 text-blue-700',
-  paid: 'bg-[#bff285] text-[#294800]',
-  rejected: 'bg-red-100 text-red-700',
-  partiallypaid: 'bg-amber-100 text-amber-700',
+  submitted: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
+  paid: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+  rejected: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  partiallypaid: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
 
   // QSC
   reportedwithin24h: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  reportedlate: 'bg-[#fef3c7] text-[#92400e]',
+  reportedlate: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   required: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  pending: 'bg-[#fef3c7] text-[#92400e]',
+  pending: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   notrequired: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
 
   // Plan types
-  ndiamanaged: 'bg-blue-100 text-blue-700',
-  planmanaged: 'bg-purple-100 text-purple-700',
-  selfmanaged: 'bg-orange-100 text-orange-700',
+  ndiamanaged: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
+  planmanaged: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
+  selfmanaged: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
 
   // Lifecycle worklists (Inquiries/Onboarding)
   new: 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
@@ -62,7 +62,7 @@ const STATUS_COLORS: Record<string, string> = {
   approvedforelectronicsigning: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
 }
 
-const DEFAULT_COLOR = 'bg-[#fef3c7] text-[#92400e]'
+const DEFAULT_COLOR = 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
 
 export function StatusBadge({ status, label, colorMap, pulse, className }: StatusBadgeProps) {
   const key = status.toLowerCase().replace(/\s+/g, '')

@@ -95,10 +95,10 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
-        className={`bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-6 w-full ${SIZE_MAP[size]} max-h-[90vh] mx-2 overflow-y-auto ${className ?? ''}`}
+        className={`bg-[var(--color-card)] rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 w-full ${SIZE_MAP[size]} max-h-[90vh] mx-2 overflow-y-auto ${className ?? ''}`}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h3 id={titleId} className="text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="p-1 hover:bg-[var(--color-accent)] rounded-lg">
             <X className="w-5 h-5" />
@@ -106,7 +106,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         </div>
         <div id={descriptionId}>{children}</div>
         {footer && (
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex justify-end gap-3 mt-4">
             {footer}
           </div>
         )}

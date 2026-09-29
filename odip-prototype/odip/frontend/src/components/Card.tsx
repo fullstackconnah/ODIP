@@ -10,10 +10,10 @@ export type CardProps = {
 
 export function Card({ title, action, className, compact, children }: CardProps) {
   return (
-    <div className={`bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] ${compact ? 'p-3' : 'p-5'} ${className ?? ''}`}>
+    <div className={`bg-[var(--color-card)] rounded-md border border-[var(--color-border)] ${compact ? 'p-2' : 'p-[var(--card-pad)]'} ${className ?? ''}`}>
       {(title || action) && (
-        <div className={`flex items-center justify-between ${children ? 'mb-4' : ''}`}>
-          {title && <h3 className="font-semibold">{title}</h3>}
+        <div className={`flex items-center justify-between ${children ? 'mb-2' : ''}`}>
+          {title && <h3 className="text-sm font-semibold">{title}</h3>}
           {action}
         </div>
       )}

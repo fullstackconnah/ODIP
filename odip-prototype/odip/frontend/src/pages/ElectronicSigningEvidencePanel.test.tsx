@@ -53,7 +53,7 @@ describe('ElectronicSigningEvidencePanel', () => {
     for (const checkbox of checkboxes) {
       expect(checkbox).not.toBeChecked()
       const row = checkbox.closest('label')
-      expect(row).toHaveClass('min-h-[44px]')
+      expect(row).toHaveClass('min-h-[var(--control-h)]')
     }
   })
 })

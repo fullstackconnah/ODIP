@@ -292,7 +292,7 @@ export function Dropdown({
       id={panelId}
       role="listbox"
       style={panelStyle}
-      className={`bg-white rounded-2xl shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
+      className={`bg-white rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
     >
       {searchable && (
         <div className="p-2">
@@ -330,7 +330,7 @@ export function Dropdown({
               onMouseDown={e => e.preventDefault()}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--color-foreground)] text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
                   ? 'opacity-40 cursor-not-allowed'
                   : focusedIndex === idx
@@ -403,7 +403,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className="w-full flex items-center justify-between h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}
