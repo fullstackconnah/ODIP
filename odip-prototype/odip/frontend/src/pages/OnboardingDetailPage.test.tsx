@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 'react-router-dom'
 import OnboardingDetailPage from './OnboardingDetailPage'
 
 const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant } = vi.hoisted(() => ({
@@ -70,7 +70,7 @@ describe('OnboardingDetailPage', () => {
     renderDetail()
 
     expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
-    expect(screen.getByText('Profile essentials').parentElement).toHaveTextContent('Needs attention')
+    expect(screen.getByText('Participant Profile').parentElement).toHaveTextContent('Needs attention')
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
     expect(screen.getByText("What's still missing")).toBeInTheDocument()
     expect(screen.getByText('Profile requires date of birth.')).toBeInTheDocument()
@@ -79,7 +79,7 @@ describe('OnboardingDetailPage', () => {
   it('gives a Needs-attention profile gate row an Edit profile link', () => {
     renderDetail()
 
-    const profileGate = screen.getByText('Profile essentials').closest('article')!
+    const profileGate = screen.getByText('Participant Profile').closest('article')!
     const editLink = within(profileGate).getByRole('link', { name: 'Edit profile' })
     expect(editLink).toHaveAttribute('href', '/participants/p-1/profile')
   })
@@ -119,5 +119,25 @@ describe('OnboardingDetailPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
     expect(screen.getByText('Read-only access: lifecycle changes are unavailable for this role.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Validate saved profile' })).not.toBeInTheDocument()
+  })
+
+  it('routes the Back control to the Participants hub Onboarding tab on direct deep-link', async () => {
+    // Deep-link entry — no prior history. The Back control must fall back to the hub's
+    // Onboarding tab (a real, current route) rather than the removed /onboarding list screen.
+    const router = createMemoryRouter(
+      [
+        { path: '/participants', element: <div>Hub placeholder</div> },
+        { path: '/onboarding/:id', element: <OnboardingDetailPage /> },
+      ],
+      { initialEntries: ['/onboarding/p-1'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    const back = screen.getByRole('button', { name: /Back to/i })
+    expect(back).toHaveAccessibleName('Back to Onboarding')
+
+    await userEvent.setup().click(back)
+    expect(router.state.location.pathname).toBe('/participants')
+    expect(router.state.location.search).toBe('?tab=onboarding')
   })
 })

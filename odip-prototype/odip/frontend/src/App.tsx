@@ -16,8 +16,6 @@ const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
 // but in App routing the list-level /participants route now resolves to ParticipantsHubPage —
 // the three lifecycle stages share one PageHeader.
 const ParticipantsHubPage = React.lazy(() => import('./pages/ParticipantsHubPage'))
-const InquiriesPage = React.lazy(() => import('./pages/InquiriesPage'))
-const OnboardingPage = React.lazy(() => import('./pages/OnboardingPage'))
 const OnboardingDetailPage = React.lazy(() => import('./pages/OnboardingDetailPage'))
 const InquiryFormPage = React.lazy(() => import('./pages/InquiryFormPage'))
 // PF-10.3 (SPEC-05): the new Intake wizard takes over the create route.
@@ -115,8 +113,8 @@ const router = createBrowserRouter(
         <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
         <Route path="/schedule" element={<PrivateRoute page="schedule"><SchedulePage /></PrivateRoute>} />
         <Route path="/participants" element={<PrivateRoute page="participants"><ParticipantsHubPage /></PrivateRoute>} />
-        <Route path="/inquiries" element={<PrivateRoute page="participants"><InquiriesPage /></PrivateRoute>} />
-        <Route path="/onboarding" element={<PrivateRoute page="participants"><OnboardingPage /></PrivateRoute>} />
+        <Route path="/inquiries" element={<Navigate to="/participants?tab=enquiries" replace />} />
+        <Route path="/onboarding" element={<Navigate to="/participants?tab=onboarding" replace />} />
         <Route path="/onboarding/:id" element={<PrivateRoute page="participants"><OnboardingDetailPage /></PrivateRoute>} />
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/new-inquiry" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><InquiryFormPage /></PrivateRoute>} />

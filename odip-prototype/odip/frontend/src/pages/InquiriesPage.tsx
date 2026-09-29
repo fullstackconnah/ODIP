@@ -31,7 +31,9 @@ export default function InquiriesPage() {
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
- * one PageHeader; the standalone /inquiries route keeps using InquiriesPage above.
+ * one PageHeader. The standalone /inquiries route is now redirected to
+ * /participants?tab=enquiries, so this default page component is only retained for the
+ * dedicated InquiriesPage test that mounts it under its own MemoryRouter.
  *
  * Capture/edit lives on its own routed page at /participants/new-inquiry — see
  * InquiryFormPage. Edit and Start-intake remain row-level actions here.
