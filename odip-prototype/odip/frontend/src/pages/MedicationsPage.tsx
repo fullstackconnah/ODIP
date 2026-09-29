@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ClipboardList, BookOpen, FileClock } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { usePermissions } from '@/lib/permissions'
 import { MarTab, RegisterTab, ReportTab } from './medications'
 
@@ -18,17 +18,18 @@ export default function MedicationsPage() {
         subtitle="Medication administration record and the participant medication register"
       />
 
-      <TabNav
+      <Tabs
         tabs={[
-          { key: 'administration', label: 'Administration', icon: ClipboardList },
-          { key: 'register', label: 'Register', icon: BookOpen },
+          { id: 'administration', label: 'Administration', icon: ClipboardList },
+          { id: 'register', label: 'Register', icon: BookOpen },
           // Hidden for roles the report endpoint itself 403s (server-gated to
           // Admin/Coordinator/SuperAdmin) — otherwise the tab would render a "no
           // administrations found" empty state that's actually a permission denial.
-          ...(canViewAdministrationReport ? [{ key: 'report' as const, label: 'Report', icon: FileClock }] : []),
+          ...(canViewAdministrationReport ? [{ id: 'report' as const, label: 'Report', icon: FileClock }] : []),
         ]}
         active={tab}
         onChange={key => setTab(key as Tab)}
+        ariaLabel="Medications sections"
       />
 
       <div className="animate-fade-in">

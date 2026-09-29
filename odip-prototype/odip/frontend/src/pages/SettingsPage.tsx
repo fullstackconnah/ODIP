@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import { Pencil } from 'lucide-react'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
@@ -143,10 +143,11 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <TabNav
-        tabs={tabs.map(t => ({ key: t.key, label: t.label }))}
+      <Tabs
+        tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
         active={tab}
         onChange={(key) => { setTab(key as typeof tab); if (key !== 'tenants') setTenantDetail(undefined) }}
+        ariaLabel="Settings sections"
       />
 
       {tab === 'templates' && (

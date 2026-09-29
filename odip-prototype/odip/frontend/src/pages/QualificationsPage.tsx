@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStaff, useSettings, useUpdateStaff } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
@@ -230,11 +230,11 @@ export default function QualificationsPage() {
       </div>
 
       {/* Filter tabs */}
-      <TabNav
-        tabs={tabs.map(t => ({ key: t.key, label: t.label }))}
+      <Tabs
+        tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
         active={filterTab}
         onChange={(key) => setFilterTab(key as FilterTab)}
-        className="overflow-x-auto"
+        ariaLabel="Qualification filters"
       />
 
       {/* Empty state */}

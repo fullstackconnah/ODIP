@@ -27,7 +27,7 @@ copying it.
 - [StatusBadge](#statusbadge)
 - [Card](#card) / [StatCard](#statcard)
 - [PageHeader](#pageheader)
-- [TabNav](#tabnav)
+- [Tabs](#tabs)
 - [ActionButtons](#actionbuttons)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
@@ -501,16 +501,34 @@ optional row of filter/toolbar children below it. Props: `title`, `subtitle`, `a
 
 ---
 
-## TabNav
+## Tabs
 
-`TabNav.tsx` — an underlined tab strip. Props: `tabs: { key, label, icon? }[]`, `active`,
-`onChange`, `className`.
+`Tabs.tsx` — the single tab primitive. It absorbed the former `TabNav.tsx` (deleted) so
+every tab surface in the app shares one look and one behaviour set; the billing screen's
+underlined, icon-optional, text-only strip is the reference styling.
 
-> Note for a future pass: this renders plain `<button>`s with manual active-state styling
-> rather than `role="tablist"`/`role="tab"`/`aria-selected` + roving tabindex (the pattern
-> `ToggleGroup` already implements correctly for its own radio-group case). Flagged here,
-> not fixed in this PR — it's an existing-page-owned surface, not a DS-01/UX-01 primitive
-> change.
+Two usage modes:
+
+1. **Inline panels** — each item carries its own `content`:
+   ```tsx
+   <Tabs tabs={[{ id: 'a', label: 'A', content: <PanelA /> }]} active={id} onChange={setId} ariaLabel="Sections" />
+   ```
+2. **External panels** (the default for existing pages) — items are `{ key, label, icon?, badge?, disabled? }`
+   and the parent renders the panel itself. `onChange` receives the tab's `key`:
+   ```tsx
+   <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Sections" />
+   {tab === 'funding' && <FundingSourcesTab />}
+   ```
+
+Accessibility contract: `role="tablist"` / `role="tab"` / `role="tabpanel"`, `aria-selected`,
+`aria-controls` (only when a real panel exists), roving tabindex, ArrowLeft/ArrowRight (wrapping),
+Home/End, and disabled tabs skipped. An `active` value that matches no enabled tab falls back to
+the first enabled tab rather than rendering a strip with nothing selected. Long tab sets
+(e.g. the 11-tab participant detail) wrap and scroll rather than overflowing the page.
+
+> When a test previously did `getByRole('button', { name: <tab> })`, it is now
+> `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a
+> cosmetic one.
 
 ---
 

@@ -11,7 +11,7 @@ import {
 } from '@/api/hooks'
 import type { FundingSourceDto, ServiceBookingListDto, BillableEventDto } from '@/api/types'
 import { PageHeader } from '@/components/PageHeader'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -100,14 +100,15 @@ export default function BillingPage() {
         )}
       />
 
-      <TabNav
+      <Tabs
         tabs={[
-          { key: 'funding', label: 'Funding Sources' },
-          { key: 'bookings', label: 'Service Bookings' },
-          { key: 'events', label: 'Billable Events' },
+          { id: 'funding', label: 'Funding Sources' },
+          { id: 'bookings', label: 'Service Bookings' },
+          { id: 'events', label: 'Billable Events' },
         ]}
         active={tab}
         onChange={key => setTab(key as typeof tab)}
+        ariaLabel="Billing sections"
       />
 
       {tab === 'funding' && <FundingSourcesTab />}

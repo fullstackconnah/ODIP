@@ -62,9 +62,9 @@ const navItems: NavEntry[] = [
     msIcon: 'group',
     children: [
       // The Participants hub at /participants owns the Enquiries, Onboarding and Active stages
-      // behind a single tab strip, so the sidebar surfaces one Participants entry. The matchActive
-      // predicate keeps it highlighted while the user is on the legacy standalone routes too —
-      // we don't want a gap of "no nav item selected" just because they bookmarked /inquiries.
+      // behind a single tab strip, so the sidebar surfaces one Participants entry. Anything
+      // nested under /participants/ (detail, intake, profile, agreement-draft, edit, etc.) and
+      // the standalone /onboarding/:id checklist still light up this nav item.
       {
         to: '/participants',
         icon: Users,
@@ -74,9 +74,6 @@ const navItems: NavEntry[] = [
         matchActive: (pathname) =>
           pathname === '/participants'
           || pathname.startsWith('/participants/')
-          || pathname === '/inquiries'
-          || pathname.startsWith('/inquiries/')
-          || pathname === '/onboarding'
           || pathname.startsWith('/onboarding/'),
       },
       { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
@@ -456,14 +453,12 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           </Link>
         )}
         {permissions.canAccessPage('participants') && (
-          // Match the desktop Participants entry's matchActive predicate so the mobile bottom
-          // nav stays highlighted when the user is on /inquiries or /onboarding too — the hub
-          // owns all three lifecycle stages.
+          // Match the desktop Participants entry's matchActive predicate: anything under
+          // /participants/* plus the standalone /onboarding/:id checklist still light up the
+          // mobile nav item, since the hub owns all three lifecycle stages.
           <NavLink to="/participants" end className={({ isActive }) => `flex flex-col items-center gap-1 ${
             isActive
-            || location.pathname === '/inquiries'
-            || location.pathname.startsWith('/inquiries/')
-            || location.pathname === '/onboarding'
+            || location.pathname.startsWith('/participants/')
             || location.pathname.startsWith('/onboarding/')
               ? 'text-[#396200]'
               : 'text-[#515f74]'

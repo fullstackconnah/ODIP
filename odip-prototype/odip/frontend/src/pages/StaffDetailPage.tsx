@@ -1,7 +1,7 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useStaffOverview, useSettings } from '@/api/hooks'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -130,16 +130,17 @@ export default function StaffDetailPage() {
         </div>
       </div>
 
-      <TabNav
+      <Tabs
         tabs={[
-          { key: 'availability', label: 'Availability', icon: CalendarClock },
-          { key: 'credentials', label: 'Credentials', icon: ShieldCheck },
-          { key: 'upcoming', label: 'Upcoming', icon: ClipboardList },
-          { key: 'incidents', label: 'Incidents', icon: AlertTriangle },
-          { key: 'completions', label: 'Completions', icon: ClipboardCheck },
+          { id: 'availability', label: 'Availability', icon: CalendarClock },
+          { id: 'credentials', label: 'Credentials', icon: ShieldCheck },
+          { id: 'upcoming', label: 'Upcoming', icon: ClipboardList },
+          { id: 'incidents', label: 'Incidents', icon: AlertTriangle },
+          { id: 'completions', label: 'Completions', icon: ClipboardCheck },
         ]}
         active={tab}
         onChange={(key) => setTab(key as Tab)}
+        ariaLabel="Staff detail sections"
       />
 
       {tab === 'availability' && (

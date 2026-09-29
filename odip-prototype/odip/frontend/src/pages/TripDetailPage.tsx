@@ -5,6 +5,7 @@ import { formatDateAu, getStatusColor } from '@/lib/utils'
 import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
+import { Tabs, type TabItem } from '@/components/Tabs'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
 
 type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
@@ -55,17 +56,17 @@ export default function TripDetailPage() {
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading trip...</div>
   if (!trip) return <div className="text-center py-12">Trip not found</div>
 
-  const tabs: { key: Tab; label: string; icon: any; count?: number }[] = [
-    { key: 'overview', label: 'Overview', icon: ClipboardList },
-    { key: 'bookings', label: 'Bookings', icon: Users, count: bookings.length },
-    { key: 'accommodation', label: 'Accommodation', icon: Building2, count: accommodation.length },
-    { key: 'vehicles', label: 'Vehicles', icon: Truck, count: vehicles.length },
-    { key: 'staff', label: 'Staff', icon: UserCog, count: staff.length },
-    { key: 'tasks', label: 'Tasks', icon: ListChecks, count: tasks.length },
-    { key: 'activities', label: 'Activities', icon: Calendar, count: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
-    { key: 'claims', label: 'Claims', icon: FileText, count: claims.length },
-    ...(canAccessIncidents ? [{ key: 'incidents' as Tab, label: 'Incidents', icon: ShieldAlert, count: incidents.length }] : []),
-    ...(isAdmin ? [{ key: 'history' as Tab, label: 'History', icon: ClockIcon }] : []),
+  const tabs: TabItem[] = [
+    { id: 'overview', label: 'Overview', icon: ClipboardList },
+    { id: 'bookings', label: 'Bookings', icon: Users, badge: bookings.length },
+    { id: 'accommodation', label: 'Accommodation', icon: Building2, badge: accommodation.length },
+    { id: 'vehicles', label: 'Vehicles', icon: Truck, badge: vehicles.length },
+    { id: 'staff', label: 'Staff', icon: UserCog, badge: staff.length },
+    { id: 'tasks', label: 'Tasks', icon: ListChecks, badge: tasks.length },
+    { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
+    { id: 'claims', label: 'Claims', icon: FileText, badge: claims.length },
+    ...(canAccessIncidents ? [{ id: 'incidents' as string, label: 'Incidents', icon: ShieldAlert, badge: incidents.length }] : []),
+    ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
 
   return (
@@ -182,46 +183,12 @@ export default function TripDetailPage() {
 
       {/* Tabs */}
       <div className="-mx-4 md:mx-0 px-4 md:px-0">
-        <div
-          role="tablist"
-          aria-label="Trip detail sections"
-          className="flex gap-1 overflow-x-auto pb-1 scrollbar-none"
-          onKeyDown={e => {
-            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-            e.preventDefault()
-            const currentIndex = tabs.findIndex(t => t.key === activeTab)
-            const delta = e.key === 'ArrowRight' ? 1 : -1
-            const nextIndex = (currentIndex + delta + tabs.length) % tabs.length
-            const nextTab = tabs[nextIndex]
-            setActiveTab(nextTab.key)
-            document.getElementById(`trip-tab-${nextTab.key}`)?.focus()
-          }}
-        >
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              id={`trip-tab-${tab.key}`}
-              role="tab"
-              aria-selected={activeTab === tab.key}
-              aria-controls={`trip-tabpanel-${tab.key}`}
-              tabIndex={activeTab === tab.key ? 0 : -1}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
-                activeTab === tab.key
-                  ? 'bg-[var(--color-primary)] text-white shadow-md shadow-[var(--color-primary)]/20'
-                  : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container)]'
-              }`}>
-              <tab.icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.label.slice(0, 5)}{tab.label.length > 5 ? '.' : ''}</span>
-              {tab.count !== undefined && tab.count > 0 && (
-                <span className={`ml-0.5 text-[10px] md:text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]'}`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          tabs={tabs.map(t => ({ ...t, panelId: `trip-tabpanel-${t.id}` }))}
+          active={activeTab}
+          onChange={key => setActiveTab(key as Tab)}
+          ariaLabel="Trip detail sections"
+        />
       </div>
 
       {/* Tab content */}

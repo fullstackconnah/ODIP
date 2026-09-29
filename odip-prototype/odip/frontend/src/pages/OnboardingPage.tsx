@@ -52,7 +52,9 @@ export default function OnboardingPage() {
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
- * one PageHeader; the standalone /onboarding route keeps using OnboardingPage above.
+ * one PageHeader. The standalone /onboarding route is now redirected to
+ * /participants?tab=onboarding, so this default page component is only retained for the
+ * dedicated OnboardingPage test that mounts it under its own MemoryRouter.
  */
 export function OnboardingTable() {
   const screen = useOnboardingScreen()
@@ -138,7 +140,7 @@ function useOnboardingScreen() {
           icon={ClipboardCheck}
           title="No participants in onboarding"
           description="Participants appear here once their intake is completed. Capture and complete an enquiry's intake to start their onboarding checklist."
-          action={canAccessPage('participants') ? { label: 'View enquiries', to: '/inquiries' } : undefined}
+          action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
         <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." />

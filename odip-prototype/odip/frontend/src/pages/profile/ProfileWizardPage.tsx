@@ -58,6 +58,7 @@ import { MobilityFunctionalStep } from './steps/MobilityFunctionalStep'
 import { BehaviourCognitionStep } from './steps/BehaviourCognitionStep'
 import { DailyLivingStep } from './steps/DailyLivingStep'
 import { CommunityAccessStep } from './steps/CommunityAccessStep'
+import { Card } from '@/components/Card'
 
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
@@ -434,16 +435,18 @@ export default function ProfileWizardPage() {
         <form
           onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)}
           noValidate
-          // max-w-3xl keeps the form's input measure readable on wide monitors while the rail
-          // (now in the WizardShell sidebar) uses the rest of the row. Scroll-margin utilities
-          // were on the original outer wrapper for the fixed bottom nav; we keep them here so
-          // they still apply to every form control inside this inner wrapper.
-          className="max-w-3xl [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44"
+          // The form now fills the full content-column width (no max-w cap) so the rail's
+          // sidebar and the form's step panel share the row; the step's heading + body sit
+          // inside a <Card> below to read as a distinct panel. Scroll-margin utilities were
+          // on the original outer wrapper for the fixed bottom nav; they stay on this <form>
+          // so they still apply to every form control inside it.
+          className="[&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44 space-y-6"
         >
-          <WizardStepHeading
-            stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-            label={isReviewStep ? 'Review' : currentStep.label}
-          />
+          <Card className="space-y-6">
+            <WizardStepHeading
+              stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+              label={isReviewStep ? 'Review' : currentStep.label}
+            />
         {!isReviewStep && currentStep.key === 'keyIdentifiers' && (
           <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} />
         )}
@@ -469,6 +472,7 @@ export default function ProfileWizardPage() {
         {isReviewStep && (
           <WizardReviewStep groups={reviewBuilder(watchedValues as unknown as ParticipantFormData, WIZARD_STEPS)} steps={WIZARD_STEPS} onEdit={wizard.goToStep} />
         )}
+          </Card>
 
         <WizardNavFooter
           showBack={wizard.stepIndex > 0}
