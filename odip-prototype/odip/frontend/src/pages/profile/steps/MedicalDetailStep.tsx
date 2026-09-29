@@ -8,6 +8,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister, FieldErrors, UseFieldArrayReturn } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { CompactGridRow } from '@/components/wizard'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -93,9 +94,7 @@ export function MedicalDetailStep({ control, register, errors, participant, heal
         </Card>
 
         <Card title="Allergies" className="space-y-4">
-          <FormField label="Allergies Detail">
-            <textarea id="allergiesDetail" rows={2} {...register('allergiesDetail')} />
-          </FormField>
+          <TextAreaField label="Allergies Detail" id="allergiesDetail" rows={2} {...register('allergiesDetail')} />
           <FormField label="Anaphylaxis Risk">
             <Controller
               control={control}
@@ -107,9 +106,7 @@ export function MedicalDetailStep({ control, register, errors, participant, heal
               )}
             />
           </FormField>
-          <FormField label="Allergy Management Notes">
-            <textarea id="allergyManagementNotes" rows={2} {...register('allergyManagementNotes')} />
-          </FormField>
+          <TextAreaField label="Allergy Management Notes" id="allergyManagementNotes" rows={2} {...register('allergyManagementNotes')} />
         </Card>
       </div>
 

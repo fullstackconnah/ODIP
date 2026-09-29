@@ -11,6 +11,7 @@ import { Controller } from 'react-hook-form'
 import type { Control, UseFormRegister, UseFieldArrayReturn } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { CompactGridRow } from '@/components/wizard'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUES, CHECKLIST_ITEM_VALUE_LABELS, COMMUNITY_MOBILITY_RISK_ITEM_TYPES } from '@/api/types/enums'
@@ -30,19 +31,19 @@ export function CommunityAccessStep({ control, register, checklistFieldArray, ri
     <div className="space-y-6">
       <div className="grid md:grid-cols-2 gap-6">
         <Card title="About Me & Behaviours of Concern" className="space-y-4">
-          <FormField label="Signs I Am Happy and Settled"><textarea id="signsHappyAndSettled" rows={2} {...register('signsHappyAndSettled')} /></FormField>
-          <FormField label="What Helps Me Calm Down"><textarea id="whatHelpsMeCalmDown" rows={2} {...register('whatHelpsMeCalmDown')} /></FormField>
-          <FormField label="BOC — Triggers"><textarea id="bocTriggers" rows={2} {...register('bocTriggers')} /></FormField>
-          <FormField label="BOC — Early Warning Signs"><textarea id="bocEarlyWarningSigns" rows={2} {...register('bocEarlyWarningSigns')} /></FormField>
-          <FormField label="BOC — De-Escalation Strategies"><textarea id="bocDeEscalationStrategies" rows={2} {...register('bocDeEscalationStrategies')} /></FormField>
-          <FormField label="BOC — What Not To Do"><textarea id="bocWhatNotToDo" rows={2} {...register('bocWhatNotToDo')} /></FormField>
+          <TextAreaField label="Signs I Am Happy and Settled" id="signsHappyAndSettled" rows={2} {...register('signsHappyAndSettled')} />
+          <TextAreaField label="What Helps Me Calm Down" id="whatHelpsMeCalmDown" rows={2} {...register('whatHelpsMeCalmDown')} />
+          <TextAreaField label="BOC — Triggers" id="bocTriggers" rows={2} {...register('bocTriggers')} />
+          <TextAreaField label="BOC — Early Warning Signs" id="bocEarlyWarningSigns" rows={2} {...register('bocEarlyWarningSigns')} />
+          <TextAreaField label="BOC — De-Escalation Strategies" id="bocDeEscalationStrategies" rows={2} {...register('bocDeEscalationStrategies')} />
+          <TextAreaField label="BOC — What Not To Do" id="bocWhatNotToDo" rows={2} {...register('bocWhatNotToDo')} />
         </Card>
 
         <Card title="What My Supports Look Like" className="space-y-4">
-          <FormField label="Morning"><textarea id="supportsLookLikeMorning" rows={2} {...register('supportsLookLikeMorning')} /></FormField>
-          <FormField label="Day"><textarea id="supportsLookLikeDay" rows={2} {...register('supportsLookLikeDay')} /></FormField>
-          <FormField label="Afternoon / Evening"><textarea id="supportsLookLikeAfternoonEvening" rows={2} {...register('supportsLookLikeAfternoonEvening')} /></FormField>
-          <FormField label="Overnight"><textarea id="supportsLookLikeOvernight" rows={2} {...register('supportsLookLikeOvernight')} /></FormField>
+          <TextAreaField label="Morning" id="supportsLookLikeMorning" rows={2} {...register('supportsLookLikeMorning')} />
+          <TextAreaField label="Day" id="supportsLookLikeDay" rows={2} {...register('supportsLookLikeDay')} />
+          <TextAreaField label="Afternoon / Evening" id="supportsLookLikeAfternoonEvening" rows={2} {...register('supportsLookLikeAfternoonEvening')} />
+          <TextAreaField label="Overnight" id="supportsLookLikeOvernight" rows={2} {...register('supportsLookLikeOvernight')} />
         </Card>
       </div>
 

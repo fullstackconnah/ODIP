@@ -9,6 +9,7 @@ import type { Control, FieldErrors, UseFormRegister, UseFieldArrayReturn, UseFor
 import { Controller } from 'react-hook-form'
 import { Plus, Trash2 } from 'lucide-react'
 import { FormField } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -159,22 +160,14 @@ export function ContactsStep({
                     </p>
                   ))}
                   {rowVisibleFields.includes('registeredProviderFlag') && (
-                    <FormField
+                    <CheckboxField
                       label="Registered NDIS provider"
-                      layout="checkbox"
                       className="mb-0"
                       hint={planType === 'AgencyManaged' ? 'Required for agency-managed participants' : undefined}
-                    >
-                      <input
-                        type="checkbox"
-                        {...register(`contactRoles.${index}.registeredProviderFlag`)}
-                        className="w-4 h-4 rounded border-[var(--color-border)]"
-                      />
-                    </FormField>
+                      {...register(`contactRoles.${index}.registeredProviderFlag`)}
+                    />
                   )}
-                  <FormField label="Primary" layout="checkbox" className="mb-0">
-                    <input type="checkbox" {...register(`contactRoles.${index}.isPrimary`)} className="w-4 h-4 rounded border-[var(--color-border)]" />
-                  </FormField>
+                  <CheckboxField label="Primary" className="mb-0" {...register(`contactRoles.${index}.isPrimary`)} />
                 </div>
               )
             })}

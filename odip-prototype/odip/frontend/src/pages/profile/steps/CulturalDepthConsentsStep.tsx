@@ -13,6 +13,7 @@ import type { Control, UseFormRegister, UseFieldArrayReturn } from 'react-hook-f
 import { Controller, useWatch } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { CompactGridRow } from '@/components/wizard'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -60,12 +61,8 @@ export function CulturalDepthConsentsStep({ control, register, participant, cons
         </Card>
 
         <Card title="Cultural Depth" className="space-y-4">
-          <FormField label="Personal Interests">
-            <textarea id="personalInterests" rows={3} {...register('personalInterests')} />
-          </FormField>
-          <FormField label="Choice & Control Notes">
-            <textarea id="choiceControlNotes" rows={3} {...register('choiceControlNotes')} />
-          </FormField>
+          <TextAreaField label="Personal Interests" id="personalInterests" rows={3} {...register('personalInterests')} />
+          <TextAreaField label="Choice & Control Notes" id="choiceControlNotes" rows={3} {...register('choiceControlNotes')} />
         </Card>
       </div>
 

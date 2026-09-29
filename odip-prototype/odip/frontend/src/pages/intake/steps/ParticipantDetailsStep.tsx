@@ -15,6 +15,8 @@ import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
 import { Controller } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import { AU_STATES, LIVING_ARRANGEMENTS } from '@/api/types/enums'
 import { LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
@@ -117,20 +119,14 @@ export function ParticipantDetailsStep({ control, register, errors, livingArrang
             <FormField label="Relationship to Participant">
               <input id="mainSupportPersonRelationship" {...register('mainSupportPersonRelationship')} placeholder="e.g. Mother" />
             </FormField>
-            <FormField label="Others Living in the Accommodation">
-              <textarea id="othersLivingInAccommodation" {...register('othersLivingInAccommodation')} rows={2} placeholder="Who else lives there..." />
-            </FormField>
-            <FormField label="Residential Information">
-              <textarea id="residentialInfo" {...register('residentialInfo')} rows={2} placeholder="Home layout, accessibility..." />
-            </FormField>
+            <TextAreaField label="Others Living in the Accommodation" id="othersLivingInAccommodation" {...register('othersLivingInAccommodation')} rows={2} placeholder="Who else lives there..." />
+            <TextAreaField label="Residential Information" id="residentialInfo" {...register('residentialInfo')} rows={2} placeholder="Home layout, accessibility..." />
           </>
         )}
 
         {livingArrangementValue === 'Independent' && (
           <>
-            <FormField label="Lives With Others" layout="checkbox">
-              <input id="livesWithOthers" type="checkbox" {...register('livesWithOthers')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-            </FormField>
+            <CheckboxField label="Lives With Others" id="livesWithOthers" {...register('livesWithOthers')} />
             <FormField label="Who They Live With" required error={errors.whoLivesWith?.message}>
               <input id="whoLivesWith" {...register('whoLivesWith')} placeholder="e.g. Housemates" />
             </FormField>
@@ -155,9 +151,7 @@ export function ParticipantDetailsStep({ control, register, errors, livingArrang
         )}
 
         {!!livingArrangementValue && (
-          <FormField label="Living Arrangement Notes">
-            <textarea id="livingArrangementNotes" {...register('livingArrangementNotes')} rows={2} placeholder="Any additional notes..." />
-          </FormField>
+          <TextAreaField label="Living Arrangement Notes" id="livingArrangementNotes" {...register('livingArrangementNotes')} rows={2} placeholder="Any additional notes..." />
         )}
       </Card>
     </div>

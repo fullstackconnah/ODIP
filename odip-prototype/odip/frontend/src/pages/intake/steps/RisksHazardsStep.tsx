@@ -7,6 +7,7 @@
 import type { Control, FieldErrors, UseFormRegister, UseFieldArrayReturn } from 'react-hook-form'
 import { Plus, Trash2 } from 'lucide-react'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
 import { Controller } from 'react-hook-form'
@@ -24,13 +25,9 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card title="Risks & Hazards" className="space-y-4">
-        <FormField label="Behaviour Risk Summary">
-          <textarea id="behaviourRiskSummary" {...register('behaviourRiskSummary')} rows={3} placeholder="Behaviour risk notes..." />
-        </FormField>
+        <TextAreaField label="Behaviour Risk Summary" id="behaviourRiskSummary" {...register('behaviourRiskSummary')} rows={3} placeholder="Behaviour risk notes..." />
 
-        <FormField label="General Notes">
-          <textarea id="notes" {...register('notes')} rows={3} placeholder="Any additional notes..." />
-        </FormField>
+        <TextAreaField label="General Notes" id="notes" {...register('notes')} rows={3} placeholder="Any additional notes..." />
       </Card>
 
       <Card title="Risk Entries" className="space-y-3">
@@ -69,22 +66,8 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <FormField label="Description" required error={errors.riskEntries?.[index]?.description?.message} className="mb-0">
-                  <textarea
-                    id={`riskEntries.${index}.description`}
-                    {...register(`riskEntries.${index}.description`)}
-                    rows={2}
-                    placeholder="Describe the risk..."
-                  />
-                </FormField>
-                <FormField label="Mitigation Notes" className="mb-0">
-                  <textarea
-                    id={`riskEntries.${index}.mitigationNotes`}
-                    {...register(`riskEntries.${index}.mitigationNotes`)}
-                    rows={2}
-                    placeholder="How this risk is mitigated (optional)..."
-                  />
-                </FormField>
+                <TextAreaField label="Description" required error={errors.riskEntries?.[index]?.description?.message} className="mb-0" id={`riskEntries.${index}.description`} {...register(`riskEntries.${index}.description`)} rows={2} placeholder="Describe the risk..." />
+                <TextAreaField label="Mitigation Notes" className="mb-0" id={`riskEntries.${index}.mitigationNotes`} {...register(`riskEntries.${index}.mitigationNotes`)} rows={2} placeholder="How this risk is mitigated (optional)..." />
               </div>
             ))}
           </div>
