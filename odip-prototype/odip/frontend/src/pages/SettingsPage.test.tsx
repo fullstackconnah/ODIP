@@ -80,7 +80,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     const user = userEvent.setup()
     const { router } = renderSettingsPage()
 
-    await user.click(screen.getByRole('button', { name: /qualification warnings/i }))
+    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
     await user.click(screen.getByRole('button', { name: /30 days/i }))
     await user.click(await screen.findByRole('option', { name: /60 days/i }))
 
@@ -93,7 +93,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     const user = userEvent.setup()
     const { router } = renderSettingsPage()
 
-    await user.click(screen.getByRole('button', { name: /qualification warnings/i }))
+    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
     await act(async () => { router.navigate('/elsewhere') })
 
     expect(await screen.findByText(/elsewhere page/i)).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     const user = userEvent.setup()
     const { router } = renderSettingsPage()
 
-    await user.click(screen.getByRole('button', { name: /provider settings/i }))
+    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
     // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
     // relative to its label text instead of by accessible label.
     const abnInput = screen.getByText('ABN').nextElementSibling as HTMLInputElement
@@ -121,8 +121,8 @@ describe('SettingsPage — Notifications tabs', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPage()
 
-    expect(screen.getByRole('button', { name: /^notifications$/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /failed sends/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^notifications$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /failed sends/i })).not.toBeInTheDocument()
   })
 
   it('shows the Failed Sends tab when canManageNotifications is true', async () => {
@@ -130,7 +130,7 @@ describe('SettingsPage — Notifications tabs', () => {
     const user = userEvent.setup()
     renderSettingsPage()
 
-    const failedSendsTab = screen.getByRole('button', { name: /failed sends/i })
+    const failedSendsTab = screen.getByRole('tab', { name: /failed sends/i })
     expect(failedSendsTab).toBeInTheDocument()
 
     await user.click(failedSendsTab)
@@ -141,7 +141,7 @@ describe('SettingsPage — Notifications tabs', () => {
     const user = userEvent.setup()
     renderSettingsPage()
 
-    await user.click(screen.getByRole('button', { name: /^notifications$/i }))
+    await user.click(screen.getByRole('tab', { name: /^notifications$/i }))
     expect(screen.getByText(/notification preferences/i)).toBeInTheDocument()
   })
 })

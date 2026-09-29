@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -171,7 +171,7 @@ export default function IncidentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   // Addressable via ?view=flagged-notes (e.g. a link in from the dashboard/tasks obligation
   // queue) — read once on mount, same as qscOverdueOnly below. Default (no param) is unchanged:
-  // the Incidents tab. Only sets the initial tab — switching tabs afterwards via TabNav doesn't
+  // the Incidents tab. Only sets the initial tab — switching tabs afterwards via Tabs doesn't
   // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
   const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
   const { data: flaggedNotes = [], isLoading: flaggedNotesLoading } = useFlaggedShiftNotes(
@@ -278,13 +278,14 @@ export default function IncidentsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {canViewFlaggedNotes && (
-        <TabNav
+        <Tabs
           tabs={[
-            { key: 'incidents', label: 'Incidents' },
-            { key: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
+            { id: 'incidents', label: 'Incidents' },
+            { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
           ]}
           active={tab}
           onChange={key => setTab(key as IncidentsTab)}
+          ariaLabel="Incidents sections"
         />
       )}
 

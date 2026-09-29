@@ -7,7 +7,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { LeaveRequestFormModal } from './components/LeaveRequestFormModal'
 import { UnavailabilityFormModal } from './components/UnavailabilityFormModal'
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types'
@@ -142,10 +142,11 @@ export default function PortalLeavePage() {
         </div>
       )}
 
-      <TabNav
-        tabs={[{ key: 'leave', label: 'Leave' }, { key: 'unavailability', label: 'Regular unavailability' }]}
+      <Tabs
+        tabs={[{ id: 'leave', label: 'Leave' }, { id: 'unavailability', label: 'Regular unavailability' }]}
         active={tab}
         onChange={key => setTab(key as 'leave' | 'unavailability')}
+        ariaLabel="Portal leave sections"
       />
 
       {isLoading ? (

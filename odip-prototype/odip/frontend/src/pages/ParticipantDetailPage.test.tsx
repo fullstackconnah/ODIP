@@ -663,7 +663,7 @@ describe('ParticipantDetailPage — PP-39 History tab permissions', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
 
-    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument()
   })
 
   it('shows the History tab for an Admin role', () => {
@@ -671,7 +671,7 @@ describe('ParticipantDetailPage — PP-39 History tab permissions', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
 
-    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument()
   })
 
   it('hides the History tab for a SupportWorker role', () => {
@@ -692,7 +692,7 @@ describe('ParticipantDetailPage — Claims tab', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'claims')
 
-    expect(screen.getByRole('button', { name: 'Claims' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Claims' })).toBeInTheDocument()
     expect(screen.getByTestId('claims-tab')).toBeInTheDocument()
   })
 
@@ -717,7 +717,7 @@ describe('ParticipantDetailPage — Rostering tab', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'rostering')
 
-    expect(screen.getByRole('button', { name: 'Rostering' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Rostering' })).toBeInTheDocument()
     expect(screen.getByTestId('rostering-tab')).toBeInTheDocument()
   })
 
