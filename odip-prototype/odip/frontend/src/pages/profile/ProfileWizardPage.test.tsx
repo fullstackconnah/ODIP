@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -7,6 +7,7 @@ import ProfileWizardPage from './ProfileWizardPage'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
 import { BehaviourCognitionStep } from './steps/BehaviourCognitionStep'
 import { fieldsForEntry, sharedFieldsDisplayedOnProfile } from '@/lib/documentMapping'
+import { __testHooks, usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import {
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
@@ -55,6 +56,26 @@ function renderProfilePage(participant = makeParticipant()) {
     { initialEntries: ['/participants/participant-1/profile'] },
   )
   return render(<RouterProvider router={router} />)
+}
+
+/** Like renderProfilePage but mounts the back-navigation tracker so the history-aware
+ *  back-control tests see a recorded previous path. */
+function renderProfilePageWithTracker(participant = makeParticipant()) {
+  __testHooks.reset()
+  mockUseParticipant.mockReturnValue({ data: participant, isLoading: false })
+  const router = createMemoryRouter(
+    [
+      { path: '/participants/:id/profile', element: <><Tracker /><ProfileWizardPage /></> },
+      { path: '/participants/:id', element: <div>Participant detail</div> },
+    ],
+    { initialEntries: ['/participants/participant-1/profile'] },
+  )
+  return render(<RouterProvider router={router} />)
+}
+
+function Tracker(): null {
+  usePreviousAppPathTracker()
+  return null
 }
 
 function stepNav() {
@@ -164,8 +185,8 @@ describe('ProfileWizardPage — PP-42 unsaved changes warning', () => {
     renderProfilePage()
     await expectStep(/key identifiers/i)
 
-    const backLink = document.querySelector('a[href="/participants/participant-1"]') as HTMLAnchorElement
-    expect(backLink).toBeTruthy()
+    const backLink = screen.getByTestId('profile-header-back') as HTMLButtonElement
+    expect(backLink).toBeInTheDocument()
 
     // Clean form: navigating away triggers no warning.
     await user.click(backLink)
@@ -180,7 +201,7 @@ describe('ProfileWizardPage — PP-42 unsaved changes warning', () => {
 
     await user.type(screen.getByLabelText(/medicare number/i), '9999999999')
 
-    const backLink = document.querySelector('a[href="/participants/participant-1"]') as HTMLAnchorElement
+    const backLink = screen.getByTestId('profile-header-back') as HTMLButtonElement
     await user.click(backLink)
 
     const dialog = await screen.findByRole('alertdialog')
@@ -478,5 +499,79 @@ describe('KeyIdentifiersStep / BehaviourCognitionStep — hiddenFields prop', ()
 
     render(<BehaviourCognitionHarness hiddenFields={new Set(['behaviourRiskRating'])} />)
     expect(screen.queryByLabelText(/behaviour risk rating/i)).not.toBeInTheDocument()
+  })
+})
+
+// CORE-01 + CORE-02 acceptance: rail sits in a WizardShell aside beside the form, and the page-header
+// back control is history-aware (uses real in-app history when available, fallback otherwise).
+describe('ProfileWizardPage — wizard shell + history-aware back', () => {
+  it('renders the WizardShell aside landmark containing the step rail and the form alongside it', async () => {
+    renderProfilePage()
+    await expectStep(/key identifiers/i)
+    const aside = screen.getByRole('complementary', { name: /wizard steps/i })
+    expect(aside).toBeInTheDocument()
+    expect(within(aside).getByRole('navigation', { name: /intake wizard steps/i })).toBeInTheDocument()
+    // The form still renders inside the same shell as the rail.
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument()
+  })
+
+  it('falls back to /participants/:id when arriving at the profile wizard via a deep link (no prior path)', async () => {
+    const user = userEvent.setup()
+    renderProfilePageWithTracker()
+    const back = screen.getByTestId('profile-header-back')
+    expect(back).toBeInTheDocument()
+    await user.click(back)
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+  })
+
+  it('returns to the previous in-app screen when the user arrived from one (e.g. onboarding → Edit profile)', async () => {
+    const user = userEvent.setup()
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/onboarding/participant-1')
+    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/participants/:id/profile',
+          element: <><Tracker /><ProfileWizardPage /></>,
+        },
+        { path: '/onboarding/:id', element: <div>Onboarding screen</div> },
+      ],
+      { initialEntries: ['/participants/participant-1/profile'] },
+    )
+    render(<RouterProvider router={router} />)
+    const back = await screen.findByTestId('profile-header-back')
+    await user.click(back)
+    expect(await screen.findByText('Onboarding screen')).toBeInTheDocument()
+  })
+
+  it('the back destination matches the recorded previous path, not the hardcoded /participants/:id fallback', async () => {
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/onboarding/participant-1')
+    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    // No /participants/:id route. If the back control hardcoded the fallback, the click would
+    // land on a "no routes matched" warning — the absence of the /participants/:id detail marker
+    // is the proof that the back target was the recorded previous path.
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/participants/:id/profile',
+          element: <><Tracker /><ProfileWizardPage /></>,
+        },
+        { path: '/onboarding/:id', element: <div>Onboarding screen</div> },
+        { path: '/participants/:id', element: <div>Participant detail</div> },
+      ],
+      { initialEntries: ['/participants/participant-1/profile'] },
+    )
+    render(<RouterProvider router={router} />)
+    const back = screen.getByTestId('profile-header-back')
+    expect(back).toBeInTheDocument()
+    fireEvent.click(back)
+    // The recorded previous path wins over the hardcoded /participants/:id fallback: the
+    // onboarding screen renders and the fallback destination does not.
+    expect(await screen.findByText('Onboarding screen')).toBeInTheDocument()
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
   })
 })

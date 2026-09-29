@@ -31,7 +31,7 @@
  * (fetched via their own nested-CRUD endpoints) rather than re-editable here, so nothing already
  * recorded is lost or silently resubmitted.
  */
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -41,9 +41,11 @@ import {
   useParticipantContactRoles, useParticipantRiskEntries,
 } from '@/api/hooks'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, WizardShell,
+  REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { Callout } from '@/components/Callout'
 import {
   type ParticipantFormData, intakeParticipantResolver, INTAKE_STEP_SCHEMAS_BY_KEY,
@@ -409,17 +411,26 @@ export default function IntakeWizardPage() {
   // PF-10.5 edit mode: wait for the existing row before rendering the form, same guard
   // ProfileWizardPage.tsx uses — resetting a still-loading `undefined` participant would flash the
   // blank create-mode defaults, then jump once the fetch resolves.
+  const fallbackBack = isEditMode ? `/participants/${id}` : '/participants'
+  const back = useBackTarget(fallbackBack)
+
   if (isEditMode && (participantLoading || !participant)) {
     return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full max-w-5xl mx-auto space-y-6 [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
-        <Link to={isEditMode ? `/participants/${id}` : '/participants'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+        <button
+          type="button"
+          onClick={back.onBack}
+          data-testid="intake-header-back"
+          aria-label={back.ariaLabel}
+          className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
-        </Link>
+        </button>
         <h1 className="text-xl md:text-2xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
       </div>
 
@@ -434,18 +445,30 @@ export default function IntakeWizardPage() {
         </Callout>
       )}
 
-      <WizardStepRail
-        steps={WIZARD_STEPS_FOR_RAIL}
-        visitedSteps={wizard.visitedSteps}
-        currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-        onSelect={wizard.goToStep}
-      />
-
-      <form onSubmit={handleSubmit(onSubmit, wizard.handleInvalidSubmit)} noValidate>
-        <WizardStepHeading
-          stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-          label={isReviewStep ? 'Review' : currentStep.label}
-        />
+      <WizardShell
+        rail={
+          <WizardStepRail
+            steps={WIZARD_STEPS_FOR_RAIL}
+            visitedSteps={wizard.visitedSteps}
+            currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+            onSelect={wizard.goToStep}
+          />
+        }
+      >
+        <form
+          onSubmit={handleSubmit(onSubmit, wizard.handleInvalidSubmit)}
+          noValidate
+          // max-w-3xl keeps the form's input measure readable on wide monitors while the rail
+          // (now in the WizardShell sidebar) uses the rest of the row. The scroll-margin
+          // utilities stay here — they were originally on the outer wrapper because of the
+          // fixed bottom nav, and they continue to apply to every form control inside this
+          // inner wrapper.
+          className="max-w-3xl [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44"
+        >
+          <WizardStepHeading
+            stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+            label={isReviewStep ? 'Review' : currentStep.label}
+          />
         {!isReviewStep && currentStep.key === 'participantDetails' && (
           <ParticipantDetailsStep control={control} register={register} errors={errors} livingArrangementValue={livingArrangementValue} />
         )}
@@ -536,7 +559,8 @@ export default function IntakeWizardPage() {
           submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete Intake'}
           isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />
-      </form>
+        </form>
+      </WizardShell>
     </div>
   )
 }

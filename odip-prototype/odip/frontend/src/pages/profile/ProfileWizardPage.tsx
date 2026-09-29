@@ -26,16 +26,18 @@
  * support for it exists yet on `main` (PF-10.5 hasn't landed) — flipping `IsDraft` via the existing
  * full-PUT path is the one part of PF-10.4's acceptance criteria achievable today.
  */
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useParticipant, usePatchParticipant, useUpdateParticipant, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
+  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, WizardShell,
+  REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import {
   type ParticipantFormData, PROFILE_STEP_SCHEMAS_BY_KEY, PROFILE_CONDITIONAL_SECTIONS,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -392,15 +394,24 @@ export default function ProfileWizardPage() {
       return { stepKey: step.key, rows }
     })
 
+  const fallbackBack = `/participants/${id}`
+  const back = useBackTarget(fallbackBack)
+
   if (isLoading || !participant) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
-        <Link to={`/participants/${id}`} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+        <button
+          type="button"
+          onClick={back.onBack}
+          data-testid="profile-header-back"
+          aria-label={back.ariaLabel}
+          className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
-        </Link>
+        </button>
         <h1 className="text-xl md:text-2xl font-bold">Profile — {participant.firstName} {participant.lastName}</h1>
       </div>
 
@@ -410,18 +421,29 @@ export default function ProfileWizardPage() {
         </div>
       )}
 
-      <WizardStepRail
-        steps={WIZARD_STEPS_FOR_RAIL}
-        visitedSteps={wizard.visitedSteps}
-        currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-        onSelect={wizard.goToStep}
-      />
-
-      <form onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)} noValidate>
-        <WizardStepHeading
-          stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
-          label={isReviewStep ? 'Review' : currentStep.label}
-        />
+      <WizardShell
+        rail={
+          <WizardStepRail
+            steps={WIZARD_STEPS_FOR_RAIL}
+            visitedSteps={wizard.visitedSteps}
+            currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+            onSelect={wizard.goToStep}
+          />
+        }
+      >
+        <form
+          onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)}
+          noValidate
+          // max-w-3xl keeps the form's input measure readable on wide monitors while the rail
+          // (now in the WizardShell sidebar) uses the rest of the row. Scroll-margin utilities
+          // were on the original outer wrapper for the fixed bottom nav; we keep them here so
+          // they still apply to every form control inside this inner wrapper.
+          className="max-w-3xl [&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44"
+        >
+          <WizardStepHeading
+            stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
+            label={isReviewStep ? 'Review' : currentStep.label}
+          />
         {!isReviewStep && currentStep.key === 'keyIdentifiers' && (
           <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} />
         )}
@@ -458,7 +480,8 @@ export default function ProfileWizardPage() {
           submitLabel={completing ? 'Completing...' : 'Complete Profile'}
           isSubmitting={completing || wizard.isAdvancing}
         />
-      </form>
+        </form>
+      </WizardShell>
     </div>
   )
 }
