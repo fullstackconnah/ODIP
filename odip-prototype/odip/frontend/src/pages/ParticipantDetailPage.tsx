@@ -4,7 +4,7 @@ import {
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
-import { TabNav } from '@/components/TabNav'
+import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
@@ -167,22 +167,23 @@ export default function ParticipantDetailPage() {
         </div>
       </div>
 
-      <TabNav
+      <Tabs
         tabs={[
-          { key: 'details', label: 'Details', icon: Users },
-          { key: 'contacts', label: 'Contacts', icon: Contact2 },
-          { key: 'bookings', label: 'Bookings', icon: ClipboardList },
-          { key: 'support', label: 'Support Profile', icon: Shield },
-          { key: 'medications', label: 'Medications', icon: Pill },
-          { key: 'notes', label: 'Notes', icon: StickyNote },
-          { key: 'routines', label: 'Routines', icon: ListChecks },
-          { key: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
-          ...(canAccessClaims ? [{ key: 'claims' as const, label: 'Claims', icon: FileText }] : []),
-          ...(canAccessRostering ? [{ key: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
-          ...((isSuperAdmin || isAdmin) ? [{ key: 'history' as const, label: 'History' }] : []),
+          { id: 'details', label: 'Details', icon: Users },
+          { id: 'contacts', label: 'Contacts', icon: Contact2 },
+          { id: 'bookings', label: 'Bookings', icon: ClipboardList },
+          { id: 'support', label: 'Support Profile', icon: Shield },
+          { id: 'medications', label: 'Medications', icon: Pill },
+          { id: 'notes', label: 'Notes', icon: StickyNote },
+          { id: 'routines', label: 'Routines', icon: ListChecks },
+          { id: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
+          ...(canAccessClaims ? [{ id: 'claims' as const, label: 'Claims', icon: FileText }] : []),
+          ...(canAccessRostering ? [{ id: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
+          ...((isSuperAdmin || isAdmin) ? [{ id: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
         onChange={(key) => setTab(key as typeof tab)}
+        ariaLabel="Participant detail sections"
       />
 
       {/* PDETAIL-01 — the Details tab's card order mirrors the original single-wizard's step-family

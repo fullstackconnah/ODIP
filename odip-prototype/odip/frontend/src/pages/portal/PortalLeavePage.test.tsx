@@ -81,7 +81,7 @@ describe('PortalLeavePage', () => {
       isLoading: false, isError: false, refetch: vi.fn(),
     })
     renderPage()
-    await user.click(screen.getByRole('button', { name: 'Regular unavailability' }))
+    await user.click(screen.getByRole('tab', { name: 'Regular unavailability' }))
     expect(screen.getByText('Tuesday')).toBeInTheDocument()
   })
 
@@ -90,7 +90,7 @@ describe('PortalLeavePage', () => {
     mockCreateUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule())
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'Regular unavailability' }))
+    await user.click(screen.getByRole('tab', { name: 'Regular unavailability' }))
     await user.click(screen.getByRole('button', { name: /add unavailability/i }))
     await user.type(screen.getByLabelText(/start time/i), '09:00')
     await user.type(screen.getByLabelText(/end time/i), '12:00')

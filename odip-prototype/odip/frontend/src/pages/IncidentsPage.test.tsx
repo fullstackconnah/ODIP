@@ -240,7 +240,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     mockUseFlaggedShiftNotes.mockReturnValue({ data: [baseFlaggedNote(), baseFlaggedNote({ shiftNoteId: 'note-2' })], isLoading: false })
     renderPage()
 
-    expect(screen.getByRole('button', { name: 'Flagged notes (2)' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Flagged notes (2)' })).toBeInTheDocument()
   })
 
   it('does not show the Flagged notes tab for a SupportWorker', () => {
@@ -286,7 +286,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /flagged notes/i }))
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
 
     expect(screen.getByRole('link', { name: 'Sophie Brown' })).toHaveAttribute('href', '/participants/p-1')
     expect(screen.getByText('Ben Turner')).toBeInTheDocument()
@@ -300,7 +300,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     mockUseFlaggedShiftNotes.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /flagged notes/i }))
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
 
     expect(screen.getByText('No flagged notes are waiting on an incident.')).toBeInTheDocument()
   })
@@ -318,7 +318,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /flagged notes/i }))
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
     await user.click(screen.getByRole('button', { name: /file incident/i }))
 
     expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
@@ -351,7 +351,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /flagged notes/i }))
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
     await user.click(screen.getByRole('button', { name: /file incident/i }))
 
     expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {

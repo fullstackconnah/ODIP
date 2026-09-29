@@ -21,15 +21,15 @@ describe('MedicationsPage — Report tab visibility', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     render(<MedicationsPage />)
 
-    expect(screen.getByRole('button', { name: 'Administration' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Administration' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Register' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Report' })).not.toBeInTheDocument()
   })
 
   it('is shown for a Coordinator (matches the backend Admin/Coordinator/SuperAdmin gate)', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     render(<MedicationsPage />)
 
-    expect(screen.getByRole('button', { name: 'Report' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Report' })).toBeInTheDocument()
   })
 })
