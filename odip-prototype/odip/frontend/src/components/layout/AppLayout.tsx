@@ -6,6 +6,7 @@ import {
   CalendarClock, Pill, CalendarCheck2, ClipboardCheck, CalendarOff, FileCheck
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { Button } from '@/components/Button'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
@@ -188,7 +189,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
   const initial = (user.fullName || 'A').charAt(0).toUpperCase()
 
   return (
-    <div className="flex min-h-screen bg-[#fbf9f5]">
+    <div className="flex min-h-screen bg-[var(--color-background)]">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-[var(--color-primary)] focus:text-[var(--color-primary-foreground)] focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-2"
@@ -201,22 +202,30 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-[#f5f3ef] pt-20 pb-6 px-4 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        {/* Brand */}
-        <div className="absolute top-4 left-4 right-4">
-          <div className="flex items-center gap-3 px-4 py-2">
-            <div className="w-9 h-9 rounded-xl bg-[#4d7c0f] flex items-center justify-center">
-              <span className="material-symbols-outlined text-[#dfffb7]" style={{ fontSize: '18px' }}>travel_explore</span>
-            </div>
-            <div>
-              <span className="font-extrabold text-[#396200] tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</span>
-              <p className="text-[10px] text-[#43493a] opacity-70 leading-none mt-0.5">NDIS Management</p>
-            </div>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        {/* Brand — ~48px tall total */}
+        <div className="flex items-center gap-2.5 h-12 px-2 shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[var(--color-primary-fixed)]" style={{ fontSize: '16px' }}>travel_explore</span>
+          </div>
+          <div className="min-w-0">
+            <span className="font-extrabold text-[var(--color-primary)] tracking-tight text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</span>
+            <p className="text-[10px] text-[var(--color-muted-foreground)] opacity-70 leading-none mt-0.5">NDIS Management</p>
           </div>
         </div>
 
+        {/* New Trip CTA — top of nav, below brand */}
+        {permissions.canWrite && (
+          <div className="px-1 pt-2 pb-1 shrink-0">
+            <Button to="/trips/new" size="md" className="w-full">
+              <Plus className="w-4 h-4" />
+              New Trip
+            </Button>
+          </div>
+        )}
+
         {/* Nav */}
-        <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto">
+        <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto pt-1">
           {navItems.map(item => {
             if ('children' in item) {
               const visibleChildren = item.children.filter(child =>
@@ -236,14 +245,14 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                     aria-expanded={isOpen}
                     aria-controls={groupId}
                     onClick={() => toggleGroup(item.label)}
-                    className={`flex items-center w-full gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
+                    className={`flex items-center w-full gap-3 px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
                       isGroupActive
-                        ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[#e3e0d8]'
-                        : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
+                        ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
+                        : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
                     }`}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{item.msIcon}</span>
-                    <span className="flex-1 text-left">{item.label}</span>
+                    <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{item.msIcon}</span>
+                    <span className="flex-1 text-left truncate">{item.label}</span>
                     <ChevronDown
                       aria-hidden="true"
                       className={`w-4 h-4 shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
@@ -272,16 +281,16 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                             tabIndex={isOpen ? undefined : -1}
                             aria-label={badgeCount > 0 ? navBadgeLabel(badgeCount, badgeNoun, label) : undefined}
                             className={({ isActive }) =>
-                              `flex items-center gap-4 pl-12 pr-6 py-2.5 rounded-full text-sm transition-all duration-150 ${
+                              `flex items-center gap-3 pl-7 pr-3 h-7 rounded-md text-sm transition-all duration-150 ${
                                 computeActive(isActive)
                                   ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-                                  : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
+                                  : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
                               }`
                             }
                             onClick={() => setSidebarOpen(false)}
                           >
-                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{msIcon}</span>
-                            <span className="flex-1">{label}</span>
+                            <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{msIcon}</span>
+                            <span className="flex-1 truncate">{label}</span>
                             {badgeCount > 0 && <NavCountBadge count={badgeCount} />}
                           </NavLink>
                         )
@@ -300,50 +309,41 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
               <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                 aria-label={showWitnessBadge ? navBadgeLabel(pendingWitnessCount, 'witness approval', label) : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-4 px-6 py-3 rounded-full text-sm transition-all duration-150 ${
+                  `flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
                     isActive
                       ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-                      : 'text-[var(--color-secondary)] font-medium hover:bg-[#e3e0d8]'
+                      : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
                   }`
                 }
                 onClick={() => setSidebarOpen(false)}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{msIcon}</span>
-                <span className="flex-1">{label}</span>
+                <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{msIcon}</span>
+                <span className="flex-1 truncate">{label}</span>
                 {showWitnessBadge && <NavCountBadge count={pendingWitnessCount} />}
               </NavLink>
             )
           })}
         </nav>
 
-        {/* New Trip CTA */}
-        {permissions.canWrite && (
-          <Link to="/trips/new"
-            className="mx-4 mt-4 py-3 px-4 flex items-center justify-center gap-2 bg-gradient-to-br from-[#396200] to-[#4d7c0f] text-white rounded-full font-bold shadow-lg shadow-[#396200]/20 hover:scale-[0.98] transition-all text-sm">
-            <Plus className="w-4 h-4" />
-            New Trip
-          </Link>
-        )}
-
         {/* Bottom */}
-        <div className="mt-4 pt-4 space-y-1">
+        <div className="pt-2 shrink-0">
           <button onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-[#515f74] hover:bg-white/40 w-full transition-colors">
-            <LogOut className="w-5 h-5" />
+            className="flex items-center gap-3 px-3 py-1.5 h-8 rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
+            <LogOut className="w-4 h-4" />
             Sign Out
           </button>
         </div>
       </aside>
 
       {/* Main area */}
-      <div className="flex-1 min-w-0 lg:ml-72 flex flex-col min-h-screen">
-        {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-[#fbf9f5]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
-          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
+      <div className="flex-1 min-w-0 lg:ml-[232px] flex flex-col min-h-screen">
+        {/* Top bar — fixed 48px */}
+        <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
+          <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
             <div className="flex items-center gap-4">
               <button
                 ref={menuButtonRef}
-                className="lg:hidden p-2 rounded-xl hover:bg-[#efeeea] transition-colors"
+                className="lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -352,14 +352,14 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span className="hidden sm:inline-flex text-xs bg-[#396200]/10 text-[#396200] px-2.5 py-0.5 rounded-full border border-[#396200]/20 font-medium">
+                <span className="hidden sm:inline-flex text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium">
                   {user.tenantName}
                 </span>
               )}
-              <div className="hidden md:flex items-center bg-[#f5f3ef] rounded-full px-4 py-2 gap-3 min-w-[280px]">
-                <span className="material-symbols-outlined text-[#43493a]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
+              <div className="hidden md:flex items-center h-8 bg-[var(--color-sidebar)] rounded-md px-3 gap-2 w-[360px]">
+                <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
                 <input
-                  className="bg-transparent border-none outline-none text-sm w-full placeholder:text-[#43493a]/60 text-[#1b1c1a]"
+                  className="bg-transparent border-none outline-none text-sm w-full placeholder:text-[var(--color-muted-foreground)]/60 text-[var(--color-foreground)]"
                   placeholder="Search trips, participants..."
                   aria-label="Search trips and participants"
                   type="text"
@@ -373,13 +373,13 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                   rather than removed, so the control is honest about doing nothing right now
                   instead of silently absorbing clicks. */}
               <button
-                className="p-2 rounded-full hover:bg-[#efeeea] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
                 aria-label="Notifications"
                 disabled
               >
-                <span className="material-symbols-outlined text-[#396200]" style={{ fontSize: '22px' }}>notifications</span>
+                <span className="material-symbols-outlined text-[var(--color-primary)]" style={{ fontSize: '20px' }}>notifications</span>
               </button>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#396200] to-[#4d7c0f] flex items-center justify-center text-white font-bold text-sm shadow-md">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
                 {initial}
               </div>
             </div>
@@ -388,11 +388,11 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
 
         {/* Impersonation banner */}
         {viewingUserId && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 md:px-6 py-2 flex items-center justify-between gap-4">
+          <div className="bg-[var(--color-warning-container)] border-b border-[var(--color-warning)] px-[var(--gutter,20px)] py-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-amber-600 text-xs font-bold uppercase tracking-wide">Viewing as</span>
-              <span className="text-amber-800 text-sm font-semibold">{user.fullName}</span>
-              <span className="text-amber-600 text-xs">({user.role})</span>
+              <span className="text-[var(--color-warning)] text-xs font-bold uppercase tracking-wide">Viewing as</span>
+              <span className="text-[var(--color-on-warning-container)] text-sm font-semibold">{user.fullName}</span>
+              <span className="text-[var(--color-warning)] text-xs">({user.role})</span>
             </div>
             <button
               onClick={() => {
@@ -403,7 +403,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                 localStorage.removeItem('odip_viewing_user')
                 window.location.reload()
               }}
-              className="text-xs text-amber-700 hover:text-amber-900 font-medium underline underline-offset-2"
+              className="text-xs text-[var(--color-on-warning-container)] hover:opacity-80 font-medium underline underline-offset-2"
             >
               Exit view
             </button>
@@ -420,7 +420,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           only thing ever setting padding-bottom, so it can't be clobbered by a later
           breakpoint's shorthand again.
         */}
-        <main id="main" className="flex-1 px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8 pb-24 lg:pb-8">
+        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-24 lg:pb-6">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -432,22 +432,22 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
       {/* Mobile bottom nav — items and the FAB are gated the same as the sidebar (same
           canAccessPage/canWrite helper), so a ReadOnly or restricted role never sees a link or
           a create action it doesn't have access to. */}
-      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#fbf9f5]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
+      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
         {permissions.canAccessPage('dashboard') && (
-          <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+          <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
             <span className="text-[10px] font-medium">Dashboard</span>
           </NavLink>
         )}
         {permissions.canAccessPage('trips') && (
-          <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+          <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
             <span className="text-[10px] font-medium">Trips</span>
           </NavLink>
         )}
         {permissions.canWrite && (
           <Link to="/trips/new" className="relative -top-5">
-            <div className="w-14 h-14 bg-[#396200] text-white rounded-full shadow-2xl shadow-[#396200]/40 flex items-center justify-center">
+            <div className="w-14 h-14 bg-[var(--color-primary)] text-white rounded-full shadow-2xl shadow-[var(--color-primary)]/40 flex items-center justify-center">
               <Plus className="w-6 h-6" />
             </div>
           </Link>
@@ -460,15 +460,15 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
             isActive
             || location.pathname.startsWith('/participants/')
             || location.pathname.startsWith('/onboarding/')
-              ? 'text-[#396200]'
-              : 'text-[#515f74]'
+              ? 'text-[var(--color-primary)]'
+              : 'text-[var(--color-secondary)]'
           }`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
             <span className="text-[10px] font-medium">People</span>
           </NavLink>
         )}
         {permissions.canAccessPage('settings') && (
-          <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[#396200]' : 'text-[#515f74]'}`}>
+          <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
             <span className="text-[10px] font-medium">Settings</span>
           </NavLink>
