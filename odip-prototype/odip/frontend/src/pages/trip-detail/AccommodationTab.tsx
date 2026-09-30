@@ -15,6 +15,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
+import { reservationCountsLabel } from './reservationCounts'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { ReservationDto } from '@/api/types/reservations'
@@ -260,13 +261,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     {
       key: 'bedroomsReserved',
       header: 'Bedrooms / Beds',
-      render: (r) => {
-        const prop = property(r)
-        const bedrooms = r.bedroomsReserved ?? prop?.bedroomCount
-        const beds = r.bedsReserved ?? prop?.bedCount
-        const maxCap = prop?.maxCapacity
-        return (bedrooms || beds) ? `${bedrooms ?? '—'} / ${beds ?? '—'}${maxCap ? ` (max ${maxCap})` : ''}` : '—'
-      },
+      // Reserved of the property's total ("2 of 4 / 4 of 8 (max 10)"), never the property's own counts standing in for what was reserved.
+      render: (r) => reservationCountsLabel(r, property(r)),
     },
     { key: 'confirmationReference', header: 'Ref', render: (r) => r.confirmationReference || '—' },
     {
