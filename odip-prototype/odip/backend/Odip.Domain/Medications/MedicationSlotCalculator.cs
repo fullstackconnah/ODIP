@@ -45,10 +45,12 @@ public static class MedicationSlotCalculator
     /// <summary>
     /// The due slots of one Regular medication inside the half-open provider-local window
     /// [<paramref name="windowStartLocal"/>, <paramref name="windowEndLocal"/>): for each calendar date the
-    /// window touches (one, or two for an overnight shift), when
-    /// <see cref="MedicationScheduleCalculator.IsDue(ParticipantMedication, DateOnly)"/> holds, each valid
-    /// TimesOfDay entry becomes the slot <c>date + time</c>. Order: by date, then the order the times are
-    /// written in the CSV. Duplicate times are NOT collapsed (the MAR has always listed them twice).
+    /// window touches (one, or two for an overnight shift), when the medication's course covers that date
+    /// (<see cref="ParticipantMedication.StartDate"/> not after it, <see cref="ParticipantMedication.EndDate"/>
+    /// not before it - tested PER DATE, because an overnight window can straddle the day a course starts or
+    /// ends) and <see cref="MedicationScheduleCalculator.IsDue(ParticipantMedication, DateOnly)"/> holds, each
+    /// valid TimesOfDay entry becomes the slot <c>date + time</c>. Order: by date, then the order the times
+    /// are written in the CSV. Duplicate times are NOT collapsed (the MAR has always listed them twice).
     /// </summary>
     public static List<DateTime> EnumerateSlots(ParticipantMedication medication, DateTime windowStartLocal, DateTime windowEndLocal)
     {
@@ -62,8 +64,12 @@ public static class MedicationSlotCalculator
 
         for (var date = firstDate; date <= lastDate; date = date.AddDays(1))
         {
-            if (!MedicationScheduleCalculator.IsDue(medication, date)) continue;
             var dayStart = date.ToDateTime(TimeOnly.MinValue);
+            // The course test the single-day MAR's query has always applied, here per calendar date: the medication has started
+            // by the end of that date (StartDate < dayEnd) and had not ended before its start (EndDate >= dayStart).
+            if (medication.StartDate >= dayStart.AddDays(1)) continue;
+            if (medication.EndDate is { } endDate && endDate < dayStart) continue;
+            if (!MedicationScheduleCalculator.IsDue(medication, date)) continue;
             foreach (var t in times)
             {
                 var slot = dayStart.Add(t);

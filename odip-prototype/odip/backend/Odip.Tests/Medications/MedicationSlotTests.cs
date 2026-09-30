@@ -37,11 +37,11 @@ public class MedicationSlotCalculatorTests
 
     private static ParticipantMedication Med(
         string times, MedicationFrequency frequency = MedicationFrequency.Daily, Weekdays? days = null,
-        int? interval = null, DateOnly? anchor = null) => new()
+        int? interval = null, DateOnly? anchor = null, DateTime? start = null, DateTime? end = null) => new()
     {
         Id = Guid.NewGuid(), Name = "Med", TimesOfDay = times, Type = MedicationType.Regular,
         Frequency = frequency, DaysOfWeek = days, IntervalDays = interval, AnchorDate = anchor,
-        StartDate = new DateTime(2025, 1, 1),
+        StartDate = start ?? new DateTime(2025, 1, 1), EndDate = end,
     };
 
     private static DateTime L(int y, int mo, int d, int h, int mi) => new(y, mo, d, h, mi, 0, DateTimeKind.Unspecified);
@@ -127,6 +127,41 @@ public class MedicationSlotCalculatorTests
     {
         Assert.Empty(MedicationSlotCalculator.EnumerateSlots(Med("08:00"), L(2026, 7, 14, 9, 0), L(2026, 7, 14, 9, 0)));
         Assert.Empty(MedicationSlotCalculator.EnumerateSlots(Med("08:00"), L(2026, 7, 14, 9, 0), L(2026, 7, 14, 7, 0)));
+    }
+
+    // ── the medication's course (StartDate / EndDate) is tested PER CALENDAR DATE ──
+
+    [Fact]
+    public void EnumerateSlots_OvernightWindow_CourseEndingOnTheFirstDate_HasNoSlotOnTheSecondDate()
+    {
+        // A 7-day antibiotic whose last day is Tuesday 14 July, on a 22:00 -> 06:00 shift starting that Tuesday.
+        // Tuesday 22:00 is the last dose; Wednesday 02:00 is the night AFTER the course ended.
+        var med = Med("02:00,22:00", end: new DateTime(2026, 7, 14));
+
+        var slots = MedicationSlotCalculator.EnumerateSlots(med, L(2026, 7, 14, 22, 0), L(2026, 7, 15, 6, 0));
+
+        Assert.Equal([L(2026, 7, 14, 22, 0)], slots);
+    }
+
+    [Fact]
+    public void EnumerateSlots_OvernightWindow_CourseStartingOnTheSecondDate_HasNoSlotOnTheFirstDate()
+    {
+        // Prescribed from Wednesday 15 July: tonight's 23:00 (Tuesday) is before the prescription, 02:00 Wednesday is the first dose.
+        var med = Med("23:00,02:00", start: new DateTime(2026, 7, 15));
+
+        var slots = MedicationSlotCalculator.EnumerateSlots(med, L(2026, 7, 14, 22, 0), L(2026, 7, 15, 6, 0));
+
+        Assert.Equal([L(2026, 7, 15, 2, 0)], slots);
+    }
+
+    [Fact]
+    public void EnumerateSlots_TheCourseStartAndEndDates_AreInclusiveOfTheirWholeDay()
+    {
+        var med = Med("00:30,23:30", start: new DateTime(2026, 7, 14), end: new DateTime(2026, 7, 14));
+
+        Assert.Equal([L(2026, 7, 14, 0, 30), L(2026, 7, 14, 23, 30)], MedicationSlotCalculator.EnumerateSlots(med, L(2026, 7, 14, 0, 0), L(2026, 7, 15, 0, 0)));
+        Assert.Empty(MedicationSlotCalculator.EnumerateSlots(med, L(2026, 7, 13, 0, 0), L(2026, 7, 14, 0, 0)));
+        Assert.Empty(MedicationSlotCalculator.EnumerateSlots(med, L(2026, 7, 15, 0, 0), L(2026, 7, 16, 0, 0)));
     }
 
     // ── IsOverdue: provider-local, not UTC ─────────────────────────────
@@ -341,6 +376,34 @@ public class MedicationSlotServiceTests
         var result = await service.GetWindowAsync(L(2026, 7, 14, 0, 0), L(2026, 7, 15, 0, 0), p.Id, Sydney, false, default);
 
         Assert.Equal("Melatonin", Assert.Single(result.Slots).Medication.Name);
+    }
+
+    [Fact]
+    public async Task GetWindow_OvernightShift_MedicationEndingOnTheServiceDate_ListsNoSlotOnTheNextDate()
+    {
+        // The window-level query keeps a medication whose EndDate (14 Jul) is on or after the window's first date. That alone must not
+        // put the 15 Jul 02:00 dose - the night after the course ended - on the list.
+        var (db, p, med) = await SeedAsync("02:00,22:00");
+        med.EndDate = new DateTime(2026, 7, 14);
+        await db.SaveChangesAsync();
+        var service = new MedicationSlotService(db, FakeClock.AtUtc(2026, 7, 14, 10, 0));
+
+        var result = await service.GetWindowAsync(L(2026, 7, 14, 22, 0), L(2026, 7, 15, 6, 0), p.Id, Sydney, false, default);
+
+        Assert.Equal(L(2026, 7, 14, 22, 0), Assert.Single(result.Slots).ScheduledAt);
+    }
+
+    [Fact]
+    public async Task GetWindow_OvernightShift_MedicationStartingTomorrow_ListsNoSlotTonight()
+    {
+        var (db, p, med) = await SeedAsync("23:00,02:00");
+        med.StartDate = new DateTime(2026, 7, 15);
+        await db.SaveChangesAsync();
+        var service = new MedicationSlotService(db, FakeClock.AtUtc(2026, 7, 14, 10, 0));
+
+        var result = await service.GetWindowAsync(L(2026, 7, 14, 22, 0), L(2026, 7, 15, 6, 0), p.Id, Sydney, false, default);
+
+        Assert.Equal(L(2026, 7, 15, 2, 0), Assert.Single(result.Slots).ScheduledAt);
     }
 
     [Fact]
