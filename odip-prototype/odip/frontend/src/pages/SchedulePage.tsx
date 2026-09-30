@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import {
   CalendarRange, Users, Truck, ChevronDown, ChevronRight,
   Car, Shield, Pill, HandMetal, Moon,
-  Filter, Download, CheckCircle, AlertTriangle
+  Filter, Download,
 } from 'lucide-react'
 import {
   useScheduleOverview, useCreateStaffAssignment, useCreateVehicleAssignment, useDeleteStaffAssignment,
@@ -10,10 +10,10 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
-import { Card } from '@/components/Card'
 import {
-  ScheduleAssignmentCell, QualBadge, TripStatusBadge, AvailabilityList,
+  ScheduleAssignmentCell, QualBadgeList, ScheduleSummary, TripStatusBadge, AvailabilityList,
   StaffAssignModal, VehicleAssignModal,
   formatDate, tripAccentText,
 } from './schedule'
@@ -23,6 +23,21 @@ import type {
   TripPreferenceDto,
   CreateStaffAssignmentDto, CreateVehicleAssignmentDto,
 } from '@/api/types'
+
+// ── Matrix geometry ──
+//
+// Every body row is one line at var(--row-h) (34px fine pointer, 48px coarse): the resource cell
+// carries name, role and qualification chips side by side, and each trip cell holds a chip that is
+// row-h minus 6px (28px). Nothing here re-declares a pixel height the density tokens already own.
+//
+// Row separators are per-cell borders (border-separate, not collapse) so they travel with the sticky
+// first column instead of being left behind by it when the matrix scrolls sideways.
+const ROW_LINE = 'border-b border-b-[color:var(--color-surface-container)]'
+const STICKY_COL = 'sticky left-0 z-10 border-r border-r-[color:var(--color-border)] bg-[var(--color-card)] group-hover:bg-[var(--color-surface-container-low)]'
+const TRIP_CELL = `px-2 py-0.5 align-middle group-hover:bg-[var(--color-surface-container-low)] ${ROW_LINE}`
+// Phones stack the resource line (name/role above chips) so the sticky column stays narrow, so rows
+// only lock to --row-h from md up.
+const ROW = 'group md:h-[var(--row-h)]'
 
 // ── Main Page ──
 
@@ -86,8 +101,11 @@ export default function SchedulePage() {
 
   if (error || !data) {
     return (
-      <div className="bg-white rounded-[2rem] p-8 text-center">
-        <p className="text-[var(--color-muted-foreground)]">Failed to load schedule overview.</p>
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <PageHeader title="Schedule Overview" />
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-10 text-center">
+          <p className="text-[var(--color-muted-foreground)]">Failed to load schedule overview.</p>
+        </div>
       </div>
     )
   }
@@ -112,124 +130,104 @@ export default function SchedulePage() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader
         title="Schedule Overview"
-        subtitle={
-          <>
-            Staff and vehicle assignment across active trips · Click{' '}
-            <span className="font-semibold text-[var(--color-primary)]">Available</span> to assign
-          </>
-        }
+        subtitle="Staff and vehicle assignment across active trips · Click Available to assign"
         action={
           <div className="flex items-center gap-2">
-            <div className="flex bg-[var(--color-surface-container)] p-0.5 rounded-[var(--radius-sm)]">
-              <button className="px-3 h-[var(--control-h)] bg-white rounded-[var(--radius-sm)] text-sm font-bold shadow-sm text-[var(--color-foreground)]">
+            <div className="flex rounded-[var(--radius-sm)] bg-[var(--color-surface-container)] p-0.5">
+              <button className="h-[calc(var(--control-h)_-_4px)] rounded-[var(--radius-sm)] bg-[var(--color-card)] px-3 text-sm font-bold text-[var(--color-foreground)] shadow-sm">
                 Grid View
               </button>
-              <button disabled title="Coming soon" className="px-3 h-[var(--control-h)] text-[var(--color-muted-foreground)] text-sm font-medium hover:text-[var(--color-foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <button disabled title="Coming soon" className="h-[calc(var(--control-h)_-_4px)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50">
                 Timeline
               </button>
             </div>
-            <button disabled title="Coming soon" className="h-[var(--control-h)] w-[var(--control-h)] flex items-center justify-center bg-[var(--color-surface-container-low)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
-              <Filter className="w-4 h-4" />
+            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
+              <Filter className="h-4 w-4" />
             </button>
-            <button disabled title="Coming soon" className="h-[var(--control-h)] w-[var(--control-h)] flex items-center justify-center bg-[var(--color-surface-container-low)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
-              <Download className="w-4 h-4" />
+            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
+              <Download className="h-4 w-4" />
             </button>
           </div>
         }
       />
 
-      {/* ── Summary Stats ── */}
-      <div className="grid grid-cols-12 gap-2 md:gap-[var(--section-gap)]">
-        {/* Active Trips count */}
-        <div className="col-span-12 md:col-span-4 bg-[var(--color-primary-container)] p-[var(--card-pad)] rounded-[var(--radius-md)] text-white flex flex-col justify-between relative overflow-hidden group">
-          <div className="relative z-10">
-            <h3 className="text-xs font-bold uppercase tracking-widest opacity-75 mb-2">Active Trips</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-display font-extrabold leading-none">{tripCount}</span>
-              <span className="text-base opacity-70">Trips</span>
-            </div>
-          </div>
-          <div className="mt-3 flex gap-2 flex-wrap relative z-10">
-            <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">{staff?.length || 0} Staff</span>
-            <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">{vehicles?.length || 0} Vehicles</span>
-          </div>
-          <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:bg-white/15 transition-colors" />
-        </div>
-
-        {/* Resource Health */}
-        <Card className="col-span-12 md:col-span-8 bg-[var(--color-surface-container-low)] flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <h3 className="text-base font-display font-bold text-[var(--color-secondary)]">Resource Health</h3>
-            <span className="text-[var(--color-primary)] font-bold text-sm">{utilization}% Utilization</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
-              <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Staff</p>
-              <div className="flex justify-between items-center">
-                <span className="text-xl font-bold text-[var(--color-foreground)]">{staffAssigned}/{staff?.length || 0}</span>
-                <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
-              </div>
-            </div>
-            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
-              <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Vehicles</p>
-              <div className="flex justify-between items-center">
-                <span className="text-xl font-bold text-[var(--color-foreground)]">{vehiclesAssigned}/{vehicles?.length || 0}</span>
-                <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
-              </div>
-            </div>
-            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
-              <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Conflicts</p>
-              <div className="flex justify-between items-center">
-                <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[var(--color-conflict)]' : 'text-[var(--color-foreground)]'}`}>
-                  {String(conflictsCount).padStart(2, '0')}
-                </span>
-                {conflictsCount > 0
-                  ? <AlertTriangle className="w-4 h-4 text-[var(--color-conflict)]" />
-                  : <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
-                }
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
+      {/* ── Summary strip (one line: trips + resource health) ── */}
+      <ScheduleSummary
+        tripCount={tripCount}
+        staffAssigned={staffAssigned}
+        staffTotal={staff?.length || 0}
+        vehiclesAssigned={vehiclesAssigned}
+        vehiclesTotal={vehicles?.length || 0}
+        conflicts={conflictsCount}
+        utilization={utilization}
+      />
 
       {/* ── Empty State ── */}
       {tripCount === 0 ? (
-        <div className="bg-white rounded-[var(--radius-md)] p-12 text-center">
-          <CalendarRange className="w-12 h-12 text-[var(--color-muted-foreground)] mx-auto mb-4 opacity-40" />
-          <p className="text-lg font-display font-bold">No trips scheduled</p>
-          <p className="text-[var(--color-muted-foreground)] mt-1">Create a trip first to see the schedule overview.</p>
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+          <EmptyState
+            icon={CalendarRange}
+            title="No trips scheduled"
+            description="Create a trip first to see the schedule overview."
+          />
         </div>
       ) : (
         /* ── Schedule Grid Table ── */
-        <div className="bg-white rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)]">
-          <p className="md:hidden text-xs text-[var(--color-muted-foreground)] px-4 pt-3 pb-1">Swipe to see all trips →</p>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse" style={{ minWidth: `${220 + tripCount * 160}px` }}>
+        <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+          <p className="px-[var(--cell-px)] pt-2 text-[13px] text-[var(--color-muted-foreground)] md:hidden">Swipe to see all trips →</p>
+          {/*
+            The scroll frame. From md up it is height-capped so the matrix scrolls INSIDE it and the sticky
+            header row genuinely stays pinned (a sticky header only sticks to its nearest scroller, which
+            used to be this wrapper with no height limit, so it never engaged). The sticky first column
+            pins horizontally in the same frame. scroll-pt/pl keep a keyboard-focused cell from landing
+            underneath the pinned header row or resource column.
+          */}
+          <div className="overflow-auto scroll-pt-20 scroll-pl-44 md:scroll-pl-80 md:max-h-[max(20rem,calc(100dvh_-_12.5rem))]">
+            {/* text-sm on the table: without it every cell inherits the browser's 16px (Tailwind sets no size
+                on table cells), which is what made this matrix's cell text 16px. DataTable sets it the same way. */}
+            <table
+              className="w-full table-fixed border-separate border-spacing-0 text-sm tabular-nums min-w-[calc(11rem_+_var(--trips)_*_10rem)] md:min-w-[calc(20rem_+_var(--trips)_*_10rem)]"
+              style={{ '--trips': tripCount } as React.CSSProperties}
+            >
+              <colgroup>
+                <col className="w-44 md:w-80" />
+                {trips.map((trip: ScheduleTripDto) => <col key={trip.id} />)}
+              </colgroup>
+
               {/* Trip column headers */}
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--color-surface-container)' }}>
-                  <th className="sticky left-0 top-0 z-20 bg-white text-left px-[var(--cell-px)] py-[6px] min-w-[200px]">
-                    <span className="text-[10px] font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest">Resources</span>
+                <tr>
+                  <th
+                    scope="col"
+                    className="sticky left-0 top-0 z-20 border-b border-r border-[var(--color-border)] bg-[var(--color-card)] px-[var(--cell-px)] py-1.5 text-left align-middle text-[13px] font-semibold text-[var(--color-muted-foreground)]"
+                  >
+                    Resources
                   </th>
                   {trips.map((trip: ScheduleTripDto, idx: number) => (
-                    <th key={trip.id} className="sticky top-0 z-10 bg-white px-[var(--cell-px)] py-[6px] text-left min-w-[150px]">
-                      <div className="space-y-1">
-                        <div className={`text-sm font-display font-bold ${tripAccentText[idx % tripAccentText.length]}`}>
+                    <th
+                      key={trip.id}
+                      scope="col"
+                      className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card)] px-[var(--cell-px)] py-1.5 text-left align-top font-normal"
+                    >
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <div className={`truncate font-display text-sm font-bold ${tripAccentText[idx % tripAccentText.length]}`} title={trip.tripName}>
                           {trip.tripName}
                         </div>
-                        <div className="text-xs font-medium text-[var(--color-muted-foreground)]">
-                          {formatDate(trip.startDate)} — {formatDate(trip.endDate)}
-                        </div>
-                        <TripStatusBadge status={trip.status} />
-                        <div className="text-[10px] text-[var(--color-muted-foreground)]">
-                          {trip.staffAssignedCount}/{trip.staffRequired ?? '?'} staff · {trip.currentParticipantCount}/{trip.maxParticipants ?? '?'} pax
-                        </div>
-                        {trip.preferenceMatchCount > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: '#fef3c7', color: '#b45309' }}>
-                            ★ {trip.preferenceMatchCount} preferred
+                        {/* Dates, status, staffing and preference chip share one wrapping line: one row on a wide trip column, stacked on a narrow one. */}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-[var(--color-muted-foreground)]">
+                          <span className="whitespace-nowrap font-medium">
+                            {formatDate(trip.startDate)} — {formatDate(trip.endDate)}
                           </span>
-                        )}
+                          <TripStatusBadge status={trip.status} />
+                          <span className="whitespace-nowrap">
+                            {trip.staffAssignedCount}/{trip.staffRequired ?? '?'} staff · {trip.currentParticipantCount}/{trip.maxParticipants ?? '?'} pax
+                          </span>
+                          {trip.preferenceMatchCount > 0 && (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-semibold text-[var(--color-on-warning-container)]">
+                              ★ {trip.preferenceMatchCount} preferred
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </th>
                   ))}
@@ -241,126 +239,117 @@ export default function SchedulePage() {
                 <tr className="bg-[var(--color-surface-container-low)]">
                   <td
                     colSpan={tripCount + 1}
-                    className="px-[var(--cell-px)] py-2 cursor-pointer select-none"
+                    className={`h-[var(--row-h)] cursor-pointer select-none p-0 ${ROW_LINE}`}
                     onClick={() => setSectionStaff(!sectionStaff)}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[var(--color-primary-fixed)]/30 flex items-center justify-center">
-                        {sectionStaff
-                          ? <ChevronDown className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                          : <ChevronRight className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                        }
-                      </div>
-                      <Users className="w-4 h-4 text-[var(--color-primary)]" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                    {/* sticky: the label stays put while the matrix scrolls sideways */}
+                    <div className="sticky left-0 flex w-fit items-center gap-2 px-[var(--cell-px)]">
+                      {sectionStaff
+                        ? <ChevronDown className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+                        : <ChevronRight className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+                      }
+                      <Users className="h-4 w-4 text-[var(--color-primary)]" />
+                      <span className="text-[13px] font-semibold text-[var(--color-muted-foreground)]">
                         Staff — {staff?.length || 0}
                       </span>
                     </div>
                   </td>
                 </tr>
 
-                {sectionStaff && staff?.map((s: ScheduleStaffDto) => (
-                  <React.Fragment key={s.id}>
-                    <tr
-                      className="hover:bg-[var(--color-surface-container-low)]/60 transition-colors"
-                      style={{ borderBottom: '1px solid var(--color-surface-container)' }}
-                    >
-                      <td className="sticky left-0 z-10 bg-white px-[var(--cell-px)] py-1.5 min-w-[200px]">
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-2 cursor-pointer text-left"
-                          onClick={() => toggleStaff(s.id)}
-                        >
-                          <div className="w-7 h-7 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center flex-shrink-0">
-                            <Users className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1">
-                              {expandedStaff.has(s.id)
-                                ? <ChevronDown className="w-3 h-3 text-[var(--color-muted-foreground)] flex-shrink-0" />
-                                : <ChevronRight className="w-3 h-3 text-[var(--color-muted-foreground)] flex-shrink-0" />
+                {sectionStaff && staff?.map((s: ScheduleStaffDto) => {
+                  const expanded = expandedStaff.has(s.id)
+                  const roleText = `${s.role?.replace(/([A-Z])/g, ' $1').trim() ?? ''}${s.region ? ` · ${s.region}` : ''}`
+                  return (
+                    <React.Fragment key={s.id}>
+                      <tr className={ROW}>
+                        <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
+                          <div className="flex min-w-0 flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
+                            <button
+                              type="button"
+                              className="flex min-w-0 cursor-pointer items-center gap-1.5 text-left md:flex-1"
+                              onClick={() => toggleStaff(s.id)}
+                              aria-expanded={expanded}
+                              title={roleText ? `${s.fullName} — ${roleText}` : s.fullName}
+                            >
+                              {expanded
+                                ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-muted-foreground)]" />
+                                : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-muted-foreground)]" />
                               }
-                              <span className="text-xs font-bold truncate">{s.fullName}</span>
-                            </div>
-                            <div className="text-[10px] text-[var(--color-muted-foreground)] pl-4">
-                              {s.role?.replace(/([A-Z])/g, ' $1').trim()}{s.region ? ` · ${s.region}` : ''}
-                            </div>
+                              <span className="min-w-0 truncate text-sm font-semibold">{s.fullName}</span>
+                              <span className="min-w-0 shrink-[3] truncate text-[13px] text-[var(--color-muted-foreground)]">{roleText}</span>
+                            </button>
+                            <QualBadgeList
+                              className="max-md:pl-5"
+                              items={[
+                                { active: s.isDriverEligible, icon: Car, title: 'Driver Eligible' },
+                                { active: s.isFirstAidQualified, icon: Shield, title: 'First Aid' },
+                                { active: s.isMedicationCompetent, icon: Pill, title: 'Medication' },
+                                { active: s.isManualHandlingCompetent, icon: HandMetal, title: 'Manual Handling' },
+                                { active: s.isOvernightEligible, icon: Moon, title: 'Overnight' },
+                              ]}
+                            />
                           </div>
-                        </button>
-                        <div className="flex items-center gap-1 mt-1 pl-9">
-                          <QualBadge active={s.isDriverEligible} icon={Car} title="Driver Eligible" />
-                          <QualBadge active={s.isFirstAidQualified} icon={Shield} title="First Aid" />
-                          <QualBadge active={s.isMedicationCompetent} icon={Pill} title="Medication" />
-                          <QualBadge active={s.isManualHandlingCompetent} icon={HandMetal} title="Manual Handling" />
-                          <QualBadge active={s.isOvernightEligible} icon={Moon} title="Overnight" />
-                        </div>
-                      </td>
-                      {s.tripStatuses?.map((ts: ScheduleStaffTripStatusDto, idx: number) => {
-                        const trip = trips[idx]
-                        const isAvailable = ts.status === 'Available'
-                        const prefEntry = s.preferredForTrips?.find((p: TripPreferenceDto) => p.tripId === ts.tripId)
-                        return (
-                          <td key={ts.tripId} className="px-2 py-1.5">
-                            <div className="relative inline-block">
-                              <ScheduleAssignmentCell
-                                status={ts.status}
-                                role={ts.assignmentRole ?? undefined}
-                                clickable={isAvailable && canWrite}
-                                onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'staff', resource: s, trip }) : undefined}
-                                assignLabel={`Assign ${s.fullName} to ${trip.tripName}`}
-                                unassignLabel={`Unassign ${s.fullName} from ${trip.tripName}`}
-                                onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => setUnassigning({
-                                  assignmentId: ts.assignmentId!,
-                                  staffName: s.fullName,
-                                  tripName: trip.tripName,
-                                  tripStart: trip.startDate,
-                                  tripEnd: trip.endDate,
-                                }) : undefined}
-                              />
-                              {prefEntry && (
-                                <span
-                                  className="absolute -top-1.5 -right-1.5 text-[9px] font-bold leading-none px-1 py-0.5 rounded-full"
-                                  style={{ background: 'var(--color-warning)', color: 'var(--color-foreground)' }}
-                                  title={`${prefEntry.participantCount} participant${prefEntry.participantCount > 1 ? 's' : ''} prefer this staff member`}
-                                >
-                                  ★{prefEntry.participantCount > 1 ? ` ${prefEntry.participantCount}` : ''}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                    {expandedStaff.has(s.id) && (
-                      <tr
-                        key={`${s.id}-detail`}
-                        style={{ borderBottom: '1px solid var(--color-surface-container)' }}
-                        className="bg-[var(--color-surface-container-low)]/40"
-                      >
-                        <td colSpan={tripCount + 1}>
-                          <AvailabilityList staffId={s.id} availability={s.availability} />
                         </td>
+                        {s.tripStatuses?.map((ts: ScheduleStaffTripStatusDto, idx: number) => {
+                          const trip = trips[idx]
+                          const isAvailable = ts.status === 'Available'
+                          const prefEntry = s.preferredForTrips?.find((p: TripPreferenceDto) => p.tripId === ts.tripId)
+                          return (
+                            <td key={ts.tripId} className={TRIP_CELL}>
+                              <div className="flex w-full items-center gap-1">
+                                <ScheduleAssignmentCell
+                                  status={ts.status}
+                                  role={ts.assignmentRole ?? undefined}
+                                  clickable={isAvailable && canWrite}
+                                  onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'staff', resource: s, trip }) : undefined}
+                                  assignLabel={`Assign ${s.fullName} to ${trip.tripName}`}
+                                  unassignLabel={`Unassign ${s.fullName} from ${trip.tripName}`}
+                                  onUnassign={canWrite && ts.status === 'Assigned' && ts.assignmentId ? () => setUnassigning({
+                                    assignmentId: ts.assignmentId!,
+                                    staffName: s.fullName,
+                                    tripName: trip.tripName,
+                                    tripStart: trip.startDate,
+                                    tripEnd: trip.endDate,
+                                  }) : undefined}
+                                />
+                                {prefEntry && (
+                                  <span
+                                    className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--color-warning)] px-1.5 text-xs font-bold leading-none text-[var(--color-foreground)]"
+                                    title={`${prefEntry.participantCount} participant${prefEntry.participantCount > 1 ? 's' : ''} prefer this staff member`}
+                                  >
+                                    ★{prefEntry.participantCount > 1 ? ` ${prefEntry.participantCount}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          )
+                        })}
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
+                      {expanded && (
+                        <tr key={`${s.id}-detail`} className="bg-[var(--color-surface-container-low)]/40">
+                          <td colSpan={tripCount + 1} className={ROW_LINE}>
+                            <AvailabilityList staffId={s.id} availability={s.availability} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
 
                 {/* ── Vehicle Section Header ── */}
                 <tr className="bg-[var(--color-surface-container-low)]">
                   <td
                     colSpan={tripCount + 1}
-                    className="px-[var(--cell-px)] py-2 cursor-pointer select-none"
+                    className={`h-[var(--row-h)] cursor-pointer select-none p-0 ${ROW_LINE}`}
                     onClick={() => setSectionVehicles(!sectionVehicles)}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center">
-                        {sectionVehicles
-                          ? <ChevronDown className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
-                          : <ChevronRight className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
-                        }
-                      </div>
-                      <Truck className="w-4 h-4 text-[var(--color-secondary)]" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                    <div className="sticky left-0 flex w-fit items-center gap-2 px-[var(--cell-px)]">
+                      {sectionVehicles
+                        ? <ChevronDown className="h-3.5 w-3.5 text-[var(--color-secondary)]" />
+                        : <ChevronRight className="h-3.5 w-3.5 text-[var(--color-secondary)]" />
+                      }
+                      <Truck className="h-4 w-4 text-[var(--color-secondary)]" />
+                      <span className="text-[13px] font-semibold text-[var(--color-muted-foreground)]">
                         Vehicles — {vehicles?.length || 0}
                       </span>
                     </div>
@@ -368,36 +357,30 @@ export default function SchedulePage() {
                 </tr>
 
                 {sectionVehicles && vehicles?.map((v: ScheduleVehicleDto) => (
-                  <tr
-                    key={v.id}
-                    className="hover:bg-[var(--color-surface-container-low)]/60 transition-colors last:border-b-0"
-                    style={{ borderBottom: '1px solid var(--color-surface-container)' }}
-                  >
-                    <td className="sticky left-0 z-10 bg-white px-[var(--cell-px)] py-1.5 min-w-[200px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-[var(--color-secondary-container)]/40 flex items-center justify-center flex-shrink-0">
-                          <Truck className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold truncate">{v.vehicleName}</div>
-                          <div className="text-[10px] text-[var(--color-muted-foreground)]">
-                            {v.registration || '—'} · {v.vehicleType?.replace(/([A-Z])/g, ' $1').trim()} · {v.totalSeats} seats
-                            {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined text-[10px] leading-none align-middle">accessible</span></>}
-                          </div>
-                        </div>
+                  <tr key={v.id} className={ROW}>
+                    <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
+                      {/* pl-5 lines the name up with staff names, which sit after a 14px chevron + gap */}
+                      <div className="flex min-w-0 flex-col pl-5 md:flex-row md:items-center md:gap-2">
+                        <span className="min-w-0 truncate text-sm font-semibold">{v.vehicleName}</span>
+                        <span className="min-w-0 shrink-[3] truncate text-[13px] text-[var(--color-muted-foreground)]">
+                          {v.registration || '—'} · {v.vehicleType?.replace(/([A-Z])/g, ' $1').trim()} · {v.totalSeats} seats
+                          {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined align-middle text-[14px] leading-none">accessible</span></>}
+                        </span>
                       </div>
                     </td>
                     {v.tripStatuses?.map((ts: ScheduleVehicleTripStatusDto, idx: number) => {
                       const trip = trips[idx]
                       const isAvailable = ts.status === 'Available'
                       return (
-                        <td key={ts.tripId} className="px-2 py-1.5">
-                          <ScheduleAssignmentCell
-                            status={ts.status}
-                            clickable={isAvailable && canWrite}
-                            onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}
-                            assignLabel={`Assign ${v.vehicleName} to ${trip.tripName}`}
-                          />
+                        <td key={ts.tripId} className={TRIP_CELL}>
+                          <div className="flex w-full items-center gap-1">
+                            <ScheduleAssignmentCell
+                              status={ts.status}
+                              clickable={isAvailable && canWrite}
+                              onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}
+                              assignLabel={`Assign ${v.vehicleName} to ${trip.tripName}`}
+                            />
+                          </div>
                         </td>
                       )
                     })}

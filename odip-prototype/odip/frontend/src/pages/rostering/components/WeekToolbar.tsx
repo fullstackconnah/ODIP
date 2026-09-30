@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, AlertTriangle, Plus } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formatWeekRange } from '../lib/roster'
@@ -45,35 +46,25 @@ export function WeekToolbar({
   canWrite,
   onNewShift,
 }: WeekToolbarProps) {
+  // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
+  // fine pointer and 44px under `pointer: coarse`, so the toolbar is one 32px line.
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
-          <button
-            type="button"
-            onClick={onPrevWeek}
-            aria-label="Previous week"
-            className="rounded-md p-3.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {/* Prev/next are square Buttons: md height, width pinned to the same token (px-0! beats the
+              size's own px-4, which would make a lone chevron 48px wide). */}
+          <Button variant="secondary" size="md" onClick={onPrevWeek} aria-label="Previous week" className="w-[var(--control-h)] px-0!">
             <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onThisWeek}
-            className="rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          </Button>
+          <Button variant="secondary" size="md" onClick={onThisWeek}>
             This week
-          </button>
-          <button
-            type="button"
-            onClick={onNextWeek}
-            aria-label="Next week"
-            className="rounded-md p-3.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          </Button>
+          <Button variant="secondary" size="md" onClick={onNextWeek} aria-label="Next week" className="w-[var(--control-h)] px-0!">
             <ChevronRight className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
-        <h2 className="font-display text-lg font-semibold text-foreground">{formatWeekRange(days)}</h2>
+        <h2 className="font-display text-sm font-semibold tabular-nums text-foreground">{formatWeekRange(days)}</h2>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -108,35 +99,23 @@ export function WeekToolbar({
           // group — ToggleGroup's role="radiogroup"/role="radio" semantics assume >=2 mutually
           // exclusive options, and its arrow-key roving-tabindex handling would otherwise fire
           // on every arrow key with only one option to rove between (index±1 mod 1 is always 0).
-          <button
-            type="button"
+          <Button
+            variant={unfilledOnly ? 'primary' : 'ghost'}
+            size="md"
             aria-pressed={unfilledOnly}
             onClick={() => onUnfilledOnlyChange(!unfilledOnly)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              unfilledOnly
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent'
-            }`}
           >
             Unfilled only
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          onClick={onOpenExceptions}
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground transition-colors duration-150 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <Button variant="secondary" size="md" onClick={onOpenExceptions}>
           <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           {exceptionsCount} exception{exceptionsCount === 1 ? '' : 's'}
-        </button>
+        </Button>
         {canWrite && (
-          <button
-            type="button"
-            onClick={onNewShift}
-            className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20 transition-all duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button size="md" onClick={onNewShift}>
             <Plus className="h-4 w-4" /> New shift
-          </button>
+          </Button>
         )}
       </div>
     </div>

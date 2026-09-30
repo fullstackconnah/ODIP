@@ -5,6 +5,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { CalendarClock, X } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -176,28 +177,32 @@ export default function RosterBoardPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Rostering" subtitle="Week roster board — community shifts, trip work, and leave in one view." />
+      {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
+          instead of being spaced apart by the page's --section-gap. */}
+      <div className="flex flex-col gap-2">
+        <PageHeader title="Rostering" subtitle="Week roster board — community shifts, trip work, and leave in one view." />
 
-      <WeekToolbar
-        days={days}
-        onPrevWeek={() => setWeekStart(w => shiftWeek(w, -1))}
-        onThisWeek={() => setWeekStart(weekStartOf(new Date()))}
-        onNextWeek={() => setWeekStart(w => shiftWeek(w, 1))}
-        groupBy={groupBy}
-        onGroupByChange={setGroupBy}
-        participantOptions={participantOptions}
-        participantFilter={participantFilter}
-        onParticipantFilterChange={setParticipantFilter}
-        regionOptions={regionOptions}
-        regionFilter={regionFilter}
-        onRegionFilterChange={setRegionFilter}
-        unfilledOnly={unfilledOnly}
-        onUnfilledOnlyChange={setUnfilledOnly}
-        exceptionsCount={combinedExceptions.length}
-        onOpenExceptions={() => setExceptionsOpen(true)}
-        canWrite={canWrite}
-        onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
-      />
+        <WeekToolbar
+          days={days}
+          onPrevWeek={() => setWeekStart(w => shiftWeek(w, -1))}
+          onThisWeek={() => setWeekStart(weekStartOf(new Date()))}
+          onNextWeek={() => setWeekStart(w => shiftWeek(w, 1))}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          participantOptions={participantOptions}
+          participantFilter={participantFilter}
+          onParticipantFilterChange={setParticipantFilter}
+          regionOptions={regionOptions}
+          regionFilter={regionFilter}
+          onRegionFilterChange={setRegionFilter}
+          unfilledOnly={unfilledOnly}
+          onUnfilledOnlyChange={setUnfilledOnly}
+          exceptionsCount={combinedExceptions.length}
+          onOpenExceptions={() => setExceptionsOpen(true)}
+          canWrite={canWrite}
+          onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
+        />
+      </div>
 
       {isLoading && <RosterGridSkeleton days={days} />}
 
@@ -214,11 +219,11 @@ export default function RosterBoardPage() {
           add-a-shift affordance. Guidance for a first-time/empty week is this dismissible hint
           above the grid, never a replacement for it. */}
       {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && (
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-surface-container-low px-4 py-3">
-          <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]">
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">Nothing rostered this week</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {canWrite ? (
                 <>
                   Click an empty cell below to add a shift, or{' '}
@@ -232,14 +237,9 @@ export default function RosterBoardPage() {
               )}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={dismissHint}
-            aria-label="Dismiss hint"
-            className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors duration-150 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button variant="ghost" size="sm" iconOnly onClick={dismissHint} aria-label="Dismiss hint" className="shrink-0">
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       )}
 
@@ -303,13 +303,9 @@ export default function RosterBoardPage() {
           </>
         )}
         footer={
-          <button
-            type="button"
-            onClick={() => setPendingBlocked(null)}
-            className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-          >
+          <Button onClick={() => setPendingBlocked(null)}>
             Got it
-          </button>
+          </Button>
         }
       />
 
@@ -326,27 +322,21 @@ export default function RosterBoardPage() {
               value={overrideReasonDraft}
               onChange={e => setOverrideReasonDraft(e.target.value)}
               placeholder="Reason for overriding these warnings"
-              className="mt-3 w-full rounded-lg bg-input border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="mt-3 w-full rounded-[var(--radius-sm)] bg-input border border-border px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </>
         )}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => { setPendingAssign(null); setOverrideReasonDraft('') }}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-accent"
-            >
+            <Button variant="secondary" onClick={() => { setPendingAssign(null); setOverrideReasonDraft('') }}>
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               disabled={!overrideReasonDraft.trim() || assignShift.isPending}
               onClick={() => pendingAssign && performAssign(pendingAssign.shift, pendingAssign.staffId, overrideReasonDraft.trim(), pendingAssign.findings.map(f => f.code))}
-              className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {assignShift.isPending ? 'Assigning…' : 'Assign anyway'}
-            </button>
+            </Button>
           </>
         }
       />

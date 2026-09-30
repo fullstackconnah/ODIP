@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { RosterDayCell } from './RosterDayCell'
+import { makeShift } from '../test-fixtures'
 
 function noop() {}
 
@@ -87,5 +89,44 @@ describe('RosterDayCell — empty cell affordance', () => {
     screen.getByRole('button', { name: ADD_LABEL }).focus()
     await user.keyboard(' ')
     expect(onAdd).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('RosterDayCell — chip context and height', () => {
+  const baseProps = {
+    day: '2026-08-19',
+    dayIndex: 2,
+    canWrite: true,
+    addLabel: ADD_LABEL,
+    onAdd: noop,
+    onOpen: noop,
+    onAssignTo: noop,
+    onUnassign: noop,
+    onDelete: noop,
+  }
+
+  it('forwards chipContext so a participant row labels its chips with the covering staff member', () => {
+    const shift = makeShift({ participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })
+    render(<MemoryRouter><RosterDayCell {...baseProps} shifts={[shift]} chipContext="participant" /></MemoryRouter>)
+
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Mia Chen' })).not.toBeInTheDocument()
+  })
+
+  it('defaults to a staff row: the chip is labelled with the participant', () => {
+    const shift = makeShift({ participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })
+    render(<MemoryRouter><RosterDayCell {...baseProps} shifts={[shift]} /></MemoryRouter>)
+
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Alex Rivera' })).not.toBeInTheDocument()
+  })
+
+  it('is --row-h less the 1px row rule tall, whether empty or holding a chip', () => {
+    const { container, unmount } = render(<RosterDayCell {...baseProps} shifts={[]} />)
+    expect(container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
+    unmount()
+
+    const filled = render(<MemoryRouter><RosterDayCell {...baseProps} shifts={[makeShift()]} /></MemoryRouter>)
+    expect(filled.container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
   })
 })

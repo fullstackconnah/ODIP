@@ -1,5 +1,7 @@
 export { default as ScheduleAssignmentCell } from './ScheduleAssignmentCell'
-export { default as QualBadge } from './QualBadge'
+export { default as QualBadge, QualBadgeList } from './QualBadge'
+export type { Qualification } from './QualBadge'
+export { default as ScheduleSummary } from './ScheduleSummary'
 export { default as TripStatusBadge } from './TripStatusBadge'
 export { default as AvailabilityList } from './AvailabilityList'
 export { default as StaffAssignModal } from './StaffAssignModal'

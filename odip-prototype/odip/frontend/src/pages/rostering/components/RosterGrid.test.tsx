@@ -121,3 +121,67 @@ describe('RosterGrid — cross-domain links', () => {
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
   })
 })
+
+describe('RosterGrid — density', () => {
+  it('does not repeat the participant name on chips in a participant row: the chip names the covering staff member', () => {
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p1',
+        fullName: 'Mia Chen',
+        daysWithoutCover: 6,
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })],
+      })],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    // The participant appears once (the row header); the covering staff member once (the chip label).
+    expect(screen.getAllByText('Mia Chen')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+  })
+
+  it('shows "Unfilled" on an unfilled shift inside a participant row', () => {
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p1',
+        fullName: 'Mia Chen',
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: null, staffName: null })],
+      })],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    expect(screen.getByText('Unfilled')).toBeInTheDocument()
+  })
+
+  it('in a staff row the chip names the participant and the staff member is named once, by the row header link', () => {
+    const board = makeStaffBoard({
+      staffRows: [makeStaffRow({
+        staffId: 'staff-9',
+        fullName: 'Alex Rivera',
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })],
+      })],
+      unfilled: [],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    expect(screen.getAllByRole('link', { name: 'Alex Rivera' })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
+  })
+
+  it('sizes row headers and day cells from --row-h so a row is 34px at a fine pointer and grows under a coarse one', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    expect(container.querySelector('.sticky.left-0.z-10')).toHaveClass('min-h-[var(--row-h)]')
+    expect(screen.getAllByRole('button', { name: /^Add a shift for/ })[0]).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
+  })
+
+  it('pins the day header row and scrolls inside its own frame from md up, so the sticky header actually engages', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    const frame = container.firstElementChild as HTMLElement
+    expect(frame).toHaveClass('overflow-auto')
+    expect(frame.className).toMatch(/md:max-h-/)
+    expect(screen.getByText('Mon').parentElement).toHaveClass('sticky', 'top-0')
+  })
+})

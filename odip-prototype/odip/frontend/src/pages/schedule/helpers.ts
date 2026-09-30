@@ -11,6 +11,6 @@ export function toEndDt(d: string) { return d + 'T23:59:59' }
 export const tripAccentText = [
   'text-[var(--color-primary)]',
   'text-[var(--color-secondary)]',
-  'text-[#8e337b]',
+  'text-[var(--color-on-accessible-container)]',
   'text-[var(--color-on-warning-container)]',
 ]

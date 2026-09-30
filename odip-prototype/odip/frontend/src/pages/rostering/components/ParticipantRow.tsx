@@ -30,33 +30,35 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
 
   return (
     <>
-      <div className="sticky left-0 z-10 flex flex-col gap-1.5 border-b border-r border-border bg-card px-4 py-2.5">
-        <div className="min-w-0">
+      {/*
+        Row header: two tight lines inside one --row-h row. Line 1: the participant (a link) and, when it
+        applies, the restrictive-practice marker — kept on the name line so it survives a crowded second
+        line. Line 2: support ratio on the left (it truncates first), coverage on the right — the visible
+        signal for the gap this row-per-participant layout exists to surface. A trip bar rendered below
+        can explain an otherwise-empty week without this reading as a failure.
+      */}
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
+        <div className="flex min-w-0 items-center gap-1">
           <Link
             to={`/participants/${row.participantId}`}
-            className="block truncate font-display text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >
             {row.fullName}
           </Link>
-          <p className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
-            {RATIO_LABELS[row.supportRatio] ?? row.supportRatio} support
-            {row.hasRestrictivePractice && (
-              <span role="img" aria-label="Restrictive practice authorised" title="Restrictive practice authorised">
-                <ShieldAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
-              </span>
-            )}
-          </p>
+          {row.hasRestrictivePractice && (
+            <span className="shrink-0 text-muted-foreground" role="img" aria-label="Restrictive practice authorised" title="Restrictive practice authorised">
+              <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+            </span>
+          )}
         </div>
 
-        {/* Coverage indicator derived from daysWithoutCover — the visible signal for the gap
-            this row-per-participant layout exists to surface. A trip bar rendered below can
-            explain an otherwise-empty week without this reading as a failure. */}
-        <div className="flex h-4 min-w-0 items-center">
+        <div className="flex min-w-0 items-center justify-between gap-2 text-[13px] leading-4 text-muted-foreground">
+          <span className="min-w-0 truncate">{RATIO_LABELS[row.supportRatio] ?? row.supportRatio} support</span>
           {hideCoverageBadge ? null : covered ? (
-            <span className="text-[11px] text-muted-foreground">Fully covered</span>
+            <span className="shrink-0">Fully covered</span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#b45309]">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 font-medium text-[var(--color-on-warning-container)]">
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
               {row.daysWithoutCover} day{row.daysWithoutCover === 1 ? '' : 's'} uncovered
             </span>
@@ -65,7 +67,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
       </div>
 
       <div
-        className="grid gap-1 border-b border-border p-1"
+        className="grid gap-x-1 gap-y-0.5 border-b border-border px-1"
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length), gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (
@@ -76,6 +78,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             shifts={row.shifts.filter(s => s.serviceDate === day)}
             canWrite={canWrite}
             addLabel={`Add a shift for ${row.fullName} on ${formatDayAccessibleName(day)}`}
+            chipContext="participant"
             onAdd={() => onAddShift(row.participantId, row.fullName, day)}
             onOpen={onOpen}
             onAssignTo={onAssignTo}
