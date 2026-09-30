@@ -1031,31 +1031,25 @@ describe('DataTable — 44px hit area for the links in a cell (coarse pointer)',
 
     const cells = screen.getAllByRole('cell')
     expect(cells).toHaveLength(rows.length * linkColumns.length)
-    for (const cell of cells) expect(cell).toHaveClass(...TAP_AREA_LINKS.split(' '))
+    for (const cell of cells) expect(cell).toHaveClass(TAP_AREA_LINKS, 'tap-area-links')
   })
 
   it('leaves the header cells alone: a column title is not a control', () => {
     render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
 
     for (const th of screen.getAllByRole('columnheader')) {
-      expect(th.className).not.toContain('[&_a]')
+      expect(th).not.toHaveClass('tap-area-links')
     }
   })
 
-  it('scopes the pad to descendant links under a coarse pointer, so a mouse gets no position or pseudo-element', () => {
+  it('adds ONE class to a cell, defined under `pointer: coarse` in index.css, so a mouse gets no position or pseudo-element', () => {
     render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
 
     const cell = screen.getByRole('link', { name: 'Bianca' }).closest('td') as HTMLElement
-    const classes = cell.className.split(/\s+/).filter(c => c.includes('[&_a]'))
-    expect(classes.length).toBeGreaterThan(8)
-    for (const c of classes) expect(c.startsWith('pointer-coarse:[&_a]:')).toBe(true)
-    // Floored by --tap-min, so the reach past the text is (44 - height) / 2 and never a hard-coded value.
-    expect(classes).toEqual(expect.arrayContaining([
-      'pointer-coarse:[&_a]:relative',
-      'pointer-coarse:[&_a]:before:absolute',
-      'pointer-coarse:[&_a]:before:min-h-[var(--tap-min)]',
-      'pointer-coarse:[&_a]:before:min-w-[var(--tap-min)]',
-    ]))
+    // Not ten arbitrary-variant classes (~730 characters of `class` on every cell of every table).
+    expect(cell.className).not.toContain('[&_a]')
+    expect(cell.className).not.toContain('before:')
+    expect(cell.className.split(/\s+/).filter(c => c.includes('tap'))).toEqual(['tap-area-links'])
   })
 
   it('keeps the cell itself unchanged: still one nowrap line from md up, and a plain string still truncates', () => {

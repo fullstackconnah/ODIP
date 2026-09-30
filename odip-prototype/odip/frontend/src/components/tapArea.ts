@@ -37,26 +37,17 @@ export const TAP_FLOOR = 'pointer-coarse:inline-flex min-h-[var(--tap-min)] poin
 
 /**
  * TAP_AREA for every link inside a table body cell, written once on the `<td>` (DataTable does it), so a caller's
- * `render: row => <Link to=…>` gets the 44px hit area without knowing about it. It is TAP_AREA spelled out under
- * `pointer-coarse:` and `[&_a]:` — Tailwind only emits whole class names it can read, so it cannot be derived
- * from TAP_AREA at runtime — and being `pointer-coarse:` it does not even set `position` on a mouse, so the
- * desktop table is byte-for-byte what it was. The pad is `max(100%, --tap-min)` centred on the link: a 19px
- * name link reaches 12px past its text above and below, inside the 48px coarse row; a link narrower than 44px
- * (an "Open") is widened to 44px. Same caveats as TAP_AREA: an `overflow-hidden` link (`truncate`) clips its own pad,
- * so such a link takes vertical padding instead (see the Incidents and Participants name links).
+ * `render: row => <Link to=…>` gets the 44px hit area without knowing about it. It is ONE class, `tap-area-links`, a
+ * Tailwind `@utility` defined in index.css (next to the density tokens) and not the ten arbitrary-variant classes that
+ * TAP_AREA spelled out for a descendant link would need, because every table cell carries it: ten classes were ~730
+ * characters of `class` on each of a table's cells. The utility is TAP_AREA under `@media (pointer: coarse)` for `a`:
+ * `position: relative` and a transparent centred `::before` of `max(100%, var(--tap-min))` each way, so on a mouse it
+ * does not even set `position` and the desktop table is byte-for-byte what it was. A 19px name link reaches 12px past its
+ * text above and below, inside the 48px coarse row; a link narrower than 44px (an "Open") is widened to 44px. Same
+ * caveats as TAP_AREA: an `overflow-hidden` link (`truncate`) clips its own pad, so such a link takes vertical padding
+ * instead (see the Incidents and Participants name links), and neighbours need the room a pad reaches.
  */
-export const TAP_AREA_LINKS = [
-  'pointer-coarse:[&_a]:relative',
-  'pointer-coarse:[&_a]:before:absolute',
-  'pointer-coarse:[&_a]:before:left-1/2',
-  'pointer-coarse:[&_a]:before:top-1/2',
-  'pointer-coarse:[&_a]:before:h-full',
-  'pointer-coarse:[&_a]:before:w-full',
-  'pointer-coarse:[&_a]:before:min-h-[var(--tap-min)]',
-  'pointer-coarse:[&_a]:before:min-w-[var(--tap-min)]',
-  'pointer-coarse:[&_a]:before:-translate-x-1/2',
-  'pointer-coarse:[&_a]:before:-translate-y-1/2',
-].join(' ')
+export const TAP_AREA_LINKS = 'tap-area-links'
 
 /**
  * For a table-cell link that TRUNCATES (`md:truncate`, so `overflow: hidden`): it clips its own TAP_AREA pad, which
@@ -67,3 +58,14 @@ export const TAP_AREA_LINKS = [
  * and TAP_AREA_LINKS already reaches 44px. Nothing changes on a mouse.
  */
 export const TAP_TRUNCATED_LINK = 'md:pointer-coarse:py-[calc((var(--tap-min)_-_1.25rem)_/_2)]'
+
+/**
+ * The touch shape of a small icon control in a row cluster (Edit, Archive, Remove from trip, a quick link): on a mouse
+ * it is whatever the caller made it (`p-1` or `p-1.5` around a 14-16px icon, 22-28px), and under `pointer: coarse` it is
+ * the `--control-h-sm` square (36px) with the icon centred and TAP_AREA's 44px hit area on top. Neighbouring controls
+ * therefore need 8px between them on touch (4px of pad each side): a `gap-2` row, or `gap-1 pointer-coarse:gap-2`.
+ * Used by ActionButtons and by the hand-rolled icon clusters on the trip detail Bookings and Staff tabs. Without it a
+ * link in such a cluster took DataTable's TAP_AREA_LINKS pad (11px past its 22px box) and overlapped its still-small
+ * neighbours by 3px each, which the broad coarse sweep caught.
+ */
+export const TAP_ICON_SQUARE = `${TAP_AREA} pointer-coarse:inline-flex pointer-coarse:size-[var(--control-h-sm)] pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:p-0`

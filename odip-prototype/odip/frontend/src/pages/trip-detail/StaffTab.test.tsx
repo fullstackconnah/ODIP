@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import StaffTab from './StaffTab'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto } from '@/api/types/staff'
+import { TAP_AREA } from '@/components/tapArea'
 
 const { mockCreateMutate, mockUpdateMutate, mockCheckMutate, mockGetRosterFindings, mockUseAvailableStaff } = vi.hoisted(() => ({
   mockCreateMutate: vi.fn(),
@@ -355,5 +356,37 @@ describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
     expect(screen.queryByText(/Failed to add staff/)).toBeNull()
+  })
+})
+
+// Density polish (touch): the Edit assignment / Remove from trip icon buttons were 22px on touch. They take the shared
+// TAP_ICON_SQUARE (22px on a mouse as before; the 36px --control-h-sm square with a 44px hit area on touch), spaced by the
+// row's 8px gap so the pads touch and never overlap.
+describe('StaffTab — touch targets in the row actions', () => {
+  const row = {
+    id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+    staffId: 'staff-1', staffName: 'Alex Rivera', assignmentRole: 'Support Worker',
+    assignmentStart: '2026-09-10', assignmentEnd: '2026-09-12', status: 'Confirmed',
+    isDriver: false, sleepoverType: 'None', shiftNotes: null,
+    hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
+  } as StaffAssignmentDto
+
+  it('gives Edit assignment and Remove from trip the 44px touch shape without changing the mouse look', () => {
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+
+    for (const title of ['Edit assignment', 'Remove from trip']) {
+      const button = screen.getByTitle(title)
+      expect(button, title).toHaveClass(...TAP_AREA.split(' '))
+      expect(button, title).toHaveClass('pointer-coarse:inline-flex', 'pointer-coarse:size-[var(--control-h-sm)]', 'pointer-coarse:items-center', 'pointer-coarse:justify-center', 'pointer-coarse:p-0')
+      expect(button, title).toHaveClass('p-1', 'rounded', 'transition-colors')
+    }
+  })
+
+  it('keeps the two buttons 8px apart in one centred row', () => {
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+
+    const cluster = screen.getByTitle('Edit assignment').parentElement as HTMLElement
+    expect(cluster).toHaveClass('flex', 'items-center', 'justify-center', 'gap-2')
+    expect(cluster).toContainElement(screen.getByTitle('Remove from trip'))
   })
 })

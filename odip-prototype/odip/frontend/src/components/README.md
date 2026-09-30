@@ -567,12 +567,19 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
   link is 44px tall on touch (0px floor on a mouse, where it stays the plain inline link box for box) and centred in
   that height. It adds real layout height, so it needs no neighbour spacing and can never be clipped by an `overflow`
   ancestor; prefer the pad where growing the box would move things.
-- **`TAP_AREA_LINKS`** is `TAP_AREA` for every link in a table cell (`[&_a]:` under `pointer-coarse:`), written once
-  on `DataTable`'s body `<td>`: a `render: row => <Link>` gets a 44px hit area with no caller code, and on a mouse not
-  even `position` changes. A `truncate`/`overflow-hidden` link clips its own pad, so give it vertical padding instead.
-  The pager's Previous/Next take `--control-h` (44px on touch) rather than a pad.
-- **`ActionButtons`** carries `TAP_AREA` on each icon control, is the `--control-h-sm` square (36px) under coarse
-  wherever it sits (a DataTable row or a card), and opens its gap from 4px to 8px there so the pads touch and never
+- **`TAP_AREA_LINKS`** is `TAP_AREA` for every link in a table cell, written once on `DataTable`'s body `<td>`: a
+  `render: row => <Link>` gets a 44px hit area with no caller code, and on a mouse not even `position` changes. It is a
+  single class, `tap-area-links`, a `@utility` in `index.css` (all of it inside `@media (pointer: coarse)`), so a cell
+  carries one class name rather than ten arbitrary-variant ones. A `truncate`/`overflow-hidden` link clips its own pad, so
+  give it `TAP_TRUNCATED_LINK` (vertical padding from md up) instead. The pager's Previous/Next take `--control-h` (44px
+  on touch) rather than a pad.
+- **`TAP_ICON_SQUARE`** is the touch shape of a small icon control in a row cluster: `TAP_AREA` plus the
+  `--control-h-sm` square (36px) with the icon centred, under `pointer-coarse:` only. `ActionButtons` uses it, and so
+  do the hand-rolled icon clusters on the trip detail Bookings and Staff tabs; two neighbours need 8px between them
+  there (a `gap-2` row) so their pads touch and never overlap. A link that sits in such a cluster and is NOT padded
+  the same way would take DataTable's `TAP_AREA_LINKS` pad and overlap its small neighbours.
+- **`ActionButtons`** carries `TAP_ICON_SQUARE` on each icon control: the `--control-h-sm` square (36px) under coarse
+  wherever it sits (a DataTable row or a card), and it opens its gap from 4px to 8px there so the pads touch and never
   overlap.
 
 ---

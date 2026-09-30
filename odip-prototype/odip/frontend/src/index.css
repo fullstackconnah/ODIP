@@ -94,6 +94,30 @@
   }
 }
 
+/*
+ * TAP_AREA_LINKS (components/tapArea.ts): the coarse-pointer 44px hit area for every link in a table body cell, as one
+ * utility so DataTable can put a single class on each <td> instead of ten. TAP_AREA for a descendant `a`: it is
+ * `position: relative` with a transparent ::before centred on it, `max(100%, --tap-min)` each way, so a tap in the
+ * padding is a tap on the link (the pseudo-element belongs to it). It exists only under `pointer: coarse`, where
+ * --tap-min is 44px; a mouse gets neither the `position` nor the pseudo-element.
+ */
+@utility tap-area-links {
+  @media (pointer: coarse) {
+    & a {
+      position: relative;
+    }
+    & a::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, var(--tap-min));
+      height: max(100%, var(--tap-min));
+      translate: -50% -50%;
+    }
+  }
+}
+
 @layer base {
   body {
     background-color: var(--color-background);

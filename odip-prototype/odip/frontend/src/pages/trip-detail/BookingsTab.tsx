@@ -5,6 +5,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor } from '@/lib/utils'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
@@ -547,7 +548,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div className="flex items-center justify-center gap-2">
                 {b.actionRequired && <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />}
                 {canWrite && (
-                  <button onClick={() => openEditModal(b)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="Edit booking">
+                  <button onClick={() => openEditModal(b)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors`} title="Edit booking">
                     <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                   </button>
                 )}
@@ -555,18 +556,18 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                   type="button"
                   onClick={() => handleDownloadClientOverview(b)}
                   disabled={downloadingBookingId === b.id}
-                  className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors disabled:opacity-50"
+                  className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors disabled:opacity-50`}
                   title="Client Overview PDF"
                 >
                   {downloadingBookingId === b.id
                     ? <Loader2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] animate-spin" />
                     : <Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />}
                 </button>
-                <Link to={`/participants/${b.participantId}`} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="View participant">
+                <Link to={`/participants/${b.participantId}`} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors`} title="View participant">
                   <ExternalLink className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
                 </Link>
                 {canWrite && (
-                  <button onClick={() => setDeletingBooking(b)} className="p-1 rounded hover:bg-[var(--color-error-container)]/60 transition-colors" title="Remove from trip">
+                  <button onClick={() => setDeletingBooking(b)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-error-container)]/60 transition-colors`} title="Remove from trip">
                     <Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]" />
                   </button>
                 )}
