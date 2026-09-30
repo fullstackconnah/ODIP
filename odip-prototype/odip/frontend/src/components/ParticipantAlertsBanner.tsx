@@ -27,7 +27,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
   const hiddenCount = alerts.length - visibleAlerts.length
 
   return (
-    <div className="space-y-1.5 mt-3" aria-label="Participant risk alerts">
+    <div className="flex flex-col gap-1 mt-2" aria-label="Participant risk alerts">
       {visibleAlerts.map((a) => {
         const style = ALERT_SEVERITY_STYLES[a.severity]
         const Icon = style.icon
@@ -36,7 +36,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
         // so a participant with several non-critical alerts doesn't get talked over. The role
         // sits on this wrapper, not the <button> itself, so the row keeps its button semantics.
         const role = a.severity === 'Critical' ? 'alert' : 'status'
-        const rowClassName = `w-full flex items-center gap-2 text-left text-sm px-3 py-2 rounded-lg ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
+        const rowClassName = `w-full flex items-center gap-2 text-left text-sm leading-5 px-3 py-1.5 rounded-[var(--radius-md)] ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
         return (
           <div key={`${a.type}:${a.message}`} role={role}>
             {a.linkTo ? (
@@ -46,7 +46,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
               // rendered inside the link for visual parity with the tab-select row below.
               <Link to={a.linkTo} aria-label={a.message} className={rowClassName}>
                 <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="flex-1" aria-hidden="true">{a.message}</span>
+                <span className="flex-1 min-w-0 truncate" title={a.message} aria-hidden="true">{a.message}</span>
                 {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
                 <span className="text-[10px] font-bold uppercase tracking-wide shrink-0" aria-hidden="true">{style.label}</span>
@@ -58,7 +58,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
                 className={rowClassName}
               >
                 <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="flex-1">{a.message}</span>
+                <span className="flex-1 min-w-0 truncate" title={a.message}>{a.message}</span>
                 {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
                 <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
@@ -72,7 +72,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
           type="button"
           onClick={() => setExpanded(true)}
           aria-expanded={false}
-          className="w-full text-left text-xs font-medium text-[var(--color-muted-foreground)] px-3 py-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+          className="w-full text-left text-xs font-medium text-[var(--color-muted-foreground)] px-3 py-1 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors"
         >
           +{hiddenCount} more alert{hiddenCount === 1 ? '' : 's'}
         </button>
@@ -82,7 +82,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
           type="button"
           onClick={() => setExpanded(false)}
           aria-expanded={true}
-          className="w-full text-left text-xs font-medium text-[var(--color-muted-foreground)] px-3 py-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+          className="w-full text-left text-xs font-medium text-[var(--color-muted-foreground)] px-3 py-1 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors"
         >
           Show fewer
         </button>

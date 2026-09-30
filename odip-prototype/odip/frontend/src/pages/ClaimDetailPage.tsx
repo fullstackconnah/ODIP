@@ -10,6 +10,9 @@ import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
+import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
@@ -53,8 +56,8 @@ export default function ClaimDetailPage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(!!claim && notes !== (claim.notes || ''))
 
-  if (isLoading) return <div className="p-8 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!claim) return <div className="p-8 text-[var(--color-muted-foreground)]">Claim not found</div>
+  if (isLoading) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Loading...</div>
+  if (!claim) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Claim not found</div>
 
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)
 
@@ -96,7 +99,7 @@ export default function ClaimDetailPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
@@ -118,75 +121,76 @@ export default function ClaimDetailPage() {
         <span className="font-medium">Claim {claim.claimReference}</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">Claim {claim.claimReference}</h1>
-          <StatusBadge status={claim.status} />
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
-            {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
-          >
-            <Download className="w-4 h-4" />
-            BPR CSV
-          </button>
-          {claim.status === 'Draft' && (
-            <button
-              onClick={() => { setStatusError(null); setStatusConfirmTarget('Submitted') }}
-              disabled={updateClaim.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50"
-            >
-              <Check className="w-4 h-4" />
-              Mark as Submitted
-            </button>
-          )}
-          {claim.status === 'Submitted' && (
-            <>
-              <button
-                onClick={() => { setStatusError(null); setStatusConfirmTarget('Paid') }}
-                disabled={updateClaim.isPending}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50"
-              >
-                <DollarSign className="w-4 h-4" />
-                Mark as Paid
-              </button>
-              <button
-                onClick={() => { setStatusError(null); setStatusConfirmTarget('Rejected') }}
-                disabled={updateClaim.isPending}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-destructive)] text-white text-sm font-medium hover:bg-[var(--color-destructive)]/90 transition-all disabled:opacity-50"
-              >
-                <XCircle className="w-4 h-4" />
-                Mark as Rejected
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Amount', value: `$${totalAmount.toFixed(2)}` },
-          claim.kind === 'Shift'
-            ? { label: 'Period', value: `${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}` }
-            : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—' },
-          { label: 'Submitted', value: claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—' },
-        ].map(card => (
-          <div key={card.label} className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4">
-            <p className="text-xs text-[var(--color-muted-foreground)] font-medium mb-1">{card.label}</p>
-            <p className="text-lg font-semibold text-[var(--color-foreground)]">{card.value}</p>
+      <PageHeader
+        title={`Claim ${claim.claimReference}`}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={claim.status} />
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
+              {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
+            </span>
           </div>
-        ))}
-      </div>
+        }
+        action={
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`)}
+            >
+              <Download className="w-4 h-4" />
+              BPR CSV
+            </Button>
+            {claim.status === 'Draft' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => { setStatusError(null); setStatusConfirmTarget('Submitted') }}
+                disabled={updateClaim.isPending}
+              >
+                <Check className="w-4 h-4" />
+                Mark as Submitted
+              </Button>
+            )}
+            {claim.status === 'Submitted' && (
+              <>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => { setStatusError(null); setStatusConfirmTarget('Paid') }}
+                  disabled={updateClaim.isPending}
+                >
+                  <DollarSign className="w-4 h-4" />
+                  Mark as Paid
+                </Button>
+                <Button
+                  variant="danger"
+                  size="md"
+                  onClick={() => { setStatusError(null); setStatusConfirmTarget('Rejected') }}
+                  disabled={updateClaim.isPending}
+                >
+                  <XCircle className="w-4 h-4" />
+                  Mark as Rejected
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      />
+
+      <FactBar
+        segments={[
+          { label: 'Total Amount', value: <span className="tabular-nums">{`$${totalAmount.toFixed(2)}`}</span> },
+          claim.kind === 'Shift'
+            ? { label: 'Period', value: <span className="tabular-nums">{`${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`}</span> }
+            : { label: 'Trip', value: claim.tripName || '—' },
+          { label: 'Created', value: <span className="tabular-nums">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—'}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—'}</span> },
+        ]}
+      />
 
       {/* Notes */}
-      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 space-y-2">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
         <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">Notes</label>
         <textarea
           value={notes}
@@ -196,19 +200,15 @@ export default function ClaimDetailPage() {
           className={inputClass + ' resize-none'}
         />
         <div className="flex justify-end">
-          <button
-            onClick={handleSaveNotes}
-            disabled={updateClaim.isPending}
-            className="px-4 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50"
-          >
+          <Button variant="primary" size="md" onClick={handleSaveNotes} disabled={updateClaim.isPending}>
             {saved ? 'Saved!' : 'Save Notes'}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Line items */}
-      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] overflow-hidden">
-        <div className="px-4 py-3 bg-[var(--color-surface-container-low)] flex items-center justify-between">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+        <div className="px-[var(--card-pad)] py-2 bg-[var(--color-surface-container-low)] flex items-center justify-between">
           <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Line Items</h2>
           <span className="text-xs text-[var(--color-muted-foreground)]">{(claim.lineItems ?? []).length} items</span>
         </div>
@@ -230,7 +230,7 @@ export default function ClaimDetailPage() {
                   ) : (
                     <p className="font-medium text-[var(--color-foreground)]">{item.participantName}</p>
                   )}
-                  <p className="text-xs text-[var(--color-muted-foreground)] font-mono">{item.ndisNumber}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] font-mono tabular-nums">{item.ndisNumber}</p>
                   <StatusBadge status={item.planType} label={planTypeLabel(item.planType)} />
                 </div>
               ),
@@ -239,7 +239,7 @@ export default function ClaimDetailPage() {
               key: 'supportItemCode',
               header: 'Support Item',
               sortable: true,
-              className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
+              className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
             },
             {
               key: 'dayType',
@@ -257,7 +257,7 @@ export default function ClaimDetailPage() {
               // supportsDeliveredFrom/To — a single shift's service date, not a booking window —
               // so show it once rather than as a redundant "date – same date" range.
               render: (item: ClaimLineItemDto) => (
-                <span className="text-xs text-[var(--color-muted-foreground)] whitespace-nowrap">
+                <span className="text-sm tabular-nums text-[var(--color-muted-foreground)] whitespace-nowrap">
                   {item.shiftId ? item.supportsDeliveredFrom : `${item.supportsDeliveredFrom} – ${item.supportsDeliveredTo}`}
                 </span>
               ),
@@ -267,7 +267,7 @@ export default function ClaimDetailPage() {
               header: 'Hours',
               align: 'right' as const,
               render: (item: ClaimLineItemDto) => (
-                <span className="text-[var(--color-muted-foreground)]">{item.hours}h</span>
+                <span className="tabular-nums text-[var(--color-muted-foreground)]">{item.hours}h</span>
               ),
             },
             {
@@ -282,7 +282,7 @@ export default function ClaimDetailPage() {
               type: 'currency' as const,
               align: 'right' as const,
               sortable: true,
-              className: 'font-medium',
+              className: 'font-medium tabular-nums',
             },
             {
               key: 'status',
@@ -305,7 +305,7 @@ export default function ClaimDetailPage() {
                   <div className="flex flex-col gap-1.5 items-start">
                     {item.claimType === 'Cancellation' ? (
                       <div className="flex flex-col gap-1 items-start">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium whitespace-nowrap">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] font-medium whitespace-nowrap">
                           No Show · {item.cancellationReason}
                         </span>
                         <button
@@ -319,7 +319,7 @@ export default function ClaimDetailPage() {
                     ) : (
                       <button
                         onClick={() => setNoShowTarget(item as ClaimLineItemDto)}
-                        className="text-xs text-[var(--color-muted-foreground)] hover:text-amber-600 hover:underline"
+                        className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-warning)] hover:underline"
                       >
                         No Show
                       </button>
@@ -339,8 +339,8 @@ export default function ClaimDetailPage() {
           ]}
           footer={
             <tr>
-              <td colSpan={6} className="p-3 text-right font-semibold text-[var(--color-foreground)]">Total</td>
-              <td className="p-3 font-bold text-[var(--color-foreground)]">{formatCurrency(totalAmount)}</td>
+              <td colSpan={6} className="p-2 text-right font-semibold text-[var(--color-foreground)]">Total</td>
+              <td className="p-2 font-bold tabular-nums text-[var(--color-foreground)]">{formatCurrency(totalAmount)}</td>
               <td colSpan={2} />
             </tr>
           }

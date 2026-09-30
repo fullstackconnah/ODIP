@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import { useStaffOverview, useSettings } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -101,34 +103,33 @@ export default function StaffDetailPage() {
   const { staff } = overview
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start gap-4">
-        <Link to="/staff" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold">{staff.fullName}</h1>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <PageHeader
+        title={staff.fullName}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
+            <span>{staff.position} · {staff.region || 'No region'}</span>
           </div>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{staff.position} · {staff.region || 'No region'}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canAccessLeaveApprovals && (
-            <Link
-              to={`/rostering/leave?userId=${id}`}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all"
-            >
-              <CalendarOff className="w-4 h-4" /> Leave & availability
-            </Link>
-          )}
-          {canWrite && (
-            <Link to={`/staff/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-              <Pencil className="w-4 h-4" /> Edit
-            </Link>
-          )}
-        </div>
-      </div>
+        }
+        action={
+          <div className="flex shrink-0 items-center gap-2">
+            <Button to="/staff" variant="secondary" size="md" aria-label="Back to staff">
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Button>
+            {canAccessLeaveApprovals && (
+              <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
+                <CalendarOff className="w-4 h-4" /> Leave & availability
+              </Button>
+            )}
+            {canWrite && (
+              <Button to={`/staff/${id}/edit`} variant="primary" size="md">
+                <Pencil className="w-4 h-4" /> Edit
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <Tabs
         tabs={[
@@ -156,11 +157,11 @@ export default function StaffDetailPage() {
           ) : (
             <ul className="divide-y divide-[var(--color-border)]">
               {credentialRows.map((row) => (
-                <li key={row.key} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                <li key={row.key} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium">{row.label}</p>
                     {row.expiryDate && (
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Expires {formatDateAu(row.expiryDate)}</p>
+                      <p className="text-xs tabular-nums text-[var(--color-muted-foreground)]">Expires {formatDateAu(row.expiryDate)}</p>
                     )}
                   </div>
                   {credentialBadge(row)}
@@ -172,7 +173,7 @@ export default function StaffDetailPage() {
       )}
 
       {tab === 'upcoming' && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-[var(--section-gap)]">
           <Card title="Upcoming shifts">
             <DataTable
               data={overview.upcomingShifts}
