@@ -26,7 +26,8 @@ copying it.
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
 - [Card](#card) / [StatCard](#statcard)
-- [PageHeader](#pageheader)
+- [PageHeader](#pageheader) (and the opt-in detail variant, `PageHeaderMeta`)
+- [FactBar](#factbar) (the default strip and the opt-in glance variant)
 - [Tabs](#tabs)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
@@ -475,8 +476,9 @@ component deliberately doesn't have.
 (matched case/whitespace-insensitively against a large built-in colour map spanning
 booking, severity, claims, QSC and plan-type vocabularies), `label` (override the
 displayed text without changing the colour lookup), `colorMap` (per-call overrides/
-additions), `pulse`, `className`. Unrecognised statuses fall back to an amber "pending"
-colour rather than an unstyled default.
+additions), `pulse`, `className`, `size`. Unrecognised statuses fall back to an amber "pending"
+colour rather than an unstyled default. `size` is `'sm'` (default: the 12px pill every table uses) or `'md'` (13px
+semibold, 24px tall), the one opt-in step up, for the status that leads a detail header's meta row; the colour is the same at both.
 
 **When to use**: rendering any of the app's status/severity/plan-type enums. Check the
 built-in `STATUS_COLORS` map before adding a one-off inline badge — a new status value is
@@ -498,7 +500,71 @@ one real, reused component instead of copy-pasted markup per page.
 
 `PageHeader.tsx` — the title/subtitle/primary-action row every page starts with, plus an
 optional row of filter/toolbar children below it. Props: `title`, `subtitle`, `action`,
-`children`.
+`children`, `variant`.
+
+`variant` is `'default'` (the default: the 20px title, exactly as every page renders it) or `'detail'`, the
+opt-in **detail header** for a record's own page (DESIGN.md "Detail header pattern"). `detail` sets the title at the
+display step (`text-display`: 28px, Plus Jakarta Sans 800), groups it with the subtitle in one block so the meta row sits
+under the title instead of a section-gap away, and always renders the subtitle below the title. It is still the page's one
+`h1`, and the actions wrap under the title below `md` exactly as in the default. Pair it with `PageHeaderMeta`:
+
+```tsx
+<PageHeader
+  variant="detail"
+  title={trip.tripName}
+  subtitle={
+    <PageHeaderMeta>
+      <StatusBadge status={trip.status} size="md" />
+      {trip.destination}                       {/* undefined / '' / false are dropped, with their separator */}
+      {trip.tripCode && <span className="font-mono">{trip.tripCode}</span>}
+      {formatDateRange(trip.startDate, trip.endDate)}
+    </PageHeaderMeta>
+  }
+  action={...}
+/>
+```
+
+`PageHeaderMeta` joins its children with `aria-hidden` middots. Falsy children are skipped BEFORE the separators are placed, so a
+missing fact never leaves a dangling dot; each separator belongs to the item before it, so a wrapped line can end with a dot but never
+begins with one. **When not to**: a list or hub page (keep the default), or any page that does not lead with a status and countable facts.
+Only the trip detail page opts in today; the other detail pages adopt it next.
+
+---
+
+## FactBar
+
+`FactBar.tsx` — a read-only strip of `label / value [badge]` segments for a detail page. Props: `segments`
+(`{ label, value, badge?, icon?, attention? }[]`), `className`, `variant`.
+
+- `variant="default"` (the default) is the 44px-tall strip: 12px label over a 14px medium value, 1px rules between segments,
+  wrapping onto a new line when narrow. Every page that uses it today renders it unchanged.
+- `variant="glance"` is the opt-in detail-header form. Cells share the width equally; each shows the value as a **display-step
+  tabular figure** (`text-display`), the state chip beside it, and the icon and a 13px label beneath (source order stays label,
+  value, badge, so a screen reader hears "Outstanding Tasks, 2, Action Needed"). It is a 2×2 grid below `md` and one row from there;
+  a chip that does not fit wraps under its figure. Keep figures short (a count, a ratio, a short amount); anything longer belongs in a `FactList`.
+- `attention` (glance only; the default bar ignores it): `'warning'` fills the segment with the warning-container, `'error'` with the
+  error-container, and the figure, label and icon take the matching on-container colour. Leave it unset for a quiet segment.
+  **Never set `attention` and the chip separately**: use `glanceState`.
+
+```tsx
+import { FactBar, type FactBarSegment } from '@/components/FactBar'
+import { glanceState } from '@/components/glanceState'
+
+const segments: FactBarSegment[] = [
+  { label: 'Outstanding Tasks', value: 2, icon, ...glanceState('negative', 'Action Needed') },  // tinted (error-container)
+  { label: 'Insurance', value: '5/5', icon, ...glanceState('positive', 'Covered') },            // quiet
+]
+<FactBar variant="glance" segments={segments} />
+```
+
+`glanceState(tone, label)` returns `{ badge, attention }` from ONE tone (`'positive' | 'warning' | 'negative' | 'neutral'`), so the fill can never
+disagree with its chip: `warning` tints warning, `negative` tints error, `positive` and `neutral` stay quiet. On a tint the chip (`FactChip`) becomes a
+card-white pill that keeps the tone's text colour, so it does not vanish into its own fill. `attentionForTone` is the same mapping on its own. These live in
+`glanceState.tsx`, not `FactBar.tsx`, because react-refresh wants a component file to export only components.
+
+The glance strip is the second reusable home of the "hero-metric" shape (after `StatCard`), so a page that needs big figures uses it
+instead of copying markup. It is a single ruled strip of real operational counts whose tint means a state, not a grid of cards. Only the trip
+detail page opts in today; the other detail pages adopt it next.
 
 ---
 

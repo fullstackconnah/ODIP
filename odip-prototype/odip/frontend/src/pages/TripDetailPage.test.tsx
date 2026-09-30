@@ -5,9 +5,15 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import TripDetailPage from './TripDetailPage'
 import type { TripDetailDto } from '@/api/types/trips'
 
-const trip: TripDetailDto = {
+const baseTrip: TripDetailDto = {
   id: 'trip-1', tripName: 'Beach Getaway 2026', status: 'Confirmed', startDate: '2026-10-01', endDate: '2026-10-05', durationDays: 5,
 } as unknown as TripDetailDto
+
+// The header tests below vary the trip, the loading flag and the write permission; the mock factories read these at
+// call time, so a test only has to assign before it renders.
+let trip: TripDetailDto | undefined = baseTrip
+let tripLoading = false
+let canWrite = true
 
 const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
   mockUseTripSchedule: vi.fn(() => ({ data: [] })),
@@ -16,11 +22,11 @@ const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hois
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true, canAccessPage: () => true }),
+  usePermissions: () => ({ canWrite, canAccessPage: () => true }),
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useTrip: () => ({ data: trip, isLoading: false }),
+  useTrip: () => ({ data: trip, isLoading: tripLoading }),
   useTripBookings: () => ({ data: [] }),
   useTripAccommodation: () => ({ data: [] }),
   useTripVehicles: () => ({ data: [] }),
@@ -54,6 +60,9 @@ function renderPage(initialEntry = '/trips/trip-1') {
 }
 
 beforeEach(() => {
+  trip = baseTrip
+  tripLoading = false
+  canWrite = true
   localStorage.clear()
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
@@ -120,6 +129,222 @@ describe('TripDetailPage — fact bar category icons', () => {
       const segment = screen.getByText(label).closest('div')!.parentElement!
       expect(within(segment).getByText(glyph)).toBeInTheDocument()
     }
+  })
+})
+
+// Every count that drives a chip and its tint. `attention` is a trip that needs a coordinator; `calm` is one that does not.
+const attentionCounts = {
+  currentParticipantCount: 5, staffAssignedCount: 3, waitlistCount: 2, outstandingTaskCount: 2,
+  highSupportCount: 2, overnightSupportCount: 2, wheelchairCount: 1, insuranceConfirmedCount: 4, insuranceOutstandingCount: 1,
+}
+const calmCounts = { ...attentionCounts, waitlistCount: 0, outstandingTaskCount: 0, insuranceConfirmedCount: 5, insuranceOutstandingCount: 0 }
+const withTrip = (over: Record<string, unknown>) => ({ ...baseTrip, ...over }) as unknown as TripDetailDto
+
+// label span -> label row -> the glance cell (the same walk the icon test above uses)
+const cellOf = (label: string) => screen.getByText(label).closest('div')!.parentElement!
+
+describe('TripDetailPage — detail header (the bolder header pattern)', () => {
+  it('sets the trip name as the one h1, at the display step', () => {
+    renderPage()
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Beach Getaway 2026')
+    expect(headings[0]).toHaveClass('text-display')
+    expect(headings[0].className).not.toMatch(/text-xl/)
+  })
+
+  it('groups the title with its meta row, so the meta is not a section-gap away from the title', () => {
+    renderPage()
+
+    const h1 = screen.getByRole('heading', { level: 1 })
+    const group = h1.parentElement!.parentElement!.parentElement!
+    expect(group).toHaveClass('flex', 'flex-col', 'gap-2')
+    expect(within(group).getByText('Confirmed')).toBeInTheDocument()
+  })
+
+  it('leads the meta row with the status as a sure md pill, then destination, code, a compact dated range and the duration', () => {
+    trip = withTrip({ tripCode: 'BGW-2610', destination: 'Caloundra QLD' })
+    renderPage()
+
+    const badge = screen.getByText('Confirmed')
+    expect(badge).toHaveClass('rounded-full', 'font-semibold', 'text-[13px]')
+    const row = badge.closest('span.inline-flex')!.parentElement!
+    // Middots are aria-hidden punctuation, so strip them to read the facts in order.
+    expect(row.textContent!.split('·')).toEqual(['Confirmed', 'Caloundra QLD', 'BGW-2610', '1–5 Oct 2026', '5 days'])
+    expect(row.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4)
+    // The trip code is data, so it stays monospace.
+    expect(screen.getByText('BGW-2610')).toHaveClass('font-mono')
+  })
+
+  it('keeps the year and every fact the old meta row showed, only presented differently', () => {
+    trip = withTrip({ tripCode: 'BGW-2610', destination: 'Caloundra QLD', startDate: '2026-08-14', endDate: '2026-08-17', durationDays: 4 })
+    renderPage()
+
+    expect(screen.getByText('14–17 Aug 2026')).toBeInTheDocument()
+    expect(screen.getByText('4 days')).toBeInTheDocument()
+    // The old dd/mm/yyyy pair and "(4 days)" form are gone.
+    expect(screen.queryByText(/14\/08\/2026/)).toBeNull()
+    expect(screen.queryByText(/\(4 days\)/)).toBeNull()
+  })
+
+  it('names both months when the trip crosses a month, and both years across New Year', () => {
+    trip = withTrip({ startDate: '2026-08-28', endDate: '2026-09-02', durationDays: 6 })
+    const { unmount } = renderPage()
+    expect(screen.getByText('28 Aug – 2 Sep 2026')).toBeInTheDocument()
+    unmount()
+
+    trip = withTrip({ startDate: '2026-12-30', endDate: '2027-01-02', durationDays: 4 })
+    renderPage()
+    expect(screen.getByText('30 Dec 2026 – 2 Jan 2027')).toBeInTheDocument()
+  })
+
+  it('reads "1 day", not "1 days", for a one-day trip', () => {
+    trip = withTrip({ startDate: '2026-08-14', endDate: '2026-08-14', durationDays: 1 })
+    renderPage()
+
+    expect(screen.getByText('1 day')).toBeInTheDocument()
+    expect(screen.getByText('14 Aug 2026')).toBeInTheDocument()
+  })
+
+  it('drops a missing destination and trip code without leaving a dangling separator', () => {
+    // baseTrip has neither.
+    renderPage()
+
+    const row = screen.getByText('Confirmed').closest('span.inline-flex')!.parentElement!
+    expect(row.textContent!.split('·')).toEqual(['Confirmed', '1–5 Oct 2026', '5 days'])
+    expect(row.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2)
+  })
+
+  it('keeps the Back link and the Edit Trip action', () => {
+    renderPage()
+
+    expect(screen.getByRole('link', { name: /back/i })).toHaveAttribute('href', '/trips')
+    expect(screen.getByRole('button', { name: /edit trip/i })).toBeInTheDocument()
+  })
+
+  it('still hides Edit Trip from a read-only user', () => {
+    canWrite = false
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /edit trip/i })).toBeNull()
+    expect(screen.getByRole('link', { name: /back/i })).toBeInTheDocument()
+  })
+
+  it('leaves the tab strip and its panel exactly as they were', () => {
+    renderPage()
+
+    expect(screen.getByRole('tablist', { name: 'Trip detail sections' })).toBeInTheDocument()
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'trip-tabpanel-overview')
+    expect(screen.getByText('Overview panel')).toBeInTheDocument()
+  })
+})
+
+describe('TripDetailPage — glance strip', () => {
+  it('opts the four facts into the glance variant: a clipped grid of display-step tabular figures', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    const strip = cellOf('Insurance').parentElement!
+    expect(strip).toHaveClass('grid', 'grid-cols-2', 'md:grid-flow-col', 'overflow-hidden')
+    expect(strip.children).toHaveLength(4)
+    for (const figure of ['5 / 3', '2', '2 / 2', '4/5']) {
+      expect(screen.getByText(figure)).toHaveClass('text-display', 'tabular-nums')
+    }
+  })
+
+  it('tints the segments whose badge signals attention: Waitlist warning, Action Needed and Outstanding error', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    const participants = cellOf('Participants / Staff')
+    expect(participants).toHaveAttribute('data-attention', 'warning')
+    expect(participants).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    expect(within(participants).getByText('Waitlist')).toBeInTheDocument()
+
+    const tasks = cellOf('Outstanding Tasks')
+    expect(tasks).toHaveAttribute('data-attention', 'error')
+    expect(tasks).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+    expect(within(tasks).getByText('Action Needed')).toBeInTheDocument()
+
+    const insurance = cellOf('Insurance')
+    expect(insurance).toHaveAttribute('data-attention', 'error')
+    expect(insurance).toHaveClass('bg-[var(--color-error-container)]')
+    expect(within(insurance).getByText('Outstanding')).toBeInTheDocument()
+  })
+
+  it('keeps the High Support / Overnight segment quiet even when its neighbours are tinted (a wheelchair count is not a problem)', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    const support = cellOf('High Support / Overnight')
+    expect(support).not.toHaveAttribute('data-attention')
+    expect(support.className).not.toMatch(/container/)
+    expect(within(support).getByText('1 WC')).toHaveClass('bg-[var(--color-input)]')
+  })
+
+  it('leaves every segment plain when nothing needs attention: Active, On Track, Covered on the card fill', () => {
+    trip = withTrip(calmCounts)
+    renderPage()
+
+    for (const label of ['Participants / Staff', 'Outstanding Tasks', 'High Support / Overnight', 'Insurance']) {
+      const cell = cellOf(label)
+      expect(cell).not.toHaveAttribute('data-attention')
+      expect(cell.className).not.toMatch(/bg-\[/)
+    }
+    expect(screen.getByText('Active')).toHaveClass('bg-[var(--color-primary-fixed)]')
+    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-primary-fixed)]')
+    expect(screen.getByText('Covered')).toHaveClass('bg-[var(--color-primary-fixed)]')
+  })
+
+  it('cannot tint a segment against its own badge: a tinted cell holds a white-pill chip, a quiet one its own tone', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    expect(screen.getByText('Waitlist')).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-on-warning-container)]')
+    expect(screen.getByText('Action Needed')).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-on-error-container)]')
+    expect(screen.getByText('1 WC')).not.toHaveClass('bg-[var(--color-card)]')
+  })
+
+  it('flips a tint away when the count clears: no waitlist, no outstanding tasks', () => {
+    trip = withTrip({ ...attentionCounts, waitlistCount: 0, outstandingTaskCount: 0 })
+    renderPage()
+
+    expect(cellOf('Participants / Staff')).not.toHaveAttribute('data-attention')
+    expect(cellOf('Outstanding Tasks')).not.toHaveAttribute('data-attention')
+    // Insurance is still outstanding, so it keeps its tint.
+    expect(cellOf('Insurance')).toHaveAttribute('data-attention', 'error')
+  })
+
+  it('reads a trip with no counts as quiet, not broken (missing counts default to zero)', () => {
+    // baseTrip has no counts at all.
+    renderPage()
+
+    expect(cellOf('Outstanding Tasks')).not.toHaveAttribute('data-attention')
+    expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
+    expect(screen.getByText('On Track')).toBeInTheDocument()
+    expect(screen.getByText('Covered')).toBeInTheDocument()
+  })
+})
+
+describe('TripDetailPage — loading and not-found states', () => {
+  it('shows only the loading line, with no header, while the trip loads', () => {
+    tripLoading = true
+    trip = undefined
+    renderPage()
+
+    expect(screen.getByText('Loading trip...')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.queryByText('Participants / Staff')).toBeNull()
+  })
+
+  it('shows "Trip not found", with no header or strip, when the trip does not exist', () => {
+    trip = undefined
+    renderPage()
+
+    expect(screen.getByText('Trip not found')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.queryByRole('tablist')).toBeNull()
   })
 })
 
