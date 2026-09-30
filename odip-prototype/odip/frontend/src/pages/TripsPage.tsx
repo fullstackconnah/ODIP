@@ -164,7 +164,7 @@ export default function TripsPage() {
   //     Lead, the trip code and "(4d)" are dropped. 1366 adds the code (+70) and lets the destination
   //     grow to 13.5rem (+24); 1536 adds Lead (+124).
   //   1536: 303 + 240 + 198 + 164 + 95 + 124 + 48 = 1172, spare 90. 1792 adds "(4d)" and room for
-  //     the full destination; at 1920 the spare is ~330px and spreads over the columns.
+  //     the full destination; at 1920 the spare is ~370px and spreads over the columns.
   // The caps below bound the two cells that can grow without limit.
   // They are ranges that never overlap: Tailwind emits the arbitrary `min-[…px]` variants BEFORE the
   // named breakpoints, so they could not be trusted to override an `md:` / `2xl:` class on one element.
