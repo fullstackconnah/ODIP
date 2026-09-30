@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Plus, PillBottle } from 'lucide-react'
 import { useMedicationRegister } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
@@ -7,6 +7,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
+import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
@@ -28,7 +29,7 @@ const STATUS_ITEMS = [
 
 const MED_STATUS_COLOR_MAP: Record<string, string> = {
   active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  onhold: 'bg-amber-100 text-amber-800',
+  onhold: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   ceased: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
@@ -93,7 +94,7 @@ export default function RegisterTab() {
       key: 'type',
       header: 'Type',
       render: m => (
-        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[#0d1c2e]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
+        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
           {MEDICATION_TYPE_LABELS[m.type]}
         </span>
       ),
@@ -136,12 +137,9 @@ export default function RegisterTab() {
           </div>
         </div>
         {canManageMedications && (
-          <Link
-            to="/medications/new"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all"
-          >
+          <Button to="/medications/new" size="md">
             <Plus className="w-4 h-4" /> New medication
-          </Link>
+          </Button>
         )}
       </div>
 

@@ -1,9 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useClaimBatches } from '@/api/hooks'
 import type { ClaimBatchListDto } from '@/api/types'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
 import { Layers, FileStack } from 'lucide-react'
 
@@ -20,7 +21,7 @@ export default function ClaimBatchesPage() {
   const { data: batches = [], isLoading, isError } = useClaimBatches()
 
   if (isError) return (
-    <div className="p-8 text-center text-red-600">Failed to load claim batches. Please refresh the page.</div>
+    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load claim batches. Please refresh the page.</div>
   )
 
   const columns: Column<ClaimBatchListDto>[] = [
@@ -59,17 +60,14 @@ export default function ClaimBatchesPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Claim Batches"
         subtitle={`${batches.length} claim batch${batches.length !== 1 ? 'es' : ''}`}
         action={canWrite && (
-          <Link
-            to="/billing/claim-batches/new"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-          >
+          <Button to="/billing/claim-batches/new" size="md">
             <Layers className="w-4 h-4" /> Build claim batch
-          </Link>
+          </Button>
         )}
       />
 

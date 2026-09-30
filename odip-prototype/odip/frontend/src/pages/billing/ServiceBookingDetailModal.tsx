@@ -35,12 +35,12 @@ export default function ServiceBookingDetailModal({ bookingId, onClose }: Servic
     >
       {isLoading || !booking ? (
         <div className="space-y-4">
-          <div className="h-16 rounded-xl bg-[var(--color-accent)] animate-pulse" />
+          <div className="h-16 rounded-[var(--radius-md)] bg-[var(--color-accent)] animate-pulse" />
           <TableSkeleton columns={4} rows={3} />
         </div>
       ) : (
         <div className="space-y-5">
-          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-[var(--color-accent)] rounded-xl p-4 text-sm">
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-[var(--color-accent)] rounded-[var(--radius-md)] p-4 text-sm">
             <div>
               <dt className="text-xs text-[var(--color-muted-foreground)]">Participant</dt>
               <dd className="font-medium">{booking.participantName ?? '—'}</dd>

@@ -12,6 +12,7 @@ import {
 } from '@/api/types'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 type EmailPrefsState = Partial<Record<NotificationEventType, boolean>>
 
@@ -105,7 +106,7 @@ export default function NotificationPreferencesTab() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="flex flex-col gap-[var(--section-gap)] max-w-2xl">
       {unsavedChangesDialog}
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Notification Preferences</h2>
@@ -114,65 +115,66 @@ export default function NotificationPreferencesTab() {
         </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="flex flex-col gap-[var(--section-gap)]">
         {NOTIFICATION_EVENT_TYPE_GROUPS.map(group => (
           <div key={group.label}>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)] mb-2">
               {group.label}
             </h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-[var(--color-muted-foreground)]">
-                  <th className="py-1 font-medium">Event</th>
-                  <th className="py-1 font-medium w-20 text-center">Email</th>
-                  <th className="py-1 font-medium w-32 text-center">SMS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.eventTypes.map(eventType => (
-                  <tr key={eventType} className="border-t border-[var(--color-border)]">
-                    <td className="py-2 text-[var(--color-foreground)]">{NOTIFICATION_EVENT_TYPE_LABELS[eventType]}</td>
-                    <td className="py-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={emailPrefs[eventType] ?? true}
-                        onChange={() => toggle(eventType)}
-                        aria-label={`Email — ${NOTIFICATION_EVENT_TYPE_LABELS[eventType]}`}
-                        className="w-4 h-4 accent-[var(--color-primary)]"
-                      />
-                    </td>
-                    <td className="py-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled
-                        aria-label={`SMS — ${NOTIFICATION_EVENT_TYPE_LABELS[eventType]} — Not available yet`}
-                        className="w-4 h-4"
-                      />
-                      <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">Not available yet</span>
-                    </td>
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--color-card)]">
+                  <tr className="text-left text-xs text-[var(--color-muted-foreground)]">
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Event</th>
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium w-20 text-center">Email</th>
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium w-32 text-center">SMS</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {group.eventTypes.map(eventType => (
+                    <tr key={eventType}>
+                      <td className="px-[var(--cell-px)] py-[7px] text-[var(--color-foreground)]">{NOTIFICATION_EVENT_TYPE_LABELS[eventType]}</td>
+                      <td className="px-[var(--cell-px)] py-[7px] text-center">
+                        <input
+                          type="checkbox"
+                          checked={emailPrefs[eventType] ?? true}
+                          onChange={() => toggle(eventType)}
+                          aria-label={`Email — ${NOTIFICATION_EVENT_TYPE_LABELS[eventType]}`}
+                          className="w-4 h-4 accent-[var(--color-primary)]"
+                        />
+                      </td>
+                      <td className="px-[var(--cell-px)] py-[7px] text-center">
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled
+                          aria-label={`SMS — ${NOTIFICATION_EVENT_TYPE_LABELS[eventType]} — Not available yet`}
+                          className="w-4 h-4"
+                        />
+                        <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">Not available yet</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
       </div>
 
       {error && (
-        <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-2xl px-4 py-3 text-sm text-[var(--color-on-error-container)]">
+        <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
           {error}
         </div>
       )}
 
-      <button
-        type="button"
+      <Button
         onClick={handleSave}
         disabled={!isDirty || updatePreferences.isPending}
-        className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+        size="md"
       >
         {updatePreferences.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Preferences'}
-      </button>
+      </Button>
     </div>
   )
 }

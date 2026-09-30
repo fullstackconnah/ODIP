@@ -12,7 +12,7 @@ export default function MedicationsPage() {
   const [tab, setTab] = useState<Tab>('administration')
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Medications"
         subtitle="Medication administration record and the participant medication register"

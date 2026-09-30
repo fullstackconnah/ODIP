@@ -200,7 +200,7 @@ export default function TenantFormPanel({
   const canSubmit = name.trim() !== '' && emailDomain.trim() !== '' && !isBusy
 
   const inputClass =
-    'w-full px-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
@@ -265,7 +265,7 @@ export default function TenantFormPanel({
                   type="button"
                   onClick={() => setIsActive(v => !v)}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
-                    isActive ? 'bg-[var(--color-primary)]' : 'bg-gray-300'
+                    isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
                   }`}
                 >
                   <span
@@ -349,7 +349,7 @@ export default function TenantFormPanel({
                     />
                   </div>
 
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-[var(--section-gap)]">
                     <label className="flex items-center gap-2 text-sm text-[var(--color-foreground)] cursor-pointer">
                       <input
                         type="checkbox"
@@ -433,7 +433,7 @@ export default function TenantFormPanel({
               {userExpanded && (
                 <div className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
                   {/* Info banner */}
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
+                  <div className="bg-[var(--color-secondary-container)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-3 text-xs text-[var(--color-foreground)]">
                     Optionally create an admin user for this tenant. All four
                     fields (first name, last name, email, username) must be
                     filled for the user to be created.
@@ -508,7 +508,7 @@ export default function TenantFormPanel({
                       <button
                         type="button"
                         onClick={() => setUserPassword(Math.random().toString(36).slice(-10) + 'A1!')}
-                        className="px-3 py-2 border border-[var(--color-border)] rounded-xl text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
+                        className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
                       >
                         Generate
                       </button>
@@ -522,14 +522,14 @@ export default function TenantFormPanel({
 
           {/* Success message */}
           {successMessage && (
-            <div className="bg-[var(--color-primary-fixed)] border border-[var(--color-primary)]/20 rounded-xl px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
+            <div className="bg-[var(--color-primary-fixed)] border border-[var(--color-primary)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
               {successMessage}
             </div>
           )}
 
           {/* Error message */}
           {error && (
-            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-700">
+            <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
               {error}
             </div>
           )}

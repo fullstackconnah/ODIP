@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Button } from '@/components/Button'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
@@ -133,15 +134,17 @@ export default function StaffPage() {
       render: (s) => (
         <div className="flex items-center justify-end gap-1">
           {canAccessLeaveApprovals && (
-            <Link
+            <Button
               to={`/rostering/leave?userId=${s.id}`}
               onClick={e => e.stopPropagation()}
-              className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors inline-block"
+              variant="ghost"
+              size="sm"
+              iconOnly
               title="Leave & availability"
               aria-label="Leave & availability"
             >
               <CalendarOff className="w-4 h-4" />
-            </Link>
+            </Button>
           )}
           {actionButtons(s)}
         </div>
@@ -150,14 +153,14 @@ export default function StaffPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Staff"
         subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
         action={!showArchived && canWrite && (
-          <Link to="/staff/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
+          <Button to="/staff/new" size="md">
             <Plus className="w-4 h-4" /> New Staff
-          </Link>
+          </Button>
         )}
       >
         {toggleButtons}

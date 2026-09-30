@@ -97,12 +97,12 @@ export default function ParticipantsHubPage() {
   )
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Participants"
         subtitle="Enquiries, onboarding and active participants — one view, three stages."
         action={canManageParticipantLifecycle ? (
-          <Button to="/participants/new-inquiry" size="lg">
+          <Button to="/participants/new-inquiry" size="md">
             <Plus className="w-4 h-4" /> New enquiry
           </Button>
         ) : undefined}

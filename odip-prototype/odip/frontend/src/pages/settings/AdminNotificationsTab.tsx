@@ -98,7 +98,7 @@ export default function AdminNotificationsTab() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="space-y-3">
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Notification Outbox</h2>
@@ -162,7 +162,7 @@ export default function AdminNotificationsTab() {
             onChange={e => setTestEmailTo(e.target.value)}
             placeholder="name@example.com"
             aria-label="Test email address"
-            className="flex-1 px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+            className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
           <button
             type="button"

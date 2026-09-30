@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Modal } from '@/components/Modal'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 import { formatDateAu } from '@/lib/utils'
 
 /**
@@ -40,52 +42,63 @@ export default function CaregiverSubmissionReviewPage() {
   const canAct = canWriteParticipantDetails && s.status === 'Submitted'
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start gap-4">
-        <Link to="/caregiver-submissions" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)]">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <div className="flex items-start gap-3">
+        <Button
+          to="/caregiver-submissions"
+          variant="ghost"
+          size="sm"
+          iconOnly
+          className="mt-0.5"
+          aria-label="Back to caregiver submissions"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{s.participantName}</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            Submitted by <strong>{s.caregiverName ?? '—'}</strong>
-            {s.caregiverRelationship ? ` (${s.caregiverRelationship})` : ''}
-            {s.submittedAt ? ` on ${formatDateAu(s.submittedAt)}` : ''} · {s.status}
-          </p>
+          <PageHeader
+            title={s.participantName}
+            subtitle={(
+              <>
+                Submitted by <strong>{s.caregiverName ?? '—'}</strong>
+                {s.caregiverRelationship ? ` (${s.caregiverRelationship})` : ''}
+                {s.submittedAt ? ` on ${formatDateAu(s.submittedAt)}` : ''} · {s.status}
+              </>
+            )}
+            action={canAct && (
+              <div className="flex gap-2">
+                <Button variant="secondary" size="md" onClick={() => setShowReject(true)}>
+                  Reject…
+                </Button>
+                <Button size="md" onClick={() => setConfirmAccept(true)}>
+                  Accept
+                </Button>
+              </div>
+            )}
+          />
         </div>
-        {canAct && (
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setShowReject(true)} className="min-h-[44px] px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm">
-              Reject…
-            </button>
-            <button type="button" onClick={() => setConfirmAccept(true)} className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm">
-              Accept
-            </button>
-          </div>
-        )}
       </div>
 
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--color-muted-foreground)]">The caregiver submitted the form without changing any values.</p>
       ) : (
         Object.entries(byGroup).map(([group, groupRows]) => (
-          <section key={group} className="rounded-2xl border border-[var(--color-border)] overflow-hidden">
-            <h2 className="px-4 py-2 bg-[var(--color-accent)] text-sm font-medium">{group}</h2>
+          <section key={group} className="rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+            <h2 className="px-[var(--cell-px)] py-[6px] bg-[var(--color-accent)] text-sm font-medium">{group}</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[var(--color-muted-foreground)]">
-                    <th className="p-3">Field</th>
-                    <th className="p-3">Current</th>
-                    <th className="p-3">Caregiver's value</th>
+                  <tr className="text-left text-[var(--color-muted-foreground)] text-xs">
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Field</th>
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Current</th>
+                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Caregiver's value</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {groupRows.map((r) => (
                     <tr key={r.field}>
-                      <td className="p-3 font-medium">{r.label}</td>
-                      <td className="p-3">{r.current}</td>
-                      <td className="p-3">{r.proposed}</td>
+                      <td className="px-[var(--cell-px)] py-[7px] font-medium">{r.label}</td>
+                      <td className="px-[var(--cell-px)] py-[7px]">{r.current}</td>
+                      <td className="px-[var(--cell-px)] py-[7px]">{r.proposed}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,21 +129,21 @@ export default function CaregiverSubmissionReviewPage() {
         size="sm"
         footer={
           <>
-            <button type="button" onClick={() => setShowReject(false)} className="min-h-[44px] px-3 py-2 text-sm">
+            <Button variant="ghost" size="md" onClick={() => setShowReject(false)}>
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
               disabled={!rejectNote.trim() || reject.isPending}
               onClick={async () => {
                 await reject.mutateAsync({ id: s.id, note: rejectNote.trim() })
                 setShowReject(false)
                 navigate('/caregiver-submissions')
               }}
-              className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-destructive)] text-white text-sm disabled:opacity-50"
             >
               Reject and reopen link
-            </button>
+            </Button>
           </>
         }
       >
@@ -140,7 +153,7 @@ export default function CaregiverSubmissionReviewPage() {
             id="reject-note"
             value={rejectNote}
             onChange={(e) => setRejectNote(e.target.value)}
-            className="w-full p-2 rounded-lg border border-[var(--color-border)]"
+            className="w-full p-2 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
             rows={3}
           />
         </div>

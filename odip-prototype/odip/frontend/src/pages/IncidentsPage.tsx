@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
+import { Button } from '@/components/Button'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -276,7 +277,7 @@ export default function IncidentsPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {canViewFlaggedNotes && (
         <Tabs
           tabs={[
@@ -297,9 +298,9 @@ export default function IncidentsPage() {
         title="Incident Reports"
         subtitle={`${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
         action={!showArchived && canCreateIncidents && (
-          <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
+          <Button to="/incidents/new" size="md">
             <Plus className="w-4 h-4" /> Report Incident
-          </Link>
+          </Button>
         )}
       >
         {toggleButtons}
@@ -334,7 +335,7 @@ export default function IncidentsPage() {
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
-          className="flex items-center gap-3 p-4 rounded-xl bg-error-container border border-destructive/40 text-on-error-container"
+          className="flex items-center gap-3 p-[var(--card-pad)] rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
           <div>

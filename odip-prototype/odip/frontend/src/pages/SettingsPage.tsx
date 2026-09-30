@@ -10,6 +10,8 @@ import { Dropdown } from '@/components/Dropdown'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { formatDateAu } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
@@ -52,7 +54,7 @@ function QualificationSettingsTab() {
   }
 
   return (
-    <div className="max-w-md space-y-6">
+    <div className="max-w-md flex flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Qualification Warning Window</h2>
@@ -135,13 +137,11 @@ export default function SettingsPage() {
   const tabs = allTabs.filter(t => (!t.superAdminOnly || isSuperAdmin) && !t.hidden)
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-          Manage event templates, activity library, and qualification settings
-        </p>
-      </div>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <PageHeader
+        title="Settings"
+        subtitle="Manage event templates, activity library, and qualification settings"
+      />
 
       <Tabs
         tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
@@ -153,30 +153,30 @@ export default function SettingsPage() {
       {tab === 'templates' && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
-              onClick={() => { setEditingTemplate(undefined); setPanelOpen(true) }}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-all"
-            >
+            <Button onClick={() => { setEditingTemplate(undefined); setPanelOpen(true) }} size="md">
               + New Template
-            </button>
+            </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             {templates.filter((t) => t.isActive).map((t) => (
-              <div key={t.id} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 group">
+              <div key={t.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] group">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <h3 className="font-semibold">{t.eventName}</h3>
                     <span className="text-xs text-[var(--color-muted-foreground)] font-mono">{t.eventCode}</span>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
                     onClick={() => { setEditingTemplate(t); setPanelOpen(true) }}
-                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-[var(--color-accent)] transition-all"
+                    className="opacity-0 group-hover:opacity-100"
                     title="Edit template"
                     aria-label="Edit template"
                   >
-                    <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-                  </button>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                 </div>
                 <div className="text-sm text-[var(--color-muted-foreground)] space-y-1">
                   <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {t.defaultDestination || '—'} · {t.defaultRegion || '—'}</p>
@@ -279,7 +279,7 @@ function ProviderSettingsTab() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
-  const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  const inputClass = 'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
@@ -304,7 +304,7 @@ function ProviderSettingsTab() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="flex flex-col gap-[var(--section-gap)] max-w-2xl">
       {unsavedChangesDialog}
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Organisation Details</h2>
@@ -357,7 +357,7 @@ function ProviderSettingsTab() {
         <textarea {...f('invoiceFooterNotes')} rows={3} className={inputClass + ' resize-none'} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-2xl px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
+        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
           <span className="mt-0.5">⚠</span>
           <span>{error}</span>
         </div>
@@ -386,11 +386,11 @@ function SupportCatalogueTab() {
 
   const dayTypeColor = (dt: string) => {
     switch(dt) {
-      case 'Weekday': return 'bg-blue-100 text-blue-700'
-      case 'Saturday': return 'bg-amber-100 text-amber-700'
-      case 'Sunday': return 'bg-orange-100 text-orange-700'
-      case 'PublicHoliday': return 'bg-red-100 text-red-700'
-      default: return 'bg-gray-100 text-gray-600'
+      case 'Weekday': return 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]'
+      case 'Saturday': return 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
+      case 'Sunday': return 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]'
+      case 'PublicHoliday': return 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
+      default: return 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
     }
   }
 
@@ -479,14 +479,14 @@ function SupportCatalogueTab() {
       {/* Import modal */}
       {importing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 space-y-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-[var(--card-pad)] max-w-lg w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[var(--color-foreground)]">Import NDIS Support Catalogue</h3>
               <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">✕</button>
             </div>
 
             {importError && (
-              <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-2xl px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
+              <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
                 <span className="mt-0.5">⚠</span>
                 <span>{importError}</span>
               </div>
@@ -495,7 +495,7 @@ function SupportCatalogueTab() {
             {previewStep === 'upload' && (
               <div className="space-y-4">
                 <p className="text-sm text-[var(--color-muted-foreground)]">Upload the NDIA Support Catalogue .xlsx file to preview changes.</p>
-                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#c3c9b6] rounded-2xl p-8 cursor-pointer hover:border-[var(--color-primary)] transition-colors">
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)] cursor-pointer hover:border-[var(--color-primary)] transition-colors">
                   <span className="text-[var(--color-muted-foreground)] text-sm mb-2">{uploading ? 'Uploading...' : 'Drop .xlsx here or click to browse'}</span>
                   <input type="file" accept=".xlsx" onChange={handleUpload} className="hidden" disabled={uploading} />
                 </label>
@@ -505,22 +505,22 @@ function SupportCatalogueTab() {
             {previewStep === 'preview' && preview && (
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-amber-600">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-xl p-3"><p className="text-xs text-[var(--color-muted-foreground)]">To deactivate</p><p className="text-xl font-bold text-red-500">{preview.itemsToDeactivate}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-[var(--color-warning)]">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To deactivate</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
                 </div>
                 {(preview.warnings ?? []).length > 0 && (
-                  <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 space-y-1">
+                  <div className="bg-[var(--color-warning-container)] rounded-[var(--radius-md)] p-[var(--card-pad)] text-xs text-[var(--color-on-warning-container)] space-y-1">
                     {preview.warnings.map((w: string, i: number) => <p key={i}>&#9888; {w}</p>)}
                   </div>
                 )}
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setPreviewStep('upload')} className="px-4 py-2 rounded-full border border-[#c3c9b6] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
-                  <button onClick={handleConfirm} disabled={confirming} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">
+                  <button onClick={() => setPreviewStep('upload')} className="px-4 h-[var(--control-h)] rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
+                  <button onClick={handleConfirm} disabled={confirming} className="px-4 h-[var(--control-h)] rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">
                     {confirming ? 'Importing...' : 'Confirm Import'}
                   </button>
                 </div>
@@ -548,7 +548,7 @@ function PublicHolidaysTab() {
   const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
 
-  const inputClass = 'px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   function handleAdd() {
     createHoliday.mutate(newForm, {
@@ -620,7 +620,7 @@ function PublicHolidaysTab() {
             />
             <div className="flex gap-2">
               <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">Save</button>
-              <button onClick={() => setAdding(false)} className="px-3 py-1.5 rounded-full border border-[#c3c9b6] text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Cancel</button>
+              <button onClick={() => setAdding(false)} className="px-3 h-[var(--control-h-sm)] rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Cancel</button>
             </div>
           </div>
         </div>
@@ -646,7 +646,7 @@ function PublicHolidaysTab() {
             key: 'actions',
             header: '',
             render: (h: PublicHolidayDto) => (
-              <button onClick={() => setDeletingHoliday(h)} className="text-xs text-red-500 hover:text-red-700 hover:underline">
+              <button onClick={() => setDeletingHoliday(h)} className="text-xs text-[var(--color-destructive)] hover:underline">
                 Delete
               </button>
             ),
@@ -682,7 +682,7 @@ function PublicHolidaysTab() {
               value={syncFromYear ?? ''}
               onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear())}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+              className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
             />
             <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
             <input
@@ -690,17 +690,17 @@ function PublicHolidaysTab() {
               value={syncToYear ?? ''}
               onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
               placeholder={String(new Date().getFullYear() + 1)}
-              className="w-24 px-3 py-1.5 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+              className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
             />
           </div>
         )}
 
         {syncMessage && (
-          <div className={`mt-3 px-4 py-2.5 rounded-2xl text-sm ${
+          <div className={`mt-3 px-4 py-2.5 rounded-[var(--radius-md)] text-sm ${
             syncMessage.type === 'success'
-              ? 'bg-green-50 text-green-700'
+              ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
               : syncMessage.type === 'warning'
-              ? 'bg-yellow-50 text-yellow-700'
+              ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
               : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
           }`}>
             {syncMessage.text}

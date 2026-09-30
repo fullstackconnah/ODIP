@@ -220,7 +220,7 @@ export default function FundingSourceFormPanel({
           </FormField>
 
           {error && (
-            <div role="alert" className="bg-[var(--color-error-container)] rounded-xl px-4 py-3 text-sm text-[var(--color-destructive)]">
+            <div role="alert" className="bg-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-destructive)]">
               {error}
             </div>
           )}

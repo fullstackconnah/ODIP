@@ -76,7 +76,7 @@ function relativeTime(iso: string | null): string {
 const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
   administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-amber-100 text-amber-800',
+  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   wrongmedication: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
@@ -134,7 +134,7 @@ export default function MarTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       {/* Date navigation + participant filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1 bg-[var(--color-muted)] rounded-lg p-1">
@@ -192,7 +192,7 @@ export default function MarTab() {
 
       {/* Scheduled slots */}
       {isLoading ? (
-        <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
+        <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
           <SkeletonRow />
           <SkeletonRow />
           <SkeletonRow />
@@ -208,7 +208,7 @@ export default function MarTab() {
           {groups.map(([time, rows]) => (
             <div key={time}>
               <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">{time}</h3>
-              <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
+              <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
                 {rows.map(entry => (
                   <div
                     key={entry.medicationId + entry.scheduledAt}
@@ -308,7 +308,7 @@ export default function MarTab() {
                       {prn.doseDescription && <p className="text-xs text-[var(--color-muted-foreground)]">{prn.doseDescription}</p>}
                     </div>
                     {prn.outcomePendingAdministrationId && (
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">Outcome due</span>
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">Outcome due</span>
                     )}
                   </div>
                   {prn.prnIndication && (

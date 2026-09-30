@@ -6,6 +6,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { Button } from '@/components/Button'
 
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
@@ -23,14 +24,14 @@ const ACTIVE_STATUS_COLORS: Record<string, string> = {
 export default function ParticipantsPage() {
   const screen = useParticipantsScreen()
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Participants"
         subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
         action={!screen.showArchived && screen.canWrite && (
-          <Link to="/participants/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all">
+          <Button to="/participants/new" size="md">
             <Plus className="w-4 h-4" /> New Participant
-          </Link>
+          </Button>
         )}
       >
         {screen.toggleButtons}
@@ -201,28 +202,29 @@ function useParticipantsScreen() {
       render: (p) => (
         <span className="flex items-center justify-end gap-2">
           {p.hasActiveMedications && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
               title="View medications"
               aria-label={`View medications for ${p.fullName}`}
               onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
-              className="p-1.5 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-accent)] transition-colors"
             >
               <Pill className="w-4 h-4" />
-            </button>
+            </Button>
           )}
           {canWrite && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               aria-label={`Change status for ${p.fullName}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
               }}
-              className="text-xs px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             >
               Change status
-            </button>
+            </Button>
           )}
           {canWrite && actionButtons(p)}
           <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />

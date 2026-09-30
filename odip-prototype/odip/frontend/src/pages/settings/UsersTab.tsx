@@ -19,11 +19,11 @@ interface UsersTabProps {
 // ---------------------------------------------------------------------------
 
 const ROLE_COLORS: Record<string, string> = {
-  SuperAdmin: 'bg-purple-100 text-purple-700',
-  Admin: 'bg-blue-100 text-blue-700',
+  SuperAdmin: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
+  Admin: 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]',
   Coordinator: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-  SupportWorker: 'bg-amber-100 text-amber-700',
-  ReadOnly: 'bg-gray-100 text-gray-600',
+  SupportWorker: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  ReadOnly: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -88,7 +88,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
   const endItem = Math.min(page * PAGE_SIZE, totalCount)
 
   const inputClass =
-    'w-full px-3 py-2 rounded-2xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   return (
     <div className="space-y-4">
@@ -178,7 +178,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
             key: 'role',
             header: 'Role',
             render: (user: AdminUserDto) => (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
                 {ROLE_LABELS[user.role] ?? user.role}
               </span>
             ),
@@ -190,8 +190,8 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
               <span
                 className={`text-xs px-2 py-0.5 rounded-full ${
                   user.isActive
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-50 text-red-600'
+                    ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                    : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
                 }`}
               >
                 {user.isActive ? 'Active' : 'Inactive'}
