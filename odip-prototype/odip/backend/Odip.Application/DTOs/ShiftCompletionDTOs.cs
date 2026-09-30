@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -52,10 +53,10 @@ public record FinishShiftDto
 public record ShiftBreakDto(
     Guid Id,
     DateTime StartedAt,
-    DateTime? EndedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? EndedAt,
     bool IsRunning,
     int Minutes,
-    DateTime? EditedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? EditedAt,
     Guid CreatedByUserId);
 
 /// <summary>
@@ -105,7 +106,7 @@ public record ShiftCompletionDto(
     int NetWorkedMinutes,
     // ── Shift package: what the worker left at Finish ──
     /// <summary>The handover note left for the next worker; null when none was written.</summary>
-    string? HandoverText,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? HandoverText,
     /// <summary>The worker confirmed "nothing to hand over".</summary>
     bool NothingToHandOver,
     /// <summary>The worker confirmed "nothing to note" instead of writing a shift note.</summary>
@@ -130,14 +131,14 @@ public record ShiftCompletionReviewDto(
     string TimeZoneId,
     /// <summary>Scheduled doses due in the rostered window, in time order. A slot whose <c>outcome</c> is null had nothing recorded.</summary>
     IReadOnlyList<PortalDoseSlotDto> Doses,
-    /// <summary>"As needed" doses administered between the actual start and end.</summary>
+    /// <summary>"As needed" (PRN) doses the submitting worker administered between the actual start and end.</summary>
     IReadOnlyList<ReviewPrnDoseDto> PrnDoses,
     IReadOnlyList<ShiftNoteDto> Notes);
 
 public record ReviewPrnDoseDto(
     Guid MedicationId,
     string MedicationName,
-    string? Strength,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Strength,
     string DoseDescription,
     PortalDoseOutcomeDto Outcome);
 

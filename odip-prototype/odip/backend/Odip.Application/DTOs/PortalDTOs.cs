@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -13,13 +14,20 @@ namespace Odip.Application.DTOs;
 // needs to do THIS shift safely and nothing more: the critical care facts (allergies and
 // anaphylaxis, choking and diet, communication, behaviour-support essentials, HIDPA flags, the
 // address), the participant's emergency contacts, the doses due in the shift window, the routines,
-// the risks, and the previous worker's handover. It NEVER returns the NDIS number, plan or funding
-// detail, or the full diagnoses, and it carries nothing about any participant other than the one on
-// the caller's OWN shift. Anything new that goes into these DTOs needs to pass the same test:
-// "does the worker need this, on this shift, to keep this person safe?"
+// the risks, and the previous worker's handover. The shift-package DTOs NEVER return the NDIS
+// number, plan or funding detail, or the structured diagnoses (primary / other), and they carry
+// nothing about any participant other than the one on the caller's OWN shift. (The older
+// PortalParticipantSummaryDto.MedicalSummary is coordinator-authored free text that predates this
+// rule and is unchanged; it can mention a condition in the coordinator's own words.) Anything new
+// that goes into these DTOs needs to pass the same test: "does the worker need this, on this shift,
+// to keep this person safe?"
 //
 // Absent data is explicit: a missing value is returned as null (never as an empty string or a
-// made-up default) so the UI can say "Not recorded" instead of silently showing nothing.
+// made-up default) so the UI can say "Not recorded" instead of silently showing nothing. The API
+// serialises with DefaultIgnoreCondition = WhenWritingNull (Program.cs), which would DROP a null
+// member from the JSON altogether, so every nullable member of the shift-package records carries
+// [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)]: the key is always present, and a
+// null means "not recorded". ShiftPackageWireContractTests pins that for every such record.
 // ══════════════════════════════════════════════════════════════
 
 /// <summary>One of the caller's own rostered <see cref="Odip.Domain.Rostering.Shift"/> rows, list-shaped for the "My Shifts" week view.</summary>
@@ -136,15 +144,18 @@ public record PortalShiftDetailDto(
     /// <c>completion.breaks</c>; it is repeated here so the package header can show a running break without reaching
     /// into the completion.</summary>
     IReadOnlyList<ShiftBreakDto> Breaks,
-    /// <summary>The latest handover for this participant from a PREVIOUS shift (the most recent submitted-or-approved
-    /// completion's), or null when there has never been one. The next worker marks it read
-    /// (<c>POST portal/shifts/{id}/handover/ack</c>).</summary>
-    PortalHandoverDto? Handover,
+    /// <summary>The latest handover for this participant: the submitted-or-approved completion of the most recent shift that
+    /// STARTED BEFORE this one (shift chronology, not submission time), or null when there has never been one. The next worker
+    /// marks it read (<c>POST portal/shifts/{id}/handover/ack</c>).</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalHandoverDto? Handover,
     /// <summary>The last 3 holders of this participant (most recent first, INCLUDING the handover's author): name and
     /// shift date only - a custody trail, never the text.</summary>
     IReadOnlyList<PortalHandoverTrailEntryDto> HandoverTrail,
-    /// <summary>What still blocks Finish right now (only while InProgress; empty otherwise): doses in the shift window
-    /// with no outcome, and a running break. Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is non-empty.</summary>
+    /// <summary>What still blocks Finish right now (only while InProgress; empty otherwise): a running break, and the doses in the
+    /// shift's rostered window that have COME DUE (their time has arrived) and have no outcome - but only for a worker who can record
+    /// doses (<see cref="CanRecordDoses"/>); a worker without a current Medication Competency is never blocked on a dose they could
+    /// not record. A dose still ahead is handed over, not blocked. Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is
+    /// non-empty; the list is computed by the same rule the server applies at Finish.</summary>
     IReadOnlyList<PortalFinishBlockerDto> FinishBlockers,
     /// <summary>The provider's IANA time zone (e.g. "Australia/Sydney"). Every wall-clock time in this DTO
     /// (<c>startTime</c>, dose <c>scheduledAt</c>, routine <c>occursAt</c>) is in this zone; instants are UTC.</summary>
@@ -167,9 +178,9 @@ public record PortalShiftDetailDto(
     /// on every administration (403 otherwise); this lets the UI explain instead of letting the worker tap and fail.</summary>
     bool CanRecordDoses,
     /// <summary>Plain-language reason when <see cref="CanRecordDoses"/> is false; null otherwise.</summary>
-    string? CanRecordDosesReason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReason,
     /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE; null when allowed.</summary>
-    string? CanRecordDosesReasonCode);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReasonCode);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────
 
@@ -186,48 +197,52 @@ public record PortalAtAGlanceDto(
     PortalAddressDto Address);
 
 public record PortalAllergiesDto(
-    string? Detail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Detail,
     /// <summary>Tri-state on purpose: true = anaphylaxis risk, false = recorded as no risk, null = not recorded. Never coerce null to false.</summary>
-    bool? IsAnaphylaxisRisk,
-    string? ManagementNotes);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? IsAnaphylaxisRisk,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ManagementNotes);
 
 public record PortalDietDto(
-    string? ChokingRiskDetail,
-    string? PegRegimeDetail,
-    string? ModifiedDietDetail,
-    string? MealAssistanceDetail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ChokingRiskDetail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? PegRegimeDetail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ModifiedDietDetail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MealAssistanceDetail,
     /// <summary>How medication is best given alongside food.</summary>
-    string? MedicationTricks);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MedicationTricks);
 
 public record PortalCommunicationDto(
-    string? ExpressiveSkills,
-    string? ReceptiveSkills,
-    string? ReadingAbility,
-    string? Aids);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ExpressiveSkills,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ReceptiveSkills,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ReadingAbility,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Aids);
 
 public record PortalBehaviourDto(
-    string? Triggers,
-    string? EarlyWarningSigns,
-    string? DeEscalationStrategies,
-    string? WhatNotToDo,
-    string? WhatHelpsMeCalmDown);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Triggers,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? EarlyWarningSigns,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? DeEscalationStrategies,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? WhatNotToDo,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? WhatHelpsMeCalmDown);
 
 /// <summary>The HIDPA (high intensity daily personal activities) flags a worker must not miss. A flag that is not set is false -
 /// the underlying data has no "not recorded" state for these.</summary>
 public record PortalHidpaDto(bool Epilepsy, bool EnteralFeeding, bool Dysphagia);
 
-public record PortalAddressDto(string? Street, string? Suburb, string? State, string? Postcode);
+public record PortalAddressDto(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Street,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Suburb,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? State,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Postcode);
 
 /// <summary>One emergency contact: who to call, and how.</summary>
 public record PortalEmergencyContactDto(
     Guid Id,
     string Name,
-    string? Relationship,
-    string? Phone,
-    string? Mobile,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Relationship,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Phone,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Mobile,
     bool IsPrimary,
     /// <summary>1 = first call; null when no order was recorded (those sort after the ranked ones).</summary>
-    int? PriorityOrder);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? PriorityOrder);
 
 // ── Doses and routines in the shift window ─────────────────────────────────
 
@@ -243,11 +258,11 @@ public enum PortalDoseState
 public record PortalDoseSlotDto(
     Guid MedicationId,
     string MedicationName,
-    string? Strength,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Strength,
     string DoseDescription,
     MedicationForm Form,
     MedicationRoute Route,
-    string? Directions,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Directions,
     MedicationSupportLevel SupportLevel,
     bool IsHighRisk,
     /// <summary>The slot as a provider-local wall-clock time (no zone suffix) - exactly what must be echoed back as
@@ -259,7 +274,7 @@ public record PortalDoseSlotDto(
     /// <summary>Convenience: <c>State == Overdue</c>.</summary>
     bool IsOverdue,
     /// <summary>The recorded outcome, or null while nothing has been recorded for this slot.</summary>
-    PortalDoseOutcomeDto? Outcome,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalDoseOutcomeDto? Outcome,
     PortalDoseWitnessDto Witness);
 
 /// <summary>A recorded outcome for a dose.</summary>
@@ -269,48 +284,48 @@ public record PortalDoseOutcomeDto(
     MedicationAdministrationStatus Status,
     string RecordedByName,
     /// <summary>When the dose was given (UTC), for Administered records.</summary>
-    DateTime? AdministeredAt,
-    string? AdministeredAtTimeZone,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? AdministeredAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? AdministeredAtTimeZone,
     /// <summary>When the record was made (UTC).</summary>
     DateTime RecordedAt,
-    string? Reason,
-    string? DoseGiven,
-    string? Notes);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? DoseGiven,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Notes);
 
 /// <summary>Whether a witness is needed for a dose and where that sign-off stands.</summary>
 public record PortalDoseWitnessDto(
     /// <summary>High-risk medication: an administered dose needs a staff witness.</summary>
     bool Required,
     /// <summary>The witness sign-off state of the recorded dose; null while nothing is recorded.</summary>
-    WitnessStatus? Status,
-    string? WitnessName,
-    DateTime? RequestedAt,
-    DateTime? RespondedAt);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] WitnessStatus? Status,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? WitnessName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? RequestedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? RespondedAt);
 
 /// <summary>An "as needed" medication and what the worker needs to decide whether another dose is allowed.</summary>
 public record PortalPrnDto(
     Guid MedicationId,
     string MedicationName,
-    string? Strength,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Strength,
     string DoseDescription,
     MedicationForm Form,
     MedicationRoute Route,
-    string? Directions,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Directions,
     MedicationSupportLevel SupportLevel,
     bool IsHighRisk,
-    string? Indication,
-    int? MaxDosesPer24h,
-    int? MinIntervalMinutes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Indication,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? MaxDosesPer24h,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? MinIntervalMinutes,
     int DosesInLast24h,
     /// <summary>The most recent administered dose (UTC), or null.</summary>
-    DateTime? LastDoseAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? LastDoseAt,
     /// <summary>The maximum in any rolling 24 hours has been reached (recording another needs an acknowledged limit breach).</summary>
     bool MaxDosesReached,
     /// <summary>When the minimum interval since the last dose has elapsed (UTC); null when there is no interval or it has already elapsed.</summary>
-    DateTime? NextAvailableAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? NextAvailableAt,
     /// <summary>The newest administered dose still awaiting its outcome ("was it effective?"), for
     /// <c>POST medications/administrations/{id}/outcome</c>.</summary>
-    Guid? OutcomePendingAdministrationId);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? OutcomePendingAdministrationId);
 
 /// <summary>A routine that applies inside the shift window.</summary>
 public record PortalShiftRoutineDto(
@@ -319,11 +334,11 @@ public record PortalShiftRoutineDto(
     string Description,
     RoutineCategory Category,
     bool IsCritical,
-    TimeOnly? StartTime,
-    TimeOnly? EndTime,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] TimeOnly? StartTime,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] TimeOnly? EndTime,
     /// <summary>Provider-local start of the routine's first occurrence inside the window (clipped to the shift's start when it began
     /// earlier) - the time to group it under. Null for an untimed critical routine ("Anytime").</summary>
-    DateTime? OccursAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OccursAt,
     /// <summary>The occurrence falls on the day AFTER the shift's service date (an overnight shift's early hours).</summary>
     bool AfterMidnight);
 
@@ -333,7 +348,7 @@ public record PortalShiftRoutineDto(
 /// </summary>
 public record PortalHandoverDto(
     Guid CompletionId,
-    string? Text,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Text,
     bool NothingToHandOver,
     Guid AuthorUserId,
     string AuthorName,
@@ -345,7 +360,7 @@ public record PortalHandoverDto(
     bool RequiresAcknowledgement,
     /// <summary>The caller has marked this handover as read.</summary>
     bool IsRead,
-    DateTime? ReadAt);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ReadAt);
 
 /// <summary>One holder in the custody trail: who worked the participant, and on which shift date.</summary>
 public record PortalHandoverTrailEntryDto(Guid CompletionId, string WorkerName, DateOnly ShiftDate);
@@ -357,14 +372,16 @@ public record AcknowledgeHandoverDto
     public Guid? CompletionId { get; init; }
 }
 
-/// <summary>One thing that must be cleared before Finish. <see cref="Code"/> is DOSE_OUTCOME_MISSING or BREAK_RUNNING.</summary>
+/// <summary>One thing that must be cleared before Finish. <see cref="Code"/> is DOSE_OUTCOME_MISSING (a dose whose time has
+/// arrived has no outcome) or BREAK_RUNNING (<see cref="MedicationId"/>, <see cref="MedicationName"/> and <see cref="ScheduledAt"/>
+/// are then explicit nulls).</summary>
 public record PortalFinishBlockerDto(
     string Code,
     string Message,
-    Guid? MedicationId,
-    string? MedicationName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? MedicationId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MedicationName,
     /// <summary>For a dose: the provider-local slot time (no zone suffix).</summary>
-    DateTime? ScheduledAt);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ScheduledAt);
 
 /// <summary>
 /// A medication administration OR an incident report (IN-7) awaiting (or already given) the

@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -116,6 +118,40 @@ public class ShiftCompletionReviewDtoTests
         Assert.NotNull(b.EditedAt);
         Assert.Equal(30, c.BreakMinutes);
         Assert.Equal(445, c.NetWorkedMinutes);   // 09:10 -> 17:05 is 475 minutes, less the 30-minute break
+    }
+
+    [Fact]
+    public async Task OnTheWire_AnUnrecordedDose_ABlankHandover_AndARunningBreak_AreExplicitNulls_UnderTheApisRealJsonPolicy()
+    {
+        // The API drops null members globally (WhenWritingNull); the review's contract says "a slot whose outcome is null had nothing
+        // recorded", so the key must be present as a null - the coordinator UI tests `outcome === null`.
+        var a = Arrange();
+        a.Completion.HandoverText = null;
+        a.Db.ShiftBreaks.Add(new ShiftBreak
+        {
+            Id = Guid.NewGuid(), TenantId = a.Completion.TenantId, ShiftCompletionId = a.Completion.Id, CreatedByUserId = a.Worker.Id, StartedAt = ActualStart.AddHours(3),
+        });
+        AddMed(a, "Levetiracetam", "09:00");
+        var prn = AddMed(a, "Paracetamol", null, MedicationType.Prn);
+        prn.Strength = null;
+        a.Db.MedicationAdministrations.Add(new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), TenantId = prn.TenantId, ParticipantMedicationId = prn.Id, ParticipantId = prn.ParticipantId, Status = MedicationAdministrationStatus.Administered,
+            RecordedByName = "Ben Turner", RecordedByUserId = a.Worker.Id, PrnReason = "Headache", AdministeredAt = ActualStart.AddHours(2),
+        });
+        a.Db.SaveChanges();
+        var review = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default));
+
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(options);
+        var data = JsonSerializer.SerializeToElement(ApiResponse<ShiftCompletionReviewDto>.Ok(review), options).GetProperty("data");
+
+        static void AssertNull(JsonElement owner, string name) =>
+            Assert.True(owner.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Null, $"'{name}' must be present as an explicit null");
+        AssertNull(data.GetProperty("doses")[0], "outcome");
+        AssertNull(data.GetProperty("completion"), "handoverText");
+        AssertNull(data.GetProperty("completion").GetProperty("breaks")[0], "endedAt");
+        AssertNull(data.GetProperty("prnDoses")[0], "strength");
     }
 
     [Fact]

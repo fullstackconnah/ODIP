@@ -96,7 +96,8 @@ export interface PortalAddressDto {
 
 /**
  * The critical care facts, in fixed groups. Every group is always present; any field inside may be null
- * ("Not recorded"). NEVER carries the NDIS number, plan, funding or full diagnoses (the need-to-know rule).
+ * ("Not recorded"). NEVER carries the NDIS number, plan, funding or the structured diagnoses (the need-to-know rule).
+ * (The older `PortalParticipantSummaryDto.medicalSummary` is coordinator-written free text and is unchanged.)
  */
 export interface PortalAtAGlanceDto {
   allergies: PortalAllergiesDto

@@ -387,11 +387,7 @@ builder.Services.AddCors(options =>
 
 // ── Controllers ──────────────────────────────────────────────
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
-    });
+    .AddJsonOptions(options => Odip.Api.Serialization.ApiJsonOptions.Configure(options.JsonSerializerOptions));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
