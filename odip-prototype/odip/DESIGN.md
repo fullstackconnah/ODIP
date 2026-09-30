@@ -346,7 +346,6 @@ Tactile and plain, like a well-used key on a desk.
 - **Variants:** `secondary` (white fill, ruled border, Mist hover), `danger` (red fill), `ghost` (muted
   text, Mist fill and olive text on hover)
 - **Focus:** 2px olive ring. Renders a router `Link` when given `to`.
-- The sidebar "New Trip" call to action is a standard full-width `md` Button.
 
 ### Inputs / Fields
 
@@ -395,18 +394,21 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 
 ### Navigation
 
-- **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block. Items are
-  32px tall, `rounded-md` (not pills), `text-sm`; group children are 28px. Every item, and "Sign Out",
-  carries a `--tap-min` floor, so on touch (the drawer, or a touch tablet's permanent sidebar) they are
-  44px and the list scrolls inside the drawer. The active item is Pale Sprout with near-black bold text;
-  inactive is Slate Blue medium with a Mist-step hover.
+- **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block, and the nav
+  straight under it: there is no call-to-action slot, and no create shortcut anywhere in the shell (a trip
+  is created from the "New Trip" Button in the Trips page header). Items are 32px tall, `rounded-md` (not
+  pills), `text-sm`; group children are 28px. Every item, and "Sign Out", carries a `--tap-min` floor, so
+  on touch (the drawer, or a touch tablet's permanent sidebar) they are 44px and the list scrolls inside
+  the drawer. The active item is Pale Sprout with near-black bold text; inactive is Slate Blue medium with
+  a Mist-step hover.
 - **Header:** 48px sticky, translucent Warm Paper with backdrop blur; global search is 32px tall and 360px
   wide from `md` and 44px on touch (the box takes the floor, the input stretches to fill it). The SuperAdmin tenant and user switchers take a `--tap-min` floor (44px fits the header)
   and show only their badge below `sm`, the name moving into the button's accessible name and tooltip.
-- **Mobile:** below `lg` a bottom bar; links have a `--tap-min` floor, the centre create action is a
-  56px round olive button. The active item is olive text. The open drawer and its scrim sit above the bottom
-  bar (z 60 and 55 over 50; from `lg` the sidebar drops back to 50 so modals still cover it), so
-  "Sign Out" is never covered by it.
+- **Mobile:** below `lg` a bottom bar of the page links a role may open (Dashboard, Trips, People,
+  Settings; a SupportWorker sees the first three). They share the row in equal-width cells, so the spacing
+  stays even whichever are gated out, and each has a `--tap-min` floor; the bar has no create action. The
+  active item is olive text. The open drawer and its scrim sit above the bottom bar (z 60 and 55 over 50;
+  from `lg` the sidebar drops back to 50 so modals still cover it), so "Sign Out" is never covered by it.
 - **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; count
   chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
   so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled

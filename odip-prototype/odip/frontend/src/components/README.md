@@ -556,9 +556,9 @@ control (the pseudo-element belongs to it). Already applied to `Button` (`size="
 Rules: `TAP_AREA` includes `relative`, so the control takes no other `position`; the pad reaches
 `(44 − visual size) / 2` past each edge, so neighbouring controls must sit at least that far apart under coarse
 (widen the gap with `pointer-coarse:gap-*`, as `RowActions` does: 6px → 8px); an `overflow-hidden` ancestor clips the
-pad. For controls that sit flush in a `justify-around` row (the mobile bottom nav) use a `min-h/min-w-[var(--tap-min)]`
-floor instead — it cannot overlap a neighbour. `Dropdown variant="icon"` is deliberately not padded (its one consumer
-is flush against a roster chip).
+pad. For controls that sit flush against their neighbours (the mobile bottom nav, whose links are equal-width `flex-1`
+cells) use a `min-h/min-w-[var(--tap-min)]` floor instead — it cannot overlap a neighbour. `Dropdown variant="icon"`
+is deliberately not padded (its one consumer is flush against a roster chip).
 
 Three more pieces of the same story (all in `tapArea.ts` or built on it):
 
