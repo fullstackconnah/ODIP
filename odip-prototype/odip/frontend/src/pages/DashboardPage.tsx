@@ -3,9 +3,9 @@ import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, use
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
-import { PageHeader } from '@/components/PageHeader'
+import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
-import { StatCard } from '@/components/StatCard'
+import { StatCard, type StatCardProps } from '@/components/StatCard'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { Link } from 'react-router-dom'
 import {
@@ -38,15 +38,33 @@ const statusBadge: Record<string, string> = {
   Completed:       'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
 }
 
-// Tint a KPI tile only when its count is actionable (> 0).
+// Tint an attention tile only when its count is actionable (> 0); at zero it is quiet.
 const tinted = (count: number, tone: 'danger' | 'warning') => (count > 0 ? tone : undefined)
+
+// The noun agrees with the count: 1 is singular, and 0 and everything else plural ("0 upcoming trips").
+const counted = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`
+
+// The attention band's shape by item count (7 without alerts, 8 with them, 9 with a pending-leave item too). Below md it is two
+// columns (an odd last item takes the whole row, like the trip glance strip on a phone). From md it is two balanced rows
+// (ceil(n / 2) columns; an odd last item stretches over the spare slot, so a row is never left with a hole). It becomes ONE
+// row once the band's own width gives every item 173px: n × 173 + (n − 1) × 8px gaps, so 1259 / 1440 / 1621px for 7 / 8 / 9.
+// 173px is what the widest label needs on ONE line ("Critical Participant Alerts" is 152.6px at 13px, plus the tile's 8px
+// sides and 1px borders, plus a pixel or two of slack), so a one-row band is always one line tall per label (78px) and never
+// wraps one. That is a container query on the band, not a viewport breakpoint, so the 232px sidebar and the pointer's gutter
+// do not matter. Full class strings, so Tailwind can see them.
+const BAND_SHAPE: Record<number, { grid: string; last: string }> = {
+  7: { grid: 'md:grid-cols-4 @min-[1259px]:grid-cols-7', last: 'col-span-2 @min-[1259px]:col-span-1' },
+  8: { grid: 'md:grid-cols-4 @min-[1440px]:grid-cols-8', last: '' },
+  9: { grid: 'md:grid-cols-5 @min-[1621px]:grid-cols-9', last: 'col-span-2 @min-[1621px]:col-span-1' },
+}
+const BAND_SHAPE_FALLBACK = { grid: 'md:grid-cols-4', last: '' }
 
 export default function DashboardPage() {
   const { canViewAlerts, canApproveLeave } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
-  const { data: allStaff = [] } = useStaff({ isActive: 'true' })
-  const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
+  const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
+  const { data: alertsAggregate = [], isLoading: alertsLoading, isError: alertsError } = useParticipantAlertsAggregate(canViewAlerts)
   const pendingLeaveCount = usePendingLeaveCount(canApproveLeave)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
@@ -106,49 +124,81 @@ export default function DashboardPage() {
         .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
     )
 
+  // The needs-attention band: a fixed order, so a position always means the same item. An item is dropped only by the two
+  // conditions the dashboard always had (the alerts item needs canViewAlerts, Pending Leave needs canApproveLeave and a
+  // non-empty queue); everything else stays in place at zero and just goes quiet. Every count, link and caption is the one
+  // the KPI row carried; the everyday counts moved into the header's summary line.
+  //
+  // The two items computed from their own request never claim "All clear", or show a definite 0, without data: while the
+  // request is in flight (`loading`) or after it failed (`error`) the item is an en dash placeholder, never tinted and with no
+  // caption. A false negative here is worse than a placeholder, since coordinators rely on these two items to know whether any
+  // staff qualification or participant needs urgent attention. Qualification Issues counts the staff list; Critical
+  // Participant Alerts counts the participant-alerts aggregate.
+  const attentionItems: StatCardProps[] = [
+    {
+      label: 'Qualification Issues',
+      value: qualIssueCount,
+      to: '/qualifications',
+      tone: tinted(qualIssueCount, 'danger'),
+      loading: staffLoading,
+      error: staffError,
+      caption: !staffLoading && !staffError && qualIssueCount === 0 ? 'All clear' : undefined,
+    },
+    ...(canViewAlerts
+      ? [
+          {
+            label: 'Critical Participant Alerts',
+            value: criticalAlertItems.length,
+            to: '/participants',
+            tone: tinted(criticalAlertItems.length, 'danger'),
+            loading: alertsLoading,
+            error: alertsError,
+            caption: !alertsLoading && !alertsError && criticalAlertItems.length === 0 ? 'All clear' : undefined,
+          },
+        ]
+      : []),
+    { label: 'Overdue', value: d.overdueTaskCount, tone: tinted(d.overdueTaskCount, 'danger') },
+    { label: 'Missing Accommodation', value: d.tripsMissingAccommodation, tone: tinted(d.tripsMissingAccommodation, 'warning') },
+    { label: 'Missing Vehicles', value: d.tripsMissingVehicles, tone: tinted(d.tripsMissingVehicles, 'warning') },
+    { label: 'Missing Staff', value: d.tripsMissingStaff, tone: tinted(d.tripsMissingStaff, 'warning') },
+    { label: 'Open Incidents', value: d.openIncidentCount, tone: tinted(d.openIncidentCount, 'warning') },
+    { label: 'QSC Overdue', value: d.qscOverdueCount, tone: tinted(d.qscOverdueCount, 'danger') },
+    // Pending Leave stays out at zero (it was never one of the fixed items): nothing to action when the queue is empty.
+    ...(canApproveLeave && pendingLeaveCount > 0
+      ? [{ label: 'Pending Leave', value: pendingLeaveCount, to: '/rostering/leave', tone: 'warning' as const }]
+      : []),
+  ]
+  const bandShape = BAND_SHAPE[attentionItems.length] ?? BAND_SHAPE_FALLBACK
+
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader title="Management Dashboard" subtitle="Centralized overview of your NDIS trip operations." />
+      {/* Title at the display step (PageHeader variant="detail"), with the everyday counts as one quiet line in the meta
+          row: they are context, not something to act on, so they no longer take a tile each. */}
+      <PageHeader
+        variant="detail"
+        title="Management Dashboard"
+        subtitle={
+          <PageHeaderMeta>
+            <span className="tabular-nums">{counted(d.upcomingTripCount, 'upcoming trip', 'upcoming trips')}</span>
+            <span className="tabular-nums">{counted(d.activeParticipantCount, 'active participant', 'active participants')}</span>
+            <span className="tabular-nums">{counted(d.outstandingTaskCount, 'outstanding task', 'outstanding tasks')}</span>
+          </PageHeaderMeta>
+        }
+      />
 
-      {/* ── KPI row — every metric in one row, tinted only when actionable ──
-          8.5rem (136px) minimum: at 1920 the content box is 1648px (1920 − 232 sidebar − 2×20
-          gutter), so 10 tiles need 10×136 + 9×8 = 1432px and 11 (with the alerts tile) need
-          1576px — both fit on one row. Below that auto-fit wraps whole tiles. ── */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
-        <StatCard label="Upcoming Trips" value={d.upcomingTripCount} />
-        <StatCard label="Active Participants" value={d.activeParticipantCount} />
-        <StatCard label="Outstanding Tasks" value={d.outstandingTaskCount} />
-        <StatCard
-          label="Qualification Issues"
-          value={qualIssueCount}
-          to="/qualifications"
-          tone={tinted(qualIssueCount, 'danger')}
-          caption={qualIssueCount === 0 ? 'All clear' : undefined}
-        />
-        {canViewAlerts && (
-          <StatCard
-            label="Critical Participant Alerts"
-            value={criticalAlertItems.length}
-            to="/participants"
-            tone={tinted(criticalAlertItems.length, 'danger')}
-            // Don't claim "All clear" while the alerts request is still in flight — a false
-            // negative here is worse than a brief blank caption, since coordinators rely on
-            // this tile to know whether any participant needs urgent attention.
-            caption={!alertsLoading && criticalAlertItems.length === 0 ? 'All clear' : undefined}
-          />
-        )}
-        <StatCard label="Overdue" value={d.overdueTaskCount} tone={tinted(d.overdueTaskCount, 'danger')} />
-        <StatCard label="Missing Accomm." value={d.tripsMissingAccommodation} tone={tinted(d.tripsMissingAccommodation, 'warning')} />
-        <StatCard label="Missing Vehicles" value={d.tripsMissingVehicles} tone={tinted(d.tripsMissingVehicles, 'warning')} />
-        <StatCard label="Missing Staff" value={d.tripsMissingStaff} tone={tinted(d.tripsMissingStaff, 'warning')} />
-        <StatCard label="Open Incidents" value={d.openIncidentCount} tone={tinted(d.openIncidentCount, 'warning')} />
-        <StatCard label="QSC Overdue" value={d.qscOverdueCount} tone={tinted(d.qscOverdueCount, 'danger')} />
-        {/* Pending Leave stays hidden at zero (not part of the fixed 10-tile KPI set) — nothing
-            to action when the queue is empty. */}
-        {canApproveLeave && pendingLeaveCount > 0 && (
-          <StatCard label="Pending Leave" value={pendingLeaveCount} to="/rostering/leave" tone="warning" />
-        )}
-      </div>
+      {/* ── Needs attention — display-step figures; only a non-zero item is tinted (DESIGN.md "Attention band") ── */}
+      <section aria-label="Needs attention" className="@container">
+        <div className={`grid grid-cols-2 gap-2 ${bandShape.grid}`}>
+          {attentionItems.map((item, i) => (
+            <StatCard
+              key={item.label}
+              variant="attention"
+              {...item}
+              className={i === attentionItems.length - 1 ? bandShape.last || undefined : undefined}
+            />
+          ))}
+        </div>
+      </section>
 
       {/* ── Main Content Grid — Upcoming Trips / Overdue Tasks ──
           One column below xl, then an even split (1920: (1648 − 16) / 2 = 816px each). Each panel

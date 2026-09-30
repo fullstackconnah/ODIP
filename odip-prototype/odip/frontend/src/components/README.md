@@ -494,6 +494,27 @@ tile. **When to use StatCard vs a hand-rolled metric block**: any single-number 
 stat — keeps the "hero-metric template" tendency the design guardrails ban confined to
 one real, reused component instead of copy-pasted markup per page.
 
+`StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant`, `loading` and `error`. `variant` is `'default'` (the default: the small KPI
+tile, a 12px label over a `text-xl` value, unchanged and still what Vehicles uses) or `'attention'`, the opt-in tile of the dashboard's **attention
+band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-display`) over a 13px medium label, in its own bordered `--radius-md` tile
+with an 8px side inset (the compact card's).
+
+- `tone`: `'danger'` fills the tile with the error-container and `'warning'` with the warning-container, and the figure and the label take the matching
+  on-container colour. Those are the glance strip's own tints (it maps through `attentionForTone`). Any other tone, or none, is quiet: the card fill, with
+  the figure and the label in `muted-foreground`. The rule is "non-zero is loud, zero is quiet", so pass `tone={count > 0 ? 'danger' : undefined}`.
+- `caption`: the all-clear state ("All clear"). On a quiet tile it is the lime positive chip beside the figure (the glance strip's all-clear); on a tinted
+  tile it is plain text, because a lime chip never sits on a tint.
+- `to`: the whole tile is a `Link` with a focus ring and a `--tap-min` floor, and its accessible name is its content ("Qualification Issues 5"). A tile
+  without `to` is a named group ("Overdue 2"), so the number and the label are always in the name. A tinted tile carries `data-attention="error" | "warning"`,
+  as a glance cell does.
+- `loading` and `error` (attention only; the default tile ignores them): the figure is an en dash in the muted style, never tinted, with no caption, and a
+  screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
+  failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
+
+Lay the tiles out in a `<section aria-label="…" className="@container">`; `DashboardPage` shows the shapes (two columns below `md`, two balanced rows
+from `md`, one row once the band's own width gives every item 173px, what the widest label needs on one line). Source order is label, figure, caption, like a glance cell, so a screen reader
+hears "Overdue, 2".
+
 ---
 
 ## PageHeader
@@ -527,7 +548,8 @@ under the title instead of a section-gap away, and always renders the subtitle b
 `PageHeaderMeta` joins its children with `aria-hidden` middots. Falsy children are skipped BEFORE the separators are placed, so a
 missing fact never leaves a dangling dot; each separator belongs to the item before it, so a wrapped line can end with a dot but never
 begins with one. **When not to**: a list or hub page (keep the default), or any page that does not lead with a status and countable facts.
-Only the trip detail page opts in today; the other detail pages adopt it next.
+The trip detail page opts in with a status-led meta row, and the dashboard opts in for its title with a meta row of plain counts and no status
+("3 upcoming trips · 5 active participants · 4 outstanding tasks", each noun agreeing with its count, in `tabular-nums`); the other detail pages adopt it next.
 
 ---
 
