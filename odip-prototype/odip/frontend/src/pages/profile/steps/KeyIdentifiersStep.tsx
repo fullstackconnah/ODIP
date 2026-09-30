@@ -34,22 +34,22 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Identity (from Intake)">
         <div className={formGrid}>
-          <ReadOnlyField field="firstName" label="First Name" value={participant.firstName || '—'} />
-          <ReadOnlyField field="lastName" label="Last Name" value={participant.lastName || '—'} />
-          <ReadOnlyField field="preferredName" label="Preferred Name" value={participant.preferredName || '—'} />
-          <ReadOnlyField field="dateOfBirth" label="Date of Birth" value={participant.dateOfBirth || '—'} />
-          <ReadOnlyField field="phone" label="Phone" value={participant.phone || '—'} />
-          <ReadOnlyField field="email" label="Email" value={participant.email || '—'} />
-          <ReadOnlyField field="addressStreet" label="Address — Street" value={participant.addressStreet || '—'} />
-          <ReadOnlyField field="addressSuburb" label="Address — Suburb" value={participant.addressSuburb || '—'} />
-          <ReadOnlyField field="addressState" label="Address — State" value={participant.addressState || '—'} />
-          <ReadOnlyField field="addressPostcode" label="Address — Postcode" value={participant.addressPostcode || '—'} />
-          <ReadOnlyField field="ndisNumber" label="NDIS Number" value={participant.ndisNumber || '—'} />
-          <ReadOnlyField field="planStartDate" label="Plan Start Date" value={participant.planStartDate || '—'} />
-          <ReadOnlyField field="planEndDate" label="Plan End Date" value={participant.planEndDate || '—'} />
-          <ReadOnlyField field="planType" label="Plan Type" value={participant.planType || '—'} />
-          <ReadOnlyField field="fundingSource" label="Funding Source" value={participant.fundingSource || '—'} />
-          <ReadOnlyGroupField field="contactRoles" label="Contacts">
+          <ReadOnlyField field="firstName" label="First Name" value={participant.firstName || '—'} className={span.medium} />
+          <ReadOnlyField field="lastName" label="Last Name" value={participant.lastName || '—'} className={span.medium} />
+          <ReadOnlyField field="preferredName" label="Preferred Name" value={participant.preferredName || '—'} className={span.medium} />
+          <ReadOnlyField field="dateOfBirth" label="Date of Birth" value={participant.dateOfBirth || '—'} className={span.short} />
+          <ReadOnlyField field="phone" label="Phone" value={participant.phone || '—'} className={span.medium} />
+          <ReadOnlyField field="email" label="Email" value={participant.email || '—'} className={span.medium} />
+          <ReadOnlyField field="addressStreet" label="Address — Street" value={participant.addressStreet || '—'} className={span.long} />
+          <ReadOnlyField field="addressSuburb" label="Address — Suburb" value={participant.addressSuburb || '—'} className={span.medium} />
+          <ReadOnlyField field="addressState" label="Address — State" value={participant.addressState || '—'} className={span.short} />
+          <ReadOnlyField field="addressPostcode" label="Address — Postcode" value={participant.addressPostcode || '—'} className={span.short} />
+          <ReadOnlyField field="ndisNumber" label="NDIS Number" value={participant.ndisNumber || '—'} className={span.short} />
+          <ReadOnlyField field="planStartDate" label="Plan Start Date" value={participant.planStartDate || '—'} className={span.short} />
+          <ReadOnlyField field="planEndDate" label="Plan End Date" value={participant.planEndDate || '—'} className={span.short} />
+          <ReadOnlyField field="planType" label="Plan Type" value={participant.planType || '—'} className={span.short} />
+          <ReadOnlyField field="fundingSource" label="Funding Source" value={participant.fundingSource || '—'} className={span.medium} />
+          <ReadOnlyGroupField field="contactRoles" label="Contacts" className={span.long}>
             Managed on the participant's Contacts tab.
           </ReadOnlyGroupField>
         </div>

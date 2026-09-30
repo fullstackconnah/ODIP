@@ -43,24 +43,25 @@ export function CulturalDepthConsentsStep({ control, register, participant, cons
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Cultural Background (from Intake)">
         <div className={formGrid}>
-          <ReadOnlyField field="isCald" label="CALD" value={yesNoUnknown(participant.isCald === null ? '' : String(participant.isCald))} />
-          <ReadOnlyField field="isLgbtqi" label="LGBTIQA+" value={yesNoUnknown(participant.isLgbtqi === null ? '' : String(participant.isLgbtqi))} />
-          <ReadOnlyField field="isFamilyCommunity" label="Family / Community" value={yesNoUnknown(participant.isFamilyCommunity === null ? '' : String(participant.isFamilyCommunity))} />
+          <ReadOnlyField field="isCald" label="CALD" value={yesNoUnknown(participant.isCald === null ? '' : String(participant.isCald))} className={span.short} />
+          <ReadOnlyField field="isLgbtqi" label="LGBTIQA+" value={yesNoUnknown(participant.isLgbtqi === null ? '' : String(participant.isLgbtqi))} className={span.short} />
+          <ReadOnlyField field="isFamilyCommunity" label="Family / Community" value={yesNoUnknown(participant.isFamilyCommunity === null ? '' : String(participant.isFamilyCommunity))} className={span.short} />
           <ReadOnlyField
             field="isAboriginalOrTorresStraitIslander"
             label="Aboriginal and/or Torres Strait Islander"
             value={yesNoUnknown(participant.isAboriginalOrTorresStraitIslander === null ? '' : String(participant.isAboriginalOrTorresStraitIslander))}
+            className={span.medium}
           />
         </div>
       </Card>
 
       <Card title="Information Received (from Intake)">
         <div className={formGrid}>
-          <ReadOnlyField field="receivedRightsAndResponsibilitiesInfo" label="Received: Rights and Responsibilities" value={yesNoUnknown(participant.receivedRightsAndResponsibilitiesInfo === null ? '' : String(participant.receivedRightsAndResponsibilitiesInfo))} />
-          <ReadOnlyField field="receivedPrivacyAndConfidentialityInfo" label="Received: Privacy and Confidentiality" value={yesNoUnknown(participant.receivedPrivacyAndConfidentialityInfo === null ? '' : String(participant.receivedPrivacyAndConfidentialityInfo))} />
-          <ReadOnlyField field="receivedFeedbackInfo" label="Received: Feedback Information and Form" value={yesNoUnknown(participant.receivedFeedbackInfo === null ? '' : String(participant.receivedFeedbackInfo))} />
-          <ReadOnlyField field="receivedBeingSafeInfo" label="Received: Being Safe Information" value={yesNoUnknown(participant.receivedBeingSafeInfo === null ? '' : String(participant.receivedBeingSafeInfo))} />
-          <ReadOnlyField field="receivedAdvocacyInfo" label="Received: Advocacy Information" value={yesNoUnknown(participant.receivedAdvocacyInfo === null ? '' : String(participant.receivedAdvocacyInfo))} />
+          <ReadOnlyField field="receivedRightsAndResponsibilitiesInfo" label="Received: Rights and Responsibilities" value={yesNoUnknown(participant.receivedRightsAndResponsibilitiesInfo === null ? '' : String(participant.receivedRightsAndResponsibilitiesInfo))} className={span.medium} />
+          <ReadOnlyField field="receivedPrivacyAndConfidentialityInfo" label="Received: Privacy and Confidentiality" value={yesNoUnknown(participant.receivedPrivacyAndConfidentialityInfo === null ? '' : String(participant.receivedPrivacyAndConfidentialityInfo))} className={span.medium} />
+          <ReadOnlyField field="receivedFeedbackInfo" label="Received: Feedback Information and Form" value={yesNoUnknown(participant.receivedFeedbackInfo === null ? '' : String(participant.receivedFeedbackInfo))} className={span.medium} />
+          <ReadOnlyField field="receivedBeingSafeInfo" label="Received: Being Safe Information" value={yesNoUnknown(participant.receivedBeingSafeInfo === null ? '' : String(participant.receivedBeingSafeInfo))} className={span.medium} />
+          <ReadOnlyField field="receivedAdvocacyInfo" label="Received: Advocacy Information" value={yesNoUnknown(participant.receivedAdvocacyInfo === null ? '' : String(participant.receivedAdvocacyInfo))} className={span.medium} />
         </div>
       </Card>
 
