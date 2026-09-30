@@ -136,8 +136,8 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
             />
             <span className="text-sm font-medium">Assigned as driver</span>
             {staff.isDriverEligible
-              ? <span className="text-[10px] text-[var(--color-primary)] font-semibold">(eligible)</span>
-              : <span className="text-[10px] text-[var(--color-destructive)] font-semibold">(not eligible)</span>
+              ? <span className="text-[13px] text-[var(--color-primary)] font-semibold">(eligible)</span>
+              : <span className="text-[13px] text-[var(--color-destructive)] font-semibold">(not eligible)</span>
             }
           </label>
           <div>

@@ -37,8 +37,8 @@ const LEVEL_SELECT_CLASS: Record<CompatibilityLevel, string> = {
 // "editable but empty" is itself the signal, backed by the cell's hairline underline.
 const RESTING_LABEL_CLASS: Record<CompatibilityLevel, string> = {
   Allowed: '',
-  Preferred: 'rounded-full bg-primary/10 px-2 py-0.5 text-[11px] leading-none text-primary',
-  Excluded: 'rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-semibold leading-none text-destructive',
+  Preferred: 'rounded-full bg-primary/10 px-2 py-0.5 text-xs leading-none text-primary',
+  Excluded: 'rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold leading-none text-destructive',
 }
 
 // Read-only (non-writer) rendering shares the same resting weight — there's nothing to reveal

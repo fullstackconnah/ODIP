@@ -383,7 +383,7 @@ export default function ClaimBatchBuilderPage() {
                   )}
                   {validateMutation.isPending ? 'Validating…' : 'Validate selection'}
                 </button>
-                <p className="text-[11px] text-[var(--color-muted-foreground)]">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
                   Read-only — validating never creates or changes anything.
                 </p>
                 {validateMutation.isError && (
@@ -404,7 +404,7 @@ export default function ClaimBatchBuilderPage() {
                   Create claim batch
                 </button>
                 {createHelpText && (
-                  <p id={createHelpId} className="text-[11px] text-[var(--color-muted-foreground)]">{createHelpText}</p>
+                  <p id={createHelpId} className="text-xs text-[var(--color-muted-foreground)]">{createHelpText}</p>
                 )}
               </div>
             </div>

@@ -223,7 +223,7 @@ export default function MarTab() {
                           {entry.participantName}
                         </Link>
                         {entry.isOverdue && (
-                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-white">Overdue</span>
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-white">Overdue</span>
                         )}
                       </div>
                       <p className="text-sm text-[var(--color-foreground)]">
@@ -236,7 +236,7 @@ export default function MarTab() {
                       </p>
                       {entry.isHighRisk && (
                         <span
-                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"
+                          className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"
                           title="Requires a witness for every administered dose"
                         >
                           <ShieldAlert className="w-3 h-3" /> High risk
@@ -308,7 +308,7 @@ export default function MarTab() {
                       {prn.doseDescription && <p className="text-xs text-[var(--color-muted-foreground)]">{prn.doseDescription}</p>}
                     </div>
                     {prn.outcomePendingAdministrationId && (
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">Outcome due</span>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">Outcome due</span>
                     )}
                   </div>
                   {prn.prnIndication && (

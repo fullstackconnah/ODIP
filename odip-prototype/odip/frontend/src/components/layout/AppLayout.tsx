@@ -210,7 +210,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           </div>
           <div className="min-w-0">
             <span className="font-extrabold text-[var(--color-primary)] tracking-tight text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</span>
-            <p className="text-[10px] text-[var(--color-muted-foreground)] opacity-70 leading-none mt-0.5">NDIS Management</p>
+            <p className="text-xs text-[var(--color-muted-foreground)] opacity-70 leading-none mt-0.5">NDIS Management</p>
           </div>
         </div>
 
@@ -436,13 +436,13 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         {permissions.canAccessPage('dashboard') && (
           <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
-            <span className="text-[10px] font-medium">Dashboard</span>
+            <span className="text-xs font-medium">Dashboard</span>
           </NavLink>
         )}
         {permissions.canAccessPage('trips') && (
           <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
-            <span className="text-[10px] font-medium">Trips</span>
+            <span className="text-xs font-medium">Trips</span>
           </NavLink>
         )}
         {permissions.canWrite && (
@@ -464,13 +464,13 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
               : 'text-[var(--color-secondary)]'
           }`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
-            <span className="text-[10px] font-medium">People</span>
+            <span className="text-xs font-medium">People</span>
           </NavLink>
         )}
         {permissions.canAccessPage('settings') && (
           <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
-            <span className="text-[10px] font-medium">Settings</span>
+            <span className="text-xs font-medium">Settings</span>
           </NavLink>
         )}
       </nav>

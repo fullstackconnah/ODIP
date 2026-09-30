@@ -56,7 +56,7 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
           {note.isPinned && <Pin className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" aria-label="Pinned note" />}
           <p className="font-medium text-[var(--color-foreground)] truncate">{note.title}</p>
           {note.sourceKey && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
               <Sparkles className="w-3 h-3" /> Auto-generated
             </span>
           )}

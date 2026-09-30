@@ -234,9 +234,9 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             )}
             {prop && (prop.isWheelchairAccessible || prop.isFullyModified || prop.isSemiModified) && (
               <div className="flex flex-wrap gap-1 mt-1">
-                {prop.isWheelchairAccessible && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]">Wheelchair Accessible</span>}
-                {prop.isFullyModified && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-info)]">Fully Modified</span>}
-                {prop.isSemiModified && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">Semi Modified</span>}
+                {prop.isWheelchairAccessible && <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]">Wheelchair Accessible</span>}
+                {prop.isFullyModified && <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-info)]">Fully Modified</span>}
+                {prop.isSemiModified && <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">Semi Modified</span>}
               </div>
             )}
             {r.comments && <p className="text-xs text-[var(--color-muted-foreground)] italic mt-1">{r.comments}</p>}
@@ -337,7 +337,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <div className="flex gap-0">
               {days.map((day, i) => (
                 <div key={i} className="flex-1 text-center">
-                  <p className="text-[10px] text-[var(--color-muted-foreground)] truncate">{day.label}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] truncate">{day.label}</p>
                 </div>
               ))}
             </div>
@@ -367,7 +367,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div key={r.id} className="relative h-6 mt-1">
                   <div className="absolute h-full rounded bg-[var(--color-primary)]/20 border border-[var(--color-primary)]/40 flex items-center px-2 overflow-hidden"
                     style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
-                    <span className="text-[10px] font-medium text-[var(--color-primary)] truncate">{r.propertyName}</span>
+                    <span className="text-xs font-medium text-[var(--color-primary)] truncate">{r.propertyName}</span>
                   </div>
                 </div>
               )

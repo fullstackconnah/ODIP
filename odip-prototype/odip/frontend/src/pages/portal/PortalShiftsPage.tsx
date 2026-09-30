@@ -168,7 +168,7 @@ export default function PortalShiftsPage() {
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <StatusBadge status={shift.status} />
                         {shift.nightType !== 'None' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          <span className="inline-flex items-center gap-1 text-[13px] text-[var(--color-muted-foreground)]">
                             <Moon className="w-3 h-3" /> {shift.nightType}
                           </span>
                         )}

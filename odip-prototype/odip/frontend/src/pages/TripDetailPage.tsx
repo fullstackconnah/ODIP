@@ -22,7 +22,7 @@ function FactChip({ tone, children }: { tone: 'positive' | 'warning' | 'negative
     negative: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
     neutral: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
   }[tone]
-  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
+  return <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
 }
 
 /** Material Symbols category glyph for a fact-bar segment — the same icons the pre-density stat

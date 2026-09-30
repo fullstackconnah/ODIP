@@ -172,7 +172,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
         {administrations.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No administrations recorded in the last 14 days.</p>
         ) : (
-          <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-x-auto">
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-x-auto">
             {administrations.map(a => (
               <div key={a.id} className="p-3 flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">

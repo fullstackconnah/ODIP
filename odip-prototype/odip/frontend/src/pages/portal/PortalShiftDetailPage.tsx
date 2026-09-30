@@ -345,7 +345,7 @@ export default function PortalShiftDetailPage() {
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {routine.isCritical && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--color-on-error-container)]" aria-label="Critical" />}
                   <span className="font-medium">{routine.title}</span>
-                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
                     {ROUTINE_CATEGORY_LABELS[routine.category]}
                   </span>
                 </div>

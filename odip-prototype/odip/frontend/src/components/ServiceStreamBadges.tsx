@@ -1,6 +1,6 @@
 import { parseServiceStreams, SERVICE_STREAM_LABELS, SERVICE_STREAM_TITLES } from '@/api/types/participants'
 
-const CHIP_CLASS = 'inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-secondary-container)] text-[var(--color-foreground)]'
+const CHIP_CLASS = 'inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-secondary-container)] text-[var(--color-foreground)]'
 
 /**
  * Small pill chips for a participant's service-stream tags. Accepts the raw wire value (a

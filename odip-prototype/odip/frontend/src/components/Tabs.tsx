@@ -199,7 +199,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
                   aria-hidden="true"
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
                     isActive
                       ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
                       : 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]'

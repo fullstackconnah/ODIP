@@ -284,7 +284,7 @@ export function SearchableSelect({
             <div className="min-w-0">
               <p className={item.description ? 'font-semibold' : ''}>{item.label}</p>
               {item.description && (
-                <p className="text-[11px] text-[var(--color-muted-foreground)]">{item.description}</p>
+                <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
               )}
             </div>
           </div>

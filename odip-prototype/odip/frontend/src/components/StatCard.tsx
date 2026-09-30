@@ -41,7 +41,7 @@ export function StatCard({ label, value, className, to, tone = 'neutral', captio
     <Card compact className={`${TONE_TILE[tone]} ${className ?? ''}`.trim() || undefined}>
       <p className={`${dense ? 'truncate ' : ''}text-xs font-medium text-[var(--color-muted-foreground)]`}>{label}</p>
       <p className={`text-xl font-display font-bold ${TONE_VALUE[tone]}`}>{value}</p>
-      {caption && <p className="text-[11px] text-[var(--color-muted-foreground)]">{caption}</p>}
+      {caption && <p className="text-xs text-[var(--color-muted-foreground)]">{caption}</p>}
     </Card>
   )
   if (to) {

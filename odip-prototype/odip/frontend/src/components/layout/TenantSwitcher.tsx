@@ -86,14 +86,14 @@ export default function TenantSwitcher() {
         aria-expanded={open}
         className="flex items-center gap-1.5 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#e0e7ff] transition-colors"
       >
-        <span className="text-[10px] bg-[#6366f1] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
+        <span className="text-xs bg-[#6366f1] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
         <span className="text-sm font-semibold text-[#3730a3]">{current?.name ?? 'Loading…'}</span>
         <span className="text-[#6366f1] text-xs">▾</span>
       </button>
 
       {open && (
         <div className="absolute right-0 mt-1 w-56 bg-[#1e2030] border border-[#334155] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="px-3 py-2 border-b border-[#334155] text-[10px] text-[#64748b] uppercase tracking-wider">
+          <div className="px-3 py-2 border-b border-[#334155] text-xs text-[#64748b] uppercase tracking-wider">
             Viewing as tenant
           </div>
           <div className="p-1.5">
@@ -112,10 +112,10 @@ export default function TenantSwitcher() {
                   {tenant.name}
                 </span>
                 {tenant.id === ownTenantId && (
-                  <span className="text-[10px] text-[#94a3b8]">(yours)</span>
+                  <span className="text-[13px] text-[#94a3b8]">(yours)</span>
                 )}
                 {!tenant.isActive && (
-                  <span className="text-[10px] text-[#64748b]">inactive</span>
+                  <span className="text-[13px] text-[#64748b]">inactive</span>
                 )}
               </button>
             ))}

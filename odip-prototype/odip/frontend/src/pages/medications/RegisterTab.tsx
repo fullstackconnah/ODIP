@@ -94,7 +94,7 @@ export default function RegisterTab() {
       key: 'type',
       header: 'Type',
       render: m => (
-        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
           {MEDICATION_TYPE_LABELS[m.type]}
         </span>
       ),
@@ -103,7 +103,7 @@ export default function RegisterTab() {
       key: 'drugSchedule',
       header: 'Schedule',
       render: m => (m.drugSchedule === 'Schedule4' || m.drugSchedule === 'Schedule8')
-        ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
+        ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
         : <span className="text-[var(--color-muted-foreground)]">—</span>,
     },
     { key: 'supportLevel', header: 'Support level', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },

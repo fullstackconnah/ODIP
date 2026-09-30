@@ -45,7 +45,7 @@ function StatCell({ icon: Icon, label, value, status }: {
         <Icon className="w-4 h-4 text-[var(--color-secondary)]" />
       </div>
       <div>
-        <p className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider">{label}</p>
+        <p className="text-xs uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider">{label}</p>
         <p className={`font-bold text-sm ${valueColor}`}>{value}</p>
       </div>
     </div>

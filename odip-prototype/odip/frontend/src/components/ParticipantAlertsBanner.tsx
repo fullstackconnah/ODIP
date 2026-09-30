@@ -47,9 +47,9 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
               <Link to={a.linkTo} aria-label={a.message} className={rowClassName}>
                 <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <span className="flex-1 min-w-0 truncate" title={a.message} aria-hidden="true">{a.message}</span>
-                {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
+                {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-                <span className="text-[10px] font-bold uppercase tracking-wide shrink-0" aria-hidden="true">{style.label}</span>
+                <span className="text-xs font-bold uppercase tracking-wide shrink-0" aria-hidden="true">{style.label}</span>
               </Link>
             ) : (
               <button
@@ -59,9 +59,9 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
               >
                 <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <span className="flex-1 min-w-0 truncate" title={a.message}>{a.message}</span>
-                {/* Full-strength colour, not a faded one — at 10px this is small text, and opacity
+                {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-                <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">{style.label}</span>
+                <span className="text-xs font-bold uppercase tracking-wide shrink-0">{style.label}</span>
               </button>
             )}
           </div>

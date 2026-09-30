@@ -130,22 +130,22 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
-          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${TYPE_BADGE_STYLES[practice.type]}`}>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${TYPE_BADGE_STYLES[practice.type]}`}>
             {RESTRICTIVE_PRACTICE_TYPE_LABELS[practice.type]}
           </span>
           {practice.type === 'Unclassified' && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-100 text-amber-800">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-100 text-amber-800">
               <AlertTriangle className="w-3 h-3" /> Needs classification
             </span>
           )}
           {!practice.isActive && (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
               Inactive
             </span>
           )}
           {practice.reviewDate && (
             <span
-              className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
+              className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
                 overdue ? 'bg-[var(--color-destructive)] text-white' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
               }`}
             >

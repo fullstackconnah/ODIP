@@ -193,7 +193,7 @@ export default function DashboardPage() {
                     <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @lg:inline">
                       {t.currentParticipantCount}/{t.maxParticipants || '—'} pax
                     </span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${badge}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${badge}`}>
                       {t.status.replace(/([A-Z])/g, ' $1').trim()}
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
@@ -225,7 +225,7 @@ export default function DashboardPage() {
                 const initials = (t.ownerName || 'UN').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                 return (
                   <div key={t.id} className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${badgeClass}`}>
                       {t.priority || 'Medium'}
                     </span>
                     {/* The title carries the participant name (e.g. "… — Sienna W."), so it is the
@@ -238,7 +238,7 @@ export default function DashboardPage() {
                     <span className="hidden shrink-0 text-xs text-[var(--color-muted-foreground)] @2xl:inline">
                       Due {dueAgo(t.dueDate)}
                     </span>
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-fixed)] text-[9px] font-bold text-[var(--color-on-primary-fixed)]">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-fixed)] text-xs font-bold text-[var(--color-on-primary-fixed)]">
                       {initials}
                     </span>
                     <Link
@@ -280,7 +280,7 @@ export default function DashboardPage() {
                   className={`rounded-[var(--radius-md)] p-[var(--card-pad)] ${style.bg} border border-[var(--color-destructive)]/10 transition-opacity hover:opacity-90`}
                 >
                   <div className="mb-2 flex items-start justify-between">
-                    <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${style.text}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-bold uppercase tracking-widest ${style.text}`}>
                       <Icon className="h-3 w-3" /> {style.label}
                     </span>
                   </div>
@@ -288,7 +288,7 @@ export default function DashboardPage() {
                     <ShieldAlert className="h-4 w-4 opacity-60" /> {participantName}
                   </h5>
                   {typeLabel && (
-                    <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{typeLabel}</p>
+                    <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{typeLabel}</p>
                   )}
                   <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">{alert.message}</p>
                   <div className="flex items-center justify-end">

@@ -10,7 +10,7 @@ type MedicationForChips = {
   drugSchedule: DrugSchedule
 }
 
-const CHIP_BASE = 'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap'
+const CHIP_BASE = 'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap'
 
 /** Small chips summarising a medication's clinical/compliance-relevant flags. */
 export function MedicationBadges({ medication, className }: { medication: MedicationForChips; className?: string }) {

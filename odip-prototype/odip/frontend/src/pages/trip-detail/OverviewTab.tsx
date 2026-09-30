@@ -73,7 +73,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           {/* Participants */}
           {bookings.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Participants</p>
+              <p className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Participants</p>
               <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
                 <div className="p-1">
                 {bookings.slice(0, 4).map((b: BookingListDto) => (
@@ -83,7 +83,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm text-[var(--color-foreground)] truncate leading-tight">{b.participantName}</p>
-                      <p className="text-[10px] text-[var(--color-muted-foreground)] truncate leading-tight">
+                      <p className="text-[13px] text-[var(--color-muted-foreground)] truncate leading-tight">
                         {[b.highSupportRequired && 'High Support', b.wheelchairRequired && 'Wheelchair', b.nightSupportRequired && 'Night Support'].filter(Boolean).join(' · ') || b.bookingStatus}
                       </p>
                     </div>
@@ -119,7 +119,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
             if (entries.length === 0) return null
             return (
               <div className="space-y-1.5">
-                <p className="text-[11px] font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Payment</p>
+                <p className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Payment</p>
                 <div className="flex flex-wrap gap-1.5 px-1">
                   {entries.map(({ value, label, count }) => (
                     <span
@@ -137,17 +137,17 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           {/* Staff */}
           {staff.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Staff Roster</p>
+              <p className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest px-1">Staff Roster</p>
               <div className="space-y-1">
                 {staff.slice(0, 3).map((s: StaffAssignmentDto, i: number) => (
                   <div key={s.id} className={`h-10 bg-[var(--color-surface-container-low)] px-2 rounded-[var(--radius-sm)] flex items-center justify-between ${i === 0 ? 'ring-2 ring-primary/20' : ''}`}>
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 shrink-0 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)] font-bold text-[10px]">
+                      <div className="w-7 h-7 shrink-0 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)] font-bold text-xs">
                         {(s.staffName || 'S').split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-sm text-[var(--color-foreground)] truncate leading-tight">{s.staffName}</p>
-                        <p className="text-[10px] text-[var(--color-muted-foreground)] truncate leading-tight">{s.assignmentRole || (s.isDriver ? 'Driver' : 'Support Worker')}</p>
+                        <p className="text-[13px] text-[var(--color-muted-foreground)] truncate leading-tight">{s.assignmentRole || (s.isDriver ? 'Driver' : 'Support Worker')}</p>
                       </div>
                     </div>
                     <button className="w-6 h-6 shrink-0 rounded-full bg-[var(--color-card)] flex items-center justify-center hover:bg-[var(--color-accent)] transition-colors">
@@ -184,7 +184,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-foreground)] truncate">{v.vehicleName || 'Vehicle'}</p>
-                    <p className="text-[10px] text-[var(--color-muted-foreground)]">
+                    <p className="text-[13px] tabular-nums leading-tight text-[var(--color-muted-foreground)]">
                       {[v.wheelchairPositionRequirement && `${v.wheelchairPositionRequirement} WC`, v.seatRequirement && `${v.seatRequirement} seats`].filter(Boolean).join(' · ') || 'Vehicle'}
                     </p>
                   </div>

@@ -93,7 +93,7 @@ export default function ContactsTab({ participantId }: { participantId: string |
       render: role => (
         <span className="inline-flex items-center gap-1.5">
           <StatusBadge status={role.roleType} label={CONTACT_ROLE_TYPE_LABELS[role.roleType]} colorMap={{ [role.roleType.toLowerCase()]: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]' }} />
-          {role.isPrimary && <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Primary</span>}
+          {role.isPrimary && <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Primary</span>}
         </span>
       ),
     },

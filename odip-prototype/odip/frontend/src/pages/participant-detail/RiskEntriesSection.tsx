@@ -42,7 +42,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
   return (
     <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
           {AT_RISK_PARTY_LABELS[entry.atRiskParty]}
         </span>
         {canWrite && (

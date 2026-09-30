@@ -20,7 +20,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
  */
 function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
   return (
-    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] capitalize">
+    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] capitalize">
       {SHIFT_NOTE_FLAG_LABELS[category]}
     </span>
   )

@@ -73,7 +73,7 @@ export default function UserSwitcher() {
         aria-expanded={open}
         className="flex items-center gap-1.5 bg-[#fff7ed] border border-[#fed7aa] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#ffedd5] transition-colors"
       >
-        <span className="text-[10px] bg-[#ea580c] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
+        <span className="text-xs bg-[#ea580c] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
         <span className="text-sm font-semibold text-[#9a3412]">
           {currentViewUser?.fullName ?? 'View as user…'}
         </span>
@@ -82,7 +82,7 @@ export default function UserSwitcher() {
 
       {open && (
         <div className="absolute right-0 mt-1 w-64 bg-[#1e2030] border border-[#334155] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="px-3 py-2 border-b border-[#334155] text-[10px] text-[#64748b] uppercase tracking-wider">
+          <div className="px-3 py-2 border-b border-[#334155] text-xs text-[#64748b] uppercase tracking-wider">
             View as user
           </div>
           <div className="p-1.5">
@@ -112,7 +112,7 @@ export default function UserSwitcher() {
                 <span className={`text-sm flex-1 ${user.id === viewingUserId ? 'text-[#e2e8f0] font-medium' : 'text-[#94a3b8]'}`}>
                   {user.fullName}
                 </span>
-                <span className="text-[10px] text-[#64748b]">{user.role}</span>
+                <span className="text-[13px] text-[#64748b]">{user.role}</span>
               </button>
             ))}
           </div>
