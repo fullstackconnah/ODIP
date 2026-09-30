@@ -32,10 +32,6 @@ public sealed class PostgresFixture : IAsyncLifetime
     private string? _baseConnectionString;
     private readonly List<string> _databases = new();
 
-    // The app switches Npgsql to its legacy timestamp behaviour at startup (Odip.Api/Program.cs): DateTime Kind is persisted verbatim.
-    // Tests that bypass Program must set the same switch before the first Npgsql call or writing a Kind=Utc value would throw.
-    static PostgresFixture() => AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
-
     public bool Available => _baseConnectionString is not null;
 
     /// <summary>The fully migrated scratch database every shared-state test uses (each test works on its own rows).</summary>
