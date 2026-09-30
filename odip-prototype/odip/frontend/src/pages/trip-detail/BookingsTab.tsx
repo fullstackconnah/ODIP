@@ -251,7 +251,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       {/* Add Booking Modal */}
       {showAddBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { setShowAddBooking(false); resetForm() }}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Add Participant to Trip</h3>
               <button onClick={() => { setShowAddBooking(false); resetForm() }} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -331,7 +331,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div>
                 <label className="block text-sm font-medium mb-1">Booking Notes</label>
                 <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -355,13 +355,13 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
                           <input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                             placeholder="e.g. Allianz" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
                           <input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                             placeholder="e.g. POL-12345" />
                         </div>
                       </div>
@@ -369,12 +369,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
                           <input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
                           <input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                       </div>
                     </>
@@ -390,7 +390,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => { setShowAddBooking(false); resetForm() }}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleCreateBooking} disabled={!selectedParticipantId || createBooking.isPending}
@@ -599,12 +599,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
         }
         return (
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-3">
+            <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-3">
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Required</p>
               <p className="text-xl font-bold mt-1">{rounded} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
               {noRatioCount > 0 && <p className="text-xs text-[var(--color-warning)] mt-1">{noRatioCount} participant{noRatioCount > 1 ? 's' : ''} without ratio</p>}
             </div>
-            <div className={`rounded-2xl p-3 ${isStaffed ? 'bg-[var(--color-primary-fixed)]/30' : 'bg-[var(--color-error-container)]/60'}`}>
+            <div className={`rounded-[var(--radius-md)] p-3 ${isStaffed ? 'bg-[var(--color-primary-fixed)]/30' : 'bg-[var(--color-error-container)]/60'}`}>
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Assigned</p>
               <p className={`text-xl font-bold mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
                 {assigned}/{rounded}
@@ -613,7 +613,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 {isStaffed ? 'Fully staffed' : `Need ${rounded - assigned} more`}
               </p>
             </div>
-            <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-3">
+            <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-3">
               <p className="text-xs text-[var(--color-muted-foreground)]">Capacity</p>
               {suggestion
                 ? <p className="text-sm mt-1">{suggestion}</p>
@@ -627,7 +627,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       {/* Edit Booking Modal */}
       {editingBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingBooking(null)}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Edit Booking — {editingBooking.participantName}</h3>
               <button onClick={() => setEditingBooking(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -708,7 +708,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div>
                 <label className="block text-sm font-medium mb-1">Booking Notes</label>
                 <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -737,13 +737,13 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
                           <input type="text" value={editForm.insuranceProvider} onChange={e => setEditForm({ ...editForm, insuranceProvider: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                             placeholder="e.g. Allianz" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
                           <input type="text" value={editForm.insurancePolicyNumber} onChange={e => setEditForm({ ...editForm, insurancePolicyNumber: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                             placeholder="e.g. POL-12345" />
                         </div>
                       </div>
@@ -751,12 +751,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
                           <input type="date" value={editForm.insuranceCoverageStart} onChange={e => setEditForm({ ...editForm, insuranceCoverageStart: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                         <div>
                           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
                           <input type="date" value={editForm.insuranceCoverageEnd} onChange={e => setEditForm({ ...editForm, insuranceCoverageEnd: e.target.value })}
-                            className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                         </div>
                       </div>
                     </>
@@ -772,7 +772,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setEditingBooking(null)}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleUpdateBooking} disabled={updateBooking.isPending}
@@ -821,14 +821,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 cancelBooking.mutate({ id: deletingBooking.id, data }, { onSuccess: () => setDeletingBooking(null) })
               }}
               disabled={cancelBooking.isPending || deleteBooking.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel booking</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
             </button>
             <button
               onClick={() => deletingBooking && deleteBooking.mutate(deletingBooking.id, { onSuccess: () => setDeletingBooking(null) })}
               disabled={deleteBooking.isPending || cancelBooking.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Delete permanently</span>
               <span className="block text-xs mt-0.5 opacity-80">Remove completely from the trip — cannot be undone</span>
             </button>

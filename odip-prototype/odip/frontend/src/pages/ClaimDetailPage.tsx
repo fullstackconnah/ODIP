@@ -12,7 +12,7 @@ import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
-const inputClass = 'w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
 
 function planTypeLabel(planType: string) {
@@ -178,7 +178,7 @@ export default function ClaimDetailPage() {
           { label: 'Created', value: claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—' },
           { label: 'Submitted', value: claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—' },
         ].map(card => (
-          <div key={card.label} className="bg-[var(--color-card)] rounded-2xl p-4">
+          <div key={card.label} className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4">
             <p className="text-xs text-[var(--color-muted-foreground)] font-medium mb-1">{card.label}</p>
             <p className="text-lg font-semibold text-[var(--color-foreground)]">{card.value}</p>
           </div>
@@ -186,7 +186,7 @@ export default function ClaimDetailPage() {
       </div>
 
       {/* Notes */}
-      <div className="bg-[var(--color-card)] rounded-2xl p-4 space-y-2">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 space-y-2">
         <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">Notes</label>
         <textarea
           value={notes}
@@ -207,7 +207,7 @@ export default function ClaimDetailPage() {
       </div>
 
       {/* Line items */}
-      <div className="bg-[var(--color-card)] rounded-2xl overflow-hidden">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] overflow-hidden">
         <div className="px-4 py-3 bg-[var(--color-surface-container-low)] flex items-center justify-between">
           <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Line Items</h2>
           <span className="text-xs text-[var(--color-muted-foreground)]">{(claim.lineItems ?? []).length} items</span>

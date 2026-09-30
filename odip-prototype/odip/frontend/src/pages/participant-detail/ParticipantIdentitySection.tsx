@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { usePatchParticipant, useStaff } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { GENDERS } from '@/api/types/enums'
 import { GENDER_LABELS } from '@/api/types/participants'
@@ -79,43 +81,43 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
     <SectionEditPanel title="Identity" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <FormField label="First Name" required>
+          <div className={formGrid}>
+            <FormField label="First Name" required className={span.medium}>
               <input value={draft.firstName} onChange={(e) => setDraft((d) => ({ ...d, firstName: e.target.value }))} />
             </FormField>
-            <FormField label="Last Name" required>
+            <FormField label="Last Name" required className={span.medium}>
               <input value={draft.lastName} onChange={(e) => setDraft((d) => ({ ...d, lastName: e.target.value }))} />
             </FormField>
-            <FormField label="Preferred Name">
+            <FormField label="Preferred Name" className={span.medium}>
               <input value={draft.preferredName} onChange={(e) => setDraft((d) => ({ ...d, preferredName: e.target.value }))} />
             </FormField>
-            <FormField label="Middle Name">
+            <FormField label="Middle Name" className={span.medium}>
               <input value={draft.middleName} onChange={(e) => setDraft((d) => ({ ...d, middleName: e.target.value }))} />
             </FormField>
-            <FormField label="Date of Birth">
+            <FormField label="Date of Birth" className={span.short}>
               <input type="date" value={draft.dateOfBirth} onChange={(e) => setDraft((d) => ({ ...d, dateOfBirth: e.target.value }))} />
             </FormField>
-            <FormField label="Gender">
+            <FormField label="Gender" className={span.short}>
               <select value={draft.gender} onChange={(e) => setDraft((d) => ({ ...d, gender: e.target.value }))}>
                 <option value="">Not specified</option>
                 {GENDERS.map((g) => <option key={g} value={g}>{GENDER_LABELS[g]}</option>)}
               </select>
             </FormField>
             {draft.gender === 'Other' && (
-              <FormField label="Gender Self-Description" required>
+              <FormField label="Gender Self-Description" required className={span.medium}>
                 <input value={draft.genderSelfDescription} onChange={(e) => setDraft((d) => ({ ...d, genderSelfDescription: e.target.value }))} placeholder="How the participant describes their gender" />
               </FormField>
             )}
-            <FormField label="Place of Birth">
+            <FormField label="Place of Birth" className={span.medium}>
               <input value={draft.placeOfBirth} onChange={(e) => setDraft((d) => ({ ...d, placeOfBirth: e.target.value }))} placeholder="e.g. Brisbane, QLD" />
             </FormField>
-            <FormField label="Country">
+            <FormField label="Country" className={span.medium}>
               <input value={draft.country} onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))} placeholder="e.g. Australia" />
             </FormField>
-            <FormField label="Phone">
+            <FormField label="Phone" className={span.medium}>
               <input type="tel" value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="e.g. 0400 000 000" />
             </FormField>
-            <FormField label="Email">
+            <FormField label="Email" className={span.medium}>
               <input type="email" value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="e.g. name@example.com" />
             </FormField>
           </div>
@@ -128,24 +130,26 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">First Name</span><span>{p.firstName || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Last Name</span><span>{p.lastName || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Preferred Name</span><span>{p.preferredName || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Middle Name</span><span>{p.middleName || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Date of Birth</span><span>{p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString('en-AU') : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Gender</span>
-          <span>
-            {p.gender
-              ? GENDER_LABELS[p.gender as Gender] + (p.gender === 'Other' && p.genderSelfDescription ? ` (${p.genderSelfDescription})` : '')
-              : '—'}
-          </span>
-          <span className="text-[var(--color-muted-foreground)]">Place of Birth</span><span>{p.placeOfBirth || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Country</span><span>{p.country || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Phone</span><span>{p.phone || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Email</span><span>{p.email || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Preferred Staff</span><span>{p.preferredStaffName ?? '—'}</span>
-        </div>
+        <FactList
+          items={[
+            { label: 'First Name', value: p.firstName },
+            { label: 'Last Name', value: p.lastName },
+            { label: 'Preferred Name', value: p.preferredName },
+            { label: 'Middle Name', value: p.middleName },
+            { label: 'Date of Birth', value: p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString('en-AU') : undefined },
+            {
+              label: 'Gender',
+              value: p.gender
+                ? GENDER_LABELS[p.gender as Gender] + (p.gender === 'Other' && p.genderSelfDescription ? ` (${p.genderSelfDescription})` : '')
+                : undefined,
+            },
+            { label: 'Place of Birth', value: p.placeOfBirth },
+            { label: 'Country', value: p.country },
+            { label: 'Phone', value: p.phone },
+            { label: 'Email', value: p.email },
+            { label: 'Preferred Staff', value: p.preferredStaffName },
+          ]}
+        />
       )}
     </SectionEditPanel>
   )

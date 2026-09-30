@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
@@ -66,44 +67,44 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
   return (
     <SectionEditPanel title="Key Identifiers" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="grid md:grid-cols-2 gap-4">
-          <FormField label="Pension Card Number">
+        <div className={formGrid}>
+          <FormField label="Pension Card Number" className={span.medium}>
             <input value={draft.pensionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, pensionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Pension Card Expiry">
+          <FormField label="Pension Card Expiry" className={span.short}>
             <input type="date" value={draft.pensionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, pensionCardExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Medicare Number">
+          <FormField label="Medicare Number" className={span.medium}>
             <input value={draft.medicareNumber} onChange={(e) => setDraft((d) => ({ ...d, medicareNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Medicare Expiry">
+          <FormField label="Medicare Expiry" className={span.short}>
             <input type="date" value={draft.medicareExpiry} onChange={(e) => setDraft((d) => ({ ...d, medicareExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Companion Card Number">
+          <FormField label="Companion Card Number" className={span.medium}>
             <input value={draft.companionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, companionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Companion Card Expiry">
+          <FormField label="Companion Card Expiry" className={span.short}>
             <input type="date" value={draft.companionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, companionCardExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Private Health Fund">
+          <FormField label="Private Health Fund" className={span.medium}>
             <input value={draft.privateHealthFund} onChange={(e) => setDraft((d) => ({ ...d, privateHealthFund: e.target.value }))} />
           </FormField>
-          <FormField label="Private Health Membership Number">
+          <FormField label="Private Health Membership Number" className={span.medium}>
             <input value={draft.privateHealthMembershipNumber} onChange={(e) => setDraft((d) => ({ ...d, privateHealthMembershipNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Taxi Card Number">
+          <FormField label="Taxi Card Number" className={span.medium}>
             <input value={draft.taxiCardNumber} onChange={(e) => setDraft((d) => ({ ...d, taxiCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Hair Colour">
+          <FormField label="Hair Colour" className={span.short}>
             <input value={draft.hairColour} onChange={(e) => setDraft((d) => ({ ...d, hairColour: e.target.value }))} />
           </FormField>
-          <FormField label="Eye Colour">
+          <FormField label="Eye Colour" className={span.short}>
             <input value={draft.eyeColour} onChange={(e) => setDraft((d) => ({ ...d, eyeColour: e.target.value }))} />
           </FormField>
-          <FormField label="Weight (kg)">
+          <FormField label="Weight (kg)" className={span.short}>
             <input type="number" min="0" max="999.99" step="0.1" value={draft.weightKg} onChange={(e) => setDraft((d) => ({ ...d, weightKg: e.target.value }))} />
           </FormField>
-          <FormField label="Height (cm)">
+          <FormField label="Height (cm)" className={span.short}>
             <input type="number" min="0" max="999.99" step="0.1" value={draft.heightCm} onChange={(e) => setDraft((d) => ({ ...d, heightCm: e.target.value }))} />
           </FormField>
         </div>

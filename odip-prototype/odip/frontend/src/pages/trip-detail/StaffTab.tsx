@@ -349,7 +349,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       {/* Edit Staff Assignment Modal */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingStaff(null)}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Edit Assignment — {editingStaff.staffName}</h3>
               <button onClick={() => setEditingStaff(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -362,7 +362,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               <div>
                 <label className="block text-sm font-medium mb-1">Assignment Role</label>
                 <input type="text" value={editStaffForm.assignmentRole} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentRole: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                   placeholder="e.g. Support Worker" />
               </div>
 
@@ -383,12 +383,12 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                 <div>
                   <label className="block text-sm font-medium mb-1">Assignment Start</label>
                   <input type="date" value={editStaffForm.assignmentStart} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentStart: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Assignment End</label>
                   <input type="date" value={editStaffForm.assignmentEnd} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentEnd: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -417,7 +417,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               <div>
                 <label className="block text-sm font-medium mb-1">Shift Notes</label>
                 <textarea value={editStaffForm.shiftNotes} onChange={e => setEditStaffForm({ ...editStaffForm, shiftNotes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -438,7 +438,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}
@@ -454,7 +454,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
       {/* Add Staff Modal */}
       {showAddStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAddStaff(false)}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Add Staff to Trip</h3>
               <button onClick={() => setShowAddStaff(false)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -492,7 +492,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               <div>
                 <label className="block text-sm font-medium mb-1">Assignment Role</label>
                 <input type="text" value={staffAssignmentRole} onChange={e => setStaffAssignmentRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                   placeholder="e.g. Support Worker" />
               </div>
 
@@ -501,12 +501,12 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                 <div>
                   <label className="block text-sm font-medium mb-1">Start Date</label>
                   <input type="date" value={staffAssignmentStart} onChange={e => setStaffAssignmentStart(e.target.value)}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">End Date</label>
                   <input type="date" value={staffAssignmentEnd} onChange={e => setStaffAssignmentEnd(e.target.value)}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -535,7 +535,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               <div>
                 <label className="block text-sm font-medium mb-1">Shift Notes</label>
                 <textarea value={staffShiftNotes} onChange={e => setStaffShiftNotes(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -555,7 +555,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowAddStaff(false)}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleCreateStaffAssignment}
@@ -603,14 +603,14 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
                 updateStaffAssignment.mutate({ id: deletingStaff.id, data }, { onSuccess: () => setDeletingStaff(null) })
               }}
               disabled={updateStaffAssignment.isPending || deleteStaffAssignment.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel assignment</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
             </button>
             <button
               onClick={() => deletingStaff && deleteStaffAssignment.mutate(deletingStaff.id, { onSuccess: () => setDeletingStaff(null) })}
               disabled={deleteStaffAssignment.isPending || updateStaffAssignment.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Delete permanently</span>
               <span className="block text-xs mt-0.5 opacity-80">Remove completely from the trip — cannot be undone</span>
             </button>

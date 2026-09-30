@@ -1,12 +1,29 @@
-import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
-import { formatDateAu, getStatusColor } from '@/lib/utils'
+import { formatDateAu } from '@/lib/utils'
 import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
+import { StatusBadge } from '@/components/StatusBadge'
+import { FactBar, type FactBarSegment } from '@/components/FactBar'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
+
+/** Small pill used inside FactBar segments — matches StatusBadge's visual language (same
+ * rounded-full/text-xs shape) for the "state" chips (Waitlist/Active, Action Needed/On Track, etc.)
+ * that aren't themselves a StatusBadge status value. */
+function FactChip({ tone, children }: { tone: 'positive' | 'warning' | 'negative' | 'neutral'; children: React.ReactNode }) {
+  const toneClass = {
+    positive: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+    warning: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+    negative: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+    neutral: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+  }[tone]
+  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
+}
 
 type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
 
@@ -69,117 +86,72 @@ export default function TripDetailPage() {
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
 
+  const factBarSegments: FactBarSegment[] = [
+    {
+      label: 'Participants / Staff',
+      value: `${trip.currentParticipantCount} / ${trip.staffAssignedCount}`,
+      badge: (trip.waitlistCount ?? 0) > 0
+        ? <FactChip tone="warning">Waitlist</FactChip>
+        : <FactChip tone="positive">Active</FactChip>,
+    },
+    {
+      label: 'Outstanding Tasks',
+      value: trip.outstandingTaskCount ?? 0,
+      badge: (trip.outstandingTaskCount ?? 0) > 0
+        ? <FactChip tone="negative">Action Needed</FactChip>
+        : <FactChip tone="positive">On Track</FactChip>,
+    },
+    {
+      label: 'High Support / Overnight',
+      value: `${trip.highSupportCount ?? 0} / ${trip.overnightSupportCount ?? 0}`,
+      badge: <FactChip tone="neutral">{trip.wheelchairCount ?? 0} WC</FactChip>,
+    },
+    {
+      label: 'Insurance',
+      value: `${trip.insuranceConfirmedCount ?? 0}/${(trip.insuranceConfirmedCount ?? 0) + (trip.insuranceOutstandingCount ?? 0)}`,
+      badge: (trip.insuranceOutstandingCount ?? 0) > 0
+        ? <FactChip tone="negative">Outstanding</FactChip>
+        : <FactChip tone="positive">Covered</FactChip>,
+    },
+  ]
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Hero Header */}
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className={`px-3 py-1 text-xs font-bold rounded-full tracking-wider uppercase ${getStatusColor(trip.status)}`}>
-              {trip.status}
-            </span>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <PageHeader
+        title={trip.tripName}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
+            <StatusBadge status={trip.status} />
             {trip.destination && (
-              <span className="text-[var(--color-muted-foreground)] text-sm flex items-center gap-1">
-                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>location_on</span>
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>location_on</span>
                 {trip.destination}
               </span>
             )}
-            {trip.tripCode && (
-              <span className="text-xs font-mono text-[var(--color-secondary)] bg-[var(--color-surface-container)] px-2 py-0.5 rounded-full">{trip.tripCode}</span>
+            {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>calendar_month</span>
+              {formatDateAu(trip.startDate)} — {formatDateAu(trip.endDate)} ({trip.durationDays} days)
+            </span>
+          </div>
+        }
+        action={
+          <div className="flex gap-2 shrink-0">
+            <Button to="/trips" variant="secondary" size="md">
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Button>
+            {canWrite && (
+              <Button variant="primary" size="md" onClick={() => setShowEditTrip(true)}>
+                <Pencil className="w-4 h-4" />
+                Edit Trip
+              </Button>
             )}
           </div>
-          <h1 className="text-2xl sm:text-4xl lg:text-[3.5rem] font-extrabold text-[var(--color-foreground)] leading-tight tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            {trip.tripName}
-          </h1>
-          <p className="text-[var(--color-muted-foreground)] font-medium flex items-center gap-2">
-            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>calendar_month</span>
-            {formatDateAu(trip.startDate)} — {formatDateAu(trip.endDate)} ({trip.durationDays} days)
-          </p>
-        </div>
-        <div className="flex gap-3 flex-shrink-0">
-          <Link to="/trips" className="px-5 py-2.5 bg-[var(--color-surface-container)] text-[var(--color-foreground)] rounded-full font-bold hover:opacity-90 transition-all flex items-center gap-2 text-sm">
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </Link>
-          {canWrite && (
-            <button
-              onClick={() => setShowEditTrip(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white text-sm font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 transition-all"
-            >
-              <Pencil className="w-4 h-4" />
-              Edit Trip
-            </button>
-          )}
-        </div>
-      </section>
+        }
+      />
 
-      {/* Quick Metrics Bento */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
-        {/* Participants */}
-        <div className="bg-[var(--color-surface-container-low)] p-4 md:p-6 rounded-2xl space-y-2 md:space-y-3">
-          <div className="flex justify-between items-start">
-            <span className="material-symbols-outlined text-[var(--color-primary)] text-2xl md:text-4xl">groups</span>
-            {(trip.waitlistCount ?? 0) > 0
-              ? <span className="text-xs font-bold text-[#92400e] px-2 py-1 bg-[#fef3c7] rounded-full">Waitlist</span>
-              : <span className="text-xs font-bold text-[var(--color-success)] px-2 py-1 bg-[var(--color-primary-fixed)] rounded-full">Active</span>
-            }
-          </div>
-          <div>
-            <p className="text-sm text-[var(--color-muted-foreground)] font-medium">Participants / Staff</p>
-            <h4 className="text-xl md:text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {trip.currentParticipantCount} / {trip.staffAssignedCount}
-            </h4>
-          </div>
-        </div>
-
-        {/* Tasks / Outstanding */}
-        <div className="bg-[var(--color-surface-container-low)] p-4 md:p-6 rounded-2xl space-y-2 md:space-y-3">
-          <div className="flex justify-between items-start">
-            <span className="material-symbols-outlined text-[var(--color-secondary)] text-2xl md:text-4xl">checklist</span>
-            {(trip.outstandingTaskCount ?? 0) > 0
-              ? <span className="text-xs font-bold text-[var(--color-destructive)] px-2 py-1 bg-[var(--color-error-container)] rounded-full">Action Needed</span>
-              : <span className="text-xs font-bold text-[var(--color-success)] px-2 py-1 bg-[var(--color-primary-fixed)] rounded-full">On Track</span>
-            }
-          </div>
-          <div>
-            <p className="text-sm text-[var(--color-muted-foreground)] font-medium">Outstanding Tasks</p>
-            <h4 className="text-xl md:text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {trip.outstandingTaskCount ?? 0}
-            </h4>
-          </div>
-        </div>
-
-        {/* Support needs */}
-        <div className="bg-[var(--color-surface-container-low)] p-4 md:p-6 rounded-2xl space-y-2 md:space-y-3">
-          <div className="flex justify-between items-start">
-            <span className="material-symbols-outlined text-[var(--color-secondary)] text-2xl md:text-4xl">accessible</span>
-            <span className="text-xs font-bold text-[var(--color-muted-foreground)] px-2 py-1 bg-[var(--color-input)] rounded-full">{trip.wheelchairCount ?? 0} WC</span>
-          </div>
-          <div>
-            <p className="text-sm text-[var(--color-muted-foreground)] font-medium">High Support / Overnight</p>
-            <h4 className="text-xl md:text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {trip.highSupportCount ?? 0} / {trip.overnightSupportCount ?? 0}
-            </h4>
-          </div>
-        </div>
-
-        {/* Insurance */}
-        <div className="bg-[var(--color-surface-container-low)] p-4 md:p-6 rounded-2xl space-y-2 md:space-y-3">
-          <div className="flex justify-between items-start">
-            <span className="material-symbols-outlined text-[var(--color-destructive)] text-2xl md:text-4xl">health_and_safety</span>
-            {(trip.insuranceOutstandingCount ?? 0) > 0
-              ? <span className="text-xs font-bold text-[var(--color-destructive)] px-2 py-1 bg-[var(--color-error-container)] rounded-full">Outstanding</span>
-              : <span className="text-xs font-bold text-[var(--color-success)] px-2 py-1 bg-[var(--color-primary-fixed)] rounded-full">Covered</span>
-            }
-          </div>
-          <div>
-            <p className="text-sm text-[var(--color-muted-foreground)] font-medium">Insurance Status</p>
-            <h4 className="text-xl md:text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {trip.insuranceConfirmedCount ?? 0}/{(trip.insuranceConfirmedCount ?? 0) + (trip.insuranceOutstandingCount ?? 0)}
-            </h4>
-          </div>
-        </div>
-      </section>
+      <FactBar segments={factBarSegments} />
 
       {/* Tabs */}
       <div className="-mx-4 md:mx-0 px-4 md:px-0">

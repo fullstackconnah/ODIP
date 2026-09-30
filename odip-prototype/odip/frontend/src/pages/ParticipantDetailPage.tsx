@@ -8,6 +8,8 @@ import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
@@ -54,25 +56,104 @@ export default function ParticipantDetailPage() {
   if (!p) return <div className="text-center py-12">Participant not found</div>
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start gap-4">
-        <Link to="/participants" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold">{p.fullName}</h1>
-            <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
-          </div>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</p>
-          <div className="mt-2">
-            <ServiceStreamBadges value={p.serviceStreams} />
-          </div>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <div className="flex items-start gap-2">
+        <Button to="/participants" variant="ghost" size="md" iconOnly aria-label="Back to participants" className="mt-1 shrink-0">
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={p.fullName}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
+                <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
+                <span>{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</span>
+                <ServiceStreamBadges value={p.serviceStreams} />
+              </div>
+            }
+            action={
+              <div className="flex flex-wrap items-start justify-end gap-2">
+                {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
+                    downloading/printing documents is a read action, and this page has no more specific
+                    canView... flag of its own to gate read-level content on (see usePermissions — the
+                    closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
+                    features), so these follow the rest of the page's ungated read-only content. */}
+                <div className="flex flex-col items-start gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
+                    disabled={downloadIntakeForm.isPending}
+                  >
+                    {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
+                  </Button>
+                  {downloadIntakeForm.isError && (
+                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                      Couldn't download the file. Try again, or contact support if this keeps happening.
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-start gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
+                    disabled={downloadParticipantProfile.isPending}
+                  >
+                    {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
+                  </Button>
+                  {downloadParticipantProfile.isError && (
+                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                      Couldn't download the file. Try again, or contact support if this keeps happening.
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-start gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
+                    disabled={downloadClientOverview.isPending}
+                  >
+                    {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
+                  </Button>
+                  {downloadClientOverview.isError && (
+                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                      Couldn't download the file. Try again, or contact support if this keeps happening.
+                    </p>
+                  )}
+                </div>
+                {canWrite && (
+                  <Button to={`/participants/${id}/agreement-draft`} variant="secondary" size="md">
+                    <FileText className="w-4 h-4" /> Agreement draft
+                  </Button>
+                )}
+                {/* cg04 Task 9 (design §5) — the caregiver-link header control. Gated on
+                    canWriteParticipantDetails (a write action), unlike the ungated Documents
+                    downloads above — see B15 in the discovery fact sheet. */}
+                <CaregiverLinkControl participantId={id!} />
+                {canWrite && (
+                  // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
+                  // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
+                  // now-redirecting /edit route.
+                  <Button to={`/participants/${id}/profile`} variant="primary" size="md">
+                    <Pencil className="w-4 h-4" /> Edit
+                  </Button>
+                )}
+              </div>
+            }
+          />
           {/* SPEC-05 PF-10.5 — three-way resume-banner state, derived from IntakeCompletedAt/IsDraft:
               no IntakeCompletedAt -> "Resume intake" (fresh Intake start, pre-filled from this row);
               IntakeCompletedAt set + IsDraft -> "Continue profile"; IsDraft false -> no banner at all. */}
           {p.isDraft && (
-            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
+            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
                 {p.intakeCompletedAt
@@ -82,7 +163,7 @@ export default function ParticipantDetailPage() {
               {canWrite && (
                 <Link
                   to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
+                  className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
                 >
                   <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
                 </Link>
@@ -91,78 +172,6 @@ export default function ParticipantDetailPage() {
           )}
           {canViewAlerts && alertsData && (
             <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
-              downloading/printing documents is a read action, and this page has no more specific
-              canView... flag of its own to gate read-level content on (see usePermissions — the
-              closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
-              features), so these follow the rest of the page's ungated read-only content. */}
-          <div className="flex flex-col items-start gap-1">
-            <button
-              type="button"
-              onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
-              disabled={downloadIntakeForm.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
-            >
-              {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
-            </button>
-            {downloadIntakeForm.isError && (
-              <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                Couldn't download the file. Try again, or contact support if this keeps happening.
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <button
-              type="button"
-              onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
-              disabled={downloadParticipantProfile.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
-            >
-              {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
-            </button>
-            {downloadParticipantProfile.isError && (
-              <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                Couldn't download the file. Try again, or contact support if this keeps happening.
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <button
-              type="button"
-              onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
-              disabled={downloadClientOverview.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
-            >
-              {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
-            </button>
-            {downloadClientOverview.isError && (
-              <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                Couldn't download the file. Try again, or contact support if this keeps happening.
-              </p>
-            )}
-          </div>
-          {/* cg04 Task 9 (design §5) — the caregiver-link header control. Gated on
-              canWriteParticipantDetails (a write action), unlike the ungated Documents
-              downloads above — see B15 in the discovery fact sheet. */}
-          <CaregiverLinkControl participantId={id!} />
-          {canWrite && (
-            <Link to={`/participants/${id}/agreement-draft`} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-all">
-              <FileText className="w-4 h-4" /> Agreement draft
-            </Link>
-          )}
-          {canWrite && (
-            // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
-            // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
-            // now-redirecting /edit route.
-            <Link to={`/participants/${id}/profile`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-              <Pencil className="w-4 h-4" /> Edit
-            </Link>
           )}
         </div>
       </div>
@@ -197,13 +206,13 @@ export default function ParticipantDetailPage() {
           see this branch's report for the section → CORE-02 patch-group mapping and how each
           section avoids nulling fields it doesn't render. */}
       {tab === 'details' && (
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] items-start gap-[var(--section-gap)]">
           <ParticipantIdentitySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantAddressLivingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantNdisFundingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantKeyIdentifiersSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantCulturalBackgroundSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <Card className="md:col-span-2">
+          <Card className="col-span-full">
             <ParticipantConsentsSection participantId={id} />
           </Card>
           {/* PD-6 — the "Support Needs & Mobility" card that used to live here has moved to the
@@ -217,7 +226,7 @@ export default function ParticipantDetailPage() {
               always returns all ten HealthConditionType entries, so there is no genuinely-empty
               state to hide behind a condition — DataTable's own emptyMessage handles a
               still-loading/zero-row edge case instead. */}
-          <Card className="md:col-span-2">
+          <Card className="col-span-full">
             <ParticipantHealthConditionsSection participantId={id} />
           </Card>
           <ParticipantBehaviourCommunicationSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
@@ -227,7 +236,7 @@ export default function ParticipantDetailPage() {
               returns all twenty AdlType entries, so there is no genuinely-empty state to hide
               behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
               edge case instead. Same convention as ParticipantHealthConditionsSection above. */}
-          <Card className="md:col-span-2">
+          <Card className="col-span-full">
             <ParticipantAdlAssessmentsSection participantId={id} />
           </Card>
           <ParticipantMealsDietSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
@@ -235,7 +244,7 @@ export default function ParticipantDetailPage() {
           <ParticipantRisksHazardsSummarySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           {/* INTAKE-09 — a compact section rather than its own tab; see RiskEntriesSection's
               module doc for the tab-count call. */}
-          <Card className="md:col-span-2">
+          <Card className="col-span-full">
             <RiskEntriesSection participantId={id} />
           </Card>
         </div>

@@ -68,7 +68,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
       {/* Vehicle cards */}
       <div className="grid gap-4 md:grid-cols-2">
         {vehicles.length === 0 ? null : vehicles.map((v: VehicleAssignmentDto) => (
-          <div key={v.id} className="bg-white rounded-2xl p-5">
+          <div key={v.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-5">
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="font-semibold">{v.vehicleName}</h4>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
@@ -79,34 +80,34 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
     <SectionEditPanel title="Cultural Background" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <FormField label="Culturally and Linguistically Diverse (CALD)" className="mb-0">
+          <div className={formGrid}>
+            <FormField label="Culturally and Linguistically Diverse (CALD)" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.isCald} onChange={(v) => setDraft((d) => ({ ...d, isCald: v }))} ariaLabel="CALD" />
             </FormField>
-            <FormField label="LGBTIQA+" className="mb-0">
+            <FormField label="LGBTIQA+" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.isLgbtqi} onChange={(v) => setDraft((d) => ({ ...d, isLgbtqi: v }))} ariaLabel="LGBTIQA+" />
             </FormField>
-            <FormField label="Family / Community" className="mb-0">
+            <FormField label="Family / Community" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.isFamilyCommunity} onChange={(v) => setDraft((d) => ({ ...d, isFamilyCommunity: v }))} ariaLabel="Family / Community" />
             </FormField>
-            <FormField label="Aboriginal and/or Torres Strait Islander" className="mb-0">
+            <FormField label="Aboriginal and/or Torres Strait Islander" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.isAboriginalOrTorresStraitIslander} onChange={(v) => setDraft((d) => ({ ...d, isAboriginalOrTorresStraitIslander: v }))} ariaLabel="Aboriginal and/or Torres Strait Islander" />
             </FormField>
           </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <FormField label="Received: Rights and Responsibilities" className="mb-0">
+          <div className={formGrid}>
+            <FormField label="Received: Rights and Responsibilities" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.receivedRightsAndResponsibilitiesInfo} onChange={(v) => setDraft((d) => ({ ...d, receivedRightsAndResponsibilitiesInfo: v }))} ariaLabel="Received: Rights and Responsibilities" />
             </FormField>
-            <FormField label="Received: Privacy and Confidentiality" className="mb-0">
+            <FormField label="Received: Privacy and Confidentiality" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.receivedPrivacyAndConfidentialityInfo} onChange={(v) => setDraft((d) => ({ ...d, receivedPrivacyAndConfidentialityInfo: v }))} ariaLabel="Received: Privacy and Confidentiality" />
             </FormField>
-            <FormField label="Received: Feedback Information and Form" className="mb-0">
+            <FormField label="Received: Feedback Information and Form" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.receivedFeedbackInfo} onChange={(v) => setDraft((d) => ({ ...d, receivedFeedbackInfo: v }))} ariaLabel="Received: Feedback Information and Form" />
             </FormField>
-            <FormField label="Received: Being Safe Information" className="mb-0">
+            <FormField label="Received: Being Safe Information" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.receivedBeingSafeInfo} onChange={(v) => setDraft((d) => ({ ...d, receivedBeingSafeInfo: v }))} ariaLabel="Received: Being Safe Information" />
             </FormField>
-            <FormField label="Received: Advocacy Information" className="mb-0">
+            <FormField label="Received: Advocacy Information" className={`mb-0 ${span.medium}`}>
               <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.receivedAdvocacyInfo} onChange={(v) => setDraft((d) => ({ ...d, receivedAdvocacyInfo: v }))} ariaLabel="Received: Advocacy Information" />
             </FormField>
           </div>

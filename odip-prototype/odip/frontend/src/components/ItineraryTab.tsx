@@ -4,6 +4,7 @@ import { MapPin, Clock, Users, Building2, UserCog, DollarSign, FileDown, Calenda
 import { useState } from 'react'
 import { generateItineraryPdf } from './ItineraryPdf'
 import { Dropdown } from './Dropdown'
+import { EmptyState } from './EmptyState'
 
 interface TripAdminData {
   eventTemplateName?: string | null
@@ -72,7 +73,18 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
   const [exportError, setExportError] = useState<string | null>(null)
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading itinerary...</div>
-  if (isError || !itinerary) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Unable to load itinerary. Make sure the trip has dates and a generated schedule.</div>
+  // Rendered inline at the top of the pane (size="inline"), not centered in an otherwise-empty
+  // viewport void, so it reads as part of the page rather than a floating standalone state.
+  if (isError || !itinerary) {
+    return (
+      <EmptyState
+        size="inline"
+        icon={Calendar}
+        title="Unable to load itinerary"
+        description="Make sure the trip has dates and a generated schedule."
+      />
+    )
+  }
 
   const handleExport = async (version: 'staff' | 'participant') => {
     setExporting(true)
@@ -91,7 +103,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
     <div className="space-y-6 animate-fade-in">
       {/* Export buttons */}
       {exportError && (
-        <div className="text-sm text-[var(--color-destructive)] bg-[var(--color-error-container)]/60 rounded-2xl px-4 py-2">{exportError}</div>
+        <div className="text-sm text-[var(--color-destructive)] bg-[var(--color-error-container)]/60 rounded-[var(--radius-md)] px-4 py-2">{exportError}</div>
       )}
       <div className="flex items-center justify-end">
         <Dropdown
@@ -108,7 +120,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       </div>
 
       {/* Overview Hero Card */}
-      <div className="bg-white rounded-2xl p-6 relative overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-6 relative overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--color-primary)]/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="relative">
           <div className="flex items-start justify-between flex-wrap gap-4">
@@ -137,7 +149,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
               { icon: UserCog, label: 'Staff', value: itinerary.staffCount },
               { icon: DollarSign, label: 'Est. Cost', value: `$${Number(itinerary.totalEstimatedCost).toLocaleString('en-AU', { minimumFractionDigits: 2 })}` },
             ].map(s => (
-              <div key={s.label} className="bg-[var(--color-surface-container)] rounded-2xl p-3 text-center">
+              <div key={s.label} className="bg-[var(--color-surface-container)] rounded-[var(--radius-md)] p-3 text-center">
                 <s.icon className="w-4 h-4 mx-auto text-[var(--color-primary)] mb-1" />
                 <p className="text-lg font-bold text-[var(--color-foreground)]">{s.value}</p>
                 <p className="text-xs text-[var(--color-muted-foreground)]">{s.label}</p>
@@ -154,7 +166,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       {/* Admin details (from trip data) */}
       {trip && (
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5 space-y-3">
+          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
             <h3 className="font-semibold text-[var(--color-foreground)]">Trip Details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Event Template</span><span className="text-[var(--color-foreground)]">{trip.eventTemplateName || '—'}</span>
@@ -166,7 +178,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
               <span className="text-[var(--color-muted-foreground)]">Min Staff</span><span className="text-[var(--color-foreground)]">{trip.minStaffRequired || '—'}</span>
             </div>
           </div>
-          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5 space-y-3">
+          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
             <h3 className="font-semibold text-[var(--color-foreground)]">Requirements</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Wheelchair Capacity</span><span className="text-[var(--color-foreground)]">{trip.requiredWheelchairCapacity || '—'}</span>
@@ -196,7 +208,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                   {day.dayNumber}
                 </div>
 
-                <div className="bg-white rounded-2xl overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
+                <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
                   {/* Day header */}
                   <div className="bg-gradient-to-r from-[var(--color-primary)]/8 to-transparent px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -212,7 +224,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                   <div className="p-5 space-y-3">
                     {/* Accommodation events */}
                     {day.accommodationEvents?.map((ae: any, i: number) => (
-                      <div key={`ae-${i}`} className="flex items-center gap-3 p-3 rounded-2xl bg-[var(--color-surface-container-low)]">
+                      <div key={`ae-${i}`} className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)]">
                         <Building2 className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
                         <div>
                           <p className="text-sm font-medium text-[var(--color-foreground)]">
@@ -244,7 +256,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                           const cat = getCategoryStyle(activity.category)
                           const CatIcon = cat.icon
                           return (
-                            <div key={i} className="flex gap-3 p-4 rounded-2xl bg-[var(--color-surface-container-low)] hover:bg-[var(--color-surface-container)] transition-colors">
+                            <div key={i} className="flex gap-3 p-4 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] hover:bg-[var(--color-surface-container)] transition-colors">
                               <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: cat.bg }}>
                                 <CatIcon className="w-5 h-5" style={{ color: cat.color }} />
                               </div>

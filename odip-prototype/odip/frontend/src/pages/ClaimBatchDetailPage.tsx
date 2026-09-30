@@ -45,7 +45,7 @@ function DetailSkeleton() {
             <div key={i} className="h-20 rounded-xl bg-[var(--color-input)] animate-pulse" />
           ))}
         </div>
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
           <div className="h-10 bg-[var(--color-accent)]" />
           <div className="divide-y divide-[var(--color-border)]">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -142,7 +142,7 @@ export default function ClaimBatchDetailPage() {
       </div>
 
       {/* Events table */}
-      <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-4 py-3 bg-[var(--color-surface-container-low)] flex items-center justify-between">
           <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Batch Events</h2>
           <span className="text-xs text-[var(--color-muted-foreground)]">{events.length} events</span>

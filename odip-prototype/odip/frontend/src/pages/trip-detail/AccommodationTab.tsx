@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2 } from 'lucide-react'
+import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Building2 } from 'lucide-react'
 import {
   useAccommodation,
   useCreateAccommodation,
@@ -12,7 +11,10 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
-import { formatDateAu, getStatusColor } from '@/lib/utils'
+import { DataTable, type Column } from '@/components/DataTable'
+import { StatusBadge } from '@/components/StatusBadge'
+import { EmptyState } from '@/components/EmptyState'
+import { Button } from '@/components/Button'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { ReservationDto } from '@/api/types/reservations'
@@ -208,15 +210,97 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     return { totalNights, coveredNights: totalNights - uncoveredNights.length, uncoveredNights, allCovered: uncoveredNights.length === 0 }
   }, [accommodation, trip?.startDate, trip?.endDate])
 
+  const property = (r: ReservationDto) => allAccommodation.find((a: AccommodationListDto) => a.id === r.accommodationPropertyId)
+  const nightsOf = (r: ReservationDto) => r.checkInDate && r.checkOutDate
+    ? Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / (1000 * 60 * 60 * 24))
+    : null
+
+  const columns: Column<ReservationDto>[] = [
+    {
+      key: 'propertyName',
+      header: 'Property',
+      render: (r) => {
+        const prop = property(r)
+        return (
+          <div className="min-w-0 py-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium">{r.propertyName}</span>
+              {r.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full">Conflict</span>}
+            </div>
+            {prop?.location && (
+              <p className="text-xs text-[var(--color-muted-foreground)] truncate">
+                {[prop.location, prop.region, prop.address || prop.suburb ? [prop.address, prop.suburb, prop.state, prop.postcode].filter(Boolean).join(', ') : null].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {prop && (prop.isWheelchairAccessible || prop.isFullyModified || prop.isSemiModified) && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {prop.isWheelchairAccessible && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]">Wheelchair Accessible</span>}
+                {prop.isFullyModified && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-info)]">Fully Modified</span>}
+                {prop.isSemiModified && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">Semi Modified</span>}
+              </div>
+            )}
+            {r.comments && <p className="text-xs text-[var(--color-muted-foreground)] italic mt-1">{r.comments}</p>}
+          </div>
+        )
+      },
+    },
+    { key: 'reservationStatus', header: 'Status', render: (r) => <StatusBadge status={r.reservationStatus} /> },
+    { key: 'checkInDate', header: 'Check-in', type: 'date' },
+    { key: 'checkOutDate', header: 'Check-out', type: 'date' },
+    { key: 'nights', header: 'Nights', render: (r) => nightsOf(r) ?? '—' },
+    {
+      key: 'cost',
+      header: 'Cost',
+      render: (r) => {
+        const nights = nightsOf(r)
+        const costPerNight = nights && r.cost ? (r.cost / nights).toFixed(2) : null
+        return <>{r.cost ? `$${r.cost}` : '—'}{costPerNight ? ` ($${costPerNight}/night)` : ''}</>
+      },
+    },
+    {
+      key: 'bedroomsReserved',
+      header: 'Bedrooms / Beds',
+      render: (r) => {
+        const prop = property(r)
+        const bedrooms = r.bedroomsReserved ?? prop?.bedroomCount
+        const beds = r.bedsReserved ?? prop?.bedCount
+        const maxCap = prop?.maxCapacity
+        return (bedrooms || beds) ? `${bedrooms ?? '—'} / ${beds ?? '—'}${maxCap ? ` (max ${maxCap})` : ''}` : '—'
+      },
+    },
+    { key: 'confirmationReference', header: 'Ref', render: (r) => r.confirmationReference || '—' },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          {canWrite && (
+            <Button variant="ghost" size="sm" iconOnly onClick={() => openEditReservation(r)} title="Edit reservation" aria-label="Edit reservation">
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" iconOnly to={`/accommodation/${r.accommodationPropertyId}`} title="View property details" aria-label="View property details">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Button>
+          {canWrite && (
+            <Button variant="ghost" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation" className="hover:text-[var(--color-destructive)]">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--color-muted-foreground)]">{accommodation.length} reservation{accommodation.length !== 1 ? 's' : ''}</p>
         {canWrite && (
-          <button onClick={() => { resetAccommForm(); setShowAddAccommodation(true) }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+          <Button variant="primary" size="md" onClick={() => { resetAccommForm(); setShowAddAccommodation(true) }}>
             <Plus className="w-4 h-4" /> Add Accommodation
-          </button>
+          </Button>
         )}
       </div>
 
@@ -239,7 +323,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
         }
 
         return (
-          <div className="bg-white rounded-2xl p-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">Stay Timeline</h3>
               {coverage && (
@@ -305,119 +389,17 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
         )
       })()}
 
-      {/* Reservation Cards */}
+      {/* Reservations */}
       {accommodation.length === 0 ? (
-        <p className="text-[var(--color-muted-foreground)]">No accommodation reservations</p>
+        <EmptyState size="inline" icon={Building2} title="No accommodation reservations" />
       ) : (
-        <div className="space-y-3">
-          {accommodation.map((r: ReservationDto) => {
-            const property = allAccommodation.find((a: AccommodationListDto) => a.id === r.accommodationPropertyId)
-            const nights = r.checkInDate && r.checkOutDate
-              ? Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / (1000 * 60 * 60 * 24))
-              : null
-            const costPerNight = nights && r.cost ? (r.cost / nights).toFixed(2) : null
-
-            return (
-              <div key={r.id} className="bg-white rounded-2xl p-5">
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-semibold">{r.propertyName}</h4>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(r.reservationStatus)}`}>{r.reservationStatus}</span>
-                      {r.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full">Conflict</span>}
-                    </div>
-                    {property?.location && (
-                      <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5">{property.location}{property.region ? ` · ${property.region}` : ''}</p>
-                    )}
-                    {property && (property.address || property.suburb) && (
-                      <p className="text-xs text-[var(--color-muted-foreground)]">{[property.address, property.suburb, property.state, property.postcode].filter(Boolean).join(', ')}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {canWrite && (
-                      <button onClick={() => openEditReservation(r)} className="p-1.5 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="Edit reservation">
-                        <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                      </button>
-                    )}
-                    <Link to={`/accommodation/${r.accommodationPropertyId}`} className="p-1.5 rounded hover:bg-[var(--color-surface-container)] transition-colors" title="View property details">
-                      <ExternalLink className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                    </Link>
-                    {canWrite && (
-                      <button onClick={() => setDeletingReservation(r)} className="p-1.5 rounded hover:bg-[var(--color-error-container)]/60 transition-colors" title="Remove reservation">
-                        <Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Details grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 mt-4 text-sm">
-                  <div>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">Check-in</p>
-                    <p className="font-medium">{formatDateAu(r.checkInDate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">Check-out</p>
-                    <p className="font-medium">{formatDateAu(r.checkOutDate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">Nights</p>
-                    <p className="font-medium">{nights ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">Cost</p>
-                    <p className="font-medium">{r.cost ? `$${r.cost}` : '—'}{costPerNight ? ` ($${costPerNight}/night)` : ''}</p>
-                  </div>
-                  {(r.bedroomsReserved || property?.bedroomCount) && (
-                    <div>
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Bedrooms</p>
-                      <p className="font-medium">{r.bedroomsReserved ?? '—'}{property?.bedroomCount ? ` / ${property.bedroomCount} available` : ''}</p>
-                    </div>
-                  )}
-                  {(r.bedsReserved || property?.bedCount) && (
-                    <div>
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Beds</p>
-                      <p className="font-medium">{r.bedsReserved ?? '—'}{property?.bedCount ? ` / ${property.bedCount} available` : ''}</p>
-                    </div>
-                  )}
-                  {property?.maxCapacity && (
-                    <div>
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Max Capacity</p>
-                      <p className="font-medium">{property.maxCapacity}</p>
-                    </div>
-                  )}
-                  {r.confirmationReference && (
-                    <div>
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Confirmation Ref</p>
-                      <p className="font-medium">{r.confirmationReference}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Property tags */}
-                {property && (property.isWheelchairAccessible || property.isFullyModified || property.isSemiModified) && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {property.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-400">Wheelchair Accessible</span>}
-                    {property.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Fully Modified</span>}
-                    {property.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Semi Modified</span>}
-                  </div>
-                )}
-
-                {/* Notes */}
-                {r.comments && (
-                  <p className="text-sm text-[var(--color-muted-foreground)] mt-3 pt-3 border-t border-[rgba(195,201,181,0.15)]">{r.comments}</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <DataTable data={accommodation} columns={columns} keyField="id" />
       )}
 
       {/* Add Accommodation Modal */}
       {showAddAccommodation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAddAccommodation(false)}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Add Accommodation</h3>
               <button onClick={() => setShowAddAccommodation(false)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -436,24 +418,24 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                   </button>
                 </div>
                 {creatingNewProperty ? (
-                  <div className="space-y-3 p-3 rounded-2xl bg-[var(--color-surface-container)]/30">
+                  <div className="space-y-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container)]/30">
                     <div>
                       <label className="block text-xs font-medium mb-1">Property Name *</label>
                       <input type="text" value={newPropertyForm.propertyName} onChange={e => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
-                        className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                         placeholder="e.g. Beach House Resort" />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium mb-1">Location</label>
                         <input type="text" value={newPropertyForm.location} onChange={e => setNewPropertyForm({ ...newPropertyForm, location: e.target.value })}
-                          className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                           placeholder="e.g. Gold Coast, QLD" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium mb-1">Region</label>
                         <input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
-                          className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                           placeholder="e.g. South East QLD" />
                       </div>
                     </div>
@@ -461,17 +443,17 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                       <div>
                         <label className="block text-xs font-medium mb-1">Bedrooms</label>
                         <input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })}
-                          className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium mb-1">Beds</label>
                         <input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })}
-                          className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium mb-1">Max Capacity</label>
                         <input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })}
-                          className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                       </div>
                     </div>
                   </div>
@@ -491,12 +473,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Check-in</label>
                   <input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Check-out</label>
                   <input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -505,12 +487,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Bedrooms</label>
                   <input type="number" min="0" value={accommForm.bedroomsReserved} onChange={e => setAccommForm({ ...accommForm, bedroomsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Beds</label>
                   <input type="number" min="0" value={accommForm.bedsReserved} onChange={e => setAccommForm({ ...accommForm, bedsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
                 </div>
               </div>
 
@@ -518,7 +500,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <div>
                 <label className="block text-sm font-medium mb-1">Cost</label>
                 <input type="number" min="0" step="0.01" value={accommForm.cost} onChange={e => setAccommForm({ ...accommForm, cost: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
               </div>
 
               {/* Status */}
@@ -537,7 +519,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <div>
                 <label className="block text-sm font-medium mb-1">Comments</label>
                 <textarea value={accommForm.comments} onChange={e => setAccommForm({ ...accommForm, comments: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -549,7 +531,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowAddAccommodation(false)}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleCreateReservation}
@@ -566,7 +548,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       {/* Edit Reservation Modal */}
       {editingReservation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingReservation(null)}>
-          <div className="bg-white rounded-2xl p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Edit Reservation — {editingReservation.propertyName}</h3>
               <button onClick={() => setEditingReservation(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
@@ -591,12 +573,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Check-in</label>
                   <input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Check-out</label>
                   <input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -605,17 +587,17 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Bedrooms</label>
                   <input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Beds</label>
                   <input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Cost</label>
                   <input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -635,7 +617,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <div>
                 <label className="block text-sm font-medium mb-1">Confirmation Reference</label>
                 <input type="text" value={editReservationForm.confirmationReference} onChange={e => setEditReservationForm({ ...editReservationForm, confirmationReference: e.target.value })}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                   placeholder="e.g. booking ref number" />
               </div>
 
@@ -644,12 +626,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Date Booked</label>
                   <input type="date" value={editReservationForm.dateBooked} onChange={e => setEditReservationForm({ ...editReservationForm, dateBooked: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Date Confirmed</label>
                   <input type="date" value={editReservationForm.dateConfirmed} onChange={e => setEditReservationForm({ ...editReservationForm, dateConfirmed: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
 
@@ -657,7 +639,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <div>
                 <label className="block text-sm font-medium mb-1">Comments</label>
                 <textarea value={editReservationForm.comments} onChange={e => setEditReservationForm({ ...editReservationForm, comments: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   placeholder="Optional notes..." />
               </div>
 
@@ -666,7 +648,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 <div>
                   <label className="block text-sm font-medium mb-1">Cancellation Reason</label>
                   <input type="text" value={editReservationForm.cancellationReason} onChange={e => setEditReservationForm({ ...editReservationForm, cancellationReason: e.target.value })}
-                    className="w-full px-3 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm"
+                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
                     placeholder="Reason for cancellation..." />
                 </div>
               )}
@@ -679,7 +661,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setEditingReservation(null)}
-                  className="px-4 py-2 rounded-2xl bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={handleUpdateReservation} disabled={updateReservation.isPending}
@@ -728,14 +710,14 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 cancelReservation.mutate({ id: deletingReservation.id, data }, { onSuccess: () => setDeletingReservation(null) })
               }}
               disabled={cancelReservation.isPending || deleteReservation.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel reservation</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
             </button>
             <button
               onClick={() => deletingReservation && deleteReservation.mutate(deletingReservation.id, { onSuccess: () => setDeletingReservation(null) })}
               disabled={deleteReservation.isPending || cancelReservation.isPending}
-              className="w-full px-4 py-2 rounded-2xl bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Delete permanently</span>
               <span className="block text-xs mt-0.5 opacity-80">Remove completely — cannot be undone</span>
             </button>

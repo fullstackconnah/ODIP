@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
@@ -82,14 +83,14 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
           <FormField label="Special Dietary Needs">
             <textarea value={draft.specialDietaryNeedsDetail} onChange={(e) => setDraft((d) => ({ ...d, specialDietaryNeedsDetail: e.target.value }))} rows={2} />
           </FormField>
-          <div className="grid md:grid-cols-3 gap-4">
-            <FormField label="Favourite Breakfast" className="mb-0">
+          <div className={formGrid}>
+            <FormField label="Favourite Breakfast" className={`mb-0 ${span.short}`}>
               <input value={draft.favouriteBreakfast} onChange={(e) => setDraft((d) => ({ ...d, favouriteBreakfast: e.target.value }))} />
             </FormField>
-            <FormField label="Favourite Lunch" className="mb-0">
+            <FormField label="Favourite Lunch" className={`mb-0 ${span.short}`}>
               <input value={draft.favouriteLunch} onChange={(e) => setDraft((d) => ({ ...d, favouriteLunch: e.target.value }))} />
             </FormField>
-            <FormField label="Favourite Dinner" className="mb-0">
+            <FormField label="Favourite Dinner" className={`mb-0 ${span.short}`}>
               <input value={draft.favouriteDinner} onChange={(e) => setDraft((d) => ({ ...d, favouriteDinner: e.target.value }))} />
             </FormField>
           </div>

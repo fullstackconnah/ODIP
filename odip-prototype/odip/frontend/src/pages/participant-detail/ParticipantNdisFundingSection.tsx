@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, maskNdisNumber, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { FUNDING_SOURCES } from '@/api/types/enums'
 import { FUNDING_SOURCE_LABELS } from '@/api/types/participants'
@@ -63,29 +65,31 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
     <SectionEditPanel title="NDIS & Funding" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
-          <FormField label="Funding Source">
-            <select value={draft.fundingSource} onChange={(e) => setDraft((d) => ({ ...d, fundingSource: e.target.value }))}>
-              {FUNDING_SOURCES.map((s) => <option key={s} value={s}>{FUNDING_SOURCE_LABELS[s]}</option>)}
-            </select>
-          </FormField>
-          {draft.fundingSource !== 'Other' && (
-            <>
-              <FormField label="NDIS Number">
-                <input value={draft.ndisNumber} onChange={(e) => setDraft((d) => ({ ...d, ndisNumber: e.target.value }))} placeholder="e.g. 431234567" />
-              </FormField>
-              <FormField label="Plan Start Date">
-                <input type="date" value={draft.planStartDate} onChange={(e) => setDraft((d) => ({ ...d, planStartDate: e.target.value }))} />
-              </FormField>
-              <FormField label="Plan End Date">
-                <input type="date" value={draft.planEndDate} onChange={(e) => setDraft((d) => ({ ...d, planEndDate: e.target.value }))} />
-              </FormField>
-            </>
-          )}
-          {draft.fundingSource === 'Other' && (
-            <FormField label="Funding Organisation">
-              <input value={draft.fundingOrganisation} onChange={(e) => setDraft((d) => ({ ...d, fundingOrganisation: e.target.value }))} placeholder="e.g. Local Council" />
+          <div className={formGrid}>
+            <FormField label="Funding Source" className={span.short}>
+              <select value={draft.fundingSource} onChange={(e) => setDraft((d) => ({ ...d, fundingSource: e.target.value }))}>
+                {FUNDING_SOURCES.map((s) => <option key={s} value={s}>{FUNDING_SOURCE_LABELS[s]}</option>)}
+              </select>
             </FormField>
-          )}
+            {draft.fundingSource !== 'Other' && (
+              <>
+                <FormField label="NDIS Number" className={span.short}>
+                  <input value={draft.ndisNumber} onChange={(e) => setDraft((d) => ({ ...d, ndisNumber: e.target.value }))} placeholder="e.g. 431234567" />
+                </FormField>
+                <FormField label="Plan Start Date" className={span.short}>
+                  <input type="date" value={draft.planStartDate} onChange={(e) => setDraft((d) => ({ ...d, planStartDate: e.target.value }))} />
+                </FormField>
+                <FormField label="Plan End Date" className={span.short}>
+                  <input type="date" value={draft.planEndDate} onChange={(e) => setDraft((d) => ({ ...d, planEndDate: e.target.value }))} />
+                </FormField>
+              </>
+            )}
+            {draft.fundingSource === 'Other' && (
+              <FormField label="Funding Organisation" className={span.medium}>
+                <input value={draft.fundingOrganisation} onChange={(e) => setDraft((d) => ({ ...d, fundingOrganisation: e.target.value }))} placeholder="e.g. Local Council" />
+              </FormField>
+            )}
+          </div>
           <FormField label="Disability Support for Older Australians (DSOA)" layout="checkbox">
             <input type="checkbox" checked={draft.isDsoa} onChange={(e) => setDraft((d) => ({ ...d, isDsoa: e.target.checked }))} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
@@ -94,24 +98,18 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Funding Source</span>
-          <span>{FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis']}</span>
-          {p.fundingSource !== 'Other' && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">NDIS Number</span><span className="font-mono">{p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Plan Start Date</span><span>{formatDateAu(p.planStartDate)}</span>
-              <span className="text-[var(--color-muted-foreground)]">Plan End Date</span><span>{formatDateAu(p.planEndDate)}</span>
-            </>
-          )}
-          {p.fundingSource === 'Other' && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Funding Organisation</span><span>{p.fundingOrganisation || '—'}</span>
-            </>
-          )}
-          <span className="text-[var(--color-muted-foreground)]">DSOA</span><span>{p.isDsoa ? 'Yes' : 'No'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Repeat Client</span><span>{p.isRepeatClient ? 'Yes' : 'No'}</span>
-        </div>
+        <FactList
+          items={[
+            { label: 'Funding Source', value: FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis'] },
+            ...(p.fundingSource !== 'Other' ? [
+              { label: 'NDIS Number', value: p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : undefined },
+              { label: 'Plan Start Date', value: p.planStartDate ? formatDateAu(p.planStartDate) : undefined },
+              { label: 'Plan End Date', value: p.planEndDate ? formatDateAu(p.planEndDate) : undefined },
+            ] : [{ label: 'Funding Organisation', value: p.fundingOrganisation }]),
+            { label: 'DSOA', value: p.isDsoa ? 'Yes' : 'No' },
+            { label: 'Repeat Client', value: p.isRepeatClient ? 'Yes' : 'No' },
+          ]}
+        />
       )}
     </SectionEditPanel>
   )
