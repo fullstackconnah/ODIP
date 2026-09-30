@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -43,6 +45,31 @@ public sealed record EarlyAccessRateLimits(
 public static class EarlyAccessRateLimiting
 {
     private const string NotLimitedPartition = "early-access:not-limited";
+
+    /// <summary>
+    /// The per-client partition key: the client's IPv4 address (an IPv4-mapped IPv6 address counts as the IPv4
+    /// address it carries), or the /64 prefix of an IPv6 address. One subscriber or host normally owns a whole /64,
+    /// so keying on the full address would let it mint a fresh 5-permit budget per request — and a fresh limiter
+    /// that lives out the whole window — just by rotating addresses. With no resolvable address it falls back to
+    /// the trace identifier, so unresolvable clients never collapse into one shared bucket.
+    /// </summary>
+    public static string ClientKey(HttpContext context)
+    {
+        var address = context.Connection.RemoteIpAddress;
+        if (address is null)
+            return context.TraceIdentifier;
+
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+            return address.ToString();
+
+        Span<byte> bytes = stackalloc byte[16];
+        address.TryWriteBytes(bytes, out _);
+        bytes[8..].Clear();
+        return new IPAddress(bytes).ToString() + "/64";
+    }
 
     /// <param name="clientKey">
     /// Resolves the per-client partition key from the request — in the app, the real client address

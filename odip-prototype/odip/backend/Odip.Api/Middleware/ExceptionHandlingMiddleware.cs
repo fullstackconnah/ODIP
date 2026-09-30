@@ -56,7 +56,7 @@ public class ExceptionHandlingMiddleware
             // turning a client error into a 500. BadHttpRequestException is an IOException, so it matches
             // none of the cases above.
             BadHttpRequestException bad => (bad.StatusCode, "The request could not be processed. Please check its size and format."),
-            _ =>((int)HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.")
+            _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.")
         };
 
         context.Response.StatusCode = statusCode;

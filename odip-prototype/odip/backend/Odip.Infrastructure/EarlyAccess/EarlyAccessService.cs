@@ -76,7 +76,10 @@ public sealed class EarlyAccessService
 
             try
             {
-                await _db.SaveChangesAsync(ct);
+                // Deliberately NOT ct: the write is short and bounded, and once started it must not be abandoned
+                // by a visitor closing the tab. A cancelled call can still commit on the server; the row would then
+                // exist with no notification sent, and the visitor's retry would be counted as a silent repeat.
+                await _db.SaveChangesAsync(CancellationToken.None);
             }
             catch (Exception ex) when (attempt < MaxAttempts && IsLostRace(ex))
             {

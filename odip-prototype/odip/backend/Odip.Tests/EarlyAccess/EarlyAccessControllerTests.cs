@@ -325,6 +325,19 @@ public class EarlyAccessControllerTests
     }
 
     [Fact]
+    public async Task ARequestCancelledBeforeTheWrite_IsAQuiet499_AndStoresNothing()
+    {
+        using var db = CreateDb();
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        var result = await MakeController(db).Submit(Valid(), cancelled.Token);
+
+        Assert.Equal(499, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Empty(db.EarlyAccessRequests);
+    }
+
+    [Fact]
     public async Task ANotifierThatThrows_DoesNotFailAStoredRequest()
     {
         using var db = CreateDb();

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Odip.Api.RateLimiting;
+using Odip.Api.Services;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -207,11 +208,7 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Notific
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
 // serves as both the IEarlyAccessNotifier the controller calls and the hosted service that drains its queue.
-builder.Services.AddScoped<Odip.Infrastructure.EarlyAccess.EarlyAccessService>();
-builder.Services.AddSingleton<Odip.Infrastructure.EarlyAccess.EarlyAccessNotifier>();
-builder.Services.AddSingleton<Odip.Application.Interfaces.IEarlyAccessNotifier>(
-    sp => sp.GetRequiredService<Odip.Infrastructure.EarlyAccess.EarlyAccessNotifier>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<Odip.Infrastructure.EarlyAccess.EarlyAccessNotifier>());
+builder.Services.AddEarlyAccess();
 
 // ── Obligation tasks (item 9 of the connection map — generic task engine) ──
 builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, Odip.Infrastructure.Tasks.ObligationTaskService>();
@@ -319,7 +316,7 @@ builder.Services.AddRateLimiter(options =>
     // global cap, chained per-client-first so one noisy address cannot spend the shared budget. It is a
     // GlobalLimiter that returns "no limit" for every request not routed to an [EarlyAccessRateLimit]
     // action, so all the named policies above are unaffected. See EarlyAccessRateLimiting.
-    options.GlobalLimiter = EarlyAccessRateLimiting.CreateLimiter(RateLimitPartitionKey, EarlyAccessRateLimits.Default);
+    options.GlobalLimiter = EarlyAccessRateLimiting.CreateLimiter(EarlyAccessRateLimiting.ClientKey, EarlyAccessRateLimits.Default);
 
     // One rejection handler for the whole app: 429 plus Retry-After when the limiter can say when to retry.
     // (Setting OnRejected supersedes RejectionStatusCode above; the handler sets the 429 itself.)

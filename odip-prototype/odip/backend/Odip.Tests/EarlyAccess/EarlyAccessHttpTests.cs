@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Odip.Api.Controllers;
 using Odip.Api.Middleware;
 using Odip.Api.RateLimiting;
+using Odip.Api.Services;
 using Odip.Application.Interfaces;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -404,7 +405,8 @@ public class EarlyAccessHttpTests
                     o.AddInterceptors(new ThrowOnSave(failSaves));
             });
             builder.Services.AddScoped<ICurrentTenant, AnonymousTenant>();
-            builder.Services.AddScoped<EarlyAccessService>();
+            builder.Services.AddEarlyAccess();
+            // Last registration wins: the controller gets the stub; the real notifier stays registered (and idle) as a hosted service.
             builder.Services.AddSingleton<IEarlyAccessNotifier>(notifier ?? new NoopNotifier());
             builder.Services.AddControllers()
                 .ConfigureApplicationPartManager(m =>

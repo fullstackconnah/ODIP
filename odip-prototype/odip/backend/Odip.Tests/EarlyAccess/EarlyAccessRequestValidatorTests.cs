@@ -218,6 +218,10 @@ public class EarlyAccessRequestValidatorTests
     }
 
     [Theory]
+    [InlineData("Jane\u2028Organisation: fake")]
+    [InlineData("Jane\u2029Organisation: fake")]
+    [InlineData("Jane\u202Egnikcart")]
+    [InlineData("Jane\u2066isolated\u2069")]
     [InlineData("Jane\r\nBcc: x@example.com")]
     [InlineData("Jane\nCitizen")]
     [InlineData("Jane\tCitizen")]
@@ -232,6 +236,17 @@ public class EarlyAccessRequestValidatorTests
 
         Assert.Equal("Name contains characters that are not allowed.", Assert.Single(result.Errors["name"]));
         Assert.Equal("Organisation contains characters that are not allowed.", Assert.Single(result.Errors["organisation"]));
+    }
+
+    [Theory]
+    [InlineData("\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645")]   // Persian: ZWNJ is part of ordinary spelling
+    [InlineData("Zo\u00eb \u2019O\u2019Brien")]                                // curly apostrophes
+    public void OrdinaryFormatCharacters_AreStillAllowed(string value)
+    {
+        var dto = Valid();
+        dto.Name = value;
+
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
     }
 
     [Fact]

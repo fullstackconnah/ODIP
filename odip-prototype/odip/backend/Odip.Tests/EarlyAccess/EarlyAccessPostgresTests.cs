@@ -28,6 +28,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public bool Available => ConnectionString is not null;
 
+    /// <summary>Why <see cref="Available"/> is false (shown as the skip reason).</summary>
+    public string UnavailableReason { get; private set; } = "POSTGRES_CONNECTION_STRING is not set: needs a real PostgreSQL server (pr-validation.yml provides one).";
+
     public async Task InitializeAsync()
     {
         var configured = Environment.GetEnvironmentVariable("POSTGRES_CONNECTION_STRING");
@@ -37,11 +40,23 @@ public sealed class PostgresFixture : IAsyncLifetime
         _adminConnectionString = new NpgsqlConnectionStringBuilder(configured) { Pooling = false }.ConnectionString;
         _databaseName = "odip_early_access_" + Guid.NewGuid().ToString("N");
 
-        await using (var admin = new NpgsqlConnection(_adminConnectionString))
+        try
         {
+            await using var admin = new NpgsqlConnection(_adminConnectionString);
             await admin.OpenAsync();
             await using var create = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\"", admin);
             await create.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex) when (ex is (NpgsqlException or System.Net.Sockets.SocketException or TimeoutException) and not PostgresException)
+        {
+            // A developer who exports POSTGRES_CONNECTION_STRING for the API but has no server running should get a
+            // skip, not six red tests. On CI (where a server is guaranteed) an unreachable server must still fail.
+            if (IsCi())
+                throw;
+            UnavailableReason = "POSTGRES_CONNECTION_STRING is set but the server is not reachable: " + ex.GetType().Name;
+            _adminConnectionString = null;
+            _databaseName = null;
+            return;
         }
 
         // Pooling off: closed connections really close, so the database can be dropped at the end.
@@ -50,6 +65,10 @@ public sealed class PostgresFixture : IAsyncLifetime
         await using var db = CreateContext();
         await db.Database.MigrateAsync(); // the whole migration history, as CI's `dotnet ef database update` does
     }
+
+    private static bool IsCi() =>
+        string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase);
 
     public async Task DisposeAsync()
     {
@@ -90,9 +109,6 @@ public sealed class PostgresFixture : IAsyncLifetime
 
 public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 {
-    private const string SkipReason =
-        "POSTGRES_CONNECTION_STRING is not set: needs a real PostgreSQL server (pr-validation.yml provides one).";
-
     private readonly PostgresFixture _pg;
 
     public EarlyAccessPostgresTests(PostgresFixture pg) => _pg = pg;
@@ -104,7 +120,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task Migration_CreatesTheTable_WithTheAgreedColumns_AndAUniqueEmailIndex()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         await using var connection = _pg.OpenConnection();
 
         await using var columns = new NpgsqlCommand(
@@ -139,7 +155,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task TheUniqueIndex_RejectsASecondRowForTheSameEmail()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var email = NewEmail("unique");
         await using (var db = _pg.CreateContext())
         {
@@ -158,7 +174,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task Service_StoresThenCounts_OnRealPostgres()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var email = NewEmail("sequence");
 
         EarlyAccessRecordResult first, second, third;
@@ -184,7 +200,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task LosingTheInsertRace_RetriesAsARepeat_InsteadOfFailing()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var email = NewEmail("insert-race");
         var interfered = 0;
         var interceptor = new BeforeFirstSave(async () =>
@@ -216,7 +232,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task LosingTheUpdateRace_RereadsAndCountsBothRequests()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var email = NewEmail("update-race");
         await using (var seed = _pg.CreateContext())
         {
@@ -246,7 +262,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task SimultaneousSubmissions_OfOneAddress_YieldOneRow_AndAnExactCount()
     {
-        Skip.IfNot(_pg.Available, SkipReason);
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
 
         for (var round = 0; round < 3; round++)
         {

@@ -25,6 +25,8 @@ public class EarlyAccessMigrationTests
 
         var index = migrations.FindIndex(m => m.EndsWith("_AddEarlyAccessRequests", StringComparison.Ordinal));
         Assert.True(index >= 0, "AddEarlyAccessRequests was not discovered");
-        Assert.True(migrations.IndexOf("20260926003000_AddElectronicSigningEvidence") < index, "must sort after the previous latest migration");
+        var previous = migrations.IndexOf("20260926003000_AddElectronicSigningEvidence");
+        Assert.True(previous >= 0, "the previous latest migration was not discovered (renamed?)");
+        Assert.True(previous < index, "must sort after the previous latest migration");
     }
 }

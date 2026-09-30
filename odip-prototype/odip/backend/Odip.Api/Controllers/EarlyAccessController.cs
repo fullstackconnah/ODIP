@@ -84,7 +84,14 @@ public class EarlyAccessController : ControllerBase
         {
             result = await _service.RecordAsync(checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The visitor went away before anything was written (the write itself ignores cancellation). Nobody is
+            // left to answer, so no error log and no 500 for a closed connection; 499 is the conventional "client
+            // closed request" status and only ever lands in access logs.
+            return StatusCode(499);
+        }
+        catch (Exception ex)
         {
             // The contract says a storage failure is a generic 500. Returning it here, rather than letting it
             // reach ExceptionHandlingMiddleware, keeps it a 500 whatever the exception type: the middleware maps

@@ -57,11 +57,22 @@ public static class EarlyAccessRequestValidator
             errors[field] = new[] { missingMessage };
         else if (value.Length > maxLength)
             errors[field] = new[] { $"{label} must be {maxLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
-        else if (value.Any(char.IsControl))
+        else if (value.Any(IsDisallowedInOneLineText))
             // CR/LF/tab and friends have no business in a one-line name, and would ride into the
             // operator notification email and any export of the stored rows.
             errors[field] = new[] { $"{label} contains characters that are not allowed." };
     }
+
+    /// <summary>
+    /// Control characters, the Unicode line and paragraph separators (U+2028/U+2029) and the bidirectional
+    /// override/isolate marks (U+202A-202E, U+2066-2069): each can fake a new line or reorder text in the PLAIN-TEXT
+    /// operator email. Other format characters (ZWJ/ZWNJ, needed by some scripts' names) are allowed.
+    /// </summary>
+    private static bool IsDisallowedInOneLineText(char c) =>
+        char.IsControl(c)
+        || c is '\u2028' or '\u2029'
+        || (c >= '\u202A' && c <= '\u202E')
+        || (c >= '\u2066' && c <= '\u2069');
 
     /// <summary>
     /// Deliberately conservative: one <c>@</c>, a dotted domain, no whitespace, no quoted local part and
