@@ -1,5 +1,5 @@
 import { useStaff, useDeleteStaff, useUpdateStaff } from '@/api/hooks'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
@@ -121,7 +121,7 @@ export default function StaffPage() {
             variant="pill"
             value={current}
             onChange={val => handleStatusChange(s, val)}
-            colorClass={ACTIVE_STATUS_COLORS[current]}
+            colorClass={`${ACTIVE_STATUS_COLORS[current]} h-[var(--control-h-sm)]`}
             items={ACTIVE_STATUS_ITEMS}
             disabled={!canWrite}
           />
@@ -132,7 +132,8 @@ export default function StaffPage() {
       key: 'actions',
       header: '',
       render: (s) => (
-        <div className="flex items-center justify-end gap-1">
+        // Row actions (24px) appear on row hover / focus and are always shown on touch.
+        <RowActions>
           {canAccessLeaveApprovals && (
             <Button
               to={`/rostering/leave?userId=${s.id}`}
@@ -147,25 +148,29 @@ export default function StaffPage() {
             </Button>
           )}
           {actionButtons(s)}
-        </div>
+        </RowActions>
       ),
     },
   ]
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Staff"
-        subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
-        action={!showArchived && canWrite && (
-          <Button to="/staff/new" size="md">
-            <Plus className="w-4 h-4" /> New Staff
-          </Button>
-        )}
-      >
-        {toggleButtons}
-        <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
-      </PageHeader>
+      {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)
+          instead of the flex column's section gap opening between them. */}
+      <div>
+        <PageHeader
+          title="Staff"
+          subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
+          action={!showArchived && canWrite && (
+            <Button to="/staff/new" size="md">
+              <Plus className="w-4 h-4" /> New Staff
+            </Button>
+          )}
+        >
+          {toggleButtons}
+          <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
+        </PageHeader>
+      </div>
 
       {!isLoading && staff.length === 0 ? (
         search ? (

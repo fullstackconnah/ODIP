@@ -74,14 +74,56 @@ describe('Button', () => {
     expect(screen.queryByRole('button', { name: 'New enquiry' })).not.toBeInTheDocument()
   })
 
-  it('renders an iconOnly layout that keeps a 44px square touch target', () => {
+  it('renders iconOnly as a fixed --control-h-sm square (24px fine, 36px coarse) with no padding', () => {
     render(<Button iconOnly aria-label="Back to inbox">{'<-'}</Button>)
     const btn = screen.getByRole('button', { name: 'Back to inbox' })
-    // iconOnly uses p-1.5 padding; the seat class itself is shared, but the variant must NOT
-    // pad-strip it back to a tiny 24px target — we want WCAG-compliant tap zones everywhere.
-    expect(btn).toHaveClass('p-1.5')
-    // The font-medium / rounded-lg class also persists into the iconOnly variant so the
-    // control still reads as a button visually.
-    expect(btn).toHaveClass('rounded-lg', 'font-medium')
+    // Height AND width come off the token, so a coarse pointer scales the hit area with the rest
+    // of the density layer; padding is zero because the centred icon is the content.
+    expect(btn).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
+    // p-1.5 (28px with a 16px icon) is what pushed table rows past --row-h — it must not return.
+    expect(btn).not.toHaveClass('p-1.5')
+    // A square in a crowded row of actions must not be squeezed narrower than tall.
+    expect(btn).toHaveClass('shrink-0')
+    expect(btn).toHaveClass('font-medium')
+  })
+
+  it('ignores size for iconOnly: every icon button is the same --control-h-sm square', () => {
+    render(
+      <>
+        <Button iconOnly size="sm" aria-label="small">x</Button>
+        <Button iconOnly size="md" aria-label="medium">x</Button>
+        <Button iconOnly size="lg" aria-label="large">x</Button>
+      </>,
+    )
+    for (const name of ['small', 'medium', 'large']) {
+      const btn = screen.getByRole('button', { name })
+      expect(btn).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]')
+      expect(btn.className).not.toMatch(/h-\[var\(--control-h\)\]|h-\[calc/)
+    }
+  })
+
+  it('takes its corner radius from the --radius-sm token, not the old rounded-lg', () => {
+    render(
+      <>
+        <Button>Text</Button>
+        <Button iconOnly aria-label="Icon">x</Button>
+      </>,
+    )
+    for (const name of ['Text', 'Icon']) {
+      const btn = screen.getByRole('button', { name })
+      expect(btn).toHaveClass('rounded-[var(--radius-sm)]')
+      expect(btn).not.toHaveClass('rounded-lg')
+    }
+  })
+
+  it('sizes text buttons off the control tokens: sm = --control-h-sm, md = --control-h', () => {
+    render(
+      <>
+        <Button size="sm">Small</Button>
+        <Button size="md">Medium</Button>
+      </>,
+    )
+    expect(screen.getByRole('button', { name: 'Small' })).toHaveClass('h-[var(--control-h-sm)]')
+    expect(screen.getByRole('button', { name: 'Medium' })).toHaveClass('h-[var(--control-h)]')
   })
 })

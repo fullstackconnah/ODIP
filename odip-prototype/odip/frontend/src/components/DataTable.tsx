@@ -77,6 +77,10 @@ export type DataTableProps<T> = {
    */
   rowError?: (row: T) => string | undefined
   className?: string
+  /**
+   * Extra-tight rows: the `--row-h` token minus 4px (30px on a mouse, 44px on a touch screen —
+   * it never drops below a usable coarse-pointer row). Default rows are exactly `--row-h`.
+   */
   compact?: boolean
   selectable?: boolean
   selectedRows?: Set<string>
@@ -237,15 +241,22 @@ export function DataTable<T>({
     }
   }
 
-  // Row height comes from the density tokens: --cell-px for horizontal padding shared by every
-  // cell, plus a vertical padding sized to land the header at 32px and body rows at --row-h's
-  // 34px (compact's default) with text-sm's 20px line-height. `compact` stays accepted for
-  // back-compat and now reads as extra-tight rather than a distinct size.
+  // Row geometry comes from the density tokens (spec §1/§4) and never from vertical padding:
+  //  - body rows: `height: var(--row-h)` on the <tr> (34px fine / 48px coarse). A table row's
+  //    height is a minimum, so a row grows past the token only when its content really needs it
+  //    (a wrapped cell). 24px row actions, pills and 32px inline editors all fit inside 34px
+  //    (36/44px inside 48px on coarse pointers, where those controls grow with their own tokens).
+  //  - header row: `height: var(--table-head-h)` (32px / 40px).
+  //  - cells get --cell-px horizontally, no vertical padding, and `align-middle`, so content is
+  //    centred in the row instead of stacking padding on top of it (which is what made rows 43px).
+  //  - `md:` on the body row: below 768px `.mobile-card-table` (index.css) turns each <tr> into a
+  //    padded flex card, and a fixed height would clip it.
+  //  - `compact` is the same token minus 4px (30px fine, 44px coarse), so it stays extra-tight on
+  //    a mouse without dropping below a usable row on a touch screen.
   const cellPaddingX = 'px-[var(--cell-px)]'
-  const bodyRowPadding = compact ? 'py-1' : 'py-[7px]'
-  const headerRowPadding = 'py-[6px]'
-  const bodyCellPadding = `${cellPaddingX} ${bodyRowPadding}`
-  const headerCellPadding = `${cellPaddingX} ${headerRowPadding}`
+  const cellClass = `${cellPaddingX} align-middle`
+  const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
+  const headerRowHeight = 'h-[var(--table-head-h)]'
   const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
@@ -257,9 +268,9 @@ export function DataTable<T>({
       )}
       <table className="w-full text-sm tabular-nums mobile-card-table">
         <thead className="sticky top-0 z-[1] bg-[var(--color-card)]">
-          <tr className={dividerClass}>
+          <tr className={`${dividerClass} ${headerRowHeight}`}>
             {selectable && (
-              <th className={`${headerCellPadding} w-10`}>
+              <th className={`${cellClass} w-10`}>
                 <input
                   ref={selectAllRef}
                   type="checkbox"
@@ -291,7 +302,7 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${alignClass} ${headerCellPadding} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${isSortable ? 'cursor-pointer select-none' : ''}`}
                   aria-sort={isSortable ? (isSorted ? (activeSort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
@@ -354,14 +365,20 @@ export function DataTable<T>({
             return (
               <Fragment key={rowKey}>
                 <tr
-                  className={`hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
+                  className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
                   onClick={isClickable ? () => onRowClick(row) : undefined}
-                  onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
+                  onKeyDown={isClickable ? (e) => {
+                    // Only the row itself activates it. Enter/Space on a control inside the row (a
+                    // row action, a status pill, a checkbox) bubbles up here too, and must keep doing
+                    // its own job — not navigate away with its default action cancelled.
+                    if (e.target !== e.currentTarget) return
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) }
+                  } : undefined}
                   tabIndex={isClickable ? 0 : undefined}
                 >
                   {selectable && (
                     <td
-                      className={`${bodyCellPadding} w-10`}
+                      className={`${cellClass} w-10`}
                       onClick={e => e.stopPropagation()}
                     >
                       <input
@@ -386,14 +403,14 @@ export function DataTable<T>({
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${bodyCellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
+                        <td key={col.key} className={`${cellClass} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
 
                     return (
-                      <td key={col.key} className={`${bodyCellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
+                      <td key={col.key} className={`${cellClass} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
                         {renderCell(row, col, rowIndex)}
                       </td>
                     )
@@ -401,7 +418,7 @@ export function DataTable<T>({
                 </tr>
                 {errorMessage && (
                   <tr className={dividerClass}>
-                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${bodyCellPadding} pt-0`}>
+                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} pb-2`}>
                       <p id={rowErrorId} role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
                     </td>
                   </tr>
@@ -417,7 +434,7 @@ export function DataTable<T>({
         )}
       </table>
       {pagination && pagination.totalCount > 0 && (
-        <div className={`flex items-center justify-between text-sm ${bodyCellPadding} border-t border-[var(--color-border)]`}>
+        <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm ${cellPaddingX} border-t border-[var(--color-border)]`}>
           <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
             {Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
@@ -445,6 +462,45 @@ export function DataTable<T>({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Row actions ──────────────────────────────────────────────────
+
+// Reveal is opacity only — never display:none / visibility:hidden — so every control stays in the
+// tab order and in the accessibility tree; keyboard focus lands on it and `focus-within` shows it.
+// Deliberately no `pointer-events: none` while hidden either: voice-control and switch tools click
+// an element by its coordinates, and would hit the cell underneath instead. Coarse pointers
+// (touch) have no hover, so the actions are always shown there.
+const ROW_ACTIONS_REVEAL = [
+  'opacity-0 transition-opacity',
+  'group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100',
+  '[@media(pointer:coarse)]:opacity-100',
+].join(' ')
+
+// Bridge for the hand-rolled icon group in `ActionButtons` (what `useArchiveRestore().actionButtons`
+// renders): its <a>/<button> children are p-1.5 (28px), which would out-size the 24px row actions
+// beside them. Pinning them to the same --control-h-sm square as `Button iconOnly` keeps a row's
+// actions one height. Targets only ActionButtons' direct icon children, so text buttons in the
+// same cluster are untouched. Drop it once ActionButtons itself renders `Button iconOnly`.
+const ROW_ACTIONS_LEGACY_ICONS = [
+  '[&>div>:is(a,button)]:inline-flex [&>div>:is(a,button)]:items-center [&>div>:is(a,button)]:justify-center',
+  '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',
+].join(' ')
+
+/**
+ * A table row's action cluster (edit / archive / quick links / status change). Right-aligned,
+ * shown while its row is hovered or holds keyboard focus and always shown on coarse pointers
+ * (spec §4). Render it inside a `DataTable` cell — the reveal keys off the `group/row` class
+ * DataTable puts on every body row, so outside a row it would stay hidden. Content should be
+ * `Button size="sm"` / `iconOnly` (24px) so the row keeps its `--row-h` height. Keep an action
+ * that must always be visible (a row's status pill, a queue's only call to action) out of it.
+ */
+export function RowActions({ children }: { children: ReactNode }) {
+  return (
+    <div className={`flex items-center justify-end gap-1.5 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS}`}>
+      {children}
     </div>
   )
 }

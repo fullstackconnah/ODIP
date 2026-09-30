@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import IncidentsPage from './IncidentsPage'
 
 const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate } = vi.hoisted(() => ({
@@ -357,5 +360,162 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/incidents/new', {
       state: expect.objectContaining({ startTime: '22:00:00', endTime: '06:00:00', endsNextDay: true }),
     })
+  })
+})
+
+describe('IncidentsPage — one-line QSC banner', () => {
+  it('compresses to a single 40px line while keeping the headline, the reason and the link', () => {
+    mockUseOverdueQscIncidents.mockReturnValue({
+      data: [baseIncident({ isOverdue24h: true }), baseIncident({ id: 'inc-2', isOverdue24h: true })],
+    })
+    renderPage()
+
+    const banner = screen.getByRole('alert')
+    expect(banner).toHaveTextContent('2 incidents require QSC reporting — 24-hour deadline exceeded')
+    expect(banner).toHaveTextContent('NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.')
+    expect(within(banner).getByRole('link', { name: 'View overdue incidents' })).toHaveAttribute('href', '/incidents?qsc=overdue')
+    // It used to stack a headline paragraph, a reason paragraph and the link on their own lines (88px).
+    expect(banner.querySelectorAll('p')).toHaveLength(1)
+    expect(banner).toHaveClass('flex', 'items-center', 'min-h-10')
+    // Keeps the token colours the C-1 test pins, and no raw palette colours.
+    expect(banner.className).toMatch(/bg-error-container/)
+  })
+})
+
+describe('IncidentsPage — header row', () => {
+  it('puts the H1 and the section tabs on one header row', () => {
+    renderPage()
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Incident Reports' })
+    const tablist = screen.getByRole('tablist', { name: 'Incidents sections' })
+    // PageHeader's title row: h1 group + action slot. The tabs live in that same row (spec §3).
+    const titleRow = h1.parentElement?.parentElement as HTMLElement
+    expect(titleRow).toContainElement(tablist)
+  })
+
+  it('keeps the H1 (and the tabs) when the Flagged notes tab is open, and drops the incident-only controls', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('tablist', { name: 'Incidents sections' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /report incident/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Archived' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Report Incident action and the filters on the Incidents tab', () => {
+    // A row present, so the empty state (which has its own "Report incident" link) is not rendered.
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: /report incident/i })).toHaveAttribute('href', '/incidents/new')
+    expect(screen.getByRole('radio', { name: 'Archived' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all statuses/i })).toBeInTheDocument()
+  })
+
+  it('renders the H1 and the action but no tab strip for a role that cannot see flagged notes', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1', role: 'SupportWorker' }))
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /report incident/i })).toBeInTheDocument()
+  })
+})
+
+describe('IncidentsPage — OVERDUE QSC pill contrast', () => {
+  const INDEX_CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../index.css'), 'utf-8')
+  type Rgb = [number, number, number]
+
+  function tokenRgb(name: string): Rgb {
+    const m = INDEX_CSS.match(new RegExp(`--color-${name}:\\s*#([0-9a-fA-F]{6})`))
+    if (!m) throw new Error(`--color-${name} is not a 6-digit hex token in index.css`)
+    const n = parseInt(m[1], 16)
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+  function luminance([r, g, b]: Rgb): number {
+    const lin = (c: number) => {
+      const s = c / 255
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    }
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  }
+  function contrast(a: Rgb, b: Rgb): number {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it('uses the solid error token pair, at least 4.5:1 computed from the token hex values, whatever the underlying QSC status', () => {
+    // The mock API's overdue incident is 'Pending', which StatusBadge would otherwise paint amber.
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ qscReportingStatus: 'Pending', isOverdue24h: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const pill = screen.getByText('OVERDUE')
+    const bg = pill.className.match(/bg-\[var\(--color-([\w-]+)\)\]/)?.[1]
+    const fg = pill.className.match(/text-\[var\(--color-([\w-]+)\)\]/)?.[1]
+    expect(bg).toBe('error-container')
+    expect(fg).toBe('on-error-container')
+    expect(contrast(tokenRgb(bg!), tokenRgb(fg!))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('does not pulse: an opacity animation halves the pill and drops every token pair to about 2.5:1', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ qscReportingStatus: 'Required', isOverdue24h: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const pill = screen.getByText('OVERDUE')
+    expect(pill.className).not.toMatch(/animate-pulse/)
+    // Even at the trough of a pulse (50% over the white card) the pair would fail — proof the
+    // static, non-animated pill is the only way to hold 4.5:1.
+    const white: Rgb = [255, 255, 255]
+    const half = (c: Rgb): Rgb => [0, 1, 2].map(i => c[i] * 0.5 + white[i] * 0.5) as Rgb
+    expect(contrast(half(tokenRgb('error-container')), half(tokenRgb('on-error-container')))).toBeLessThan(4.5)
+  })
+
+  it('leaves a non-overdue Pending status as its own amber pill and label', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ qscReportingStatus: 'Pending', isOverdue24h: false })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.queryByText('OVERDUE')).not.toBeInTheDocument()
+    expect(screen.getByText('Pending').className).toMatch(/bg-\[var\(--color-warning-container\)\]/)
+  })
+})
+
+describe('IncidentsPage — row actions', () => {
+  it('reveals archive/edit actions on row hover and focus (opacity only) inside a 24px-icon cluster', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    const archive = screen.getByRole('button', { name: 'Archive' })
+    const cluster = archive.closest('[class*="group-hover/row:opacity-100"]') as HTMLElement
+    expect(cluster).not.toBeNull()
+    expect(cluster).toHaveClass('opacity-0', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
+    expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible)(\s|$)/)
+    // The edit link is in the same cluster and still a real, focusable link.
+    expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/incidents/inc-1/edit')
+  })
+
+  it('files an incident from a flagged note with a 24px always-visible button, not a 44px hand-rolled one', async () => {
+    const user = userEvent.setup()
+    mockUseFlaggedShiftNotes.mockReturnValue({ data: [baseFlaggedNote()], isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
+    const file = screen.getByRole('button', { name: /file incident/i })
+    expect(file).toHaveClass('h-[var(--control-h-sm)]')
+    expect(file.className).not.toMatch(/min-h-\[44px\]/)
+    // It is the queue's only action, so it is not wrapped in the hover-revealed cluster.
+    expect(file.closest('[class*="group-hover/row:opacity-100"]')).toBeNull()
   })
 })

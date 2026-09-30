@@ -348,3 +348,82 @@ describe('ParticipantsPage — status change safety', () => {
     expect(mockUpdateMutate).not.toHaveBeenCalled()
   })
 })
+
+// Density review — 24px row actions revealed on row hover/focus (always shown on touch), with the
+// read-only status pill and the "opens the record" chevron kept outside the fading cluster.
+describe('ParticipantsPage — density row actions', () => {
+  function clusterFor(name: RegExp): HTMLElement {
+    return screen.getByRole('button', { name }).closest('[class*="group-hover/row:opacity-100"]') as HTMLElement
+  }
+
+  it('renders Change status and View medications as 24px controls inside one hover/focus-revealed cluster', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', hasActiveMedications: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const change = screen.getByRole('button', { name: /change status for jamie smith/i })
+    const meds = screen.getByRole('button', { name: /view medications for jamie smith/i })
+    expect(change).toHaveClass('h-[var(--control-h-sm)]')
+    expect(meds).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
+
+    const cluster = clusterFor(/change status for jamie smith/i)
+    expect(cluster).not.toBeNull()
+    expect(cluster).toHaveClass('opacity-0', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
+    expect(cluster).toContainElement(meds)
+    // Archive / edit from the shared ActionButtons live in the same cluster.
+    expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/participants/p1/edit')
+  })
+
+  it('keeps the status pill and the chevron cue outside the revealed cluster, so they are always visible', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    const cluster = clusterFor(/change status for jamie smith/i)
+    expect(cluster).not.toContainElement(within(row).getByLabelText('Status: Active'))
+    const chevron = row.querySelector('svg.lucide-chevron-right') as SVGElement
+    expect(chevron).not.toBeNull()
+    expect(cluster).not.toContainElement(chevron as unknown as HTMLElement)
+    // It shares the row hover group, so it brightens with the row (the unnamed `group` never applied here).
+    expect(chevron.getAttribute('class')).toContain('group-hover/row:text-[var(--color-foreground)]')
+  })
+
+  it('shows no actions cluster content for a read-only role without medications, and nothing extra to tab through', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ hasActiveMedications: false })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    // Only the name link remains focusable in the row.
+    expect(within(row).getAllByRole('link')).toHaveLength(1)
+    expect(within(row).queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('keeps the title row and the filter row in one block-flow wrapper so the header is 72px, not gap-spaced', () => {
+    renderPage()
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
+    const search = screen.getByPlaceholderText(/search participants/i)
+    const wrapper = h1.parentElement?.parentElement?.parentElement as HTMLElement
+    expect(wrapper).toContainElement(search)
+    expect(wrapper.tagName).toBe('DIV')
+    expect(wrapper.className).toBe('')
+  })
+
+  it('renders the NDIS number at 13px, not the 12px micro type, and wraps-tolerant Streams cells with padding', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ maskedNdisNumber: '123456789', serviceStreams: 'STA, Trip' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    const ndis = within(row).getByText('••••••••9')
+    expect(ndis).toHaveClass('text-[13px]')
+    expect(ndis).not.toHaveClass('text-xs')
+    // The one cell that can wrap gets its own breathing room; single-line rows stay at --row-h.
+    expect(within(row).getByText('STA').closest('td')).toHaveClass('py-1')
+  })
+})

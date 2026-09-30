@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DataTable } from './DataTable'
+import { DataTable, RowActions } from './DataTable'
 import type { Column } from './DataTable'
+import { Button } from './Button'
 import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 
 type Row = { id: string; name: string; age: number }
@@ -545,5 +546,187 @@ describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
     )
 
     expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('DataTable — density row geometry (spec §1/§4)', () => {
+  // A cell with any of these would stack padding on top of the row's token height again — the
+  // py-[7px] + 28px-button combination that made rows 43px instead of 34.
+  const VERTICAL_PADDING = /(^|\s)(p|py|pt|pb)-/
+
+  it('takes body row height from --row-h on the row, from md up, so the mobile card view keeps auto height', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    const [, ...bodyRows] = screen.getAllByRole('row')
+    expect(bodyRows).toHaveLength(2)
+    for (const row of bodyRows) {
+      expect(row).toHaveClass('md:h-[var(--row-h)]')
+      // No unconditional fixed height: below 768px .mobile-card-table makes the row a padded flex card.
+      expect(row.className).not.toMatch(/(^|\s)h-\[/)
+    }
+  })
+
+  it('puts no vertical padding on body cells and centres their content', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    const [, ...bodyRows] = screen.getAllByRole('row')
+    for (const row of bodyRows) {
+      for (const cell of within(row).getAllByRole('cell')) {
+        expect(cell).toHaveClass('align-middle', 'px-[var(--cell-px)]')
+        expect(cell.className).not.toMatch(VERTICAL_PADDING)
+      }
+    }
+  })
+
+  it('takes header height from --table-head-h and centres unpadded header cells', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    const headerRow = screen.getAllByRole('row')[0]
+    expect(headerRow).toHaveClass('h-[var(--table-head-h)]')
+    for (const th of within(headerRow).getAllByRole('columnheader')) {
+      expect(th).toHaveClass('align-middle', 'px-[var(--cell-px)]')
+      expect(th.className).not.toMatch(VERTICAL_PADDING)
+    }
+  })
+
+  it('no longer carries the fixed pixel padding that built rows out of padding', () => {
+    const { container } = render(
+      <DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />,
+    )
+
+    expect(container.innerHTML).not.toMatch(/py-\[7px\]|py-\[6px\]/)
+  })
+
+  it('compact is the row token minus 4px: extra-tight on a mouse, never below a usable touch row', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" compact />)
+
+    const [, ...bodyRows] = screen.getAllByRole('row')
+    for (const row of bodyRows) {
+      expect(row).toHaveClass('md:h-[calc(var(--row-h)-4px)]')
+      expect(row).not.toHaveClass('md:h-[var(--row-h)]')
+    }
+    // compact only changes the row height; cells stay padding-free and centred.
+    expect(within(bodyRows[0]).getAllByRole('cell')[0]).toHaveClass('align-middle')
+  })
+
+  it('sizes the pagination bar off --row-h too, so paging does not add a taller-than-row strip', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 1, pageSize: 2, totalCount: 5, onPageChange: vi.fn() }}
+      />,
+    )
+
+    const bar = screen.getByText(/showing/i).closest('div')
+    expect(bar).toHaveClass('min-h-[var(--row-h)]', 'items-center')
+  })
+})
+
+describe('DataTable — RowActions (hover / focus reveal)', () => {
+  const actionColumns: Column<Row>[] = [
+    ...columns,
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => (
+        <RowActions>
+          <Button variant="ghost" size="sm" iconOnly aria-label={`Edit ${row.name}`}>e</Button>
+        </RowActions>
+      ),
+    },
+  ]
+
+  it('gives every body row the named group the actions reveal against', () => {
+    render(<DataTable data={rows} columns={actionColumns} keyField="id" />)
+
+    const [headerRow, ...bodyRows] = screen.getAllByRole('row')
+    expect(headerRow).not.toHaveClass('group/row')
+    for (const row of bodyRows) expect(row).toHaveClass('group/row')
+  })
+
+  it('reveals actions on row hover and focus, always shows them on coarse pointers, and only ever fades them', () => {
+    render(<DataTable data={rows} columns={actionColumns} keyField="id" />)
+
+    const cluster = screen.getByRole('button', { name: 'Edit Bianca' }).parentElement as HTMLElement
+    expect(cluster).toHaveClass(
+      'opacity-0',
+      'group-hover/row:opacity-100',
+      'group-focus-within/row:opacity-100',
+      'focus-within:opacity-100',
+      '[@media(pointer:coarse)]:opacity-100',
+    )
+    // Never removed from the accessibility tree or the tab order.
+    expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible|sr-only)(\s|$)|display:|visibility:/)
+    // And it stays clickable by coordinate (voice control, switch access) — no pointer-events:none.
+    expect(cluster.className).not.toMatch(/pointer-events/)
+  })
+
+  it('keeps hidden actions keyboard-reachable: Tab from a clickable row lands on its action', async () => {
+    const user = userEvent.setup()
+    render(<DataTable data={rows} columns={actionColumns} keyField="id" onRowClick={vi.fn()} />)
+
+    await user.tab() // first data row (tabIndex 0)
+    expect(screen.getAllByRole('row')[1]).toHaveFocus()
+    await user.tab() // its action
+    expect(screen.getByRole('button', { name: 'Edit Bianca' })).toHaveFocus()
+  })
+
+  it('pins the legacy ActionButtons icon children to the same --control-h-sm square as Button iconOnly', () => {
+    render(<DataTable data={rows} columns={actionColumns} keyField="id" />)
+
+    const cluster = screen.getByRole('button', { name: 'Edit Bianca' }).parentElement as HTMLElement
+    expect(cluster).toHaveClass(
+      '[&>div>:is(a,button)]:h-[var(--control-h-sm)]',
+      '[&>div>:is(a,button)]:w-[var(--control-h-sm)]',
+      '[&>div>:is(a,button)]:p-0',
+    )
+  })
+})
+
+describe('DataTable — keyboard activation of a clickable row', () => {
+  const actionClicks: string[] = []
+  const controlColumns: Column<Row>[] = [
+    ...columns,
+    {
+      key: 'actions',
+      header: '',
+      // Like every real row action (see ParticipantsPage/TripsPage): the click stops propagating
+      // so it doesn't also open the row. The keydown is what DataTable itself has to get right.
+      render: (row) => (
+        <button type="button" onClick={(e) => { e.stopPropagation(); actionClicks.push(row.id) }}>
+          Act on {row.name}
+        </button>
+      ),
+    },
+  ]
+
+  it('leaves Enter on a control inside the row to that control instead of opening the row', async () => {
+    const user = userEvent.setup()
+    actionClicks.length = 0
+    const onRowClick = vi.fn()
+    render(<DataTable data={rows} columns={controlColumns} keyField="id" onRowClick={onRowClick} />)
+
+    screen.getByRole('button', { name: 'Act on Bianca' }).focus()
+    await user.keyboard('{Enter}')
+
+    // The row used to cancel the keydown and navigate, so the control's own click never fired.
+    expect(actionClicks).toEqual(['1'])
+    expect(onRowClick).not.toHaveBeenCalled()
+  })
+
+  it('still activates the row when the row itself has focus (Enter and Space)', async () => {
+    const user = userEvent.setup()
+    const onRowClick = vi.fn()
+    render(<DataTable data={rows} columns={controlColumns} keyField="id" onRowClick={onRowClick} />)
+
+    const firstRow = screen.getAllByRole('row')[1]
+    firstRow.focus()
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
+
+    expect(onRowClick).toHaveBeenCalledTimes(2)
+    expect(onRowClick).toHaveBeenCalledWith(rows[0])
   })
 })

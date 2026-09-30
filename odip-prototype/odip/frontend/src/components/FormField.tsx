@@ -18,7 +18,14 @@ export type FormFieldProps = {
   children: ReactNode
 }
 
-export const inputClass = 'w-full h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+const CONTROL_SURFACE = 'px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+
+export const inputClass = `w-full h-[var(--control-h)] ${CONTROL_SURFACE}`
+// A textarea must not carry the single-line control's fixed height, or its `rows` attribute is
+// ignored (it stayed one line tall however many rows a caller asked for). `min-h` keeps an empty
+// or rows={1} textarea level with its 32px/44px neighbours; `h-auto` lets `rows` set the height;
+// `py-1.5` keeps text off the border, which a fixed-height single line never needed.
+export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${CONTROL_SURFACE}`
 export const labelClass = 'block text-[13px] font-medium mb-1 text-[var(--color-muted-foreground)]'
 
 const NATIVE_INPUTS = ['input', 'select', 'textarea']
@@ -91,9 +98,11 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
     && typeof children.type === 'string'
     && NATIVE_INPUTS.includes(children.type)
 
+  const isTextarea = isValidElement(children) && children.type === 'textarea'
+
   const enhanced = isNativeInput && !isCheckboxOrRadio
     ? cloneElement(children as ReactElement<EnhancedChildProps>, {
-        className: `${inputClass} ${(children.props as { className?: string }).className ?? ''}`,
+        className: `${isTextarea ? textareaClass : inputClass} ${(children.props as { className?: string }).className ?? ''}`,
         ...(existingId ? {} : { id: fieldId }),
         ...(required ? { 'aria-required': 'true' } : {}),
         ...(error ? { 'aria-invalid': 'true' } : {}),

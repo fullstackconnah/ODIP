@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
@@ -162,9 +162,11 @@ export default function TripsPage() {
       header: 'Trip',
       sortable: true,
       render: (t) => (
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-[var(--color-foreground)]">{t.tripName}</p>
-          {t.tripCode && <p className="truncate font-mono text-xs tabular-nums text-[var(--color-muted-foreground)]">{t.tripCode}</p>}
+        // One line: name, then the muted code (13px, the floor for secondary table text). A
+        // stacked name/code cell is two lines and pushes the row past --row-h.
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate font-semibold text-[var(--color-foreground)]">{t.tripName}</span>
+          {t.tripCode && <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{t.tripCode}</span>}
         </div>
       ),
     },
@@ -182,9 +184,10 @@ export default function TripsPage() {
       key: 'startDate',
       header: 'Dates',
       sortable: true,
+      className: 'whitespace-nowrap',
       render: (t) => (
         <span className="tabular-nums text-[var(--color-muted-foreground)]">
-          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-xs">({t.durationDays}d)</span>
+          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-[13px]">({t.durationDays}d)</span>
         </span>
       ),
     },
@@ -192,23 +195,12 @@ export default function TripsPage() {
       key: 'status',
       header: 'Status',
       render: (t) => (
-        <span onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1">
-          {canWrite && (
-            <button
-              type="button"
-              onClick={e => handleOpenEdit(t.id, e)}
-              title="Edit trip"
-              aria-label={`Edit ${t.tripName}`}
-              className="rounded-full p-1 hover:bg-[var(--color-surface-container-low)]"
-            >
-              <Pencil className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
-            </button>
-          )}
+        <span onClick={e => e.stopPropagation()} className="inline-flex items-center">
           <Dropdown
             variant="pill"
             value={t.status}
             onChange={val => handleStatusChange(t, val as TripStatus)}
-            colorClass={getStatusColor(t.status)}
+            colorClass={`${getStatusColor(t.status)} h-[var(--control-h-sm)]`}
             items={TRIP_STATUS_ITEMS}
           />
         </span>
@@ -218,11 +210,12 @@ export default function TripsPage() {
       key: 'currentParticipantCount',
       header: 'Pax',
       align: 'center',
+      className: 'whitespace-nowrap',
       render: (t) => (
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {t.currentParticipantCount}/{t.maxParticipants || '—'}
           {t.waitlistCount > 0 && (
-            <span className="badge-pending rounded-full px-1.5 py-0.5 text-[10px]">{t.waitlistCount} wait</span>
+            <span className="badge-pending rounded-full px-1.5 py-0.5 text-xs">{t.waitlistCount} wait</span>
           )}
         </span>
       ),
@@ -233,52 +226,77 @@ export default function TripsPage() {
       sortable: true,
       render: (t) => t.leadCoordinatorName || '—',
     },
+    {
+      key: 'actions',
+      header: '',
+      hidden: !canWrite,
+      // 24px, revealed on row hover / focus and always shown on touch. handleOpenEdit stops the
+      // click so it doesn't also open the trip.
+      render: (t) => (
+        <RowActions>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            title="Edit trip"
+            aria-label={`Edit ${t.tripName}`}
+            onClick={e => handleOpenEdit(t.id, e)}
+          >
+            <Pencil className="w-4 h-4" />
+          </Button>
+        </RowActions>
+      ),
+    },
   ]
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Trips"
-        subtitle={`${trips.length} trip${trips.length !== 1 ? 's' : ''}`}
-        action={
-          <div className="flex items-center gap-2">
-            <ToggleGroup
-              options={[{ key: 'table', label: 'Table' }, { key: 'cards', label: 'Cards' }]}
-              value={view}
-              onChange={handleViewChange}
-              ariaLabel="Trips view"
-            />
-            {canWrite && (
-              <Button to="/trips/new" size="md">
-                <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Trip</span><span className="sm:hidden">New</span>
-              </Button>
-            )}
-          </div>
-        }
-      >
-        <ToggleGroup
-          options={[{ key: 'active', label: 'Active Trips' }, { key: 'completed', label: 'Completed' }]}
-          value={tab}
-          onChange={switchTab}
-          ariaLabel="Trip status"
-        />
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={tab === 'completed' ? 'Search completed trips...' : 'Search trips...'}
-          label={tab === 'completed' ? 'Search completed trips' : 'Search trips'}
-        />
-        {statusOptions.length > 0 && (
-          <Dropdown
-            variant="pill"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            label="All Statuses"
-            items={statusOptions}
-            colorClass="bg-[var(--color-surface-container-low)]"
+      {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)
+          instead of the flex column's section gap opening between them. */}
+      <div>
+        <PageHeader
+          title="Trips"
+          subtitle={`${trips.length} trip${trips.length !== 1 ? 's' : ''}`}
+          action={
+            <div className="flex items-center gap-2">
+              <ToggleGroup
+                options={[{ key: 'table', label: 'Table' }, { key: 'cards', label: 'Cards' }]}
+                value={view}
+                onChange={handleViewChange}
+                ariaLabel="Trips view"
+              />
+              {canWrite && (
+                <Button to="/trips/new" size="md">
+                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Trip</span><span className="sm:hidden">New</span>
+                </Button>
+              )}
+            </div>
+          }
+        >
+          <ToggleGroup
+            options={[{ key: 'active', label: 'Active Trips' }, { key: 'completed', label: 'Completed' }]}
+            value={tab}
+            onChange={switchTab}
+            ariaLabel="Trip status"
           />
-        )}
-      </PageHeader>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={tab === 'completed' ? 'Search completed trips...' : 'Search trips...'}
+            label={tab === 'completed' ? 'Search completed trips' : 'Search trips'}
+          />
+          {statusOptions.length > 0 && (
+            <Dropdown
+              variant="pill"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              label="All Statuses"
+              items={statusOptions}
+              colorClass="bg-[var(--color-surface-container-low)]"
+            />
+          )}
+        </PageHeader>
+      </div>
 
       {statusChangeError && (
         <div role="alert" className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-error-container)] p-[var(--card-pad)] text-[var(--color-destructive)]">
@@ -335,7 +353,7 @@ export default function TripsPage() {
       ) : (
         <div className="grid gap-[var(--section-gap)] md:grid-cols-2 xl:grid-cols-3">
           {trips.map((t: TripListDto) => (
-            <div key={t.id} className="group rounded-[var(--radius-md)] bg-white p-[var(--card-pad)] transition-all hover:shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+            <div key={t.id} className="group rounded-[var(--radius-md)] bg-[var(--color-card)] p-[var(--card-pad)] transition-all hover:shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
               {/* Title row */}
               <Link to={`/trips/${t.id}`} className="mb-3 block">
                 <h3 className="truncate font-semibold transition-colors group-hover:text-[var(--color-primary)]">{t.tripName}</h3>

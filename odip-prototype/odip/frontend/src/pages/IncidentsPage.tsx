@@ -1,7 +1,7 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -100,13 +100,14 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       header: '',
       align: 'right',
       render: row => (
-        <button
-          type="button"
+        // Always visible (not a hover-revealed RowActions): filing an incident is this queue's
+        // whole purpose, so hiding its only action behind a hover would hide the queue's point.
+        <Button
+          size="sm"
           onClick={() => navigate('/incidents/new', { state: buildFlaggedNotePrefill(row, currentUserId) })}
-          className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90"
         >
           File incident
-        </button>
+        </Button>
       ),
     },
   ]
@@ -235,7 +236,7 @@ export default function IncidentsPage() {
   }
 
   const incidentColumns: Column<any>[] = [
-    { key: 'title', header: 'Title', sortable: true, className: 'font-medium' },
+    { key: 'title', header: 'Title', sortable: true, className: 'font-medium py-1' },
     { key: 'incidentType', header: 'Type', sortable: true },
     {
       key: 'tripName',
@@ -265,86 +266,109 @@ export default function IncidentsPage() {
       header: 'QSC',
       render: (i) => i.qscReportingStatus === 'NotRequired' ? (
         <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
+      ) : i.isOverdue24h ? (
+        // Overdue is the one QSC state that must never be missed, so it always takes the solid
+        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
+        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
+        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
+        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
+        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
       ) : (
-        <StatusBadge
-          status={i.qscReportingStatus}
-          label={i.isOverdue24h ? 'OVERDUE' : formatQscLabel(i.qscReportingStatus)}
-          pulse={i.isOverdue24h}
-        />
+        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
       ),
     },
-    { key: 'actions', header: '', render: (i) => canWrite ? actionButtons(i) : null },
+    { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
   ]
+
+  // Same condition the body uses to swap in the queue: a ?view=flagged-notes link from someone who
+  // can't see the tab still lands on the incidents list.
+  const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
+  const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
+    <Button to="/incidents/new" size="md">
+      <Plus className="w-4 h-4" /> Report Incident
+    </Button>
+  )
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {canViewFlaggedNotes && (
-        <Tabs
-          tabs={[
-            { id: 'incidents', label: 'Incidents' },
-            { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
-          ]}
-          active={tab}
-          onChange={key => setTab(key as IncidentsTab)}
-          ariaLabel="Incidents sections"
-        />
-      )}
+      {/* The tabs share the H1 row (spec §3), and the H1 now renders on both tabs. PageHeader's title
+          row is `flex justify-between` without wrap, so this wrapper lets it wrap: on a phone the
+          tabs and button drop under the title instead of squeezing it. A plain wrapper also keeps
+          the title and filter rows in block flow, without the flex column's section gap between them. */}
+      <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
+        <PageHeader
+          title="Incident Reports"
+          subtitle={showFlaggedNotes ? undefined : `${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
+          action={(canViewFlaggedNotes || reportIncidentAction) && (
+            <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
+              {canViewFlaggedNotes && (
+                <Tabs
+                  tabs={[
+                    { id: 'incidents', label: 'Incidents' },
+                    { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
+                  ]}
+                  active={tab}
+                  onChange={key => setTab(key as IncidentsTab)}
+                  ariaLabel="Incidents sections"
+                  className="min-w-0"
+                />
+              )}
+              {reportIncidentAction && <div className="ml-auto">{reportIncidentAction}</div>}
+            </div>
+          )}
+        >
+          {!showFlaggedNotes && (
+            <>
+              {toggleButtons}
+              {!showArchived && (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Filter aria-hidden="true" className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                    <Dropdown
+                      variant="pill"
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      label="All Statuses"
+                      items={INCIDENT_STATUS_FILTER_ITEMS}
+                      colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+                    />
+                  </div>
+                  <div>
+                    <Dropdown
+                      variant="pill"
+                      value={severityFilter}
+                      onChange={setSeverityFilter}
+                      label="All Severities"
+                      items={INCIDENT_SEVERITY_FILTER_ITEMS}
+                      colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </PageHeader>
+      </div>
 
-      {tab === 'flagged-notes' && canViewFlaggedNotes ? (
+      {showFlaggedNotes ? (
         <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} />
       ) : (
       <>
-      <PageHeader
-        title="Incident Reports"
-        subtitle={`${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
-        action={!showArchived && canCreateIncidents && (
-          <Button to="/incidents/new" size="md">
-            <Plus className="w-4 h-4" /> Report Incident
-          </Button>
-        )}
-      >
-        {toggleButtons}
-        {!showArchived && (
-          <>
-            <div className="flex items-center gap-1.5">
-              <Filter aria-hidden="true" className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-              <Dropdown
-                variant="pill"
-                value={statusFilter}
-                onChange={setStatusFilter}
-                label="All Statuses"
-                items={INCIDENT_STATUS_FILTER_ITEMS}
-                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
-              />
-            </div>
-            <div>
-              <Dropdown
-                variant="pill"
-                value={severityFilter}
-                onChange={setSeverityFilter}
-                label="All Severities"
-                items={INCIDENT_SEVERITY_FILTER_ITEMS}
-                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
-              />
-            </div>
-          </>
-        )}
-      </PageHeader>
-
-      {/* QSC Overdue Alert Banner */}
+      {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
+          the reason truncates (md+) before the link ever does. */}
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
-          className="flex items-center gap-3 p-[var(--card-pad)] rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
+          className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-semibold text-sm">{overdueQsc.length} incident{overdueQsc.length !== 1 ? 's' : ''} require QSC reporting — 24-hour deadline exceeded</p>
-            <p className="text-xs mt-0.5 opacity-80">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</p>
-            <Link to="/incidents?qsc=overdue" className="inline-block mt-1 text-sm font-medium underline underline-offset-2">
-              View overdue incidents
-            </Link>
-          </div>
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm md:truncate">
+            <span className="font-semibold">{overdueQsc.length} incident{overdueQsc.length !== 1 ? 's' : ''} require QSC reporting — 24-hour deadline exceeded</span>
+            <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
+          </p>
+          <Link to="/incidents?qsc=overdue" className="shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2">
+            View overdue incidents
+          </Link>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { useParticipants, useDeleteParticipant, useUpdateParticipant, useParticipantAlertsAggregate } from '@/api/hooks'
 import { maskNdisNumber } from '@/lib/utils'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -25,19 +25,24 @@ export default function ParticipantsPage() {
   const screen = useParticipantsScreen()
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Participants"
-        subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
-        action={!screen.showArchived && screen.canWrite && (
-          <Button to="/participants/new" size="md">
-            <Plus className="w-4 h-4" /> New Participant
-          </Button>
-        )}
-      >
-        {screen.toggleButtons}
+      {/* PageHeader's title row and filter row are siblings. Directly inside this flex column the
+          section gap opens between them (32 + 16 + 8 + 32 = 88px); in a plain wrapper they stay in
+          block flow: 32px title row + 8px + 32px filters = 72px, the spec §3 header budget. */}
+      <div>
+        <PageHeader
+          title="Participants"
+          subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
+          action={!screen.showArchived && screen.canWrite && (
+            <Button to="/participants/new" size="md">
+              <Plus className="w-4 h-4" /> New Participant
+            </Button>
+          )}
+        >
+          {screen.toggleButtons}
 
-        <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants..." />
-      </PageHeader>
+          <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants..." />
+        </PageHeader>
+      </div>
 
       {screen.body}
     </div>
@@ -119,16 +124,16 @@ function useParticipantsScreen() {
         <Link
           to={`/participants/${p.id}`}
           aria-label={`Open ${p.fullName} profile`}
-          className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm"
+          className="font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm"
         >
           {p.fullName}
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
     { key: 'planType', header: 'Plan Type' },
     { key: 'region', header: 'Region', sortable: true },
-    { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px]', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
+    { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px] py-1', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
     {
       key: 'mobilityAidWheelchair',
       // The emoji alone has no accessible name for a screen reader — sr-only text gives the
@@ -200,35 +205,39 @@ function useParticipantsScreen() {
       key: 'actions',
       header: '',
       render: (p) => (
-        <span className="flex items-center justify-end gap-2">
-          {p.hasActiveMedications && (
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              title="View medications"
-              aria-label={`View medications for ${p.fullName}`}
-              onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
-            >
-              <Pill className="w-4 h-4" />
-            </Button>
-          )}
-          {canWrite && (
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={`Change status for ${p.fullName}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
-              }}
-            >
-              Change status
-            </Button>
-          )}
-          {canWrite && actionButtons(p)}
-          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
-        </span>
+        <div className="flex items-center justify-end gap-1.5">
+          {/* Row actions (24px) appear on row hover / focus and are always shown on touch; the
+              chevron is the row's constant "opens the record" cue, so it stays outside. */}
+          <RowActions>
+            {p.hasActiveMedications && (
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                title="View medications"
+                aria-label={`View medications for ${p.fullName}`}
+                onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
+              >
+                <Pill className="w-4 h-4" />
+              </Button>
+            )}
+            {canWrite && (
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={`Change status for ${p.fullName}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
+                }}
+              >
+                Change status
+              </Button>
+            )}
+            {canWrite && actionButtons(p)}
+          </RowActions>
+          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover/row:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
+        </div>
       ),
     },
   ]

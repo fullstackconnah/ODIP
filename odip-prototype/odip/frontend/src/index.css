@@ -68,6 +68,7 @@
   --control-h: 32px;      /* button / input / select height */
   --control-h-sm: 24px;   /* row actions, pills */
   --row-h: 34px;           /* table body row */
+  --table-head-h: 32px;    /* table header row */
   --cell-px: 12px;         /* table cell horizontal padding */
   --card-pad: 12px;        /* Card internal padding (non-compact) */
   --section-gap: 16px;     /* gap between stacked page blocks */
@@ -81,6 +82,7 @@
     --control-h: 44px;
     --control-h-sm: 36px;
     --row-h: 48px;
+    --table-head-h: 40px;
     --cell-px: 12px;
     --card-pad: 16px;
     --section-gap: 20px;
