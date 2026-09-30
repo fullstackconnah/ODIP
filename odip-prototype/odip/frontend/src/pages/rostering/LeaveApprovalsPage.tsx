@@ -44,8 +44,8 @@ const STATUS_FILTER_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
-// Neutral grey — StatusBadge's own STATUS_COLORS has no 'record' key, so without this override
-// it would fall through to the amber DEFAULT_COLOR and read as "awaiting decision", which a
+// Neutral grey — StatusBadge's own STATUS_TONE has no 'record' key, so without this override
+// it would fall through to the amber warning fallback and read as "awaiting decision", which a
 // legacy record (no status/decision workflow at all) never is.
 const LEGACY_RECORD_COLOR: Record<string, Tone> = { record: 'neutral' }
 
