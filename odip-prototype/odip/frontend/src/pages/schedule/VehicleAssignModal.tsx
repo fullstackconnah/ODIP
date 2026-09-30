@@ -76,8 +76,8 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6" style={{ borderBottom: '1px solid rgba(195,201,181,0.25)' }}>
+      <div className="bg-white rounded-[var(--radius-lg)] shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex h-12 items-center justify-between px-4" style={{ borderBottom: '1px solid rgba(195,201,181,0.25)' }}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center">
               <Truck className="w-4 h-4 text-[var(--color-secondary)]" />
@@ -88,8 +88,8 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
             <X className="w-4 h-4" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="bg-[var(--color-surface-container-low)] rounded-[1rem] p-4 space-y-1">
+        <form onSubmit={handleSubmit} className="p-4 space-y-[var(--section-gap)]">
+          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
             <div className="text-sm font-bold">{vehicle.vehicleName}</div>
             <div className="text-xs text-[var(--color-muted-foreground)]">
               {vehicle.registration || '—'} · {vehicle.totalSeats} seats
@@ -119,7 +119,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
               onChange={e => setComments(e.target.value)}
               rows={2}
               placeholder="E.g. pickup from depot, needs fuel..."
-              className="w-full px-4 py-2.5 rounded-[1rem] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
+              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
             />
           </div>
 
@@ -131,7 +131,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
           />
 
           {error && (
-            <div role="alert" className="rounded-[1rem] bg-[#ffdad6]/50 px-3 py-2 text-sm text-[#ba1a1a]">
+            <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-error-container)]/50 px-3 py-2 text-sm text-[var(--color-destructive)]">
               {error}
             </div>
           )}
@@ -142,7 +142,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
               Cancel
             </button>
             <button type="submit" disabled={isBusy || gate.isBlocked}
-              className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#396200] to-[#4d7c0f] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+              className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-container)] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
               {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
             </button>
           </div>

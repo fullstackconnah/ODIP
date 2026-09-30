@@ -5,14 +5,14 @@ import { formatEffectiveRange } from '../rostering/lib/roster'
 import type { ScheduleAvailabilityItemDto } from '@/api/types'
 
 const availTypeColors: Record<string, string> = {
-  Available:   'text-emerald-600 bg-emerald-50',
+  Available:   'text-[var(--color-on-primary-fixed)] bg-[var(--color-primary-fixed)]/30',
   Unavailable: 'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
   Leave:       'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
   // #8e337b (the text color) has no token equivalent in index.css — left as a literal hex.
   // The background half (#ffd7ef) does match --color-accessible-container exactly.
   Training:    'text-[#8e337b] bg-[var(--color-accessible-container)]/60',
   Preferred:   'text-[var(--color-secondary)] bg-[var(--color-secondary-container)]/40',
-  Tentative:   'text-amber-700 bg-amber-50',
+  Tentative:   'text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)]/60',
 }
 
 interface AvailabilityListProps {
@@ -54,8 +54,8 @@ export default function AvailabilityList({ staffId, availability }: Availability
   const manageLink = `/rostering/leave?userId=${staffId}`
 
   return (
-    <div className="pl-8 py-3">
-      <div className="flex items-center justify-between mb-3">
+    <div className="pl-8 py-2">
+      <div className="flex items-center justify-between mb-2">
         <p className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">Availability</p>
         <Link to={manageLink} className="text-xs text-[var(--color-primary)] hover:underline">
           Manage on Leave page →

@@ -117,7 +117,7 @@ export function RosterGridSkeleton({ days }: { days: string[] }) {
             </div>
             <div className="col-span-7 grid gap-1 border-b border-border p-1" style={{ gridTemplateColumns: rosterDayColumnsTemplate(7) }}>
               {days.map(day => (
-                <div key={day} className="min-h-[2.25rem] rounded-sm p-0.5">
+                <div key={day} className="min-h-[var(--row-h)] rounded-sm p-0.5">
                   {rowIdx % 3 === 0 && <div className="h-6 w-full animate-pulse rounded-sm bg-muted" />}
                 </div>
               ))}

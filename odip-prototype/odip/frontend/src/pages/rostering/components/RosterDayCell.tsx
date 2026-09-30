@@ -27,7 +27,7 @@ export type RosterDayCellProps = {
  */
 export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, onAdd, onOpen, onAssignTo, onUnassign, onDelete }: RosterDayCellProps) {
   const style = { gridColumn: dayIndex + 1, gridRow: 1 }
-  const base = `flex min-h-[2.25rem] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`
+  const base = `flex min-h-[var(--row-h)] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`
 
   if (shifts.length === 0 && canWrite) {
     return (

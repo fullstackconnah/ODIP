@@ -51,13 +51,13 @@ function RestingMark({ level }: { level: CompatibilityLevel }) {
 /** Loading state — a skeleton matching the final matrix's shape, no spinner. */
 function CompatibilityMatrixSkeleton() {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border" aria-hidden="true">
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border" aria-hidden="true">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 border-b border-r border-border bg-surface-container-low p-2" />
+            <th className="sticky left-0 z-10 border-b border-r border-border bg-surface-container-low px-[var(--cell-px)] py-[6px]" />
             {Array.from({ length: 6 }, (_, i) => (
-              <th key={i} className="border-b border-border bg-surface-container-low p-2">
+              <th key={i} className="border-b border-border bg-surface-container-low px-[var(--cell-px)] py-[6px]">
                 <div className="h-3 w-16 animate-pulse rounded-sm bg-muted" />
               </th>
             ))}
@@ -65,12 +65,12 @@ function CompatibilityMatrixSkeleton() {
         </thead>
         <tbody>
           {Array.from({ length: 6 }, (_, rowIdx) => (
-            <tr key={rowIdx} className="border-b border-border">
-              <td className="sticky left-0 z-10 border-r border-border bg-card p-2">
+            <tr key={rowIdx} className="h-[var(--row-h)] border-b border-border">
+              <td className="sticky left-0 z-10 border-r border-border bg-card px-[var(--cell-px)]">
                 <div className="h-3 w-24 animate-pulse rounded-sm bg-muted" />
               </td>
               {Array.from({ length: 6 }, (_, colIdx) => (
-                <td key={colIdx} className="p-2 text-center">
+                <td key={colIdx} className="px-[var(--cell-px)] text-center">
                   <div className="mx-auto h-4 w-16 animate-pulse rounded-full bg-muted" />
                 </td>
               ))}
@@ -187,7 +187,7 @@ export default function CompatibilityPage() {
   const noPeopleYet = !isLoading && !isError && (staff.length === 0 || participants.length === 0)
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Staff–participant compatibility"
         subtitle="Preferred and excluded pairings the roster board and conflict checks use when suggesting or warning about a match."
@@ -220,7 +220,7 @@ export default function CompatibilityPage() {
             onChange={e => setStaffFilter(e.target.value)}
             placeholder="Filter staff…"
             aria-label="Filter staff"
-            className="w-48 rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-[var(--control-h)] w-48 rounded-[var(--radius-sm)] border border-border bg-card px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <input
             type="text"
@@ -228,23 +228,23 @@ export default function CompatibilityPage() {
             onChange={e => setParticipantFilter(e.target.value)}
             placeholder="Filter participants…"
             aria-label="Filter participants"
-            className="w-48 rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-[var(--control-h)] w-48 rounded-[var(--radius-sm)] border border-border bg-card px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
       )}
 
       {!isLoading && !isError && !noPeopleYet && (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th className="sticky left-0 top-0 z-30 whitespace-nowrap border-b border-r border-border bg-surface-container-low px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                <th className="sticky left-0 top-0 z-30 whitespace-nowrap border-b border-r border-border bg-surface-container-low px-[var(--cell-px)] py-[6px] text-left text-xs font-medium text-muted-foreground">
                   Staff
                 </th>
                 {filteredParticipants.map(participant => (
                   <th
                     key={participant.id}
-                    className="sticky top-0 z-20 min-w-[7rem] whitespace-nowrap border-b border-border bg-surface-container-low px-2 py-2 text-left text-xs font-medium text-muted-foreground"
+                    className="sticky top-0 z-20 min-w-[7rem] whitespace-nowrap border-b border-border bg-surface-container-low px-[var(--cell-px)] py-[6px] text-left text-xs font-medium text-muted-foreground"
                   >
                     {participant.fullName}
                   </th>
@@ -253,8 +253,8 @@ export default function CompatibilityPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filteredStaff.map(staffMember => (
-                <tr key={staffMember.id}>
-                  <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card px-3 py-1 text-sm font-medium text-foreground">
+                <tr key={staffMember.id} className="h-[var(--row-h)]">
+                  <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card px-[var(--cell-px)] text-sm font-medium text-foreground">
                     {staffMember.fullName}
                   </td>
                   {filteredParticipants.map(participant => {
@@ -265,7 +265,7 @@ export default function CompatibilityPage() {
                     const accessibleName = `${staffMember.fullName} with ${participant.fullName}: ${level}`
 
                     return (
-                      <td key={participant.id} className="px-1.5 py-1 text-center align-middle" title={reason ?? undefined}>
+                      <td key={participant.id} className="px-1.5 text-center align-middle" title={reason ?? undefined}>
                         {canWrite ? (
                           <div
                             className={`group relative inline-flex h-6 min-w-[1.5rem] items-center justify-center gap-1 ${

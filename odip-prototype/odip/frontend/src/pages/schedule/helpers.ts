@@ -12,5 +12,5 @@ export const tripAccentText = [
   'text-[var(--color-primary)]',
   'text-[var(--color-secondary)]',
   'text-[#8e337b]',
-  'text-amber-700',
+  'text-[var(--color-on-warning-container)]',
 ]

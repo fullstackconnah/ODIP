@@ -527,7 +527,7 @@ export default function LeaveApprovalsPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Leave approvals" subtitle="Review and decide staff leave and regular-unavailability requests.">
         {canApproveLeave && (
           <Dropdown

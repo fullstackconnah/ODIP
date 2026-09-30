@@ -10,6 +10,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { PageHeader } from '@/components/PageHeader'
+import { Card } from '@/components/Card'
 import {
   ScheduleAssignmentCell, QualBadge, TripStatusBadge, AvailabilityList,
   StaffAssignModal, VehicleAssignModal,
@@ -107,40 +109,39 @@ export default function SchedulePage() {
     : 0
 
   return (
-    <div className="space-y-4">
-      {/* ── Page Header ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
-        <div>
-          <h1 className="font-display font-extrabold text-2xl md:text-3xl text-[var(--color-primary)] tracking-tight leading-none mb-1">
-            Schedule Overview
-          </h1>
-          <p className="text-sm text-[var(--color-muted-foreground)] font-medium">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <PageHeader
+        title="Schedule Overview"
+        subtitle={
+          <>
             Staff and vehicle assignment across active trips · Click{' '}
             <span className="font-semibold text-[var(--color-primary)]">Available</span> to assign
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex bg-[var(--color-surface-container)] p-1 rounded-full">
-            <button className="px-5 py-2 bg-white rounded-full text-sm font-bold shadow-sm text-[var(--color-foreground)]">
-              Grid View
+          </>
+        }
+        action={
+          <div className="flex items-center gap-2">
+            <div className="flex bg-[var(--color-surface-container)] p-0.5 rounded-[var(--radius-sm)]">
+              <button className="px-3 h-[var(--control-h)] bg-white rounded-[var(--radius-sm)] text-sm font-bold shadow-sm text-[var(--color-foreground)]">
+                Grid View
+              </button>
+              <button disabled title="Coming soon" className="px-3 h-[var(--control-h)] text-[var(--color-muted-foreground)] text-sm font-medium hover:text-[var(--color-foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                Timeline
+              </button>
+            </div>
+            <button disabled title="Coming soon" className="h-[var(--control-h)] w-[var(--control-h)] flex items-center justify-center bg-[var(--color-surface-container-low)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
+              <Filter className="w-4 h-4" />
             </button>
-            <button disabled title="Coming soon" className="px-5 py-2 text-[var(--color-muted-foreground)] text-sm font-medium hover:text-[var(--color-foreground)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              Timeline
+            <button disabled title="Coming soon" className="h-[var(--control-h)] w-[var(--control-h)] flex items-center justify-center bg-[var(--color-surface-container-low)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
+              <Download className="w-4 h-4" />
             </button>
           </div>
-          <button disabled title="Coming soon" className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
-            <Filter className="w-4 h-4" />
-          </button>
-          <button disabled title="Coming soon" className="p-2.5 bg-[var(--color-surface-container-low)] rounded-full hover:bg-[var(--color-surface-container)] transition-colors text-[var(--color-muted-foreground)] disabled:opacity-50 disabled:cursor-not-allowed">
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Summary Stats ── */}
-      <div className="grid grid-cols-12 gap-3 md:gap-4">
+      <div className="grid grid-cols-12 gap-2 md:gap-[var(--section-gap)]">
         {/* Active Trips count */}
-        <div className="col-span-12 md:col-span-4 bg-[var(--color-primary-container)] p-4 md:p-5 rounded-2xl md:rounded-[1.5rem] text-white flex flex-col justify-between relative overflow-hidden group">
+        <div className="col-span-12 md:col-span-4 bg-[var(--color-primary-container)] p-[var(--card-pad)] rounded-[var(--radius-md)] text-white flex flex-col justify-between relative overflow-hidden group">
           <div className="relative z-10">
             <h3 className="text-xs font-bold uppercase tracking-widest opacity-75 mb-2">Active Trips</h3>
             <div className="flex items-baseline gap-2">
@@ -156,27 +157,27 @@ export default function SchedulePage() {
         </div>
 
         {/* Resource Health */}
-        <div className="col-span-12 md:col-span-8 bg-[var(--color-surface-container-low)] p-4 md:p-5 rounded-2xl md:rounded-[1.5rem] flex flex-col justify-between">
+        <Card className="col-span-12 md:col-span-8 bg-[var(--color-surface-container-low)] flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <h3 className="text-base font-display font-bold text-[var(--color-secondary)]">Resource Health</h3>
             <span className="text-[var(--color-primary)] font-bold text-sm">{utilization}% Utilization</span>
           </div>
-          <div className="grid grid-cols-3 gap-3 mt-3">
-            <div className="bg-white p-3 rounded-[0.75rem]">
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
               <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Staff</p>
               <div className="flex justify-between items-center">
                 <span className="text-xl font-bold text-[var(--color-foreground)]">{staffAssigned}/{staff?.length || 0}</span>
                 <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
               </div>
             </div>
-            <div className="bg-white p-3 rounded-[0.75rem]">
+            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
               <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Vehicles</p>
               <div className="flex justify-between items-center">
                 <span className="text-xl font-bold text-[var(--color-foreground)]">{vehiclesAssigned}/{vehicles?.length || 0}</span>
                 <CheckCircle className="w-4 h-4 text-[var(--color-primary)]" />
               </div>
             </div>
-            <div className="bg-white p-3 rounded-[0.75rem]">
+            <div className="bg-white p-2 rounded-[var(--radius-sm)]">
               <p className="text-xs text-[var(--color-muted-foreground)] font-bold uppercase mb-1 tracking-wide">Conflicts</p>
               <div className="flex justify-between items-center">
                 <span className={`text-xl font-bold ${conflictsCount > 0 ? 'text-[var(--color-conflict)]' : 'text-[var(--color-foreground)]'}`}>
@@ -189,30 +190,30 @@ export default function SchedulePage() {
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* ── Empty State ── */}
       {tripCount === 0 ? (
-        <div className="bg-white rounded-[2rem] p-12 text-center">
+        <div className="bg-white rounded-[var(--radius-md)] p-12 text-center">
           <CalendarRange className="w-12 h-12 text-[var(--color-muted-foreground)] mx-auto mb-4 opacity-40" />
           <p className="text-lg font-display font-bold">No trips scheduled</p>
           <p className="text-[var(--color-muted-foreground)] mt-1">Create a trip first to see the schedule overview.</p>
         </div>
       ) : (
         /* ── Schedule Grid Table ── */
-        <div className="bg-white rounded-2xl md:rounded-[2rem] overflow-hidden">
+        <div className="bg-white rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)]">
           <p className="md:hidden text-xs text-[var(--color-muted-foreground)] px-4 pt-3 pb-1">Swipe to see all trips →</p>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse" style={{ minWidth: `${220 + tripCount * 160}px` }}>
               {/* Trip column headers */}
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-surface-container)' }}>
-                  <th className="sticky left-0 z-20 bg-white text-left px-4 py-3 min-w-[200px]">
+                  <th className="sticky left-0 top-0 z-20 bg-white text-left px-[var(--cell-px)] py-[6px] min-w-[200px]">
                     <span className="text-[10px] font-bold text-[var(--color-muted-foreground)] uppercase tracking-widest">Resources</span>
                   </th>
                   {trips.map((trip: ScheduleTripDto, idx: number) => (
-                    <th key={trip.id} className="px-4 py-3 text-left min-w-[150px]">
+                    <th key={trip.id} className="sticky top-0 z-10 bg-white px-[var(--cell-px)] py-[6px] text-left min-w-[150px]">
                       <div className="space-y-1">
                         <div className={`text-sm font-display font-bold ${tripAccentText[idx % tripAccentText.length]}`}>
                           {trip.tripName}
@@ -240,7 +241,7 @@ export default function SchedulePage() {
                 <tr className="bg-[var(--color-surface-container-low)]">
                   <td
                     colSpan={tripCount + 1}
-                    className="px-6 py-3 cursor-pointer select-none"
+                    className="px-[var(--cell-px)] py-2 cursor-pointer select-none"
                     onClick={() => setSectionStaff(!sectionStaff)}
                   >
                     <div className="flex items-center gap-2">
@@ -264,7 +265,7 @@ export default function SchedulePage() {
                       className="hover:bg-[var(--color-surface-container-low)]/60 transition-colors"
                       style={{ borderBottom: '1px solid var(--color-surface-container)' }}
                     >
-                      <td className="sticky left-0 z-10 bg-white px-4 py-2.5 min-w-[200px]">
+                      <td className="sticky left-0 z-10 bg-white px-[var(--cell-px)] py-1.5 min-w-[200px]">
                         <button
                           type="button"
                           className="flex w-full items-center gap-2 cursor-pointer text-left"
@@ -299,7 +300,7 @@ export default function SchedulePage() {
                         const isAvailable = ts.status === 'Available'
                         const prefEntry = s.preferredForTrips?.find((p: TripPreferenceDto) => p.tripId === ts.tripId)
                         return (
-                          <td key={ts.tripId} className="px-3 py-2.5">
+                          <td key={ts.tripId} className="px-2 py-1.5">
                             <div className="relative inline-block">
                               <ScheduleAssignmentCell
                                 status={ts.status}
@@ -319,7 +320,7 @@ export default function SchedulePage() {
                               {prefEntry && (
                                 <span
                                   className="absolute -top-1.5 -right-1.5 text-[9px] font-bold leading-none px-1 py-0.5 rounded-full"
-                                  style={{ background: '#f59e0b', color: '#000' }}
+                                  style={{ background: 'var(--color-warning)', color: 'var(--color-foreground)' }}
                                   title={`${prefEntry.participantCount} participant${prefEntry.participantCount > 1 ? 's' : ''} prefer this staff member`}
                                 >
                                   ★{prefEntry.participantCount > 1 ? ` ${prefEntry.participantCount}` : ''}
@@ -348,7 +349,7 @@ export default function SchedulePage() {
                 <tr className="bg-[var(--color-surface-container-low)]">
                   <td
                     colSpan={tripCount + 1}
-                    className="px-6 py-3 cursor-pointer select-none"
+                    className="px-[var(--cell-px)] py-2 cursor-pointer select-none"
                     onClick={() => setSectionVehicles(!sectionVehicles)}
                   >
                     <div className="flex items-center gap-2">
@@ -372,7 +373,7 @@ export default function SchedulePage() {
                     className="hover:bg-[var(--color-surface-container-low)]/60 transition-colors last:border-b-0"
                     style={{ borderBottom: '1px solid var(--color-surface-container)' }}
                   >
-                    <td className="sticky left-0 z-10 bg-white px-4 py-2.5 min-w-[200px]">
+                    <td className="sticky left-0 z-10 bg-white px-[var(--cell-px)] py-1.5 min-w-[200px]">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-[var(--color-secondary-container)]/40 flex items-center justify-center flex-shrink-0">
                           <Truck className="w-3.5 h-3.5 text-[var(--color-secondary)]" />
@@ -390,7 +391,7 @@ export default function SchedulePage() {
                       const trip = trips[idx]
                       const isAvailable = ts.status === 'Available'
                       return (
-                        <td key={ts.tripId} className="px-3 py-2.5">
+                        <td key={ts.tripId} className="px-2 py-1.5">
                           <ScheduleAssignmentCell
                             status={ts.status}
                             clickable={isAvailable && canWrite}

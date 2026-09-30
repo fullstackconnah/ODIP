@@ -175,7 +175,7 @@ export default function RosterBoardPage() {
   )
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Rostering" subtitle="Week roster board — community shifts, trip work, and leave in one view." />
 
       <WeekToolbar

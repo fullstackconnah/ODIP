@@ -36,7 +36,7 @@ export function UnfilledLane({ days, shifts, canWrite, onOpen, onAssignTo, onDel
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length) }}
       >
         {days.map((day, i) => (
-          <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[2.25rem] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>
+          <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[var(--row-h)] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>
             {shifts
               .filter(s => s.serviceDate === day)
               .map(shift => (

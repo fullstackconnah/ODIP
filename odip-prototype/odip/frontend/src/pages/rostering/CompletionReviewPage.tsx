@@ -26,7 +26,7 @@ const STATUS_FILTER_ITEMS: { value: ShiftStatus; label: string }[] = [
 
 function varianceBadgeClass(isOutlier: boolean): string {
   return isOutlier
-    ? 'bg-[#fef3c7] text-[#92400e]'
+    ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
     : 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
 }
 
@@ -210,7 +210,7 @@ export default function CompletionReviewPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Completion review" subtitle="Review submitted shift completions against their rostered times before they're billed.">
         {canReviewCompletions && selectedRows.size > 0 && (
           <button
