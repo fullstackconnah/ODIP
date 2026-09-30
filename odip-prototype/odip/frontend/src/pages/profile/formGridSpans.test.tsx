@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { CaregiverFormDto } from '@/api/types/caregiver'
@@ -108,7 +108,7 @@ type StepName = 'keyIdentifiers' | 'behaviourCognition' | 'culturalDepth' | 'med
 
 /** Renders one Profile step against a real react-hook-form instance, the way ProfileWizardPage does. */
 function StepHarness({ step }: { step: StepName }) {
-  const { control, register, watch, formState: { errors } } = useForm<ParticipantFormData>({
+  const { control, register, formState: { errors } } = useForm<ParticipantFormData>({
     defaultValues: { consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [] },
   })
   const consents = useFieldArray({ control, name: 'consents' })
@@ -116,7 +116,7 @@ function StepHarness({ step }: { step: StepName }) {
   const adl = useFieldArray({ control, name: 'adlAssessments' })
   const checklist = useFieldArray({ control, name: 'checklistItems' })
   const riskItems = useFieldArray({ control, name: 'communityAccessRiskItems' })
-  const watched = watch()
+  const watched = useWatch({ control }) as Partial<ParticipantFormData>
   const participant = { firstName: 'Alexandra', lastName: 'Citizen-Smith', overnightSupport: 'Sleepover', overnightRatio: '1:1', supportRatio: '1:2' } as unknown as ParticipantDetailDto
   switch (step) {
     case 'keyIdentifiers':
