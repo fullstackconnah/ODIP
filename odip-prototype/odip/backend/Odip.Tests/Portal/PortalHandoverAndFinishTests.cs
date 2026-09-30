@@ -448,6 +448,7 @@ public class PortalFinishValidationTests
     public async Task ADoseInTheWindowWithNoOutcome_Is422_WithTheListAndTheShiftAsData_AndNothingChanges()
     {
         var f = Create();
+        f.Advance(TimeSpan.FromHours(2));   // 13:00 local: both slots have come due
         AddNote(f);
         var med = AddMed(f, "Levetiracetam", "09:00,12:30");
         Record(f, med, Nine);   // 09:00 done; 12:30 still has nothing
@@ -471,6 +472,7 @@ public class PortalFinishValidationTests
     public async Task EveryRecordedOutcomeCounts_InCludingNotGivenThisShiftWithAReason_RecordedAsMissed()
     {
         var f = Create();
+        f.Advance(TimeSpan.FromHours(5));   // 16:00 local: all three slots have come due
         AddNote(f);
         var med = AddMed(f, "Levetiracetam", "09:00,12:30,15:00");
         Record(f, med, Nine, MedicationAdministrationStatus.Administered);
@@ -487,7 +489,6 @@ public class PortalFinishValidationTests
     {
         // The worker started at 09:05 (actual); a 09:00 dose is before their actual start but inside the rostered window.
         var f = Create();
-        f.Advance(TimeSpan.FromHours(5));   // 16:00 local: all three slots have come due
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
 
@@ -500,7 +501,6 @@ public class PortalFinishValidationTests
     public async Task DosesOutsideTheWindow_AndPrnMedications_AndOtherDays_NeverBlock()
     {
         var f = Create();
-        f.Advance(TimeSpan.FromHours(2));   // 13:00 local: both slots have come due
         AddNote(f);
         AddMed(f, "Before", "08:59");                                           // before the 09:00 start
         AddMed(f, "AtTheEnd", "17:00");                                         // the window is half-open: 17:00 is the next shift's
@@ -678,6 +678,7 @@ public class PortalFinishValidationTests
     public async Task BothBlockers_AreListed_BreakFirst_ThenDosesByScheduledTime()
     {
         var f = Create();
+        f.Advance(TimeSpan.FromHours(2));   // 13:00 local
         AddNote(f);
         AddMed(f, "Zeta", "12:30");
         AddMed(f, "Alpha", "09:00");
@@ -711,7 +712,6 @@ public class PortalFinishValidationTests
     public async Task ADoseBlockerIsDedupedWhenAScheduleListsTheSameTimeTwice()
     {
         var f = Create();
-        f.Advance(TimeSpan.FromHours(2));   // 13:00 local
         AddNote(f);
         AddMed(f, "Twice", "09:00,09:00");
 
