@@ -44,21 +44,27 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
   const updateTask = useUpdateTask()
 
   const columns: Column<TaskDto>[] = [
+    // Column budget (density §4), the same as the Tasks page: the text columns are capped (ellipsis, full text in the tooltip) and Type
+    // gives way below 2xl (1536), so Status stays on screen at 1280 whatever the task titles and owners are.
     {
       key: 'title',
       header: 'Task',
       className: 'font-medium',
       sortable: true,
+      maxWidth: '16rem',
     },
     {
       key: 'taskType',
       header: 'Type',
       sortable: true,
+      priority: 'low',
+      maxWidth: '10rem',
     },
     {
       key: 'ownerName',
       header: 'Owner',
       sortable: true,
+      maxWidth: '8rem',
       render: (t) => t.ownerName || 'Unassigned',
     },
     {

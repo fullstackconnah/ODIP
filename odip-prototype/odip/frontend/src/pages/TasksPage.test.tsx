@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
@@ -125,5 +125,41 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
   it('still shows the raw type text for an existing task type not in the new label map', () => {
     renderPage()
     expect(screen.getByText('AccommodationRequest')).toBeInTheDocument()
+  })
+})
+
+// R2-01: DataTable cells no longer wrap, so a table's minimum width is the sum of every column's widest content. Uncapped, the Tasks
+// table needed 1436px against a ~1006px box at 1280 and pushed Status and the row actions off-screen. jsdom does no layout (the Playwright
+// overflow audit measures it), so this pins the budget itself: what gives way and when, what is capped, and what is reserved.
+describe('TasksPage — column budget', () => {
+  it('drops the two least useful columns as the screen narrows (Trip below 1536px, Type below 1792px) and keeps the rest', () => {
+    renderPage()
+    expect(screen.getByRole('columnheader', { name: 'Trip' })).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByRole('columnheader', { name: 'Type' })).toHaveClass('md:max-[1792px]:hidden')
+    for (const name of ['Task', 'Owner', 'Due', 'Priority', 'Status']) {
+      const header = screen.getByRole('columnheader', { name })
+      expect(header.className, name).not.toMatch(/max-(xl|2xl)|max-\[1792px\]/)
+    }
+  })
+
+  it('caps the Task and Owner text and truncates the trip link on the link itself, with the full text in a tooltip', () => {
+    renderPage()
+    const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
+    const task = within(row).getByText('Confirm accommodation')
+    expect(task).toHaveClass('md:truncate')
+    expect(task).toHaveStyle('--cell-max: 16rem')
+    expect(task).toHaveAttribute('title', 'Confirm accommodation')
+    expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 8rem')
+    // The link is a custom cell, so it limits itself: truncation on the link (not a wrapper, which would clip its focus ring).
+    const link = screen.getByRole('link', { name: 'Beach Trip' })
+    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[11rem]')
+    expect(link).toHaveAttribute('title', 'Beach Trip')
+  })
+
+  it('reserves the widest Status pill so the column does not jump when a task changes state', () => {
+    renderPage()
+    const header = screen.getByRole('columnheader', { name: 'Status' })
+    expect(header).toHaveClass('md:min-w-[var(--col-min)]')
+    expect(header).toHaveStyle('--col-min: 9rem')
   })
 })

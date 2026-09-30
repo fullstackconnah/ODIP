@@ -205,18 +205,23 @@ export default function ClaimBatchBuilderPage() {
   const createHelpId = 'create-batch-help'
 
   // ── Table columns ────────────────────────────────────────────────────────
+  // Column budget (density §4): ten columns with an uncapped participant and reference need ~1600px against a ~1006px box at 1280, which
+  // pushed the Findings column off-screen. Both are capped (ellipsis, full text in the tooltip); Stream gives way below 2xl (1536)
+  // and Day Type below 1792.
   const columns: Column<BillableEventDto>[] = [
     {
       key: 'participantName',
       header: 'Participant',
       sortable: true,
       className: 'font-medium',
+      maxWidth: '10rem',
       render: e => e.participantName || '—',
     },
     {
       key: 'stream',
       header: 'Stream',
       sortable: true,
+      priority: 'low',
       render: e => INCOME_STREAM_LABELS[e.stream] ?? e.stream,
     },
     {
@@ -224,7 +229,7 @@ export default function ClaimBatchBuilderPage() {
       header: 'Support Item',
       className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
     },
-    { key: 'dayType', header: 'Day Type', sortable: true },
+    { key: 'dayType', header: 'Day Type', sortable: true, priority: 'lowest' },
     {
       key: 'supportsDeliveredFrom',
       header: 'Dates',
@@ -252,6 +257,7 @@ export default function ClaimBatchBuilderPage() {
     {
       key: 'claimReference',
       header: 'Reference',
+      maxWidth: '8rem',
       className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
     },
     {

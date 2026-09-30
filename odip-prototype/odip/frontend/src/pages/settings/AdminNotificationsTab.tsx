@@ -76,10 +76,11 @@ export default function AdminNotificationsTab() {
 
   const columns: Column<NotificationOutboxDto>[] = [
     { key: 'eventType', header: 'Event', render: row => NOTIFICATION_EVENT_TYPE_LABELS[row.eventType] ?? row.eventType },
-    { key: 'recipientName', header: 'Recipient', render: row => row.recipientName ?? row.recipientUserId },
+    { key: 'recipientName', header: 'Recipient', maxWidth: '10rem', render: row => row.recipientName ?? row.recipientUserId },
     { key: 'status', header: 'Status', render: row => <StatusBadge status={row.status} colorMap={NOTIFICATION_STATUS_COLORS} /> },
     { key: 'attempts', header: 'Attempts', align: 'right' as const },
-    { key: 'lastError', header: 'Last Error', render: row => row.lastError ?? '—' },
+    // Capped (ellipsis, full text in the tooltip): an error message is free text and this table has no room to spare at 1280.
+    { key: 'lastError', header: 'Last Error', maxWidth: '14rem', render: row => row.lastError ?? '—' },
     { key: 'createdAt', header: 'Created', type: 'date' as const },
     {
       key: 'actions', header: '', align: 'right' as const, render: row => (

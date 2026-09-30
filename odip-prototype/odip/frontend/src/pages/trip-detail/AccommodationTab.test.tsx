@@ -100,3 +100,48 @@ describe('AccommodationTab — Bedrooms / Beds column and row actions', () => {
     expect(remove).not.toHaveClass('hover:text-[var(--color-primary)]')
   })
 })
+
+// R2-01 / R2-08: the Property cell (name, address, badges, comments) has no width of its own, and unwrapped it made this table 1275px wide
+// with a one-line address and ~2000px with a two-sentence comment, pushing Ref and the row actions off-screen at 1280-1536. jsdom does no
+// layout (the Playwright overflow audit measures it), so this pins the budget: the Property column wraps and its address line
+// contributes nothing to the minimum width, and the two least useful columns give way below 1536px.
+describe('AccommodationTab — column budget', () => {
+  const trip = { startDate: '2026-10-10T00:00:00', endDate: '2026-10-14T00:00:00' } as TripDetailDto
+
+  function renderTab(reservations: ReservationDto[]) {
+    properties.length = 0
+    properties.push(property({ address: '12 Beachfront Parade', suburb: 'Sunshine Beach' }))
+    return render(
+      <MemoryRouter>
+        <AccommodationTab tripId="t1" trip={trip} accommodation={reservations} canWrite />
+      </MemoryRouter>,
+    )
+  }
+
+  it('lets the Property cell wrap (so a long comment stays under the property instead of widening the table) and caps its width', () => {
+    renderTab([reservation({ comments: 'Ground floor rooms required for wheelchair users. Please call the manager on arrival.' })])
+    const cell = screen.getByText(/Ground floor rooms required/).closest('td')!
+    expect(cell.className).not.toContain('whitespace-nowrap')
+    expect(screen.getByText(/Ground floor rooms required/).closest('div')).toHaveClass('md:max-w-[26rem]')
+    // Every other body cell in the row still never wraps.
+    const others = [...cell.parentElement!.querySelectorAll('td')].filter(td => td !== cell)
+    expect(others.length).toBeGreaterThan(0)
+    for (const td of others) expect(td.className).toContain('md:whitespace-nowrap')
+  })
+
+  it('takes the truncated address line out of the minimum width (w-0 + min-w-full) so it cannot pin the column at its cap', () => {
+    renderTab([reservation()])
+    const address = screen.getByText(/Noosa/)
+    expect(address).toHaveClass('truncate', 'md:w-0', 'md:min-w-full')
+  })
+
+  it('hides Nights and Ref below 1536px, and caps Ref', () => {
+    renderTab([reservation({ confirmationReference: 'CONF-88123' })])
+    expect(screen.getByRole('columnheader', { name: 'Nights' })).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByRole('columnheader', { name: 'Ref' })).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByText('CONF-88123')).toHaveStyle('--cell-max: 8rem')
+    for (const name of ['Property', 'Status', 'Check-in', 'Check-out', 'Cost', 'Bedrooms / Beds']) {
+      expect(screen.getByRole('columnheader', { name }).className, name).not.toMatch(/max-(xl|2xl)|max-\[1792px\]/)
+    }
+  })
+})

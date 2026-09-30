@@ -465,18 +465,21 @@ export default function LeaveApprovalsPage() {
     return `${who} · ${requestedAt.slice(0, 10)}`
   }
 
+  // Column budget (density §4): the Edit / Decline / Approve buttons take ~260px, so with uncapped text columns this table needed ~1170px
+  // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip)
+  // and Requested (who asked, and when) gives way below 2xl (1536).
   const columns: Column<ApprovalRow>[] = [
-    { key: 'staff', header: 'Staff', render: row => row.data.userFullName },
-    { key: 'type', header: 'Type', render: rowType },
-    { key: 'window', header: 'Dates', render: rowWindow },
-    { key: 'requestedAt', header: 'Requested', render: rowRequestedBy },
+    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => row.data.userFullName },
+    { key: 'type', header: 'Type', maxWidth: '8rem', render: rowType },
+    { key: 'window', header: 'Dates', maxWidth: '16rem', render: rowWindow },
+    { key: 'requestedAt', header: 'Requested', priority: 'low', maxWidth: '12rem', render: rowRequestedBy },
     { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
     ) : (
       <div>
         <StatusBadge status={row.data.status} colorMap={LEAVE_STATUS_COLORS} />
         {row.data.status === 'Declined' && row.data.decisionNote && (
-          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{row.data.decisionNote}</p>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)] md:max-w-[12rem] md:truncate" title={row.data.decisionNote}>{row.data.decisionNote}</p>
         )}
       </div>
     ) },

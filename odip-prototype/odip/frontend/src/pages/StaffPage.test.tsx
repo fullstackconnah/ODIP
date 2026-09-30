@@ -239,3 +239,27 @@ describe('StaffPage — density row actions', () => {
     expect(wrapper.className).toBe('')
   })
 })
+
+// R2-01: DataTable cells no longer wrap, so the eleven-column staff table needed ~1140px against a ~1006px box at 1280 and pushed Status
+// and the row actions off-screen (more with long names and regions). jsdom does no layout (the Playwright overflow audit measures it), so
+// this pins the budget: the two least-asked qualification flags give way below 1536px, and the text columns are capped.
+describe('StaffPage — column budget', () => {
+  it('hides the Manual and Overnight flags below 1536px and keeps every other column', () => {
+    renderPage()
+    expect(screen.getByRole('columnheader', { name: 'Manual' })).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByRole('columnheader', { name: 'Overnight' })).toHaveClass('md:max-2xl:hidden')
+    for (const name of ['Name', 'Position', 'Region', 'Driver', 'First Aid', 'Meds', 'Worker Screening', 'Status']) {
+      expect(screen.getByRole('columnheader', { name }).className, name).not.toMatch(/max-(xl|2xl)|max-\[1792px\]/)
+    }
+  })
+
+  it('caps Position and Region, and truncates the name link on the link itself with the full name in a tooltip', () => {
+    renderPage()
+    const row = screen.getByRole('link', { name: 'Alex Rivera' }).closest('tr')!
+    expect(within(row).getByText('Coordinator')).toHaveStyle('--cell-max: 7rem')
+    expect(within(row).getByText('North')).toHaveStyle('--cell-max: 7rem')
+    const link = screen.getByRole('link', { name: 'Alex Rivera' })
+    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[11rem]')
+    expect(link).toHaveAttribute('title', 'Alex Rivera')
+  })
+})

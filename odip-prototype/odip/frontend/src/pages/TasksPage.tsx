@@ -61,19 +61,25 @@ export default function TasksPage() {
         </Button>
       ) : null,
     },
-    { key: 'title', header: 'Task', sortable: true, className: 'font-medium' },
+    // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
+    // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip) and the two least useful ones
+    // give way: Trip below 2xl (1536), Type below 1792. Uncapped, this table needed 1436px and pushed Status off-screen.
+    { key: 'title', header: 'Task', sortable: true, className: 'font-medium', maxWidth: '16rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
+      priority: 'low',
+      maxWidth: '11rem',
       render: (t) => t.tripInstanceId && t.tripName ? (
-        <Link to={`/trips/${t.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+        // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
+        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[11rem]">
           {t.tripName}
         </Link>
       ) : (t.tripName ?? '—'),
     },
-    { key: 'taskType', header: 'Type', sortable: true, render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
-    { key: 'ownerName', header: 'Owner', sortable: true },
+    { key: 'taskType', header: 'Type', sortable: true, priority: 'lowest', maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem' },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {
       key: 'priority',
@@ -84,6 +90,8 @@ export default function TasksPage() {
       key: 'status',
       header: 'Status',
       sortable: true,
+      // "Not Started" / "In Progress" swap in place: reserve the widest so the column does not jump.
+      minWidth: '9rem',
       render: (t) => (
         <div>
           <Dropdown

@@ -87,18 +87,22 @@ export default function StaffPage() {
       sortable: true,
       className: 'font-medium',
       render: (s: StaffListDto) => (
-        <Link to={`/staff/${s.id}`} className="hover:text-[var(--color-primary)] hover:underline">
+        // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
+        <Link to={`/staff/${s.id}`} title={s.fullName} className="block truncate hover:text-[var(--color-primary)] hover:underline md:max-w-[11rem]">
           {s.fullName}
         </Link>
       ),
     },
-    { key: 'position', header: 'Position', sortable: true },
-    { key: 'region', header: 'Region', sortable: true },
+    // Column budget (density §4): eleven columns need ~1140px, the box at 1280 is ~1006. The text columns are capped (ellipsis, full
+    // text in the tooltip) and the two least-asked qualification flags give way below 2xl (1536), so Status and the row actions
+    // stay on screen at 1280-1535 whatever the names and regions are.
+    { key: 'position', header: 'Position', sortable: true, maxWidth: '7rem' },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem' },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
     { key: 'isFirstAidQualified', header: 'First Aid', type: 'boolean', align: 'center' },
     { key: 'isMedicationCompetent', header: 'Meds', type: 'boolean', align: 'center' },
-    { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center' },
-    { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center' },
+    { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center', priority: 'low' },
+    { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center', priority: 'low' },
     {
       key: 'workerScreening',
       header: 'Worker Screening',
