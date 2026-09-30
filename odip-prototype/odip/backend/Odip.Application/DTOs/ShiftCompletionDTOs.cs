@@ -27,6 +27,22 @@ public record FinishShiftDto
     public bool GeolocationDeclined { get; init; }
     /// <summary>Supplied only on the manual-start path — Start was skipped, so Finish supplies the real ActualStart.</summary>
     public DateTime? ActualStart { get; init; }
+
+    /// <summary>
+    /// The handover note for the next worker (max 2000 chars; blank is allowed - the handover is prompted but
+    /// optional). Stored on the completion and shown to the participant's next worker.
+    /// </summary>
+    [StringLength(2000)]
+    public string? HandoverText { get; init; }
+
+    /// <summary>"Nothing to hand over", confirmed explicitly. Mutually exclusive with a non-blank <see cref="HandoverText"/> (400 SHIFT_HANDOVER_CONFLICT).</summary>
+    public bool NothingToHandOver { get; init; }
+
+    /// <summary>
+    /// "Nothing to note", confirmed explicitly. Lets Finish proceed when the shift has no notes (otherwise
+    /// 409 SHIFT_NOTE_REQUIRED, unchanged). Stored on the completion only when there really are no notes.
+    /// </summary>
+    public bool NothingToNote { get; init; }
 }
 
 /// <summary>
@@ -86,7 +102,14 @@ public record ShiftCompletionDto(
     /// <summary>Whole minutes spent on breaks (a running break counts up to now).</summary>
     int BreakMinutes,
     /// <summary>Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative.</summary>
-    int NetWorkedMinutes);
+    int NetWorkedMinutes,
+    // ── Shift package: what the worker left at Finish ──
+    /// <summary>The handover note left for the next worker; null when none was written.</summary>
+    string? HandoverText,
+    /// <summary>The worker confirmed "nothing to hand over".</summary>
+    bool NothingToHandOver,
+    /// <summary>The worker confirmed "nothing to note" instead of writing a shift note.</summary>
+    bool NothingToNoteConfirmed);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>

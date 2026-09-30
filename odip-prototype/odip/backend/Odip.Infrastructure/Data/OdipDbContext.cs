@@ -111,6 +111,9 @@ public class OdipDbContext : DbContext
 
     /// <summary>Breaks taken during a shift, hung off the active <see cref="ShiftCompletion"/> — see <see cref="Rostering.ShiftBreak"/>'s type doc.</summary>
     public DbSet<ShiftBreak> ShiftBreaks => Set<ShiftBreak>();
+
+    /// <summary>The next worker marking a handover as read - see <see cref="Rostering.HandoverAcknowledgement"/>.</summary>
+    public DbSet<HandoverAcknowledgement> HandoverAcknowledgements => Set<HandoverAcknowledgement>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
@@ -1230,6 +1233,7 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.ReturnReason).HasMaxLength(2000);
+            entity.Property(e => e.HandoverText).HasMaxLength(2000);
 
             // Restrict: same idiom as ShiftNote -> Shift — a shift's completion history must
             // not be silently cascade-deleted out from under it.
@@ -1267,6 +1271,24 @@ public class OdipDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName(ShiftBreak.OneRunningIndexName)
                 .HasFilter("\"EndedAt\" IS NULL");
+        });
+
+        // ── HandoverAcknowledgement (shift package) ─────────────────
+        modelBuilder.Entity<HandoverAcknowledgement>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict throughout: an acknowledgement is an audit-worthy record of who read what; the completion,
+            // shift and user it points at must not cascade it away.
+            entity.HasOne(e => e.SourceCompletion).WithMany().HasForeignKey(e => e.SourceCompletionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Shift).WithMany().HasForeignKey(e => e.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // One acknowledgement per reader per handover - acknowledging again is an idempotent no-op.
+            entity.HasIndex(e => new { e.SourceCompletionId, e.UserId })
+                .IsUnique()
+                .HasDatabaseName(HandoverAcknowledgement.UniqueReaderIndexName);
+            entity.HasIndex(e => new { e.TenantId, e.ShiftId });
         });
 
         // ── LeaveRequest ─────────────────────────────────────────
@@ -1849,6 +1871,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ShiftBreak>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftBreak>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<HandoverAcknowledgement>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<HandoverAcknowledgement>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()

@@ -54,13 +54,17 @@ public class PortalController : ControllerBase
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
     private readonly TimeProvider _clock;
     private readonly ShiftBreakService _breaks;
+    private readonly ShiftHandoverService _handover;
+    private readonly ShiftPackageService _package;
 
     public PortalController(
         OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
         TimeProvider? clock = null,
-        ShiftBreakService? breaks = null)
+        ShiftBreakService? breaks = null,
+        ShiftHandoverService? handover = null,
+        ShiftPackageService? package = null)
     {
         _db = db;
         _currentTenant = currentTenant;
@@ -69,6 +73,8 @@ public class PortalController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
         _clock = clock ?? TimeProvider.System;
         _breaks = breaks ?? new ShiftBreakService(db, _clock);
+        _handover = handover ?? new ShiftHandoverService(db, _clock);
+        _package = package ?? new ShiftPackageService(db, new MedicationSlotService(db, _clock));
     }
 
     private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
@@ -172,6 +178,15 @@ public class PortalController : ControllerBase
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, shift.ReturnCount, ct);
         var breakDtos = completionDto?.Breaks ?? Array.Empty<ShiftBreakDto>();
 
+        // Handover baton pass (D4): the latest handover from a PREVIOUS shift for this participant, with the caller's
+        // own read state, and the last 3 holders. The caller is the shift's own worker (ownership was established).
+        var handoverView = await _handover.GetAsync(shift, shift.UserId!.Value, ct);
+
+        // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress).
+        var finishBlockers = shift.Status == ShiftStatus.InProgress
+            ? await _package.GetFinishBlockersAsync(shift, activeCompletion, ct)
+            : new List<PortalFinishBlockerDto>();
+
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
         // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
         // why". Most recent Returned row's reason, independent of the current active completion.
@@ -191,7 +206,10 @@ public class PortalController : ControllerBase
             completionDto,
             shift.ReturnCount,
             lastReturnReason,
-            breakDtos);
+            breakDtos,
+            handoverView.Latest,
+            handoverView.Trail,
+            finishBlockers);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
@@ -335,12 +353,35 @@ public class PortalController : ControllerBase
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
 
+        // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation.
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
-        if (!hasNote)
+        if (!hasNote && !dto.NothingToNote)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Add a shift note before finishing.", ShiftErrorCodes.ShiftNoteRequired));
 
-        var now = DateTime.UtcNow;
+        // Handover (D4): prompted at End but optional - blank is fine, and "nothing to hand over" is an explicit
+        // confirmation, not the same as leaving it blank. Writing one AND saying there is nothing is contradictory.
+        var handoverText = string.IsNullOrWhiteSpace(dto.HandoverText) ? null : dto.HandoverText.Trim();
+        if (dto.NothingToHandOver && handoverText is not null)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Write a handover or confirm there is nothing to hand over, not both.", ShiftErrorCodes.ShiftHandoverConflict));
+
+        // The End checklist, ENFORCED: every dose due in the rostered window needs an outcome (or a "not given this
+        // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the
+        // current shift detail as data so the client can refresh what it shows.
+        var checkedCompletion = shift.Status == ShiftStatus.InProgress
+            ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct)
+            : null;
+        var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, ct);
+        if (blockers.Count > 0)
+        {
+            var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
+            var blocked = ApiResponse<PortalShiftDetailDto>.Fail(detail, blockers.Select(b => b.Message).ToList());
+            blocked.Code = ShiftErrorCodes.ShiftFinishBlocked;
+            return UnprocessableEntity(blocked);
+        }
+
+        var now = NowUtc;
         ShiftCompletion completion;
 
         if (shift.Status == ShiftStatus.Published)
@@ -404,6 +445,9 @@ public class PortalController : ControllerBase
 
         completion.ActualEnd = now;
         completion.SubmittedAt = now;
+        completion.HandoverText = handoverText;
+        completion.NothingToHandOver = dto.NothingToHandOver;
+        completion.NothingToNoteConfirmed = dto.NothingToNote && !hasNote;
         completion.EndLatitude = dto.Latitude;
         completion.EndLongitude = dto.Longitude;
         completion.GeolocationDeclined = completion.GeolocationDeclined || dto.GeolocationDeclined;
@@ -437,6 +481,58 @@ public class PortalController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // HANDOVER (shift package, D4)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The next worker marks the participant's latest handover as READ - who and when are recorded and audited. Only
+    /// for the caller's OWN shift, before it is finished (Published or InProgress). Idempotent. The optional
+    /// `completionId` names the handover the worker saw: if a newer one has arrived, 409 SHIFT_HANDOVER_CHANGED (with
+    /// the refreshed shift as data) and nothing is recorded. 404 SHIFT_HANDOVER_NOT_FOUND when there is nothing to read.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/handover/ack")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> AcknowledgeHandover(
+        Guid id, [FromBody] AcknowledgeHandoverDto? dto, CancellationToken ct)
+    {
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        ActionResult? stateConflict = shift!.Status switch
+        {
+            ShiftStatus.Published or ShiftStatus.InProgress => null,
+            ShiftStatus.PendingReview => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished)),
+            ShiftStatus.Completed => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted)),
+            ShiftStatus.Cancelled => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled)),
+            _ => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
+        };
+        if (stateConflict is not null) return stateConflict;
+
+        var outcome = await _handover.AcknowledgeAsync(shift, shift.UserId!.Value, dto?.CompletionId, ct);
+        switch (outcome)
+        {
+            case HandoverAckOutcome.NothingToAcknowledge:
+                return NotFound(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "There's no handover to mark as read.", ShiftErrorCodes.ShiftHandoverNotFound));
+
+            case HandoverAckOutcome.Changed:
+            {
+                var current = await BuildShiftDetailDtoAsync(shift, ct);
+                var changed = ApiResponse<PortalShiftDetailDto>.Fail(
+                    current, new List<string> { "There is a newer handover. Read it before marking it as read." });
+                changed.Code = ShiftErrorCodes.ShiftHandoverChanged;
+                return Conflict(changed);
+            }
+
+            default:
+                return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+        }
     }
 
     // ══════════════════════════════════════════════════════════════

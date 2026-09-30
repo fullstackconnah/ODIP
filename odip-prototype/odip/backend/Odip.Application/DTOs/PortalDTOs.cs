@@ -122,7 +122,56 @@ public record PortalShiftDetailDto(
     /// <summary>Breaks taken in the shift's active completion, oldest first (empty before Start). The same list rides on
     /// <c>completion.breaks</c>; it is repeated here so the package header can show a running break without reaching
     /// into the completion.</summary>
-    IReadOnlyList<ShiftBreakDto> Breaks);
+    IReadOnlyList<ShiftBreakDto> Breaks,
+    /// <summary>The latest handover for this participant from a PREVIOUS shift (the most recent submitted-or-approved
+    /// completion's), or null when there has never been one. The next worker marks it read
+    /// (<c>POST portal/shifts/{id}/handover/ack</c>).</summary>
+    PortalHandoverDto? Handover,
+    /// <summary>The last 3 holders of this participant (most recent first, INCLUDING the handover's author): name and
+    /// shift date only - a custody trail, never the text.</summary>
+    IReadOnlyList<PortalHandoverTrailEntryDto> HandoverTrail,
+    /// <summary>What still blocks Finish right now (only while InProgress; empty otherwise): doses in the shift window
+    /// with no outcome, and a running break. Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is non-empty.</summary>
+    IReadOnlyList<PortalFinishBlockerDto> FinishBlockers);
+
+/// <summary>
+/// The latest handover for a participant, as the next worker sees it. <see cref="Text"/> is null when the author wrote
+/// none (<see cref="NothingToHandOver"/> says whether they said so explicitly). The read state is the CALLER's.
+/// </summary>
+public record PortalHandoverDto(
+    Guid CompletionId,
+    string? Text,
+    bool NothingToHandOver,
+    Guid AuthorUserId,
+    string AuthorName,
+    /// <summary>The service date of the shift the handover came from.</summary>
+    DateOnly ShiftDate,
+    /// <summary>When the author finished the shift (UTC).</summary>
+    DateTime SubmittedAt,
+    /// <summary>True when there is text to read (a blank or "nothing to hand over" handover needs no acknowledgement).</summary>
+    bool RequiresAcknowledgement,
+    /// <summary>The caller has marked this handover as read.</summary>
+    bool IsRead,
+    DateTime? ReadAt);
+
+/// <summary>One holder in the custody trail: who worked the participant, and on which shift date.</summary>
+public record PortalHandoverTrailEntryDto(Guid CompletionId, string WorkerName, DateOnly ShiftDate);
+
+/// <summary>POST portal/shifts/{id}/handover/ack body. <see cref="CompletionId"/> (optional) names the handover the worker
+/// believes they read; if a newer one has arrived since, the call is 409 SHIFT_HANDOVER_CHANGED and nothing is recorded.</summary>
+public record AcknowledgeHandoverDto
+{
+    public Guid? CompletionId { get; init; }
+}
+
+/// <summary>One thing that must be cleared before Finish. <see cref="Code"/> is DOSE_OUTCOME_MISSING or BREAK_RUNNING.</summary>
+public record PortalFinishBlockerDto(
+    string Code,
+    string Message,
+    Guid? MedicationId,
+    string? MedicationName,
+    /// <summary>For a dose: the provider-local slot time (no zone suffix).</summary>
+    DateTime? ScheduledAt);
 
 /// <summary>
 /// A medication administration OR an incident report (IN-7) awaiting (or already given) the

@@ -131,7 +131,8 @@ public static class ShiftCompletionMapper
             c.VarianceMinutesStart, c.VarianceMinutesEnd,
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
             varianceReviewMinutes, shiftReturnCount, incidents,
-            breaks.Select(b => ToBreakDto(b, now)).ToList(), breakMinutes, netMinutes);
+            breaks.Select(b => ToBreakDto(b, now)).ToList(), breakMinutes, netMinutes,
+            c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed);
     }
 
     /// <summary>Maps a break; a running break's minutes are the time so far (up to <paramref name="nowUtc"/>).</summary>

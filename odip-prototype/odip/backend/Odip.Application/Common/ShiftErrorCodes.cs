@@ -33,4 +33,10 @@ public static class ShiftErrorCodes
     public const string ShiftBreakEndNotAfterStart = "SHIFT_BREAK_END_NOT_AFTER_START";
     public const string ShiftBreakOverlap = "SHIFT_BREAK_OVERLAP";
     public const string ShiftBreakEndRequired = "SHIFT_BREAK_END_REQUIRED";
+
+    // ── Shift package (finish validation, handover) ──
+    public const string ShiftFinishBlocked = "SHIFT_FINISH_BLOCKED";
+    public const string ShiftHandoverNotFound = "SHIFT_HANDOVER_NOT_FOUND";
+    public const string ShiftHandoverChanged = "SHIFT_HANDOVER_CHANGED";
+    public const string ShiftHandoverConflict = "SHIFT_HANDOVER_CONFLICT";
 }

@@ -73,6 +73,10 @@ public static class AuditedEntities
         // must be recoverable, same reasoning as ShiftCompletion above.
         typeof(ShiftBreak),
 
+        // Handover acknowledgement (shift package): who marked a handover as read, and when - a compliance-adjacent
+        // "did the next worker actually see this?" record, audited like the shift notes it comes from.
+        typeof(HandoverAcknowledgement),
+
         // Compliance-coverage report (item 11): these six were flagged as audited-entity gaps.
         // Restrictive practices, claims/line items, participant consent decisions, shift notes
         // (compliance-adjacent per its own remarks — falls/medication/injury/behaviour keyword
