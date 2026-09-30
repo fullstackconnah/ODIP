@@ -1,4 +1,5 @@
 import type { FundingRouteType, BillableEventStatus } from '@/api/types'
+import type { Tone } from '@/lib/tone'
 import {
   FUNDING_ROUTE_TYPES,
   FUNDING_ROUTE_TYPE_LABELS,
@@ -45,15 +46,16 @@ export function isBillableEventLocked(status: BillableEventStatus): boolean {
   return LOCKED_BILLABLE_EVENT_STATUSES.includes(status)
 }
 
-export const BILLABLE_EVENT_STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-  validated: 'bg-[var(--color-secondary-container)] text-[var(--color-secondary)]',
-  routed: 'bg-[var(--color-secondary-container)] text-[var(--color-secondary)]',
-  claimed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  invoiced: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  paid: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  rejected: 'bg-[var(--color-error-container)] text-[var(--color-destructive)]',
-  cancelled: 'bg-[var(--color-error-container)] text-[var(--color-destructive)]',
+/** The StatusBadge tone of each billable-event status (StatusBadge `colorMap`). */
+export const BILLABLE_EVENT_STATUS_COLORS: Record<string, Tone> = {
+  draft: 'neutral',
+  validated: 'info',
+  routed: 'info',
+  claimed: 'success',
+  invoiced: 'success',
+  paid: 'success',
+  rejected: 'danger',
+  cancelled: 'danger',
 }
 
 // ── Claim Day Type / Claim Type / GST Code labels ───────────────

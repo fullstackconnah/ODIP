@@ -10,6 +10,7 @@ import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { StaffListDto } from '@/api/types/staff'
 import type { IncidentWitnessDto } from '@/api/types/incidents'
 import type { IncidentFormData } from '../incidentFormSchema'
+import type { Tone } from '@/lib/tone'
 import { X } from 'lucide-react'
 
 export type WitnessesStepProps = {
@@ -26,12 +27,15 @@ export type WitnessesStepProps = {
 
 type WitnessRow = { existingId?: string; witnessUserId: string | null; witnessName: string }
 
-const WITNESS_STATUS_COLOR_MAP: Record<string, string> = {
-  notrequired: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-  pending: 'bg-amber-100 text-amber-800',
-  approved: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  declined: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const WITNESS_STATUS_COLOR_MAP: Record<string, Tone> = {
+  notrequired: 'neutral',
+  pending: 'warning',
+  approved: 'success',
+  declined: 'danger',
 }
+
+// Staff and External are categories of witness, not states: info and neutral.
+const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
 
 /**
  * IN-7 — wizard step "Witnesses". A single `witnesses[]` field array holds both staff (approvable
@@ -75,7 +79,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
     {
       key: 'type',
       header: 'Type',
-      render: (row) => <StatusBadge status={row.witnessUserId ? 'Staff' : 'External'} colorMap={{ staff: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]', external: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]' }} />,
+      render: (row) => <StatusBadge status={row.witnessUserId ? 'Staff' : 'External'} colorMap={WITNESS_TYPE_COLOR_MAP} />,
     },
     { key: 'witnessName', header: 'Name' },
     {

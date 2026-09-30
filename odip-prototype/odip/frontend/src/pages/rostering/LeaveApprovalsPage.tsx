@@ -27,6 +27,7 @@ import type {
 } from '@/api/types'
 import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import type { Tone } from '@/lib/tone'
 
 type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
@@ -46,7 +47,7 @@ const STATUS_FILTER_ITEMS = [
 // Neutral grey — StatusBadge's own STATUS_COLORS has no 'record' key, so without this override
 // it would fall through to the amber DEFAULT_COLOR and read as "awaiting decision", which a
 // legacy record (no status/decision workflow at all) never is.
-const LEGACY_RECORD_COLOR = { record: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]' }
+const LEGACY_RECORD_COLOR: Record<string, Tone> = { record: 'neutral' }
 
 function rowType(row: ApprovalRow) {
   if (row.rowKind === 'leave') return `Leave — ${LEAVE_TYPE_LABELS[row.data.leaveType]}`

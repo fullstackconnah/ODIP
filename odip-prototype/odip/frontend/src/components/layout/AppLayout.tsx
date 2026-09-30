@@ -401,9 +401,9 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         {viewingUserId && (
           <div className="bg-[var(--color-warning-container)] border-b border-[var(--color-warning)] px-[var(--gutter,20px)] py-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-[var(--color-warning)] text-xs font-bold uppercase tracking-wide">Viewing as</span>
+              <span className="text-[var(--color-on-warning-container)] text-xs font-bold uppercase tracking-wide">Viewing as</span>
               <span className="text-[var(--color-on-warning-container)] text-sm font-semibold">{user.fullName}</span>
-              <span className="text-[var(--color-warning)] text-xs">({user.role})</span>
+              <span className="text-[var(--color-on-warning-container)] text-xs">({user.role})</span>
             </div>
             <button
               onClick={() => {

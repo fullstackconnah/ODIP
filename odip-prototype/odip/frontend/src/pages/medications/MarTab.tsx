@@ -14,6 +14,7 @@ import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
+import type { Tone } from '@/lib/tone'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -73,12 +74,12 @@ function relativeTime(iso: string | null): string {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
-const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
-  administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  wrongmedication: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
+  administered: 'success',
+  refused: 'danger',
+  withheld: 'warning',
+  missed: 'danger',
+  wrongmedication: 'danger',
 }
 
 function SkeletonRow() {

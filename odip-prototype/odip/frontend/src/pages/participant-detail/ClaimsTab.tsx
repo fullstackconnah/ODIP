@@ -10,15 +10,16 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import type { TripClaimListDto, ShiftClaimPreviewResponseDto } from '@/api/types'
+import type { Tone } from '@/lib/tone'
 
 // Distinct from trip-detail/ClaimsTab.tsx (same name, different directory — see the
 // shift-completion design spec §4 "Claims entry point"). This tab lists BOTH kinds of claim a
 // participant may have (a Trip claim generated from one of their trip bookings, or a Shift claim
 // generated below) rather than only shift claims, so a coordinator has one place to see all of a
 // participant's NDIS claims.
-const KIND_COLOR_MAP: Record<string, string> = {
-  trip: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
-  shift: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
+const KIND_COLOR_MAP: Record<string, Tone> = {
+  trip: 'info',
+  shift: 'accessible',
 }
 
 /** yyyy-MM-dd in the viewer's local time — never UTC, which can silently shift the date near

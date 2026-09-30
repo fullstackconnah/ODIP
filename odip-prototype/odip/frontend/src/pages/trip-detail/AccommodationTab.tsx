@@ -9,6 +9,7 @@ import {
   useCancelReservation,
 } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { TONE } from '@/lib/tone'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -231,7 +232,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
           <div className="min-w-0 py-0.5 md:max-w-[26rem]">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{r.propertyName}</span>
-              {r.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full">Conflict</span>}
+              {r.hasOverlapConflict && <span className={`${TONE.danger.solid} text-xs px-2 py-0.5 rounded-full`}>Conflict</span>}
             </div>
             {prop?.location && (
               // w-0 + min-w-full: a truncated line still reports its whole text as the cell's minimum width, which pinned the Property

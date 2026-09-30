@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
+import { TONE } from '@/lib/tone'
 
 const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveCount, mockUseStaff } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
@@ -916,5 +917,68 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
     expect(children.indexOf(band())).toBe(1)
     expect(children[0]).toContainElement(screen.getByRole('heading', { level: 1 }))
     expect(children[2].className).toMatch(/xl:grid-cols-2/)
+  })
+})
+
+// A trip status and a task priority are coloured one way everywhere: the dashboard's chips take StatusBadge's tones (lib/tone.ts),
+// not a map of their own (it had no entry for Cancelled or Archived, which fell to grey, and read Urgent as Medium).
+describe('DashboardPage — trip status and task priority chips use the shared tones', () => {
+  const dashboardWith = (overrides: Record<string, unknown>) => ({
+    data: {
+      upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
+      overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0,
+      tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
+      qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
+      ...overrides,
+    },
+    isLoading: false, isError: false,
+  })
+  const trip = (status: string) => ({
+    id: `t-${status}`, tripName: `Trip ${status}`, startDate: '2026-08-14', destination: 'Somewhere', currentParticipantCount: 1, maxParticipants: 6, status,
+  })
+  const task = (priority: string) => ({
+    id: `task-${priority}`, title: `Task ${priority}`, priority, dueDate: new Date(Date.now() - 3600000).toISOString(), tripName: 'Beach Trip', ownerName: 'Sam Owner',
+  })
+
+  it.each([
+    ['Draft', 'neutral'],
+    ['Planning', 'info'],
+    ['OpenForBookings', 'success'],
+    ['WaitlistOnly', 'warning'],
+    ['Confirmed', 'success'],
+    ['InProgress', 'accessible'],
+    ['Completed', 'success'],
+    ['Cancelled', 'danger'],
+    ['Archived', 'neutral'],
+  ] as const)('colours a %s trip with the %s tone', (status, tone) => {
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(dashboardWith({ upcomingTripCount: 1, upcomingTrips: [trip(status)] }))
+    renderPage()
+
+    const chip = screen.getByText(status.replace(/([A-Z])/g, ' $1').trim())
+    expect(chip).toHaveClass('rounded-full', 'text-xs', 'font-bold', 'shrink-0', ...TONE[tone].solid.split(' '))
+  })
+
+  it.each([
+    ['Urgent', 'danger'],
+    ['High', 'danger'],
+    ['Medium', 'warning'],
+    ['Low', 'info'],
+  ] as const)('colours a %s priority with the %s tone and keeps the uppercase chip shape', (priority, tone) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(dashboardWith({ overdueTaskCount: 1, overdueTasks: [task(priority)] }))
+    renderPage()
+
+    const chip = screen.getByText(priority)
+    expect(chip).toHaveClass('rounded-full', 'text-xs', 'font-bold', 'uppercase', 'tracking-widest', 'shrink-0', ...TONE[tone].solid.split(' '))
+  })
+
+  it('reads a task with no priority as Medium (warning), as before', () => {
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(dashboardWith({ overdueTaskCount: 1, overdueTasks: [{ ...task('Medium'), priority: null }] }))
+    renderPage()
+
+    expect(screen.getByText('Medium')).toHaveClass(...TONE.warning.solid.split(' '))
   })
 })

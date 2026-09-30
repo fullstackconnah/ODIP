@@ -126,10 +126,11 @@ export const STATUS_TONE: Record<string, Tone> = {
   overdue: 'danger',
   conflict: 'danger',
 
-  // Severity
+  // Severity, and task priority (Urgent had no entry: it fell to the amber fallback on the Tasks page and to Medium on the dashboard)
   low: 'info',
   medium: 'warning',
   high: 'danger',
+  urgent: 'danger',
   critical: 'danger',
 
   // Claims
@@ -145,10 +146,13 @@ export const STATUS_TONE: Record<string, Tone> = {
   pending: 'warning',
   notrequired: 'neutral',
 
-  // Plan types
+  // Plan types are categories, never a state: info, accessible and neutral keep the three apart, and none is warning or danger.
+  // (Self managed was the warning amber, which read as "needs attention" on every self-managed plan.) AgencyManaged is the
+  // enum's name for NDIA-managed, so it takes the same tone.
   ndiamanaged: 'info',
+  agencymanaged: 'info',
   planmanaged: 'accessible',
-  selfmanaged: 'warning',
+  selfmanaged: 'neutral',
 
   // Lifecycle worklists (Inquiries/Onboarding). `new` is in QUIET_STATUS.
   new: 'neutral',

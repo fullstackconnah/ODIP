@@ -105,7 +105,7 @@ export default function ContactsTab({ participantId }: { participantId: string |
         <StatusBadge
           status={role.status}
           label={CONTACT_ROLE_STATUS_LABELS[role.status]}
-          colorMap={{ superseded: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]' }}
+          colorMap={{ superseded: 'neutral' }}
         />
       ),
     },

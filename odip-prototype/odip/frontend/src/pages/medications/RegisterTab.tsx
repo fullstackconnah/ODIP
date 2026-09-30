@@ -14,6 +14,7 @@ import { usePermissions } from '@/lib/permissions'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
+import type { Tone } from '@/lib/tone'
 
 // Matches MedicationsController.GetRegister's own PagingParams.DefaultPageSize (backend house
 // convention: default 50, ceiling 200) — kept in sync manually since paging params cross the API
@@ -27,10 +28,10 @@ const STATUS_ITEMS = [
   { value: 'Ceased', label: 'Ceased' },
 ]
 
-const MED_STATUS_COLOR_MAP: Record<string, string> = {
-  active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  onhold: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  ceased: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
+  active: 'success',
+  onhold: 'warning',
+  ceased: 'danger',
 }
 
 export default function RegisterTab() {

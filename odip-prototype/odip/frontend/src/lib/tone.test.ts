@@ -3,7 +3,7 @@ import {
   TONE, CARD_WASH, ON_TINT, STATUS_TONE, QUIET_STATUS, TRIP_STATUS_LABELS,
   attentionOf, isTone, statusClass, statusKey, toneForStatus, toneOf, type Tone,
 } from './tone'
-import { TRIP_STATUSES } from '@/api/types/enums'
+import { PLAN_TYPES, TASK_PRIORITIES, TRIP_STATUSES } from '@/api/types/enums'
 
 const TONES = Object.keys(TONE) as Tone[]
 const textClass = (pair: string) => pair.split(' ').find(c => c.startsWith('text-'))
@@ -99,5 +99,22 @@ describe('STATUS_TONE', () => {
     expect([...QUIET_STATUS]).toEqual(['new'])
     expect(statusClass('New')).toBe(`${TONE.neutral.soft} ${TONE.neutral.ink}`)
     expect(bgClass(statusClass('New'))).toBe('bg-[var(--color-surface-container)]')
+  })
+})
+
+describe('plan types and task priorities', () => {
+  it('plan types are categories, never a state: none is warning or danger, and the three plan types stay distinguishable', () => {
+    for (const planType of PLAN_TYPES) expect(['warning', 'danger'], planType).not.toContain(toneForStatus(planType))
+    expect(new Set(PLAN_TYPES.map(toneForStatus)).size).toBe(PLAN_TYPES.length)
+    // Self managed left the warning amber (it read as "needs attention" on every self-managed plan): neutral is the category tone left over.
+    expect(toneForStatus('SelfManaged')).toBe('neutral')
+    expect(toneForStatus('PlanManaged')).toBe('accessible')
+    expect(toneForStatus('AgencyManaged')).toBe('info')
+    // NdiaManaged is the same plan type under an older spelling.
+    expect(toneForStatus('NdiaManaged')).toBe(toneForStatus('AgencyManaged'))
+  })
+
+  it('task priority has one mapping: Low info, Medium warning, High and Urgent danger (Urgent had no entry and fell to amber)', () => {
+    expect(TASK_PRIORITIES.map(p => [p, toneForStatus(p)])).toEqual([['Low', 'info'], ['Medium', 'warning'], ['High', 'danger'], ['Urgent', 'danger']])
   })
 })

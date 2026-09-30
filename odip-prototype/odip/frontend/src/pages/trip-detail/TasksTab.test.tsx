@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TasksTab from './TasksTab'
 import type { TaskDto } from '@/api/types'
+import { TONE } from '@/lib/tone'
 
 const { mockUpdateMutate } = vi.hoisted(() => ({
   mockUpdateMutate: vi.fn(),
@@ -71,5 +72,22 @@ describe('TasksTab', () => {
 
     expect(screen.queryByRole('button', { name: /not started/i })).not.toBeInTheDocument()
     expect(screen.getByText('NotStarted')).toBeInTheDocument()
+  })
+})
+
+// One priority mapping across the Tasks page, this tab and the dashboard: StatusBadge's tones (Low info, Medium warning, High and Urgent
+// danger). The tab had its own two-colour rule (High/Urgent red, everything else blue) on raw-hex `.badge-*` classes.
+describe('TasksTab — priority pill', () => {
+  it.each([
+    ['Urgent', 'danger'],
+    ['High', 'danger'],
+    ['Medium', 'warning'],
+    ['Low', 'info'],
+  ] as const)('shows %s as a StatusBadge in the %s tone', (priority, tone) => {
+    renderTab({ tasks: [baseTask({ priority })] })
+
+    const pill = screen.getByText(priority)
+    expect(pill).toHaveClass('text-xs', 'px-2', 'py-0.5', 'rounded-full', ...TONE[tone].solid.split(' '))
+    expect(pill.className).not.toMatch(/badge-/)
   })
 })
