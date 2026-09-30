@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import TripsPage from './TripsPage'
 import type { TripListDto } from '@/api/types'
 import { TAP_AREA } from '@/components/tapArea'
+import { TONE } from '@/lib/tone'
 
 const { mockUseTrips, mockUseTrip, mockPatchMutate } = vi.hoisted(() => ({
   mockUseTrips: vi.fn(),
@@ -344,5 +345,39 @@ describe('TripsPage — starting a new trip', () => {
     renderPage()
 
     expect(screen.queryByRole('link', { name: /New Trip/ })).not.toBeInTheDocument()
+  })
+})
+
+// A trip status is coloured one way everywhere (lib/tone.ts): these pills used `getStatusColor`, which had no entry for Planning,
+// OpenForBookings or InProgress, so all three were amber (the warning signal) on this page and something else on the trip header.
+describe('TripsPage — trip status pills use the shared tones', () => {
+  it.each([
+    ['Draft', 'neutral'],
+    ['Planning', 'info'],
+    ['OpenForBookings', 'success'],
+    ['Confirmed', 'success'],
+    ['InProgress', 'accessible'],
+  ] as const)('colours a %s trip with the %s tone in the table and in the cards', (status, tone) => {
+    mockUseTrips.mockReturnValue({ data: [trip({ status })], isLoading: false })
+    const label = status.replace(/([A-Z])/g, ' $1').trim()
+
+    const table = renderPage()
+    expect(screen.getByRole('button', { name: label })).toHaveClass(...TONE[tone].solid.split(' '))
+    table.unmount()
+
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+    expect(screen.getByRole('button', { name: label })).toHaveClass(...TONE[tone].solid.split(' '))
+  })
+
+  it('shows the waitlist count in the warning tone (table and cards), not the old badge-pending class', () => {
+    const table = renderPage()
+    expect(screen.getByText('2 wait')).toHaveClass('rounded-full', 'text-xs', ...TONE.warning.solid.split(' '))
+    expect(screen.getByText('2 wait').className).not.toMatch(/badge-/)
+    table.unmount()
+
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+    expect(screen.getByText('2 waitlist')).toHaveClass('rounded-full', 'text-xs', ...TONE.warning.solid.split(' '))
   })
 })

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
 import type { TripStatus, TripListDto } from '@/api/types'
-import { formatDateAu, getStatusColor } from '@/lib/utils'
+import { formatDateAu } from '@/lib/utils'
+import { TONE, statusClass } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -224,7 +225,7 @@ export default function TripsPage() {
             variant="pill"
             value={t.status}
             onChange={val => handleStatusChange(t, val as TripStatus)}
-            colorClass={`${getStatusColor(t.status)} h-[var(--control-h-sm)] whitespace-nowrap`}
+            colorClass={`${statusClass(t.status)} h-[var(--control-h-sm)] whitespace-nowrap`}
             items={TRIP_STATUS_ITEMS}
           />
         </span>
@@ -238,7 +239,7 @@ export default function TripsPage() {
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {t.currentParticipantCount}/{t.maxParticipants || '—'}
           {t.waitlistCount > 0 && (
-            <span className="badge-pending rounded-full px-1.5 py-0.5 text-xs">{t.waitlistCount} wait</span>
+            <span className={`${TONE.warning.solid} rounded-full px-1.5 py-0.5 text-xs`}>{t.waitlistCount} wait</span>
           )}
         </span>
       ),
@@ -415,13 +416,13 @@ export default function TripsPage() {
                     variant="pill"
                     value={t.status}
                     onChange={val => handleStatusChange(t, val as TripStatus)}
-                    colorClass={getStatusColor(t.status)}
+                    colorClass={statusClass(t.status)}
                     items={TRIP_STATUS_ITEMS}
                   />
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>
-                  {t.waitlistCount > 0 && <span className="badge-pending rounded-full px-2 py-0.5 text-xs">{t.waitlistCount} waitlist</span>}
+                  {t.waitlistCount > 0 && <span className={`${TONE.warning.solid} rounded-full px-2 py-0.5 text-xs`}>{t.waitlistCount} waitlist</span>}
                   {t.leadCoordinatorName && <span className="text-xs">{t.leadCoordinatorName}</span>}
                 </div>
               </div>

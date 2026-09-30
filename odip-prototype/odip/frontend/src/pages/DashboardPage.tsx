@@ -6,6 +6,7 @@ import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeve
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
 import { StatCard, type StatCardProps } from '@/components/StatCard'
+import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { Link } from 'react-router-dom'
 import {
@@ -20,22 +21,6 @@ function dueAgo(dueDate: string): string {
   const diffH = Math.floor(diffMs / 3600000)
   if (diffH < 24) return `${diffH}h ago`
   return `${Math.floor(diffH / 24)}d ago`
-}
-
-const priorityStyle: Record<string, string> = {
-  High: 'text-[var(--color-destructive)] bg-[var(--color-error-container)]/30 uppercase tracking-widest',
-  Medium: 'text-[var(--color-muted-foreground)] bg-[var(--color-surface-container)] uppercase tracking-widest',
-  Low: 'text-[var(--color-info)] bg-[var(--color-surface-container-low)] uppercase tracking-widest',
-}
-
-const statusBadge: Record<string, string> = {
-  Draft:           'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
-  Planning:        'bg-[var(--color-secondary-container)]/60 text-[var(--color-secondary)]',
-  OpenForBookings: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  WaitlistOnly:    'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  Confirmed:       'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  InProgress:      'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
-  Completed:       'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
 }
 
 // Tint an attention tile only when its count is actionable (> 0); at zero it is quiet.
@@ -227,7 +212,6 @@ export default function DashboardPage() {
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
               {d.upcomingTrips.slice(0, 5).map((t: any) => {
-                const badge = statusBadge[t.status] || statusBadge.Draft
                 return (
                   <Link
                     key={t.id}
@@ -244,9 +228,8 @@ export default function DashboardPage() {
                     <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @lg:inline">
                       {t.currentParticipantCount}/{t.maxParticipants || '—'} pax
                     </span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${badge}`}>
-                      {t.status.replace(/([A-Z])/g, ' $1').trim()}
-                    </span>
+                    {/* The trip status is coloured by StatusBadge's own tones (lib/tone.ts), the same as the trip header, the schedule and the trips list. */}
+                    <StatusBadge status={t.status} label={t.status.replace(/([A-Z])/g, ' $1').trim()} className="shrink-0 font-bold" />
                     <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
                   </Link>
                 )
@@ -272,13 +255,11 @@ export default function DashboardPage() {
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
               {d.overdueTasks.slice(0, 5).map((t: any) => {
-                const badgeClass = priorityStyle[t.priority] || priorityStyle.Medium
                 const initials = (t.ownerName || 'UN').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                 return (
                   <div key={t.id} className="flex h-10 min-h-[var(--tap-min)] items-center gap-2 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${badgeClass}`}>
-                      {t.priority || 'Medium'}
-                    </span>
+                    {/* One priority mapping everywhere (Low info, Medium warning, High and Urgent danger): StatusBadge's tones. */}
+                    <StatusBadge status={t.priority || 'Medium'} className="shrink-0 font-bold uppercase tracking-widest" />
                     {/* The title carries the participant name (e.g. "… — Sienna W."), so it is the
                         cell that flexes; the trip and due cells give way to it when the panel is
                         narrow. `title` reveals the full text where it still has to truncate. */}

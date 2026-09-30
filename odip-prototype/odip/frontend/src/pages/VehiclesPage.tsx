@@ -11,6 +11,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatCard } from '@/components/StatCard'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { TONE } from '@/lib/tone'
 
 type VehicleTypeKey = 'Car' | 'Van' | 'Bus' | 'MiniBus' | 'AccessibleVan' | 'Other'
 
@@ -36,8 +37,9 @@ function getDateStatus(dateStr: string | null | undefined): 'overdue' | 'warning
 function StatCell({ icon: Icon, label, value, status }: {
   icon: React.ElementType; label: string; value: string; status?: 'overdue' | 'warning' | 'ok' | null
 }) {
-  const valueColor = status === 'overdue' ? 'text-[var(--color-destructive)]'
-    : status === 'warning' ? 'text-[var(--color-warning)]'
+  // The warning tone's ink, not --color-warning: amber text on the card is 2.15:1.
+  const valueColor = status === 'overdue' ? TONE.danger.ink
+    : status === 'warning' ? TONE.warning.ink
     : 'text-[var(--color-foreground)]'
   return (
     <div className="flex items-center gap-3">

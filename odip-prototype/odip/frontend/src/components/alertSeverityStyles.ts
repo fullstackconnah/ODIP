@@ -1,15 +1,21 @@
 import { AlertTriangle, AlertCircle, Info, type LucideIcon } from 'lucide-react'
 import type { AlertSeverity } from '@/api/types'
+import { TONE, type Tone } from '@/lib/tone'
+
+// An Info alert sits on the quiet surface rather than the info tone's slate wash: it must not read as a coloured banner beside the
+// Critical and Warning rows. (A deliberate exception to `TONE.info.soft`, kept from before the tone table.)
+const QUIET_ROW = 'bg-[var(--color-surface-container-low)]'
 
 /**
  * Shared icon/colour mapping for computed participant risk alerts (task 6c) — used by
  * ParticipantAlertsBanner, the participants table alerts badge, and the dashboard's
- * Critical-alerts card, so all three read the same severity consistently.
+ * Critical-alerts card, so all three read the same severity consistently. Each severity is a tone
+ * (Critical is danger, Warning is warning, Info is info): `text` is the tone's ink and `bg` its soft wash.
  */
-export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; text: string; bg: string; label: string }> = {
-  Critical: { icon: AlertTriangle, text: 'text-[var(--color-destructive)]', bg: 'bg-[var(--color-error-container)]/30', label: 'Critical' },
-  Warning: { icon: AlertCircle, text: 'text-[var(--color-on-warning-container)]', bg: 'bg-[var(--color-warning-container)]', label: 'Warning' },
-  Info: { icon: Info, text: 'text-[var(--color-info)]', bg: 'bg-[var(--color-surface-container-low)]', label: 'Info' },
+export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; tone: Tone; text: string; bg: string; label: string }> = {
+  Critical: { icon: AlertTriangle, tone: 'danger', text: TONE.danger.ink, bg: TONE.danger.soft, label: 'Critical' },
+  Warning: { icon: AlertCircle, tone: 'warning', text: TONE.warning.ink, bg: TONE.warning.soft, label: 'Warning' },
+  Info: { icon: Info, tone: 'info', text: TONE.info.ink, bg: QUIET_ROW, label: 'Info' },
 }
 
 /**

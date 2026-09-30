@@ -8,20 +8,21 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { AdministrationDto } from '@/api/types/medications'
 import { formatWithTimeZone } from '@/lib/utils'
+import type { Tone } from '@/lib/tone'
 
-const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
-  administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  wrongmedication: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
+  administered: 'success',
+  refused: 'danger',
+  withheld: 'warning',
+  missed: 'danger',
+  wrongmedication: 'danger',
 }
 
-const WITNESS_STATUS_COLOR_MAP: Record<string, string> = {
-  notrequired: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-  pending: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  approved: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  declined: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const WITNESS_STATUS_COLOR_MAP: Record<string, Tone> = {
+  notrequired: 'neutral',
+  pending: 'warning',
+  approved: 'success',
+  declined: 'danger',
 }
 
 /**

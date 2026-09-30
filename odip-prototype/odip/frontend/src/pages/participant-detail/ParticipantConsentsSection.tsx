@@ -20,8 +20,8 @@ type ConsentFormState = {
 const EMPTY_FORM: ConsentFormState = { granted: '', signedByName: '', signedDate: '' }
 
 /**
- * Same status/colour lookup StatusBadge already ships (README: "check the built-in STATUS_COLORS
- * map before adding a one-off inline badge") — "active"/"cancelled"/"draft" give exactly the
+ * Same status/colour lookup StatusBadge already ships (README: "check STATUS_TONE before adding
+ * a one-off inline badge") — "active"/"cancelled"/"draft" give exactly the
  * granted (green)/declined (red)/not-recorded (muted) three-way vocabulary this needs, with
  * `label` overriding the displayed text without touching the colour lookup.
  */

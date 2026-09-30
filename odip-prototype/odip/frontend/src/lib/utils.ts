@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import type { AxiosError } from 'axios'
+import { TONE } from './tone'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -78,14 +79,18 @@ export function formatDateAu(date: string | null | undefined): string {
   return d.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/**
+ * The pill colour for a booking, task, vehicle or insurance status (the Dropdown pill triggers and a few inline pills): the green, grey, red
+ * and amber tones of lib/tone.ts, with amber for any status with no entry here. It is a generic helper whose words mean the same thing across
+ * those domains, so it is NOT the trip-status mapping: a trip's status is coloured by `statusClass` (STATUS_TONE), which has a tone for every
+ * trip status (Planning, OpenForBookings, WaitlistOnly and InProgress are not amber there).
+ */
 export function getStatusColor(status: string): string {
   const s = status.toLowerCase()
-  if (['confirmed', 'completed', 'available'].includes(s)) return 'bg-[#bbf37c] text-[#0f2000]'
-  if (['draft', 'proposed'].includes(s)) return 'bg-[#e4e2de] text-[#43493a]'
-  if (['cancelled', 'unavailable', 'nolongerattending', 'expired'].includes(s)) return 'bg-[#ffdad6] text-[var(--color-on-error-container)]'
-  if (['overdue', 'conflict'].includes(s)) return 'bg-[#ffdad6] text-[var(--color-on-error-container)]'
-  if (['none'].includes(s)) return 'bg-[#e4e2de] text-[#43493a]'
-  return 'bg-[#fef3c7] text-[#92400e]'
+  if (['confirmed', 'completed', 'available'].includes(s)) return TONE.success.solid
+  if (['draft', 'proposed', 'none'].includes(s)) return TONE.neutral.solid
+  if (['cancelled', 'unavailable', 'nolongerattending', 'expired', 'overdue', 'conflict'].includes(s)) return TONE.danger.solid
+  return TONE.warning.solid
 }
 
 export function formatCurrency(amount: number | null | undefined): string {

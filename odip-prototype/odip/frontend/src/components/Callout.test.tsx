@@ -15,6 +15,14 @@ describe('Callout primitive', () => {
     expect(el.className).toMatch(/text-\[var\(--color-destructive\)\]/)
   })
 
+  it('treats tone="danger" as the same tone as "error" (the canonical name in lib/tone.ts)', () => {
+    const { container, rerender } = render(<Callout tone="error">Could not save changes.</Callout>)
+    const asError = container.innerHTML
+    rerender(<Callout tone="danger">Could not save changes.</Callout>)
+    expect(container.innerHTML).toBe(asError)
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
+  })
+
   it('renders warning tone with role=alert (assertive) and warning-container tokens', () => {
     render(<Callout tone="warning">Intake not yet complete.</Callout>)
     const el = screen.getByRole('alert')

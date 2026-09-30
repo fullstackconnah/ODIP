@@ -8,6 +8,8 @@
 // there ("never renumber, never remove"), so this list only ever grows.
 // ══════════════════════════════════════════════════════════════
 
+import type { Tone } from '@/lib/tone'
+
 export const NOTIFICATION_EVENT_TYPES = [
   'LeaveRequestSubmitted',
   'LeaveRequestDecided',
@@ -72,18 +74,16 @@ export const NOTIFICATION_OUTBOX_STATUSES = ['Pending', 'Sent', 'Failed', 'Skipp
 export type NotificationOutboxStatus = typeof NOTIFICATION_OUTBOX_STATUSES[number]
 
 /**
- * `StatusBadge`'s built-in `STATUS_COLORS` already has a 'pending' key (amber) that matches this
- * domain's Pending for free, but no 'sent'/'failed'/'skipped' keys — without this override those
- * would all fall through to the same amber `DEFAULT_COLOR`, making a successfully-sent row look
- * identical to a failed one. Reuses the same design-token classes `STATUS_COLORS` uses for
- * equivalent semantics elsewhere (sent → the primary "confirmed" colour, failed → the
- * error-container "rejected" colour, skipped → the neutral "archived" colour).
+ * `StatusBadge`'s built-in STATUS_TONE (lib/tone.ts) already has a 'pending' key (warning) that matches this domain's Pending for free,
+ * but no 'sent'/'failed'/'skipped' keys: without this override those would all fall through to the same amber fallback, making a
+ * successfully-sent row look identical to a failed one. Tones, like every other status map: sent is success, failed is danger, skipped is
+ * neutral.
  */
-export const NOTIFICATION_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-[#fef3c7] text-[#92400e]',
-  sent: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  failed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  skipped: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+export const NOTIFICATION_STATUS_COLORS: Record<string, Tone> = {
+  pending: 'warning',
+  sent: 'success',
+  failed: 'danger',
+  skipped: 'neutral',
 }
 
 export interface NotificationPreferenceRowDto {

@@ -25,6 +25,7 @@ copying it.
 - [Modal](#modal) / [ConfirmDialog](#confirmdialog)
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
+- [Tone system](#tone-system) (`lib/tone.ts`: `TONE`, `STATUS_TONE`, how a status gets its colour)
 - [Card](#card) / [StatCard](#statcard)
 - [PageHeader](#pageheader) (and the opt-in detail variant, `PageHeaderMeta`)
 - [FactBar](#factbar) (the default strip and the opt-in glance variant)
@@ -472,17 +473,53 @@ component deliberately doesn't have.
 
 ## StatusBadge
 
-`StatusBadge.tsx` — a small coloured pill for an enum-like status value. Props: `status`
-(matched case/whitespace-insensitively against a large built-in colour map spanning
-booking, severity, claims, QSC and plan-type vocabularies), `label` (override the
-displayed text without changing the colour lookup), `colorMap` (per-call overrides/
-additions), `pulse`, `className`, `size`. Unrecognised statuses fall back to an amber "pending"
-colour rather than an unstyled default. `size` is `'sm'` (default: the 12px pill every table uses) or `'md'` (13px
-semibold, 24px tall), the one opt-in step up, for the status that leads a detail header's meta row; the colour is the same at both.
+`StatusBadge.tsx` — a small coloured pill for an enum-like status value. Props: `status` (matched case/whitespace-insensitively against
+`STATUS_TONE`, the tone map in `lib/tone.ts`, which spans booking, severity and priority, claims, QSC, plan-type and trip vocabularies), `label`
+(override the displayed text without changing the colour lookup), `tone` (colour the badge with this tone whatever the status word is), `colorMap`
+(per-call overrides for one domain), `pulse`, `className`, `size`. Unrecognised statuses fall back to the warning tone (the amber "awaiting" pair)
+rather than an unstyled default. `size` is `'sm'` (default: the 12px pill every table uses) or `'md'` (13px semibold, 24px tall), the one opt-in
+step up, for the status that leads a detail header's meta row; the colour is the same at both.
 
-**When to use**: rendering any of the app's status/severity/plan-type enums. Check the
-built-in `STATUS_COLORS` map before adding a one-off inline badge — a new status value is
-usually a one-line addition there, not a reason to bypass this component.
+```tsx
+<StatusBadge status={claim.status} />                          {/* looked up in STATUS_TONE */}
+<StatusBadge tone="danger" label="Refused" />                  {/* a tone and a word, no status */}
+<StatusBadge status={leave.status} colorMap={LEAVE_STATUS_COLORS} />  {/* { cancelled: 'neutral', ... }: values are tones */}
+```
+
+`colorMap` values are a `Tone` (`'danger'`), or, for back-compat, a ready-made class string (the contact role chip still passes one). A `colorMap` is for
+a domain whose word means something else (a cancelled leave request is over, not a failure), not for a new colour.
+
+**When to use**: rendering any of the app's status/severity/priority/plan-type enums. Check `STATUS_TONE` before adding a one-off inline badge: a new status
+value is usually a one-line addition there, not a reason to bypass this component. The colour never carries the meaning alone: the status word is always printed.
+
+---
+
+## Tone system
+
+`lib/tone.ts` (JSX-free, so any file can import it) is the one table that decides what each status colour means. A **tone** is one of
+`'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accessible'`, and each maps to colours already in the palette: no status gets a colour of its own
+(DESIGN.md, The Tone Rule). `TONE[tone]` has three class strings:
+
+- `solid`: a container fill and its on-container text, as one pair. A badge, a chip, a glance cell, an attention tile.
+- `soft`: a wash for something larger than a pill (a tile, a row). Pair it with `ink`.
+- `ink`: text only, for a figure or a line on the card or on the `soft` wash.
+
+| Need | Use |
+|---|---|
+| The colour of a status word, priority or plan type | `STATUS_TONE[key]` (add the word there), or `statusClass(status)` for the pill classes |
+| A badge | `<StatusBadge status=... />`, or `<StatusBadge tone=... label=... />` |
+| A pill you build yourself | `` `${TONE.warning.solid} rounded-full px-2 py-0.5 text-xs` `` |
+| A tinted tile on a `Card` | `CARD_WASH[tone]` (the soft wash with the important modifier, since `Card` paints its own fill) and `TONE[tone].ink` |
+| A chip on a tinted segment | `ON_TINT[tone]` (the tone's text on the card fill) |
+| Which tones tint a segment or tile | `attentionOf(tone)`: warning tints the warning container, danger the error container, every other tone is quiet |
+| The older tone words | `toneOf('error' \| 'positive' \| 'negative')`: Callout `error` is `danger`, FactChip `positive` is `success` and `negative` is `danger` |
+
+Adding a status: put it in `STATUS_TONE` (the key is the status lower-cased with no spaces). Do not add a colour, a class string or a hex; if the word means
+something else in one domain, give that domain a `colorMap` of tones. **Plan types and other categories are `info`, `accessible` or `neutral`, never `warning`
+or `danger`.** `--color-warning` is a fill, border and ring colour, never text or an icon (2.15:1 on the card): warning text is `TONE.warning.ink`.
+
+`src/test/toneContrast.test.ts` reads `src/index.css` and holds every solid pair and every soft wash with its ink to WCAG AA (4.5:1); it also ratchets down
+text still written in `--color-warning`. `lib/tone.test.ts` pins the class strings and the mappings (a trip status, a task priority and a plan type each have one).
 
 ---
 
@@ -500,8 +537,11 @@ band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-displa
 with an 8px side inset (the compact card's).
 
 - `tone`: `'danger'` fills the tile with the error-container and `'warning'` with the warning-container, and the figure and the label take the matching
-  on-container colour. Those are the glance strip's own tints (it maps through `attentionForTone`). Any other tone, or none, is quiet: the card fill, with
+  on-container colour. Those are the glance strip's own tints: both take `TONE.warning.solid` and `TONE.danger.solid` from `lib/tone.ts` (`attentionOf` decides
+  which tones tint). Any other tone, or none, is quiet: the card fill, with
   the figure and the label in `muted-foreground`. The rule is "non-zero is loud, zero is quiet", so pass `tone={count > 0 ? 'danger' : undefined}`.
+- Default tile: every tone (`neutral`, `info`, `success`, `warning`, `danger`) sets the tone's soft wash (`CARD_WASH`, from `lib/tone.ts`) and the figure takes the tone's ink;
+  a tile with no tone has no wash and keeps the olive figure. Unchanged by the tone system.
 - `caption`: the all-clear state ("All clear"). On a quiet tile it is the lime positive chip beside the figure (the glance strip's all-clear); on a tinted
   tile it is plain text, because a lime chip never sits on a tint.
 - `to`: the whole tile is a `Link` with a focus ring and a `--tap-min` floor, and its accessible name is its content ("Qualification Issues 5"). A tile
@@ -582,8 +622,8 @@ const segments: FactBarSegment[] = [
 **Spell every ratio with `glanceRatio(x, y)`**, which returns `"x / y"` (a space each side of the slash). At display size a hand-written `` `${a}/${b}` ``
 beside `"12 / 10"` is obvious, and one shared formatter is what stops two figures in a strip, or on two pages, drifting apart.
 
-`glanceState(tone, label)` returns `{ badge, attention }` from ONE tone (`'positive' | 'warning' | 'negative' | 'neutral'`), so the fill can never
-disagree with its chip: `warning` tints warning, `negative` tints error, `positive` and `neutral` stay quiet. On a tint the chip (`FactChip`) becomes a
+`glanceState(tone, label)` returns `{ badge, attention }` from ONE tone (`'positive' | 'warning' | 'negative' | 'neutral'`, or the tone words `'success'` and
+`'danger'`, which mean `'positive'` and `'negative'`; see the Tone system), so the fill can never disagree with its chip: `warning` tints warning, `negative` tints error, `positive` and `neutral` stay quiet. On a tint the chip (`FactChip`) becomes a
 card-white pill that keeps the tone's text colour, so it does not vanish into its own fill. `attentionForTone` is the same mapping on its own. These live in
 `glanceState.tsx`, not `FactBar.tsx`, because react-refresh wants a component file to export only components.
 

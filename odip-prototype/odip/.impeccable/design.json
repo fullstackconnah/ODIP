@@ -387,6 +387,113 @@
             "effect": "two columns below 768px; two balanced rows from 768px (an odd last item stretches over the spare slot); one row when the band's own width (a container query) gives every item 173px, what the widest label needs on one line: 1259 / 1440 / 1621px for 7 / 8 / 9 items"
           }
         ]
+      },
+      {
+        "name": "Tone system",
+        "status": "shared; one table decides what each status colour means (src/lib/tone.ts)",
+        "shipsOn": [
+          "StatusBadge",
+          "FactBar chips and glance tints",
+          "StatCard (default and attention)",
+          "ParticipantAlertsBanner and the alert badges",
+          "Callout (tone=\"danger\" alias)",
+          "Trip status pills: dashboard, schedule, trips list",
+          "Task priority: Tasks page, trip Tasks tab, dashboard",
+          "Plan types"
+        ],
+        "tones": [
+          {
+            "tone": "neutral",
+            "solid": "input / muted-foreground",
+            "soft": "surface-container",
+            "ink": "muted-foreground",
+            "reads": "no state"
+          },
+          {
+            "tone": "info",
+            "solid": "secondary-container / info",
+            "soft": "secondary-container at 60%",
+            "ink": "info",
+            "reads": "information, a category"
+          },
+          {
+            "tone": "success",
+            "solid": "primary-fixed / on-primary-fixed",
+            "soft": "primary-fixed at 40%",
+            "ink": "primary",
+            "reads": "go, confirmed, paid, all clear"
+          },
+          {
+            "tone": "warning",
+            "solid": "warning-container / on-warning-container",
+            "soft": "warning-container",
+            "ink": "on-warning-container",
+            "reads": "pending or time-bound"
+          },
+          {
+            "tone": "danger",
+            "solid": "error-container / on-error-container",
+            "soft": "error-container at 30%",
+            "ink": "destructive",
+            "reads": "action needed, failed, over"
+          },
+          {
+            "tone": "accessible",
+            "solid": "accessible-container / on-accessible-container",
+            "soft": "accessible-container at 60%",
+            "ink": "on-accessible-container",
+            "reads": "accessibility, and the categories that already use its pink"
+          }
+        ],
+        "mappings": [
+          "Trip status: Draft and Archived neutral; Planning info; Open for bookings, Confirmed and Completed success; Waitlist only warning; In progress accessible; Cancelled danger",
+          "Task priority: Low info; Medium warning; High and Urgent danger",
+          "Plan type: NDIA / Agency managed info; Plan managed accessible; Self managed neutral"
+        ],
+        "api": [
+          {
+            "component": "lib/tone",
+            "prop": "TONE[tone]",
+            "values": [
+              "solid",
+              "soft",
+              "ink"
+            ],
+            "effect": "the class strings of each tone: solid is a container and its on-container text (badge, chip, glance cell, attention tile), soft a wash for a larger surface, ink text only"
+          },
+          {
+            "component": "lib/tone",
+            "prop": "STATUS_TONE",
+            "effect": "a status word (lower case, no spaces) to its tone; a new status is a line here, never a colour. Unlisted statuses are warning (statusClass)"
+          },
+          {
+            "component": "StatusBadge",
+            "prop": "tone",
+            "values": [
+              "neutral",
+              "info",
+              "success",
+              "warning",
+              "danger",
+              "accessible"
+            ],
+            "effect": "colours the badge with this tone whatever the status word is; with a label and no status it is just a tone and a word"
+          },
+          {
+            "component": "StatusBadge",
+            "prop": "colorMap",
+            "effect": "per-domain overrides keyed by the lower-cased status; values are tones (a class string still works)"
+          },
+          {
+            "component": "Callout / FactChip",
+            "prop": "tone",
+            "effect": "the older words keep working: error is danger, positive is success, negative is danger"
+          }
+        ],
+        "guards": [
+          "src/test/toneContrast.test.ts: every solid pair and every soft wash with its ink is WCAG AA (4.5:1), read from index.css",
+          "the same file ratchets down text in --color-warning (R2-12)"
+        ]
       }
     ]
   },
@@ -506,6 +613,11 @@
         "section": "colors"
       },
       {
+        "name": "The Tone Rule",
+        "body": "A status is never given a colour of its own. Every status word, priority, plan type and alert severity maps to one of six tones (neutral, info, success, warning, danger, accessible), and every tone maps to colours that already exist (TONE in src/lib/tone.ts: a solid pair, a soft wash and an ink). A new status is a one-line entry in STATUS_TONE, never a new colour, and a domain whose word means something else passes a colorMap of tones. The same intent is coloured the same way on every screen (a trip status, a task priority, a plan type each have one mapping). Plan types and other categories are info, accessible or neutral, never warning or danger. Tone is never the only cue: the text is always printed, every pair is held to WCAG AA (4.5:1) by a test that reads index.css, and --color-warning is a fill, never text or an icon (2.15:1).",
+        "section": "colors"
+      },
+      {
         "name": "The Warm Base Rule",
         "body": "The page is never `#ffffff` and text is never `#000000`. Warm off-white and near-black are what separate ODIP from a generic Material dashboard.",
         "section": "colors"
@@ -542,7 +654,7 @@
       },
       {
         "name": "The Attention Tint Rule",
-        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays on the card fill.",
+        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used: the fills are TONE.warning.solid and TONE.danger.solid (the pairs the status badges wear, src/lib/tone.ts) and `attentionOf` decides which tones ask for a tint. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays on the card fill.",
         "section": "components"
       },
       {
@@ -570,6 +682,7 @@
       "**Do** render one `<h1>` per screen via `PageHeader`",
       "**Do** give a record's own page the detail header pattern by opting in (`variant=\"detail\"`, `variant=\"glance\"`), never by restyling the default header or bar",
       "**Do** derive a glance segment's chip and tint from one tone with `glanceState`",
+      "**Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own",
       "**Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on",
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",
@@ -583,6 +696,7 @@
       "**Don't** hide row actions with `display: none`, `visibility: hidden` or `pointer-events: none`; hide by opacity so focus, screen readers and voice control still reach them",
       "**Don't** use pure `#ffffff` as a page background or pure `#000000` as text",
       "**Don't** invent a colour outside the semantic list to express a new state",
+      "**Don't** give a category (a plan type, a witness type) the warning or danger tone, or use `--color-warning` for text or an icon: warning text is `TONE.warning.ink`",
       "**Don't** add a second page heading",
       "**Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size",
       "**Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container",

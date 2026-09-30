@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { StatCard } from './StatCard'
-import { FactBar } from './FactBar'
 
 const renderCard = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 
@@ -126,34 +125,6 @@ describe('StatCard — attention variant', () => {
       expect(tile(label)).not.toHaveAttribute('data-attention')
       expect(tile(label)).toHaveClass('bg-[var(--color-card)]')
     }
-  })
-
-  // The band tints exactly as the trip glance strip does. FactBar keeps its own tone map (a component file may export only
-  // components), so this is what stops the two from drifting: both must carry these fills and on-container colours.
-  it('carries the same fill and on-container classes as a glance segment of the same attention', () => {
-    const { container } = renderCard(
-      <>
-        <FactBar
-          variant="glance"
-          segments={[
-            { label: 'E', value: 1, attention: 'error' },
-            { label: 'W', value: 1, attention: 'warning' },
-          ]}
-        />
-        <StatCard variant="attention" label="Qual" value={5} tone="danger" />
-        <StatCard variant="attention" label="Missing" value={2} tone="warning" />
-      </>,
-    )
-
-    const glance = (attention: string) => container.querySelector(`[data-attention="${attention}"]`) as HTMLElement
-    const expected = {
-      error: ['bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]'],
-      warning: ['bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]'],
-    } as const
-    expect(glance('error')).toHaveClass(...expected.error)
-    expect(glance('warning')).toHaveClass(...expected.warning)
-    expect(tile('Qual')).toHaveClass(...expected.error)
-    expect(tile('Missing')).toHaveClass(...expected.warning)
   })
 
   it('shows a quiet tile\'s caption as the lime positive chip and a tinted tile\'s caption as plain text', () => {

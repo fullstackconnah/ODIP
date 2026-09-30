@@ -11,18 +11,19 @@ import { MedicationBadges, ComplianceFlagChips } from '../medications'
 import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
 import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
+import type { Tone } from '@/lib/tone'
 
-const MED_STATUS_COLOR_MAP: Record<string, string> = {
-  active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  onhold: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  ceased: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
+  active: 'success',
+  onhold: 'warning',
+  ceased: 'danger',
 }
 
-const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
-  administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
+  administered: 'success',
+  refused: 'danger',
+  withheld: 'warning',
+  missed: 'danger',
 }
 
 function isoDaysAgo(days: number): string {

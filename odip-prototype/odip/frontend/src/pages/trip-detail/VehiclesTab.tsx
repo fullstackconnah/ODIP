@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, XCircle, AlertTriangle, Car } from 'lucide-react'
 import AddVehicleModal from '@/components/AddVehicleModal'
 import { getStatusColor } from '@/lib/utils'
+import { TONE } from '@/lib/tone'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 import type { StaffAssignmentDto } from '@/api/types/staff'
 
@@ -36,7 +37,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
           </div>
         ) : assigned < needed ? (
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500/10 text-amber-500">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${TONE.warning.soft} ${TONE.warning.ink}`}>
               <AlertTriangle className="w-4 h-4" />
               <span>{assigned} / {needed} · need {shortfall} more</span>
             </div>
@@ -76,7 +77,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
               </div>
               <div className="flex gap-2">
                 <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(v.status)}`}>{v.status}</span>
-                {v.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1"><span className="material-symbols-outlined text-xs leading-none">warning</span> Conflict</span>}
+                {v.hasOverlapConflict && <span className={`${TONE.danger.solid} text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1`}><span className="material-symbols-outlined text-xs leading-none">warning</span> Conflict</span>}
               </div>
             </div>
             <div className="mt-3 text-sm text-[var(--color-muted-foreground)]">

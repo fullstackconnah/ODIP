@@ -1,3 +1,4 @@
+import type { Tone } from '@/lib/tone'
 import type { RosterFindingDto } from './rostering'
 
 // ══════════════════════════════════════════════════════════════
@@ -21,24 +22,18 @@ export const LEAVE_STATUSES = ['Pending', 'Approved', 'Declined', 'Cancelled'] a
 export type LeaveStatus = typeof LEAVE_STATUSES[number]
 
 /**
- * `StatusBadge`'s built-in `STATUS_COLORS` map (`src/components/StatusBadge.tsx:9-50`) has no
- * `approved`/`declined`/`pending`/`cancelled` keys of its own for this domain — `pending` only
- * exists there for an unrelated QSC status, and `approved`/`declined` don't exist at all, so
- * every `LeaveStatus` value would otherwise fall through to the same default amber colour
- * (`StatusBadge.tsx:52`, `DEFAULT_COLOR`), making Pending/Approved/Declined rows visually
- * indistinguishable. `StatusBadge` accepts an override via its `colorMap?: Record<string, string>`
- * prop (`StatusBadge.tsx:4`, looked up by the lower-cased status at `StatusBadge.tsx:55-56`) —
- * this is that override, shared by Task 8's `PortalLeavePage` and Task 9's `LeaveApprovalsPage`
- * so every leave/unavailability status badge in the app renders identically. Reuses the same
- * design-token classes `STATUS_COLORS` already uses for equivalent semantics elsewhere (pending →
- * its amber "awaiting decision" colour, approved → the primary "confirmed" colour, declined → the
- * error-container "rejected" colour, cancelled → the neutral "archived" colour).
+ * `StatusBadge`'s built-in STATUS_TONE (lib/tone.ts) has no `approved`/`declined` keys for this domain, `pending` only exists there for
+ * an unrelated QSC status, and its `cancelled` is danger while a cancelled leave request is just over: so every `LeaveStatus` value would
+ * otherwise fall through to the same amber fallback or read as a failure, making Pending/Approved/Declined rows indistinguishable.
+ * `StatusBadge` accepts an override via its `colorMap` prop (looked up by the lower-cased status); this is that override, shared by
+ * `PortalLeavePage` and `LeaveApprovalsPage` so every leave/unavailability status badge in the app renders identically: pending is the
+ * warning tone (awaiting a decision), approved success, declined danger, cancelled neutral.
  */
-export const LEAVE_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-[#fef3c7] text-[#92400e]',
-  approved: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  declined: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  cancelled: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
+export const LEAVE_STATUS_COLORS: Record<string, Tone> = {
+  pending: 'warning',
+  approved: 'success',
+  declined: 'danger',
+  cancelled: 'neutral',
 }
 
 /** Mirrors StaffUnavailabilityQuery.UnavailabilityKind — which of the three sources (plus the

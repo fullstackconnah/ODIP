@@ -5,6 +5,7 @@ import type { TaskDto, UpdateTaskDto } from '@/api/types'
 import type { TaskItemStatus } from '@/api/types/enums'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
+import { StatusBadge } from '@/components/StatusBadge'
 import { getStatusColor } from '@/lib/utils'
 
 const TASK_STATUS_ITEMS = [
@@ -81,11 +82,8 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
         const order: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
         return (order[a.priority] ?? 99) - (order[b.priority] ?? 99)
       },
-      render: (t) => (
-        <span className={`text-xs px-2 py-0.5 rounded-full ${t.priority === 'High' || t.priority === 'Urgent' ? 'badge-overdue' : 'badge-info'}`}>
-          {t.priority}
-        </span>
-      ),
+      // The same priority pill as the Tasks page and the dashboard (one mapping: Low info, Medium warning, High and Urgent danger).
+      render: (t) => <StatusBadge status={t.priority} />,
     },
     {
       key: 'status',
