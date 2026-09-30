@@ -1,6 +1,7 @@
 /**
  * PF-10.4 — Profile wizard, "Behaviour & Cognition Detail" step. The Behaviours-of-Concern Y/N
- * flags, Expressive Skills, and Behaviour Risk Summary are Shared/Intake-owned (read-only); memory/
+ * flags, Expressive Skills, and Behaviour Risk Summary are Shared/Intake-owned (editable when
+ * `sharedFieldsEditable`, the Profile wizard; read-only for the caregiver wizard); memory/
  * cognition/receptive-communication detail is Profile-owned.
  */
 import { Controller } from 'react-hook-form'
@@ -14,6 +15,7 @@ import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import { ReadOnlyField } from '../profileHelpers'
 import { yesNoUnknown } from '../profileFormat'
+import { BehaviourSummaryFields, FromIntakeNote } from '../sharedFieldControls'
 import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
@@ -24,25 +26,30 @@ const TRI_OPTIONS = [
 
 const EMPTY: ReadonlySet<string> = new Set()
 
-export function BehaviourCognitionStep({ control, register, participant, hiddenFields }: {
+export function BehaviourCognitionStep({ control, register, participant, hiddenFields, sharedFieldsEditable = false }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   participant: ParticipantDetailDto
   /** Field ids to omit entirely — e.g. the caregiver wizard's CAREGIVER_INTERNAL_FIELDS. Defaults
    * to empty, so every existing Profile-wizard caller is unaffected. */
   hiddenFields?: ReadonlySet<string>
+  /** Render the fields captured at Intake as editable controls (the Profile wizard) instead of
+   * read-only ones (the caregiver wizard, the default). */
+  sharedFieldsEditable?: boolean
 }) {
   const hidden = hiddenFields ?? EMPTY
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <Card title="Behaviour Summary (from Intake)">
-        <div className={formGrid}>
-          <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} className={span.medium} />
-          <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} className={span.medium} />
-          <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} className={span.medium} />
-          <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} className={span.long} />
-        </div>
-      </Card>
+      {sharedFieldsEditable ? (
+        <Card title="Behaviour Summary (from Intake)">
+          <FromIntakeNote />
+          <div className={formGrid}>
+            <BehaviourSummaryFields control={control} register={register} />
+          </div>
+        </Card>
+      ) : (
+        <ReadOnlyBehaviourSummaryCard participant={participant} />
+      )}
 
       <Card title="Cognition">
         <div className={formGrid}>
@@ -118,5 +125,19 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
         </div>
       </Card>
     </div>
+  )
+}
+
+/** The caregiver wizard's version of the behaviour-summary card: the same values, read-only. */
+function ReadOnlyBehaviourSummaryCard({ participant }: { participant: ParticipantDetailDto }) {
+  return (
+    <Card title="Behaviour Summary (from Intake)">
+      <div className={formGrid}>
+        <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} className={span.medium} />
+        <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} className={span.medium} />
+        <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} className={span.medium} />
+        <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} className={span.long} />
+      </div>
+    </Card>
   )
 }

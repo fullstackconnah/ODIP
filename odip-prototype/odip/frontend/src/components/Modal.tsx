@@ -100,7 +100,9 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
       >
         <div className="flex items-center justify-between mb-3">
           <h3 id={titleId} className="text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-[var(--color-accent)] rounded-lg">
+          {/* type="button": the dialog renders inline, so when it is opened from inside a <form> (the Profile
+              wizard's embedded Contacts editor) an untyped close button would SUBMIT that form. */}
+          <button type="button" onClick={onClose} className="p-1 hover:bg-[var(--color-accent)] rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>

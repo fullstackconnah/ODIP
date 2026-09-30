@@ -1,6 +1,7 @@
 /**
  * PF-10.4 — Profile wizard, "Medical Detail" step: diagnoses / HIDPA / structured health
- * conditions grid. medicalSummary is Shared/Intake-owned (read-only); hidpaNotes is Intake-owned
+ * conditions grid. medicalSummary is Shared/Intake-owned (an editable textarea when
+ * `sharedFieldsEditable`, the Profile wizard; read-only for the caregiver wizard); hidpaNotes is Intake-owned
  * but NOT shared (sources: [] — ungated, no Profile-side existence per PF-10.1) so it does not
  * appear on this wizard at all, editable or read-only.
  */
@@ -18,6 +19,7 @@ import { HIDPA_CATEGORY_LABELS } from '@/api/types/participants'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { HealthConditionType } from '@/api/types/enums'
 import { ReadOnlyField } from '../profileHelpers'
+import { FromIntakeNote, MedicalSummaryField } from '../sharedFieldControls'
 import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
@@ -26,20 +28,32 @@ const TRI_OPTIONS = [
   { value: '', label: 'Not recorded' },
 ]
 
-export function MedicalDetailStep({ control, register, errors, participant, healthConditionFieldArray, watchedValues }: {
+export function MedicalDetailStep({ control, register, errors, participant, healthConditionFieldArray, watchedValues, sharedFieldsEditable = false }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   errors: FieldErrors<ParticipantFormData>
   participant: ParticipantDetailDto
   healthConditionFieldArray: UseFieldArrayReturn<ParticipantFormData, 'healthConditions'>
   watchedValues: Partial<ParticipantFormData>
+  /** Render the medical summary as an editable field (the Profile wizard) instead of a read-only
+   * one (the caregiver wizard, the default). */
+  sharedFieldsEditable?: boolean
 }) {
   return (
     <div className="grid md:grid-cols-2 gap-[var(--section-gap)] items-start">
       <div className="flex flex-col gap-[var(--section-gap)]">
-        <Card>
-          <ReadOnlyField field="medicalSummary" label="Medical Summary (from Intake)" value={participant.medicalSummary || '—'} />
-        </Card>
+        {sharedFieldsEditable ? (
+          <Card title="Medical Summary (from Intake)">
+            <FromIntakeNote />
+            <div className={formGrid}>
+              <MedicalSummaryField register={register} />
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <ReadOnlyField field="medicalSummary" label="Medical Summary (from Intake)" value={participant.medicalSummary || '—'} />
+          </Card>
+        )}
 
         <Card title="Diagnoses & HIDPA">
           <div className={formGrid}>

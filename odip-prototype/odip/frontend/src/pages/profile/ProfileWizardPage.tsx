@@ -7,8 +7,14 @@
  * Field set: every `entryPhase: 'profile'` entry in `src/lib/documentMapping.ts`
  * (`fieldsForEntry('profile')`), re-grouped into 7 steps under `src/lib/participantSchema.ts`'s
  * `PROFILE_STEP_*_FIELDS` constants — see `ProfileWizardPage.test.tsx`'s "drift guard" describe
- * block for the guard that this wizard renders every one of those fields, shows every Shared field
- * read-only, and renders no Intake-only field as editable.
+ * block for the guard that this wizard renders every one of those fields, renders every Shared
+ * field (captured at Intake) as an editable, prefilled control, and renders no Intake-only field.
+ *
+ * Shared fields are EDITABLE here (`sharedFieldsEditable`, see `sharedFieldControls.tsx`): intake
+ * answers are sometimes wrong. They are validated by `PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY` (the Intake
+ * refines) and saved by the same per-step PATCH, whose step -> group map
+ * (`PROFILE_WIZARD_STEP_TO_PATCH_GROUPS`) also carries the `address` and `risksHazardsSummary` groups
+ * those fields live in. Contacts are edited in place by the embedded Contacts tab editor.
  *
  * Two independently-gated conditional regions (SPEC-05's generic `{key,label,fields,isVisible}`
  * shape, `PROFILE_CONDITIONAL_SECTIONS` in participantSchema.ts):
@@ -39,12 +45,12 @@ import {
 } from '@/components/wizard'
 import { useBackTarget } from '@/hooks/useBackNavigation'
 import {
-  type ParticipantFormData, PROFILE_STEP_SCHEMAS_BY_KEY, PROFILE_CONDITIONAL_SECTIONS,
+  type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   PROFILE_STEP_COMMUNITY_ACCESS_FIELDS,
 } from '@/lib/participantSchema'
-import { buildProfileStepPatch, buildParticipantWirePayload } from '@/lib/participantPatchGroups'
+import { buildProfileStepPatch, buildParticipantWirePayload, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS } from '@/lib/participantPatchGroups'
 import { parseServiceStreams, parseHidpaCategories, DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL } from '@/api/types/participants'
 import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_ACCESS_RISK_ITEM_TYPES } from '@/api/types/enums'
 import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
@@ -176,6 +182,17 @@ export default function ProfileWizardPage() {
       privateHealthFund: participant.privateHealthFund ?? '', privateHealthMembershipNumber: participant.privateHealthMembershipNumber ?? '',
       taxiCardNumber: participant.taxiCardNumber ?? '', hairColour: participant.hairColour ?? '', eyeColour: participant.eyeColour ?? '',
       weightKg: participant.weightKg ?? undefined, heightCm: participant.heightCm ?? undefined,
+      // ── Intake-only fields this wizard never displays. They must still be in the form values: "Complete
+      // Profile" is a full PUT, and the server nulls any field a full PUT omits (living arrangement and its
+      // dependents, region, general notes), and `notes` rides in the risksHazardsSummary PATCH group with
+      // behaviourRiskSummary (THE TRAP in participantPatchGroups.ts). ──
+      livingArrangement: participant.livingArrangement ?? '', mainSupportPersonName: participant.mainSupportPersonName ?? '',
+      mainSupportPersonRelationship: participant.mainSupportPersonRelationship ?? '',
+      othersLivingInAccommodation: participant.othersLivingInAccommodation ?? '', residentialInfo: participant.residentialInfo ?? '',
+      livesWithOthers: participant.livesWithOthers ?? undefined, whoLivesWith: participant.whoLivesWith ?? '',
+      silProviderName: participant.silProviderName ?? '', silProviderContactPhone: participant.silProviderContactPhone ?? '',
+      accommodationType: participant.accommodationType ?? '', onSiteSupportHours: participant.onSiteSupportHours ?? '',
+      livingArrangementNotes: participant.livingArrangementNotes ?? '', region: participant.region ?? '', notes: participant.notes ?? '',
       // ── Support Needs & Mobility (Shared companions echoed for the supportNeedsMobility group) ──
       isHighSupport: participant.isHighSupport ?? false, isIntensiveSupport: participant.isIntensiveSupport ?? false,
       mobilityAidWheelchair: participant.mobilityAidWheelchair ?? false, mobilityAidWalker: participant.mobilityAidWalker ?? false,
@@ -274,11 +291,13 @@ export default function ProfileWizardPage() {
 
   const WIZARD_STEPS: WizardStepDef<ParticipantFormData>[] = useMemo(() => {
     const steps: WizardStepDef<ParticipantFormData>[] = [
-      { key: 'keyIdentifiers', label: 'Key Identifiers', fields: PROFILE_STEP_KEY_IDENTIFIERS_FIELDS },
-      { key: 'culturalDepth', label: 'Cultural Depth & Consents', fields: PROFILE_STEP_CULTURAL_DEPTH_FIELDS },
-      { key: 'medical', label: 'Medical Detail', fields: PROFILE_STEP_MEDICAL_FIELDS },
-      { key: 'mobility', label: 'Mobility & Functional', fields: PROFILE_STEP_MOBILITY_FIELDS },
-      { key: 'behaviourCognition', label: 'Behaviour & Cognition', fields: PROFILE_STEP_BEHAVIOUR_FIELDS },
+      // Each step's `fields` lists the Profile-owned fields first (a failed save points at fields[0]) and then
+      // the shared fields the step edits, so "Next" clears their stale validation errors too.
+      { key: 'keyIdentifiers', label: 'Key Identifiers', fields: [...PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, ...PROFILE_STEP_SHARED_FIELDS.keyIdentifiers] },
+      { key: 'culturalDepth', label: 'Cultural Depth & Consents', fields: [...PROFILE_STEP_CULTURAL_DEPTH_FIELDS, ...PROFILE_STEP_SHARED_FIELDS.culturalDepth] },
+      { key: 'medical', label: 'Medical Detail', fields: [...PROFILE_STEP_MEDICAL_FIELDS, ...PROFILE_STEP_SHARED_FIELDS.medical] },
+      { key: 'mobility', label: 'Mobility & Functional', fields: [...PROFILE_STEP_MOBILITY_FIELDS, ...PROFILE_STEP_SHARED_FIELDS.mobility] },
+      { key: 'behaviourCognition', label: 'Behaviour & Cognition', fields: [...PROFILE_STEP_BEHAVIOUR_FIELDS, ...PROFILE_STEP_SHARED_FIELDS.behaviourCognition] },
       { key: 'dailyLiving', label: 'Daily Living', fields: PROFILE_STEP_DAILY_LIVING_FIELDS },
     ]
     // Computed step list (CORE-01) — the Community Access step is present only when its
@@ -294,7 +313,7 @@ export default function ProfileWizardPage() {
     if (!id) return
     const values = getValues()
     if (stepKey === 'communityAccess') {
-      const dto = buildProfileStepPatch(stepKey, values, staVisible)
+      const dto = buildProfileStepPatch(stepKey, values, staVisible, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS)
       if (dto) await patchParticipant.mutateAsync({ id, data: dto })
       // The 22-row risk matrix has its own nested-CRUD endpoint (PF-10.2), not a PatchParticipantDto
       // collection group — one upsert PUT per row, same "materialize all N rows" write path the
@@ -310,13 +329,13 @@ export default function ProfileWizardPage() {
       )
       return
     }
-    const dto = buildProfileStepPatch(stepKey, values, staVisible)
+    const dto = buildProfileStepPatch(stepKey, values, staVisible, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS)
     if (!dto) return
     await patchParticipant.mutateAsync({ id, data: dto })
   }
 
   const validateStep: WizardValidate<ParticipantFormData> = async (step, values) => {
-    const schema = PROFILE_STEP_SCHEMAS_BY_KEY[step.key]
+    const schema = PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY[step.key]
     if (schema) {
       const result = schema.safeParse(values)
       if (!result.success) {
@@ -364,7 +383,10 @@ export default function ProfileWizardPage() {
       const data: UpdateParticipantDto = { ...(payload as unknown as UpdateParticipantDto), isActive: participant.isActive, isDraft: false }
       const res = await updateParticipant.mutateAsync({ id, data })
       if (res.success) {
-        flushSync(() => {})
+        // Clear the dirty flag synchronously first (the documented useUnsavedChangesWarning idiom, as the Intake
+        // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
+        // edit in it asks "Leave without saving?" on its way out.
+        flushSync(() => reset(getValues()))
         navigate(`/participants/${id}`)
       }
     } catch (err) {
@@ -448,19 +470,19 @@ export default function ProfileWizardPage() {
               label={isReviewStep ? 'Review' : currentStep.label}
             />
         {!isReviewStep && currentStep.key === 'keyIdentifiers' && (
-          <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} />
+          <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'culturalDepth' && (
-          <CulturalDepthConsentsStep control={control} register={register} participant={participant} consentsFieldArray={consentsFieldArray} staVisible={staVisible} />
+          <CulturalDepthConsentsStep control={control} register={register} participant={participant} consentsFieldArray={consentsFieldArray} staVisible={staVisible} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'medical' && (
-          <MedicalDetailStep control={control} register={register} errors={errors} participant={participant} healthConditionFieldArray={healthConditionFieldArray} watchedValues={watchedValues as unknown as Partial<ParticipantFormData>} />
+          <MedicalDetailStep control={control} register={register} errors={errors} participant={participant} healthConditionFieldArray={healthConditionFieldArray} watchedValues={watchedValues as unknown as Partial<ParticipantFormData>} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'mobility' && (
-          <MobilityFunctionalStep control={control} register={register} participant={participant} />
+          <MobilityFunctionalStep control={control} register={register} participant={participant} errors={errors} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'behaviourCognition' && (
-          <BehaviourCognitionStep control={control} register={register} participant={participant} />
+          <BehaviourCognitionStep control={control} register={register} participant={participant} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'dailyLiving' && (
           <DailyLivingStep control={control} register={register} adlFieldArray={adlFieldArray} watchedValues={watchedValues as unknown as Partial<ParticipantFormData>} caVisible={caVisible} />

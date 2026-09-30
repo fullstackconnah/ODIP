@@ -11,3 +11,7 @@
 export function yesNoUnknown(value: string | null | undefined): string {
   return value === 'true' ? 'Yes' : value === 'false' ? 'No' : 'Not recorded'
 }
+
+/** The note shown above each group of fields that were captured at Intake and can now be corrected on
+ * the Profile wizard. It replaces the old per-field "Captured at Intake — read-only here" hint. */
+export const FROM_INTAKE_NOTE = "From intake — correct it here if it's wrong"

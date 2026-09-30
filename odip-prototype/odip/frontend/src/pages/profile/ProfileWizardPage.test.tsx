@@ -28,6 +28,9 @@ vi.mock('@/api/hooks', () => ({
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useUpsertCommunityAccessRiskItem: () => ({ mutateAsync: mockUpsertRiskItemMutateAsync }),
   useStaff: () => ({ data: [{ id: 'staff-1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', isActive: true }] }),
+  // The embedded Contacts editor (KeyIdentifiersStep) and the plan-type banner read the participant's contacts.
+  useParticipantContactRoles: () => ({ data: [], isLoading: false }),
+  useDeleteContactRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 function makeParticipant(overrides: Partial<ParticipantDetailDto> = {}): ParticipantDetailDto {
@@ -124,16 +127,28 @@ describe('ProfileWizardPage — drift guard against the PF-10.1 field-allocation
   // convention IntakeWizardPage.test.tsx's drift guard uses for its own collection fields).
   const COLLECTION_FIELDS = new Set(['consents', 'healthConditions', 'adlAssessments', 'checklistItems', 'communityAccessRiskItems'])
 
-  it('renders every non-collection editable Profile field, shows every Shared field read-only, and renders no Intake-only field as an editable control (CommunityAccessDailyLiving stream, so the CA step is included)', async () => {
+  it('renders every non-collection Profile field, every Shared field as an EDITABLE control, and no Intake-only field (CommunityAccessDailyLiving stream, so the CA step is included)', async () => {
     const user = userEvent.setup()
-    const participant = makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving' })
+    // ActiveNight: as at Intake, the overnight ratio is only asked when there is overnight support.
+    const participant = makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving', overnightSupport: 'ActiveNight' })
     renderProfilePage(participant)
     await expectStep(/key identifiers/i)
 
     const stepCount = 7 // 6 always-visible + Community Access (CA-gated, visible here)
+    const sharedFields = sharedFieldsDisplayedOnProfile().map((e) => e.field)
     const seenIds = new Set<string>()
+    const radioGroups = new Set<string>()
+    const lockedSharedControls: string[] = []
+    let readOnlyElements = 0
+    const sawContactsEditor: boolean[] = []
     for (let i = 0; i < stepCount; i++) {
-      document.querySelectorAll('[id]').forEach((el) => seenIds.add(el.id))
+      document.querySelectorAll('[id]').forEach((el) => {
+        seenIds.add(el.id)
+        if (sharedFields.includes(el.id) && (el.hasAttribute('disabled') || el.hasAttribute('readonly'))) lockedSharedControls.push(el.id)
+      })
+      document.querySelectorAll('[role="radiogroup"]').forEach((el) => radioGroups.add(el.getAttribute('aria-label') ?? ''))
+      readOnlyElements += document.querySelectorAll('[aria-readonly="true"]').length
+      if (i === 0) sawContactsEditor.push(screen.queryByRole('heading', { name: /^contacts$/i }) !== null)
       if (i < stepCount - 1) {
         await user.click(screen.getByRole('button', { name: /^next$/i }))
         await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(i + 1))
@@ -145,17 +160,27 @@ describe('ProfileWizardPage — drift guard against the PF-10.1 field-allocation
     const missing = editableProfileFields.filter((f) => !seenIds.has(f))
     expect(missing).toEqual([])
 
-    // Shared fields render read-only (a disabled input carrying the field's own id) — never a
-    // second, editable control also keyed by that same field name.
-    const sharedFields = sharedFieldsDisplayedOnProfile().map((e) => e.field)
-    for (const field of sharedFields) {
-      // Checked against the accumulated `seenIds` (not a live document.getElementById) — by this
-      // point in the test the wizard has navigated past whichever step rendered this field.
-      expect(seenIds.has(field), `expected a read-only element for shared field "${field}"`).toBe(true)
+    // Every Shared field (captured at Intake) is an ordinary editable control, keyed by its own field id:
+    // nothing is a read-only placeholder any more. Tri-state Yes/No/Not-recorded flags are radio-group toggles
+    // (same as Intake) and the Contacts group is the embedded Contacts editor.
+    const TOGGLE_LABELS = [
+      'CALD', 'LGBTIQA+', 'Family / Community', 'Aboriginal and/or Torres Strait Islander',
+      'Received: Rights and Responsibilities', 'Received: Privacy and Confidentiality', 'Received: Feedback Information and Form',
+      'Received: Being Safe Information', 'Received: Advocacy Information', 'Behaviours of Concern (Current)', 'Behaviours of Concern (5-Year History)',
+    ]
+    expect(readOnlyElements).toBe(0)
+    expect(lockedSharedControls).toEqual([])
+    for (const label of TOGGLE_LABELS) expect(radioGroups.has(label), `expected a Yes/No toggle for "${label}"`).toBe(true)
+    const toggleBacked = new Set(['isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander', 'receivedRightsAndResponsibilitiesInfo',
+      'receivedPrivacyAndConfidentialityInfo', 'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+      'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'contactRoles'])
+    for (const field of sharedFields.filter((f) => !toggleBacked.has(f))) {
+      expect(seenIds.has(field), `expected an editable control for shared field "${field}"`).toBe(true)
     }
+    expect(sawContactsEditor).toEqual([true])
 
-    // No Intake-only (non-shared) field ever appears — e.g. hidpaNotes/region/livingArrangement/
-    // notes/isRepeatClient/mobilityAidWalker are Intake-owned and not in the shared set.
+    // No Intake-only field ever appears — e.g. hidpaNotes/region/livingArrangement/notes/isRepeatClient/
+    // mobilityAidWalker are Intake-owned and not in the shared set.
     const intakeOnlyFields = fieldsForEntry('intake').map((e) => e.field).filter((f) => !sharedFields.includes(f))
     for (const field of intakeOnlyFields) {
       expect(seenIds.has(field), `Intake-only field "${field}" must not render on the Profile wizard`).toBe(false)
@@ -256,7 +281,7 @@ describe('ProfileWizardPage — conditional sections (generic isVisible list, no
 })
 
 describe('ProfileWizardPage — per-step PATCH and the collection-group trap', () => {
-  it('saving the Key Identifiers step PATCHes only its own groups, echoing the read-only Shared companion fields rather than omitting them', async () => {
+  it('saving the Key Identifiers step PATCHes only its own groups, echoing the Shared fields it did not edit rather than omitting them', async () => {
     const user = userEvent.setup()
     renderProfilePage(makeParticipant({ preferredName: 'Jam', ndisNumber: 'NDIS-999' }))
     await expectStep(/key identifiers/i)
@@ -266,8 +291,9 @@ describe('ProfileWizardPage — per-step PATCH and the collection-group trap', (
 
     await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
     const { data } = mockPatchMutateAsync.mock.calls[0][0]
-    expect(Object.keys(data).sort()).toEqual(['keyIdentifiers', 'ndisPlan', 'personalDetails', 'preferredStaff'].sort())
-    // The Shared companion fields (firstName/lastName/preferredName/ndisNumber/planType/
+    // `address` is patched too now: its four fields are editable here (they used to be read-only and unsaved).
+    expect(Object.keys(data).sort()).toEqual(['address', 'keyIdentifiers', 'ndisPlan', 'personalDetails', 'preferredStaff'].sort())
+    // The Shared fields (firstName/lastName/preferredName/ndisNumber/planType/
     // fundingSource) are echoed from the loaded participant, never nulled out.
     expect(data.personalDetails.firstName).toBe('Jamie')
     expect(data.personalDetails.lastName).toBe('Rivers')

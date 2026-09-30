@@ -78,6 +78,22 @@ export const PROFILE_STEP_TO_PATCH_GROUPS: Partial<Record<string, (keyof PatchPa
   communityAccess: ['communityAccessBehaviour', 'checklistItems'],
 }
 
+/**
+ * The Profile wizard's own step -> group map: PROFILE_STEP_TO_PATCH_GROUPS plus the two groups that hold
+ * intake-captured fields the wizard now lets staff correct, but that no step patched before, so an edit
+ * to them would not have persisted on "Next":
+ *  - `address` (street/suburb/state/postcode) on Key Identifiers;
+ *  - `risksHazardsSummary` (behaviourRiskSummary) on Behaviour & Cognition. It is a mini full-submit, so it
+ *    also carries `notes`, which the wizard hydrates from the participant and echoes (THE TRAP above).
+ * Kept apart from PROFILE_STEP_TO_PATCH_GROUPS because the caregiver wizard reads that one and must not
+ * start submitting groups whose fields it treats as read-only or internal.
+ */
+export const PROFILE_WIZARD_STEP_TO_PATCH_GROUPS: Partial<Record<string, (keyof PatchParticipantDto)[]>> = {
+  ...PROFILE_STEP_TO_PATCH_GROUPS,
+  keyIdentifiers: [...(PROFILE_STEP_TO_PATCH_GROUPS.keyIdentifiers ?? []), 'address'],
+  behaviourCognition: [...(PROFILE_STEP_TO_PATCH_GROUPS.behaviourCognition ?? []), 'risksHazardsSummary'],
+}
+
 /** Pulls one scalar group's fields out of an already wire-shaped payload — verbatim copy of
  * the retired single-step wizard's extractGroupFields. */
 export function extractGroupFields(payload: Record<string, unknown>, fields: readonly (keyof ParticipantFormData)[]): Record<string, unknown> {
@@ -200,9 +216,15 @@ export function buildGroupPayload(group: keyof PatchParticipantDto, payload: Rec
   return extractGroupFields(payload, PATCH_GROUP_FIELDS[group as ScalarPatchGroup])
 }
 
-/** Assembles a full PatchParticipantDto for one Profile step, applying every group it owns. */
-export function buildProfileStepPatch(stepKey: string, data: ParticipantFormData, staVisible: boolean): PatchParticipantDto | null {
-  const groups = PROFILE_STEP_TO_PATCH_GROUPS[stepKey]
+/** Assembles a full PatchParticipantDto for one Profile step, applying every group it owns.
+ * `groupsByStep` defaults to the caregiver-safe map; the Profile wizard passes PROFILE_WIZARD_STEP_TO_PATCH_GROUPS. */
+export function buildProfileStepPatch(
+  stepKey: string,
+  data: ParticipantFormData,
+  staVisible: boolean,
+  groupsByStep: Partial<Record<string, (keyof PatchParticipantDto)[]>> = PROFILE_STEP_TO_PATCH_GROUPS,
+): PatchParticipantDto | null {
+  const groups = groupsByStep[stepKey]
   if (!groups) return null
   const payload = buildParticipantWirePayload(data)
   const dto: Record<string, unknown> = {}
