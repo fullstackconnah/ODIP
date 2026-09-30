@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import OnboardingPage from './OnboardingPage'
+import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
+import OnboardingPage, { OnboardingTable } from './OnboardingPage'
+import { intakeCompleteState } from './intake/intakeComplete'
 
 const { mockUseQuery } = vi.hoisted(() => ({ mockUseQuery: vi.fn() }))
 vi.mock('@tanstack/react-query', () => ({ useQuery: mockUseQuery }))
@@ -100,5 +101,46 @@ describe('OnboardingPage', () => {
     await user.type(box(), 'NDIS plan')
     expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
     expect(screen.queryByText('Avery Lee')).not.toBeInTheDocument()
+  })
+})
+
+describe('OnboardingTable: arriving from a completed intake', () => {
+  const rows = [
+    { participantId: 'p-1', fullName: 'Jamie Rivers', stage: 'Onboarding incomplete', completedSteps: 1, totalSteps: 5, nextAction: 'Validate profile essentials' },
+    { participantId: 'p-2', fullName: 'Avery Lee', stage: 'Onboarding incomplete', completedSteps: 1, totalSteps: 5, nextAction: 'Validate profile essentials' },
+  ]
+  const HIGHLIGHT = 'bg-[var(--color-primary)]/10'
+
+  function renderArrival(state: unknown) {
+    mockUseQuery.mockReturnValue({ data: rows, isLoading: false })
+    const router = createMemoryRouter(
+      [{ path: '/participants', element: <OnboardingTable /> }],
+      { initialEntries: [{ pathname: '/participants', search: '?tab=onboarding', state }] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  it('confirms the intake in a polite status message and highlights that participant\'s row only', () => {
+    renderArrival(intakeCompleteState('p-1', 'Jamie Rivers'))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Intake complete — Jamie Rivers is now in onboarding.')
+    expect(screen.getByText('Jamie Rivers').closest('tr')).toHaveClass(HIGHLIGHT)
+    expect(screen.getByText('Avery Lee').closest('tr')).not.toHaveClass(HIGHLIGHT)
+  })
+
+  it('shows it once: the notice is cleared from history state (so a reload does not replay it) while it stays on screen', async () => {
+    const router = renderArrival(intakeCompleteState('p-1', 'Jamie Rivers'))
+
+    await waitFor(() => expect(router.state.location.state).toBeNull())
+    expect(router.state.location.pathname + router.state.location.search).toBe('/participants?tab=onboarding')
+    expect(screen.getByRole('status')).toHaveTextContent(/intake complete/i)
+  })
+
+  it('shows no confirmation and highlights nothing for an ordinary visit, or for unrecognised navigation state', () => {
+    renderArrival({ intakeComplete: { participantId: 42 } })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    for (const row of screen.getAllByRole('row').slice(1)) expect(row).not.toHaveClass(HIGHLIGHT)
   })
 })

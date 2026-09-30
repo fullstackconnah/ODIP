@@ -101,7 +101,11 @@ export function useCreateParticipant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateParticipantDto) => apiPostRaw<ParticipantDetailDto>('/participants', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['participants'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      // Completing intake on create puts the participant on the onboarding worklist.
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
   })
 }
 
@@ -113,6 +117,8 @@ export function useUpdateParticipant() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // Completing (or re-completing) intake creates the onboarding record; a full save also drops a stale profile validation.
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
     },
   })
 }
@@ -174,6 +180,8 @@ export function usePatchParticipant() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // Correcting identity/NDIS details on the Profile wizard can invalidate the profile-essentials gate the worklist shows.
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
     },
   })
 }

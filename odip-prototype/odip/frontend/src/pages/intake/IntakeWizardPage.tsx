@@ -13,8 +13,10 @@
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
  * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
- * "Save as draft" still lands on the detail page), navigates to the Profile wizard
- * (`/participants/{id}/profile`, PF-10.4) — see the `onSubmit` handler below.
+ * "Save as draft" still lands on the detail page), the server has also put the participant on the
+ * onboarding worklist, so the wizard navigates to the Onboarding table
+ * (`/participants?tab=onboarding`) with a one-off "Intake complete" confirmation — see the
+ * `onSubmit` handler below and intakeComplete.ts.
  *
  * PF-10.5 EDIT MODE — resuming an existing draft whose IntakeCompletedAt is still null (the
  * detail page's "Resume intake" banner, routed to `/participants/{id}/intake`): this same
@@ -55,6 +57,7 @@ import {
 } from '@/lib/participantSchema'
 import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
+import { ONBOARDING_TABLE_PATH, intakeCompleteState } from './intakeComplete'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -291,22 +294,22 @@ export default function IntakeWizardPage() {
     // only the Profile wizard (PF-10.4) ever flips it false. completeIntake=true stamps
     // IntakeCompletedAt server-side; it is a distinct flag from IsDraft, not its replacement.
     const payload = buildIntakePayload(data, true, true)
+    // The name the Onboarding table lists them under (the server's, preferred-name aware), falling back to what was typed.
+    const typedName = [data.firstName, data.lastName].filter(Boolean).join(' ')
     try {
       if (isEditMode && id) {
         const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${id}/profile`)
+          // Completing Intake puts the participant on the onboarding worklist: show them there.
+          navigate(ONBOARDING_TABLE_PATH, { state: intakeCompleteState(id, res.data?.fullName || typedName) })
         }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
-        // PF-10.4: the Profile wizard now exists — hand off there directly instead of the detail
-        // page. PF-10.5 still owns the fuller three-way resume-banner logic described in SPEC-05
-        // (e.g. resuming a not-yet-profile-completed participant from the detail page later).
         flushSync(() => reset(data))
-        navigate(`/participants/${res.data.id}/profile`)
+        navigate(ONBOARDING_TABLE_PATH, { state: intakeCompleteState(res.data.id, res.data.fullName || typedName) })
       }
     } catch {
       // error handled by mutation state

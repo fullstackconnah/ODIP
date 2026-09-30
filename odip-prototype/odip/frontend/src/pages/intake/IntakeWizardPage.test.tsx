@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, fireEvent } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import IntakeWizardPage from './IntakeWizardPage'
 import { __testHooks, usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { fieldsForEntry } from '@/lib/documentMapping'
@@ -26,13 +26,26 @@ vi.mock('@/api/hooks', () => ({
   usePersons: () => ({ data: [] }),
 }))
 
+/** The '/participants' route: still "Participants list" for the back-control tests, and it reports the query string and
+ *  router state the wizard navigated with, so the Complete-Intake tests can assert the Onboarding tab hand-off. */
+function ParticipantsArrival() {
+  const { search, state } = useLocation()
+  return (
+    <div>
+      Participants list
+      <span data-testid="arrival-search">{search}</span>
+      <span data-testid="arrival-state">{JSON.stringify(state)}</span>
+    </div>
+  )
+}
+
 function renderPage(path = '/participants/new') {
   const router = createMemoryRouter([
     { path: '/participants/new', element: <IntakeWizardPage /> },
     { path: '/participants/:id/intake', element: <IntakeWizardPage /> },
     { path: '/participants/:id', element: <div>Participant detail</div> },
     { path: '/participants/:id/profile', element: <div>Profile wizard</div> },
-    { path: '/participants', element: <div>Participants list</div> },
+    { path: '/participants', element: <ParticipantsArrival /> },
   ], { initialEntries: [path] })
   return render(<RouterProvider router={router} />)
 }
@@ -184,7 +197,7 @@ describe('IntakeWizardPage', () => {
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
   })
 
-  it('completes create-mode intake with a CSPRNG UUID when randomUUID is unavailable and hands off to Profile', async () => {
+  it('completes create-mode intake with a CSPRNG UUID when randomUUID is unavailable and hands off to the Onboarding table', async () => {
     vi.stubGlobal('crypto', {
       getRandomValues: (bytes: Uint8Array) => {
         bytes.fill(0)
@@ -200,7 +213,65 @@ describe('IntakeWizardPage', () => {
       isDraft: true, completeIntake: true, firstName: 'Jamie', lastName: 'Rivers',
       completionRequestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
     }))
-    expect(await screen.findByText(/profile wizard/i)).toBeInTheDocument()
+    // Not the Profile wizard: completing Intake puts the participant on the onboarding worklist, so go and show them there,
+    // carrying who completed (for the table's one-off confirmation) in router state.
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(screen.queryByText(/profile wizard/i)).not.toBeInTheDocument()
+    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=onboarding')
+    expect(JSON.parse(screen.getByTestId('arrival-state').textContent!)).toEqual({
+      intakeComplete: { participantId: 'new-participant-1', name: 'Jamie Rivers' },
+    })
+  })
+
+  it('names the participant in the confirmation as the server lists them (preferred name aware) when it returns one', async () => {
+    mockCreate.mockResolvedValue({ success: true, data: { id: 'new-participant-1', fullName: 'Jay Rivers' } })
+    const user = userEvent.setup()
+    renderPage()
+    await walkToReview(user)
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(JSON.parse(screen.getByTestId('arrival-state').textContent!).intakeComplete.name).toBe('Jay Rivers')
+  })
+
+  it('completing a resumed draft (edit mode) also lands on the Onboarding table, for that participant', async () => {
+    const user = userEvent.setup()
+    mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    mockUpdate.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
+    renderPage('/participants/draft-1/intake')
+    for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/review/i)
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(mockUpdate.mock.calls[0][0]).toEqual({
+      id: 'draft-1',
+      data: expect.objectContaining({ isDraft: true, completeIntake: true, completionRequestId: expect.any(String) }),
+    })
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(screen.queryByText(/profile wizard/i)).not.toBeInTheDocument()
+    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=onboarding')
+    expect(JSON.parse(screen.getByTestId('arrival-state').textContent!)).toEqual({
+      intakeComplete: { participantId: 'draft-1', name: 'Jamie Rivers' },
+    })
+  })
+
+  it('stays on the wizard, navigating nowhere, when completing fails or the server does not accept it', async () => {
+    const user = userEvent.setup()
+    mockCreate.mockRejectedValueOnce(new Error('Network down'))
+    renderPage()
+    await walkToReview(user)
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
+    await expectStep(/review/i)
+
+    mockCreate.mockResolvedValueOnce({ success: false })
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
   })
 
   it('saves a create-mode draft from the first step without completing intake', async () => {
@@ -210,7 +281,9 @@ describe('IntakeWizardPage', () => {
     await user.click(screen.getByRole('button', { name: /save as draft/i }))
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({ isDraft: true, completeIntake: false }))
+    // "Save as draft" is unchanged: it lands on the participant's detail page, not the Onboarding table.
     expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
   })
 
   it('keeps Intake field ownership exact: every Intake field belongs to one step and no Profile field does', () => {

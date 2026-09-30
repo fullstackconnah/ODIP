@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { apiGet } from '@/api/client'
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
+import { readIntakeCompleteNotice } from './intake/intakeComplete'
 
 type WorklistRow = {
   participantId: string
@@ -63,6 +64,16 @@ export function OnboardingTable() {
 
 function useOnboardingScreen() {
   const navigate = useNavigate()
+  const location = useLocation()
+  // A one-off confirmation from the Intake wizard ("Intake complete — {name} is now in onboarding."), carried by
+  // navigation state. Held in state so it survives the history-state clear below, and cleared from history so a
+  // reload or coming back to this URL later does not replay it.
+  const [completed] = useState(() => readIntakeCompleteNotice(location.state))
+  useEffect(() => {
+    if (completed) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    // Only the arrival matters: run once for the notice this screen mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<WorklistRow[]>('/inquiries/onboarding-worklist') })
@@ -127,6 +138,9 @@ function useOnboardingScreen() {
 
   const body = (
     <>
+      {completed && (
+        <Callout tone="success" className="mb-3">Intake complete — {completed.name} is now in onboarding.</Callout>
+      )}
       {worklist.isError && (
         <Callout
           tone="error"
@@ -143,7 +157,7 @@ function useOnboardingScreen() {
           action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
-        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." />
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
       ))}
     </>
   )
