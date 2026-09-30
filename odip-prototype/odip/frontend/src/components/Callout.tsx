@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, AlertCircle, Info, CheckCircle2, type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
+import { toneOf } from '@/lib/tone'
 
 /**
  * Severity for `Callout`. `error` and `warning` are announced assertively to assistive
  * tech (`role="alert"`); `info` and `success` are polite (`role="status"`), per the WAI-ARIA
- * guidance for "informational" vs "interrupting" content.
+ * guidance for "informational" vs "interrupting" content. `error` is the older word for the `danger` tone (lib/tone.ts); both work.
  */
-export type CalloutTone = 'error' | 'warning' | 'info' | 'success'
+export type CalloutTone = 'error' | 'danger' | 'warning' | 'info' | 'success'
 
 type ToneStyle = {
   icon: LucideIcon
@@ -19,10 +20,11 @@ type ToneStyle = {
   ariaLive: 'assertive' | 'polite'
 }
 
-const TONE_STYLES: Record<CalloutTone, ToneStyle> = {
-  // Error: destructive container tint, destructive ink — the canonical "something went
+// Keyed by the canonical tone: the `error` alias is resolved to `danger` before the lookup.
+const TONE_STYLES: Record<'danger' | 'warning' | 'info' | 'success', ToneStyle> = {
+  // Danger (`error`): destructive container tint, destructive ink — the canonical "something went
   // wrong" banner that was previously copy-pasted across ~20 pages.
-  error: {
+  danger: {
     icon: AlertTriangle,
     container: 'bg-[var(--color-destructive)]/10 border-[var(--color-destructive)]/30 text-[var(--color-destructive)]',
     iconClass: 'text-[var(--color-destructive)]',
@@ -84,7 +86,7 @@ export type CalloutProps = {
  * - The icon is decorative (`aria-hidden`); the visible text is the source of meaning.
  */
 export function Callout({ tone, title, children, icon, actions, className }: CalloutProps) {
-  const style = TONE_STYLES[tone]
+  const style = TONE_STYLES[toneOf(tone) as keyof typeof TONE_STYLES]
   const Icon = icon === null ? null : (icon ?? style.icon)
   return (
     <div

@@ -1,4 +1,5 @@
 import { isValidElement, type ComponentType, type ReactNode } from 'react'
+import { ON_TINT, TONE, toneOf, type Attention, type Tone } from '@/lib/tone'
 
 type FactBarIconComponent = ComponentType<{ className?: string }>
 
@@ -6,7 +7,7 @@ type FactBarIconComponent = ComponentType<{ className?: string }>
  * How a `glance` segment asks for attention. `warning` fills it with `--color-warning-container` (pending,
  * time-bound), `error` with `--color-error-container` (action needed, outstanding). Quiet segments set nothing.
  */
-export type FactBarAttention = 'warning' | 'error'
+export type FactBarAttention = Attention
 
 export type FactBarSegment = {
   label: string
@@ -92,14 +93,9 @@ const GLANCE_TONE: Record<'quiet' | FactBarAttention, { cell: string; label: str
     cell: 'text-[var(--color-foreground)]',
     label: 'text-[var(--color-muted-foreground)]',
   },
-  warning: {
-    cell: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-    label: '',
-  },
-  error: {
-    cell: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-    label: '',
-  },
+  // A tinted segment is the tone's own container and on-container (lib/tone.ts): the same pair StatCard's attention tile wears.
+  warning: { cell: TONE.warning.solid, label: '' },
+  error: { cell: TONE.danger.solid, label: '' },
 }
 
 /**
@@ -183,22 +179,11 @@ export function FactBar({ segments, className, variant = 'default' }: FactBarPro
   )
 }
 
-/** The state a badge reports. `warning` and `negative` ask for attention; `positive` and `neutral` do not. */
-export type FactChipTone = 'positive' | 'warning' | 'negative' | 'neutral'
-
-const CHIP_TONE: Record<FactChipTone, string> = {
-  positive: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  warning: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  negative: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  neutral: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
-}
-
-// On a tinted segment a chip in its own tone would vanish into the fill (warning on warning-container), so it
-// becomes a card-white pill that keeps the tone's text colour. Positive and neutral chips never sit on a tint.
-const CHIP_ON_TINT: Partial<Record<FactChipTone, string>> = {
-  warning: 'bg-[var(--color-card)] text-[var(--color-on-warning-container)]',
-  negative: 'bg-[var(--color-card)] text-[var(--color-on-error-container)]',
-}
+/**
+ * The state a badge reports. `warning` and `negative` (the danger tone) ask for attention; `positive` (success) and `neutral` do not.
+ * `positive` and `negative` are the older words for the success and danger tones, and `success` and `danger` work too.
+ */
+export type FactChipTone = 'positive' | 'warning' | 'negative' | 'neutral' | Extract<Tone, 'success' | 'danger'>
 
 /**
  * Small state pill for a `FactBarSegment.badge` (Waitlist, Action Needed, Covered ...): the same rounded-full,
@@ -206,6 +191,9 @@ const CHIP_ON_TINT: Partial<Record<FactChipTone, string>> = {
  * does that for you.
  */
 export function FactChip({ tone, onTint = false, children }: { tone: FactChipTone; onTint?: boolean; children: ReactNode }) {
-  const toneClass = (onTint && CHIP_ON_TINT[tone]) || CHIP_TONE[tone]
+  const resolved = toneOf(tone)
+  // On a tinted segment a chip in its own tone would vanish into the fill (warning on warning-container), so it becomes a card-white
+  // pill that keeps the tone's text colour. Success and neutral chips never sit on a tint.
+  const toneClass = (onTint && ON_TINT[resolved]) || TONE[resolved].solid
   return <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
 }

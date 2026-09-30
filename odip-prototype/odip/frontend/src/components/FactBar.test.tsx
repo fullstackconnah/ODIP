@@ -338,4 +338,10 @@ describe('FactChip', () => {
     render(<FactChip tone={tone} onTint>Label</FactChip>)
     expect(screen.getByText('Label').className).not.toMatch(/bg-\[var\(--color-card\)\]/)
   })
+  it.each([['success', 'positive'], ['danger', 'negative']] as const)('accepts the tone word "%s" for the older "%s": same chip, same tint behaviour', (word, older) => {
+    const { container, rerender } = render(<FactChip tone={older} onTint>Label</FactChip>)
+    const asOlder = container.innerHTML
+    rerender(<FactChip tone={word} onTint>Label</FactChip>)
+    expect(container.innerHTML).toBe(asOlder)
+  })
 })

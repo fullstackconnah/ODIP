@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
+import { CARD_WASH, TONE, attentionOf, type Attention, type Tone } from '@/lib/tone'
 import { Card } from './Card'
-import type { FactBarAttention, FactChipTone } from './FactBar'
-import { attentionForTone, glanceState } from './glanceState'
+import { glanceState } from './glanceState'
 
-export type StatCardTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+/** A KPI tile's tone: every tone but `accessible`, which is a category colour, not a figure's state. */
+export type StatCardTone = Exclude<Tone, 'accessible'>
 
 /**
  * `default` (the default) is the small KPI tile: a 12px label over a `text-xl` value. `attention` is the opt-in tile of the
@@ -50,32 +51,20 @@ export type StatCardProps = {
 const LOADING_TEXT = 'Loading'
 const ERROR_TEXT = "Couldn't load"
 
-// Tile background tint (applied with `!` because Card sets its own background) and value colour
-// per tone. 'neutral' adds nothing, so a StatCard without `tone` renders exactly as before.
-const TONE_TILE: Record<StatCardTone, string> = {
-  neutral: '',
-  info: '!bg-[var(--color-secondary-container)]/60',
-  success: '!bg-[var(--color-primary-fixed)]/40',
-  warning: '!bg-[var(--color-warning-container)]',
-  danger: '!bg-[var(--color-error-container)]/30',
-}
-
-const TONE_VALUE: Record<StatCardTone, string> = {
-  neutral: 'text-[var(--color-primary)]',
-  info: 'text-[var(--color-info)]',
-  success: 'text-[var(--color-primary)]',
-  warning: 'text-[var(--color-on-warning-container)]',
-  danger: 'text-[var(--color-destructive)]',
-}
+// The tile's wash is the tone's soft wash (CARD_WASH: Card sets its own background, so it needs the important modifier) and its figure takes
+// the tone's ink. A tile without a tone renders exactly as before: no wash, and the olive figure of the fleet KPIs, which is the default tile's
+// own look rather than the neutral tone's ink.
+const NEUTRAL_FIGURE = 'text-[var(--color-primary)]'
+const figureInk = (tone: StatCardTone) => (tone === 'neutral' ? NEUTRAL_FIGURE : TONE[tone].ink)
 
 function DefaultStatCard({ label, value, className, to, tone = 'neutral', caption }: StatCardProps) {
   // Tiles that carry a link, tint or caption sit in dense KPI rows where a long label must not
   // wrap and change the row height; plain tiles keep their original (wrapping) label.
   const dense = !!to || tone !== 'neutral' || !!caption
   const body = (
-    <Card compact className={`${TONE_TILE[tone]} ${className ?? ''}`.trim() || undefined}>
+    <Card compact className={`${CARD_WASH[tone]} ${className ?? ''}`.trim() || undefined}>
       <p className={`${dense ? 'truncate ' : ''}text-xs font-medium text-[var(--color-muted-foreground)]`}>{label}</p>
-      <p className={`text-xl font-display font-bold ${TONE_VALUE[tone]}`}>{value}</p>
+      <p className={`text-xl font-display font-bold ${figureInk(tone)}`}>{value}</p>
       {caption && <p className="text-xs text-[var(--color-muted-foreground)]">{caption}</p>}
     </Card>
   )
@@ -94,23 +83,14 @@ function DefaultStatCard({ label, value, className, to, tone = 'neutral', captio
 
 // ── Attention variant ──
 
-// The glance tone each StatCard tone asks for. Only warning and danger ask for attention, and the tint comes from the glance
-// strip's own mapping (`attentionForTone`), so a tile and a glance segment can never tint differently.
-const GLANCE_TONE: Record<StatCardTone, FactChipTone> = {
-  neutral: 'neutral',
-  info: 'neutral',
-  success: 'neutral',
-  warning: 'warning',
-  danger: 'negative',
-}
-
-// The colours of one tile: the same fills and on-container colours as `GLANCE_TONE` in FactBar.tsx (StatCard.test.tsx pins the
-// two together). A tinted tile puts EVERYTHING (figure and label) in the matching on-container colour, so secondary text is
-// tinted from the hue, never grey. A quiet tile sets its figure and its label in the muted colour, which is what makes it recede.
-const ATTENTION_LOOK: Record<'quiet' | FactBarAttention, string> = {
+// The colours of one tile: the same fills and on-container colours as a glance segment (The Attention Tint Rule), because both take them
+// from the one tone table: only warning and danger ask for attention (`attentionOf`), and they fill with the tone's own solid pair. A tinted
+// tile puts EVERYTHING (figure and label) in the matching on-container colour, so secondary text is tinted from the hue, never grey. A
+// quiet tile sets its figure and its label in the muted colour, which is what makes it recede.
+const ATTENTION_LOOK: Record<'quiet' | Attention, string> = {
   quiet: 'bg-[var(--color-card)] text-[var(--color-muted-foreground)]',
-  warning: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-  error: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  warning: TONE.warning.solid,
+  error: TONE.danger.solid,
 }
 
 // Shape: its own bordered --radius-md tile (so a band that wraps onto a second row never leaves a hole in a shared strip), with
@@ -128,7 +108,7 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
   // count, so it is never tinted and shows no caption: an "All clear" is never claimed without data.
   const noData = loading || error
   const noDataText = loading ? LOADING_TEXT : ERROR_TEXT
-  const attention = noData ? undefined : attentionForTone(GLANCE_TONE[tone])
+  const attention = noData ? undefined : attentionOf(tone)
   const classes = `${ATTENTION_TILE} ${ATTENTION_LOOK[attention ?? 'quiet']} ${className ?? ''}`.trim()
 
   let captionNode = null

@@ -1,18 +1,18 @@
 import type { ReactNode } from 'react'
+import { attentionOf, toneOf } from '@/lib/tone'
 import { FactChip, type FactBarAttention, type FactBarSegment, type FactChipTone } from './FactBar'
 
 /**
  * The attention tint a badge tone asks for, or `undefined` for a quiet segment. The tint is the tone's own family:
  * `warning` (pending, time-bound: Waitlist) -> the warning-container, `negative` (action needed, outstanding) ->
- * the error-container. `positive` and `neutral` never tint: an all-clear is the lime chip, never a fill.
+ * the error-container. `positive` and `neutral` never tint: an all-clear is the lime chip, never a fill. The mapping is
+ * `attentionOf` in lib/tone.ts (The Attention Tint Rule); this only resolves the chip's older tone words first.
  *
  * Kept out of FactBar.tsx because that file exports components, and react-refresh wants component files to export
  * only components.
  */
 export function attentionForTone(tone: FactChipTone): FactBarAttention | undefined {
-  if (tone === 'warning') return 'warning'
-  if (tone === 'negative') return 'error'
-  return undefined
+  return attentionOf(toneOf(tone))
 }
 
 /**
