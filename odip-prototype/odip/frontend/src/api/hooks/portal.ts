@@ -112,6 +112,9 @@ export function useAcknowledgeHandover() {
  * InProgress; `scheduledAt` (the slot's wall-clock `scheduledAt`, unchanged) for a scheduled dose, omitted for PRN. "Not given this
  * shift" is `status: 'Missed'` with a `reason`. Send an `idempotencyKey`. 403 = no Medication Competency; 409
  * ADMINISTRATION_ALREADY_RECORDED carries the existing record as `data`. Refreshes the shift detail and the medication caches.
+ * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;
+ * `scheduledAt` stays the slot's provider-local wall-clock value. The same `idempotencyKey` may only be reused for the SAME dose
+ * (medication, slot and outcome): reusing it for a different one is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED, never a silent replay.
  */
 export function useRecordShiftDose() {
   const qc = useQueryClient()

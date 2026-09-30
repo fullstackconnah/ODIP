@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -59,12 +61,16 @@ public sealed record RecordAdministrationRequest(
 ///    Medication Competency credential on the recording user — see <see cref="MedicationCompetencyGate"/>.
 ///    No role bypass, including the coordinator MAR path.
 /// 2. <b>Idempotent replay.</b> A submit carrying an <see cref="CreateAdministrationDto.IdempotencyKey"/> already
-///    used for this medication returns the earlier record (a double tap is safe). The unique filtered index
-///    on the key backs this up against a true race.
+///    used for the SAME request (medication, slot and outcome) returns the earlier record (a double tap is safe); the same
+///    key on a different request is refused, never silently dropped. The unique filtered index on the key backs this up
+///    against a true race.
 /// 3. <b>One record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), a record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
 ///    with the existing record. This is an application rule, not a unique index, because existing data may already
-///    hold duplicates per slot — see <see cref="MedicationAdministration.IdempotencyKey"/>.
+///    hold duplicates per slot — see <see cref="MedicationAdministration.IdempotencyKey"/>. On PostgreSQL the replay check, the slot
+///    check and the insert run under a transaction-scoped advisory lock keyed on the slot, so two requests for one slot (two
+///    devices, two workers, a double tap with no key) cannot both pass the check: the loser waits, then gets the winner's record
+///    as a replay when its key matches and as a 409 when it does not.
 /// </summary>
 public sealed class MedicationAdministrationRecorder
 {
@@ -119,20 +125,32 @@ public sealed class MedicationAdministrationRecorder
         AdministrationDto ToDto(MedicationAdministration a) =>
             MedicationMapping.ToAdministrationDto(a, participantName, med.Name, med.DoseDescription);
 
+        // The slot lock comes BEFORE both the replay check and the one-record-per-slot check and is held until the insert commits (released
+        // by disposal on every early return): a concurrent request for the same slot waits here, and once it gets in it sees the winner's
+        // record - as a replay (200) when the key matches, as an AlreadyRecorded (409) when it does not.
+        await using var slotLock = await SlotLock.AcquireAsync(_db, med.Id, dto.ScheduledAt, ct);
+
         // ── 2. Idempotent replay ──
+        // A key means "this exact request": a replay is only honoured when the medication, slot and outcome all match. A client that
+        // reused one key for two doses (generated once per page instead of per sheet) would otherwise have its second dose silently
+        // dropped while the screen shows success.
+        RecordAdministrationResult ReplayOf(MedicationAdministration prior)
+        {
+            if (prior.ParticipantMedicationId != med.Id)
+                return Fail(RecordAdministrationOutcome.Invalid,
+                    "This request key was already used for a different medication.", MedicationErrorCodes.AdministrationIdempotencyKeyReused);
+            if (prior.ScheduledAt != dto.ScheduledAt || prior.Status != dto.Status)
+                return Fail(RecordAdministrationOutcome.Invalid,
+                    "This request key was already used for a different dose.", MedicationErrorCodes.AdministrationIdempotencyKeyReused);
+            return new RecordAdministrationResult(RecordAdministrationOutcome.Replayed, ToDto(prior));
+        }
+
         var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
         if (key != null)
         {
             var prior = await _db.MedicationAdministrations
                 .FirstOrDefaultAsync(a => a.IdempotencyKey == key && a.TenantId == med.TenantId, ct);
-            if (prior != null)
-            {
-                return prior.ParticipantMedicationId == med.Id
-                    ? new RecordAdministrationResult(RecordAdministrationOutcome.Replayed, ToDto(prior))
-                    : Fail(RecordAdministrationOutcome.Invalid,
-                        "This request key was already used for a different medication.",
-                        MedicationErrorCodes.AdministrationIdempotencyKeyReused);
-            }
+            if (prior != null) return ReplayOf(prior);
         }
 
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
@@ -147,7 +165,7 @@ public sealed class MedicationAdministrationRecorder
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
 
-        // ── 3. One record per scheduled dose slot ──
+        // ── 3. One record per scheduled dose slot (under the slot lock taken above) ──
         if (dto.ScheduledAt is { } scheduledAt)
         {
             var existing = await _db.MedicationAdministrations
@@ -263,21 +281,62 @@ public sealed class MedicationAdministrationRecorder
         try
         {
             await _db.SaveChangesAsync(ct);
+            await slotLock.CommitAsync(ct);
         }
         catch (DbUpdateException ex) when (key != null && ex.InnerException is PostgresException pg
                                           && pg.ConstraintName == MedicationAdministration.IdempotencyIndexName)
         {
             // A racing submit with the SAME key committed between our replay check and our insert. The filtered
             // unique index rejected this one — its outbox/task rows went down with the same transaction — so
-            // drop everything tracked and return the winner, exactly as the sequential replay path would.
+            // drop everything tracked and return the winner, exactly as the sequential replay path would. (A failed statement
+            // aborts a PostgreSQL transaction, so the slot lock's transaction is rolled back before the winner is read.)
             _db.ChangeTracker.Clear();
+            await slotLock.RollbackAsync(ct);
             var winner = await _db.MedicationAdministrations.FirstOrDefaultAsync(a => a.IdempotencyKey == key && a.TenantId == med.TenantId, ct);
-            if (winner != null && winner.ParticipantMedicationId == med.Id)
-                return new RecordAdministrationResult(RecordAdministrationOutcome.Replayed, ToDto(winner));
+            if (winner != null) return ReplayOf(winner);
             throw;
         }
 
         return new RecordAdministrationResult(RecordAdministrationOutcome.Created, ToDto(admin));
+    }
+
+    /// <summary>
+    /// Serialises concurrent recordings of ONE dose slot on PostgreSQL: a transaction-scoped advisory lock keyed on (medication, slot),
+    /// taken before the "already recorded?" check and released when the transaction ends. There is deliberately no unique index on
+    /// (medication, slot) - existing data may hold duplicates and a migration over them could fail on deploy - so this lock is what
+    /// makes the one-record-per-slot rule hold under concurrency. The key is computed here (not with a server hash function) so it does
+    /// not depend on the server version; a hash collision only serialises two unrelated slots briefly. A no-op for an unscheduled (PRN)
+    /// dose and on a provider without advisory locks (the in-memory test provider). If the context is already inside a transaction the
+    /// lock joins it and that transaction's owner commits.
+    /// </summary>
+    private sealed class SlotLock : IAsyncDisposable
+    {
+        private readonly IDbContextTransaction? _owned;
+
+        private SlotLock(IDbContextTransaction? owned) => _owned = owned;
+
+        public static async Task<SlotLock> AcquireAsync(OdipDbContext db, Guid medicationId, DateTime? slot, CancellationToken ct)
+        {
+            if (slot is null || !db.Database.IsNpgsql()) return new SlotLock(null);
+
+            var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({KeyFor(medicationId, slot.Value)})", ct);
+            return new SlotLock(owned);
+        }
+
+        public Task CommitAsync(CancellationToken ct) => _owned?.CommitAsync(ct) ?? Task.CompletedTask;
+
+        public Task RollbackAsync(CancellationToken ct) => _owned?.RollbackAsync(ct) ?? Task.CompletedTask;
+
+        public ValueTask DisposeAsync() => _owned?.DisposeAsync() ?? ValueTask.CompletedTask;
+
+        private static long KeyFor(Guid medicationId, DateTime slot)
+        {
+            Span<byte> bytes = stackalloc byte[24];
+            medicationId.TryWriteBytes(bytes);
+            BitConverter.TryWriteBytes(bytes[16..], slot.Ticks);
+            return BitConverter.ToInt64(SHA256.HashData(bytes), 0);
+        }
     }
 
     private static RecordAdministrationResult Fail(RecordAdministrationOutcome outcome, string message, string? code = null) =>

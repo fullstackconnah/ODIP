@@ -585,8 +585,23 @@ public class PortalController : ControllerBase
 
         var result = await _recorder.RecordAsync(
             new RecordAdministrationRequest(medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId), ct);
+
+        // Every instant this endpoint returns is UTC with a Z. The record a request just created carries Kind=Utc, but the one a replay
+        // or a 409 hands back is read from PostgreSQL as Kind=Unspecified and would otherwise serialise without the Z - so the same field
+        // would parse differently on the retry path. (scheduledAt stays a provider-local wall-clock value, as it always was.)
+        if (result.Administration is { } administration)
+            result = result with { Administration = WithUtcInstants(administration) };
         return result.ToActionResult(this);
     }
+
+    private static AdministrationDto WithUtcInstants(AdministrationDto a) => a with
+    {
+        AdministeredAt = ProviderLocalTime.AsUtc(a.AdministeredAt),
+        WitnessRequestedAt = ProviderLocalTime.AsUtc(a.WitnessRequestedAt),
+        WitnessRespondedAt = ProviderLocalTime.AsUtc(a.WitnessRespondedAt),
+        PrnOutcomeAt = ProviderLocalTime.AsUtc(a.PrnOutcomeAt),
+        CreatedAt = ProviderLocalTime.AsUtc(a.CreatedAt),
+    };
 
     // ══════════════════════════════════════════════════════════════
     // HANDOVER (shift package, D4)

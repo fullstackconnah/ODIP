@@ -16,6 +16,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Medications;
 using Xunit;
 
 namespace Odip.Tests.Postgres;
@@ -377,6 +378,196 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.IdempotencyKey == key));
     }
 
+    private static Mock<ICurrentTenant> TenantMock(Guid tenantId)
+    {
+        var mock = new Mock<ICurrentTenant>();
+        mock.Setup(t => t.TenantId).Returns(tenantId);
+        mock.Setup(t => t.IsSuperAdmin).Returns(false);
+        return mock;
+    }
+
+    /// <summary>Runs <paramref name="attempt"/> <paramref name="count"/> times at once, each on its OWN context (as separate requests would), released together.</summary>
+    private async Task<T[]> RaceAsync<T>(Guid tenantId, int count, Func<OdipDbContext, int, Task<T>> attempt)
+    {
+        var tenant = TenantMock(tenantId);
+        using var gate = new ManualResetEventSlim(false);
+        var tasks = Enumerable.Range(0, count).Select(n => Task.Run(async () =>
+        {
+            await using var db = PostgresFixture.NewContext(_pg.ConnectionString, tenant.Object);
+            gate.Wait();
+            return await attempt(db, n);
+        })).ToList();
+        gate.Set();
+        return await Task.WhenAll(tasks);
+    }
+
+    [SkippableTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConcurrentSubmitsForOneSlot_WithDifferentKeysOrNone_CreateExactlyOneRecord_AndTheRestAreTold409(bool withDistinctKeys)
+    {
+        // There is deliberately no unique index on (medication, slot), so one record per slot under concurrency rests on the advisory
+        // lock the recorder takes on the slot: two workers on overlapping shifts, or a keyless double tap, cannot both pass the check.
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            TimesOfDay = "08:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+        var slot = new DateTime(2026, 7, 14, 8, 0, 0);
+
+        var results = await RaceAsync(tenantId, 8, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
+            new RecordAdministrationRequest(
+                med.Id,
+                new CreateAdministrationDto
+                {
+                    Status = MedicationAdministrationStatus.Administered, ScheduledAt = slot, IdempotencyKey = withDistinctKeys ? $"key-{n}-{Guid.NewGuid()}" : null,
+                },
+                userId, "Ben Turner"),
+            default));
+
+        Assert.Equal(1, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
+        Assert.Equal(7, results.Count(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded));
+        var winner = results.Single(r => r.Outcome == RecordAdministrationOutcome.Created).Administration!;
+        Assert.All(results.Where(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded), r => Assert.Equal(winner.Id, r.Administration!.Id));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == slot));
+    }
+
+    [SkippableFact]
+    public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
+    {
+        // The lock is per (medication, slot): recording the 08:00 and the 12:30 dose at the same moment must both succeed.
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            TimesOfDay = "08:00,12:30", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+
+        var results = await RaceAsync(tenantId, 6, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
+            new RecordAdministrationRequest(
+                med.Id,
+                new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = new DateTime(2026, 7, 14, 8, 0, 0).AddMinutes(n * 30) },
+                userId, "Ben Turner"),
+            default));
+
+        Assert.All(results, r => Assert.Equal(RecordAdministrationOutcome.Created, r.Outcome));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(6, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
+    [SkippableFact]
+    public async Task ConcurrentBreakStarts_OnRealPostgres_LeaveExactlyOneRunningBreak_AndTheRestAreToldAlreadyRunning()
+    {
+        // Exercises the unique-violation branch of ShiftBreakService.StartAsync (the partial unique index: one running break per completion).
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (_, userId, _, completionId) = await SeedCompletionAsync(setup);
+
+        var results = await RaceAsync(tenantId, 8, async (db, _) =>
+        {
+            var completion = await db.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+            return await new ShiftBreakService(db).StartAsync(completion, userId, default);
+        });
+
+        Assert.Equal(1, results.Count(r => r.Outcome == ShiftBreakOutcome.Ok));
+        Assert.Equal(7, results.Count(r => r.Outcome == ShiftBreakOutcome.AlreadyRunning));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.ShiftBreaks.CountAsync(b => b.ShiftCompletionId == completionId && b.EndedAt == null));
+    }
+
+    [SkippableFact]
+    public async Task ConcurrentHandoverAcknowledgements_OnRealPostgres_AreAllOk_AndLeaveOneRow()
+    {
+        // Exercises the unique-violation branch of ShiftHandoverService.AcknowledgeAsync (one acknowledgement per reader per handover).
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, shiftId, _) = await SeedCompletionAsync(setup);
+        var previous = new User
+        {
+            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(), FirstName = "Tom", LastName = "Beattie",
+            Role = UserRole.SupportWorker, IsActive = true,
+        };
+        var previousShift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = previous.Id, ServiceDate = new DateOnly(2026, 7, 13),
+            StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(15, 0), Status = ShiftStatus.PendingReview,
+        };
+        var previousCompletion = new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = previousShift.Id, ActualStart = new DateTime(2026, 7, 12, 21, 0, 0, DateTimeKind.Utc),
+            ActualEnd = new DateTime(2026, 7, 13, 5, 0, 0, DateTimeKind.Utc), TimeZoneId = "Australia/Sydney", SubmittedByUserId = previous.Id,
+            StartedAt = new DateTime(2026, 7, 12, 21, 0, 0, DateTimeKind.Utc), SubmittedAt = new DateTime(2026, 7, 13, 5, 0, 0, DateTimeKind.Utc),
+            IsActive = true, HandoverText = "Check the left heel.",
+        };
+        setup.AddRange(previous, previousShift, previousCompletion);
+        await setup.SaveChangesAsync();
+
+        var outcomes = await RaceAsync(tenantId, 8, async (db, _) =>
+        {
+            var shift = await db.Shifts.SingleAsync(s => s.Id == shiftId);
+            return await new ShiftHandoverService(db).AcknowledgeAsync(shift, userId, null, default);
+        });
+
+        Assert.All(outcomes, o => Assert.Equal(HandoverAckOutcome.Ok, o));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.HandoverAcknowledgements.CountAsync(a => a.SourceCompletionId == previousCompletion.Id && a.UserId == userId));
+    }
+
+    [SkippableFact]
+    public async Task ARetryAndA409_OnRealPostgres_ReturnTheRecordsInstantsAsUtc()
+    {
+        // A record read back from PostgreSQL has Kind=Unspecified (legacy timestamp behaviour): without the portal's normalisation the
+        // replay and the 409 body would serialise their instants without a Z while a fresh record carries one.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), State = "NSW" });
+        var (participantId, userId, shiftId, _) = await SeedCompletionAsync(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            TimesOfDay = "09:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        db.ParticipantMedications.Add(med);
+        await db.SaveChangesAsync();
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test");
+        PortalController PortalFor(OdipDbContext context) => new(context, TenantMock(tenantId).Object, clock: FakeClock.AtUtc(2026, 7, 14, 7, 0))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+        var slot = new DateTime(2026, 7, 14, 9, 0, 0);
+        var created = await PortalFor(db).RecordShiftDose(shiftId, med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = slot, IdempotencyKey = "k-utc" }, default);
+        Assert.Equal(DateTimeKind.Utc, Assert.IsType<ApiResponse<AdministrationDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!.AdministeredAt!.Value.Kind);
+
+        // A fresh context, so the record is READ from PostgreSQL rather than handed back from the change tracker.
+        await using var fresh = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var replay = await PortalFor(fresh).RecordShiftDose(shiftId, med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = slot, IdempotencyKey = "k-utc" }, default);
+        await using var fresh2 = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var conflict = await PortalFor(fresh2).RecordShiftDose(shiftId, med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = slot, IdempotencyKey = "k-other" }, default);
+
+        var replayed = Assert.IsType<ApiResponse<AdministrationDto>>(Assert.IsType<OkObjectResult>(replay.Result).Value).Data!;
+        var conflicting = Assert.IsType<ApiResponse<AdministrationDto>>(Assert.IsType<ConflictObjectResult>(conflict.Result).Value).Data!;
+        foreach (var record in new[] { replayed, conflicting })
+        {
+            Assert.Equal(DateTimeKind.Utc, record.AdministeredAt!.Value.Kind);
+            Assert.Equal(DateTimeKind.Utc, record.CreatedAt.Kind);
+        }
+    }
+
     // ══════════════════════ every new read path translates to SQL ══════════════════════
 
     [SkippableFact]
@@ -444,7 +635,8 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         await db.SaveChangesAsync();
 
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test");
-        var portal = new PortalController(db, tenant.Object)
+        // 17:00 local (AEST) on the shift's day: every slot of the 09:00-17:00 shift has come due, whatever the machine's clock says.
+        var portal = new PortalController(db, tenant.Object, clock: FakeClock.AtUtc(2026, 7, 14, 7, 0))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
         };

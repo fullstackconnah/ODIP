@@ -282,6 +282,106 @@ public class PortalRecordShiftDoseTests
         Assert.Equal(DateTimeKind.Unspecified, (await f.Db.MedicationAdministrations.SingleAsync()).ScheduledAt!.Value.Kind);
     }
 
+    [Fact]
+    public async Task AMedicationOutsideItsStartAndEndDates_Is422_OnAnOvernightShift_TheCourseIsTestedPerDate()
+    {
+        // A 22:00 -> 06:00 shift starting 14 Jul touches two dates. A course that ends on the 14th has no dose on the 15th, and one that
+        // starts on the 15th has none on the 14th: the window-level query keeps both medications, so the per-date test is what refuses them.
+        var f = Create(endsNextDay: true, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0));
+        var ended = AddMed(f, "Antibiotic", "02:00,22:00");
+        ended.EndDate = new DateTime(2026, 7, 14);
+        var starting = AddMed(f, "NewMedication", "23:00,02:00");
+        starting.StartDate = new DateTime(2026, 7, 15);
+        f.Db.SaveChanges();
+
+        var afterTheCourse = await f.Controller.RecordShiftDose(f.Shift.Id, ended.Id, Dose(new DateTime(2026, 7, 15, 2, 0, 0)), default);
+        var lastDose = await f.Controller.RecordShiftDose(f.Shift.Id, ended.Id, Dose(new DateTime(2026, 7, 14, 22, 0, 0)), default);
+        var beforeTheCourse = await f.Controller.RecordShiftDose(f.Shift.Id, starting.Id, Dose(new DateTime(2026, 7, 14, 23, 0, 0)), default);
+        var firstDose = await f.Controller.RecordShiftDose(f.Shift.Id, starting.Id, Dose(new DateTime(2026, 7, 15, 2, 0, 0)), default);
+
+        Assert.Equal(422, Status(afterTheCourse));
+        Assert.Equal(MedicationErrorCodes.DoseSlotNotDue, Body(afterTheCourse).Code);
+        Assert.Equal(200, Status(lastDose));
+        Assert.Equal(422, Status(beforeTheCourse));
+        Assert.Equal(MedicationErrorCodes.DoseSlotNotDue, Body(beforeTheCourse).Code);
+        Assert.Equal(200, Status(firstDose));
+        Assert.Equal(2, await f.Db.MedicationAdministrations.CountAsync());
+    }
+
+    // ── a key means one request (independent review finding 8) ──
+
+    [Fact]
+    public async Task TheSameKeyForADifferentSlot_IsRefused_NotSilentlyReplayed()
+    {
+        // A client that generated one key per page (not per sheet) and reused it for two doses: the second used to be "replayed" as the
+        // first, so the screen said success while the 12:30 dose was never recorded.
+        var f = Create();
+        var med = AddMed(f);
+        await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "page-key"), default);
+
+        var second = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Noon, key: "page-key"), default);
+
+        Assert.Equal(400, Status(second));
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(second).Code);
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task TheSameKeyForADifferentOutcome_IsRefused_NotSilentlyReplayed()
+    {
+        var f = Create();
+        var med = AddMed(f);
+        await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1"), default);
+
+        var changedMind = await f.Controller.RecordShiftDose(
+            f.Shift.Id, med.Id, Dose(Nine, MedicationAdministrationStatus.Refused, key: "k1", reason: "declined"), default);
+
+        Assert.Equal(400, Status(changedMind));
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(changedMind).Code);
+        Assert.Equal(MedicationAdministrationStatus.Administered, (await f.Db.MedicationAdministrations.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task AnExactRetry_StillReplays_EvenWithADifferentNoteOrDoseText()
+    {
+        // The key binds the request to (medication, slot, outcome) - not to every free-text field a retry might re-render.
+        var f = Create();
+        var med = AddMed(f);
+        var first = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1"), default);
+
+        var retry = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1") with { Notes = "added while retrying" }, default);
+
+        Assert.Equal(200, Status(retry));
+        Assert.Equal(Body(first).Data!.Id, Body(retry).Data!.Id);
+    }
+
+    // ── every instant is UTC with a Z, on every path (independent review finding 14) ──
+
+    [Fact]
+    public async Task ARetryAndA409_ReturnEveryInstantAsUtc_EvenWhenTheStoredValueHasNoKind()
+    {
+        // A record read back from PostgreSQL has Kind=Unspecified, which would serialise WITHOUT the Z and be parsed in the browser's
+        // local zone. The response must carry it as a UTC instant, exactly like a record that was just created.
+        var f = Create();
+        var med = AddMed(f);
+        await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1"), default);
+        var stored = await f.Db.MedicationAdministrations.SingleAsync();
+        stored.AdministeredAt = DateTime.SpecifyKind(stored.AdministeredAt!.Value, DateTimeKind.Unspecified);
+        stored.CreatedAt = DateTime.SpecifyKind(stored.CreatedAt, DateTimeKind.Unspecified);
+        f.Db.SaveChanges();
+
+        var replay = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1"), default);
+        var conflict = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k2"), default);
+
+        Assert.Equal(200, Status(replay));
+        Assert.Equal(409, Status(conflict));
+        foreach (var body in new[] { Body(replay), Body(conflict) })
+        {
+            Assert.Equal(DateTimeKind.Utc, body.Data!.AdministeredAt!.Value.Kind);
+            Assert.Equal(DateTimeKind.Utc, body.Data.CreatedAt.Kind);
+        }
+    }
+
     // ── Medication Competency (D3) ──
 
     [Fact]
