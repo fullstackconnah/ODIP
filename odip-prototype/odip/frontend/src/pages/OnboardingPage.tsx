@@ -88,20 +88,34 @@ function useOnboardingScreen() {
         .filter(Boolean)
         .some(field => String(field).toLowerCase().includes(term)))
   }, [allRows, search])
+  // Column budget (md+; below md the mobile card layout lets everything wrap). DataTable cells never wrap and its box
+  // scrolls sideways, and two of these columns hold free text of any length: the stage chip (the first blocking
+  // reason, a full sentence) and the reasons list under the next action. Left alone they set the column widths, so a
+  // worklist with one long reason was about 2000px wide at 1280 and pushed "Action" off the right edge, and the
+  // Complete Intake hand-off lands here. So the two free-text columns wrap inside a cap and may shrink, the
+  // participant name wraps rather than being cut, and Progress and Action (fixed-size content) keep a floor.
   const columns: Column<WorklistRow>[] = [
-    { key: 'fullName', header: 'Participant', sortable: true },
+    { key: 'fullName', header: 'Participant', sortable: true, wrap: true, minWidth: '9rem' },
     {
       key: 'stage',
       header: 'Current stage',
       sortable: true,
+      minWidth: '11rem',
       render: row => {
         const badge = stageBadge(row)
-        return <StatusBadge status={badge.status} label={badge.label} />
+        return (
+          <StatusBadge
+            status={badge.status}
+            label={badge.label}
+            className="md:inline-block md:my-1.5 md:max-w-[18rem] md:whitespace-normal md:rounded-xl md:leading-snug"
+          />
+        )
       },
     },
     {
       key: 'completedSteps',
       header: 'Progress',
+      minWidth: '10rem',
       render: row => (
         <ProgressBar
           value={row.completedSteps}
@@ -113,8 +127,10 @@ function useOnboardingScreen() {
     {
       key: 'nextAction',
       header: 'Recommended next action',
+      wrap: true,
+      minWidth: '16rem',
       render: row => (
-        <div>
+        <div className="md:max-w-[32rem] md:py-1.5">
           <span className="font-medium">{row.nextAction}</span>
           {row.reasons && row.reasons.length > 1 && (
             <ul className="mt-1 text-xs text-[var(--color-muted-foreground)] space-y-0.5">
@@ -130,6 +146,7 @@ function useOnboardingScreen() {
       key: 'participantId',
       header: 'Action',
       type: 'custom',
+      minWidth: '6rem',
       render: row => canManageParticipantLifecycle
         ? <Button size="sm" className="w-full sm:w-auto" aria-label={`Open onboarding for ${row.fullName}`} onClick={() => navigate(`/onboarding/${row.participantId}`)}>Open</Button>
         : <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => navigate(`/onboarding/${row.participantId}`)}>View checklist</Button>,

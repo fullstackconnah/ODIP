@@ -144,3 +144,44 @@ describe('OnboardingTable: arriving from a completed intake', () => {
     for (const row of screen.getAllByRole('row').slice(1)) expect(row).not.toHaveClass(HIGHLIGHT)
   })
 })
+
+describe('OnboardingTable: column budget (the table must fit, not scroll sideways)', () => {
+  // jsdom does no layout, so this pins the cause. DataTable cells never wrap, so an unbudgeted stage chip (the first
+  // blocking reason, a full sentence) or reasons list sets its column's width: with realistic rows the table was ~2000px
+  // wide at 1280 and "Action" sat off the right edge. Measured in a browser at 1280/1366/1440, see REPORT.md.
+  const LONG_REASON = 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'
+  const LONG_NEXT = 'Confirm service needs for the current draft revision and review the agreement evidence with the representative'
+
+  function renderLongRow() {
+    mockUseQuery.mockReturnValue({
+      data: [{ participantId: 'p-9', fullName: 'Alexandra Christine Montgomery-Featherstonehaugh', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5,
+        nextAction: LONG_NEXT, reasons: [LONG_REASON, 'Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.'] }],
+      isLoading: false,
+    })
+    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+  }
+
+  it('wraps the stage chip inside a cap instead of letting a long reason set the column width', () => {
+    renderLongRow()
+    const chip = screen.getByText(LONG_REASON)
+    expect(chip).toHaveClass('md:max-w-[18rem]', 'md:whitespace-normal', 'md:inline-block')
+  })
+
+  it('lets the next-action cell and the participant name wrap (no nowrap), with the next action capped in width', () => {
+    renderLongRow()
+    const next = screen.getByText(LONG_NEXT).closest('td')!
+    expect(next).not.toHaveClass('md:whitespace-nowrap')
+    expect(screen.getByText(LONG_NEXT).parentElement).toHaveClass('md:max-w-[32rem]')
+    expect(screen.getByText('Alexandra Christine Montgomery-Featherstonehaugh').closest('td')).not.toHaveClass('md:whitespace-nowrap')
+  })
+
+  it('keeps a floor under every column, so none is squeezed out of view and the headers stay readable', () => {
+    renderLongRow()
+    const floors: Record<string, string> = { Participant: '9rem', 'Current stage': '11rem', Progress: '10rem', 'Recommended next action': '16rem', Action: '6rem' }
+    for (const [header, min] of Object.entries(floors)) {
+      const th = screen.getByRole('columnheader', { name: new RegExp(header) })
+      expect(th, header).toHaveClass('md:min-w-[var(--col-min)]')
+      expect(th.getAttribute('style'), header).toContain(`--col-min: ${min}`)
+    }
+  })
+})
