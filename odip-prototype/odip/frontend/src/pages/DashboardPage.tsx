@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/permissions'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
+import { StatCard } from '@/components/StatCard'
 import { Link } from 'react-router-dom'
 import {
   Map, ListChecks, ChevronRight, ShieldAlert
@@ -30,50 +31,14 @@ const statusBadge: Record<string, string> = {
   Draft:           'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
   Planning:        'bg-[var(--color-secondary-container)]/60 text-[var(--color-secondary)]',
   OpenForBookings: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  WaitlistOnly:    'bg-amber-100 text-amber-700',
+  WaitlistOnly:    'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   Confirmed:       'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  InProgress:      'bg-[#ffd7ef]/60 text-[#8e337b]',
+  InProgress:      'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
   Completed:       'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]',
 }
 
-// ── KPI tile ──
-// StatCard has no slot for a link wrapper, a semantic tone, or a caption line — all needed here
-// — so this is a local tile built on the same Card primitive StatCard itself wraps, rather than
-// editing StatCard. See final report for this gap.
-type KpiTone = 'error' | 'warning'
-
-function KpiTile({ label, value, to, tone, caption }: {
-  label: string
-  value: number
-  to?: string
-  tone?: KpiTone
-  caption?: string
-}) {
-  const tinted = !!tone && value > 0
-  const toneClass = tinted
-    ? tone === 'error'
-      ? '!bg-[var(--color-error-container)]/30 [&_[data-kpi-value]]:text-[var(--color-destructive)]'
-      : '!bg-[var(--color-warning-container)] [&_[data-kpi-value]]:text-[var(--color-on-warning-container)]'
-    : ''
-  const body = (
-    <Card compact className={toneClass}>
-      <p className="truncate text-xs font-medium text-[var(--color-muted-foreground)]">{label}</p>
-      <p data-kpi-value className="text-xl font-display font-bold text-[var(--color-primary)]">{value}</p>
-      {caption && <p className="text-[11px] text-[var(--color-muted-foreground)]">{caption}</p>}
-    </Card>
-  )
-  if (to) {
-    return (
-      <Link
-        to={to}
-        className="block rounded-[var(--radius-md)] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-      >
-        {body}
-      </Link>
-    )
-  }
-  return body
-}
+// Tint a KPI tile only when its count is actionable (> 0).
+const tinted = (count: number, tone: 'danger' | 'warning') => (count > 0 ? tone : undefined)
 
 export default function DashboardPage() {
   const { canViewAlerts, canApproveLeave } = usePermissions()
@@ -146,38 +111,38 @@ export default function DashboardPage() {
 
       {/* ── KPI row — every metric in one row, tinted only when actionable ── */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
-        <KpiTile label="Upcoming Trips" value={d.upcomingTripCount} />
-        <KpiTile label="Active Participants" value={d.activeParticipantCount} />
-        <KpiTile label="Outstanding Tasks" value={d.outstandingTaskCount} />
-        <KpiTile
+        <StatCard label="Upcoming Trips" value={d.upcomingTripCount} />
+        <StatCard label="Active Participants" value={d.activeParticipantCount} />
+        <StatCard label="Outstanding Tasks" value={d.outstandingTaskCount} />
+        <StatCard
           label="Qualification Issues"
           value={qualIssueCount}
           to="/qualifications"
-          tone="error"
+          tone={tinted(qualIssueCount, 'danger')}
           caption={qualIssueCount === 0 ? 'All clear' : undefined}
         />
         {canViewAlerts && (
-          <KpiTile
+          <StatCard
             label="Critical Participant Alerts"
             value={criticalAlertItems.length}
             to="/participants"
-            tone="error"
+            tone={tinted(criticalAlertItems.length, 'danger')}
             // Don't claim "All clear" while the alerts request is still in flight — a false
             // negative here is worse than a brief blank caption, since coordinators rely on
             // this tile to know whether any participant needs urgent attention.
             caption={!alertsLoading && criticalAlertItems.length === 0 ? 'All clear' : undefined}
           />
         )}
-        <KpiTile label="Overdue" value={d.overdueTaskCount} tone="error" />
-        <KpiTile label="Missing Accomm." value={d.tripsMissingAccommodation} tone="warning" />
-        <KpiTile label="Missing Vehicles" value={d.tripsMissingVehicles} tone="warning" />
-        <KpiTile label="Missing Staff" value={d.tripsMissingStaff} tone="warning" />
-        <KpiTile label="Open Incidents" value={d.openIncidentCount} tone="warning" />
-        <KpiTile label="QSC Overdue" value={d.qscOverdueCount} tone="error" />
+        <StatCard label="Overdue" value={d.overdueTaskCount} tone={tinted(d.overdueTaskCount, 'danger')} />
+        <StatCard label="Missing Accomm." value={d.tripsMissingAccommodation} tone={tinted(d.tripsMissingAccommodation, 'warning')} />
+        <StatCard label="Missing Vehicles" value={d.tripsMissingVehicles} tone={tinted(d.tripsMissingVehicles, 'warning')} />
+        <StatCard label="Missing Staff" value={d.tripsMissingStaff} tone={tinted(d.tripsMissingStaff, 'warning')} />
+        <StatCard label="Open Incidents" value={d.openIncidentCount} tone={tinted(d.openIncidentCount, 'warning')} />
+        <StatCard label="QSC Overdue" value={d.qscOverdueCount} tone={tinted(d.qscOverdueCount, 'danger')} />
         {/* Pending Leave stays hidden at zero (not part of the fixed 10-tile KPI set) — nothing
             to action when the queue is empty. */}
         {canApproveLeave && pendingLeaveCount > 0 && (
-          <KpiTile label="Pending Leave" value={pendingLeaveCount} to="/rostering/leave" tone="warning" />
+          <StatCard label="Pending Leave" value={pendingLeaveCount} to="/rostering/leave" tone="warning" />
         )}
       </div>
 
@@ -302,7 +267,7 @@ export default function DashboardPage() {
                   className={`rounded-[var(--radius-md)] p-[var(--card-pad)] ${style.bg} border border-[var(--color-destructive)]/10 transition-opacity hover:opacity-90`}
                 >
                   <div className="mb-2 flex items-start justify-between">
-                    <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${style.text}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${style.text}`}>
                       <Icon className="h-3 w-3" /> {style.label}
                     </span>
                   </div>

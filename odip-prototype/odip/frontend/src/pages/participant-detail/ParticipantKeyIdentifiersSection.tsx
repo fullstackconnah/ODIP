@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -109,51 +110,17 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          {p.pensionCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Pension Card</span>
-              <span>{p.pensionCardNumber}{p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.medicareNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Medicare</span>
-              <span>{p.medicareNumber}{p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.companionCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Companion Card</span>
-              <span>{p.companionCardNumber}{p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.privateHealthFund && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Private Health Fund</span>
-              <span>{p.privateHealthFund}{p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}</span>
-            </>
-          )}
-          {p.taxiCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Taxi Card</span>
-              <span>{p.taxiCardNumber}</span>
-            </>
-          )}
-          {(p.hairColour || p.eyeColour) && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Hair / Eye Colour</span>
-              <span>{[p.hairColour, p.eyeColour].filter(Boolean).join(' / ') || '—'}</span>
-            </>
-          )}
-          {(p.weightKg != null || p.heightCm != null) && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Weight / Height</span>
-              <span>{[p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') || '—'}</span>
-            </>
-          )}
-          {!hasAnyData && <span className="text-[var(--color-muted-foreground)] sm:col-span-2">No key identifiers recorded</span>}
-        </div>
+        <FactList
+          items={[
+            { label: 'Pension Card', value: p.pensionCardNumber ? `${p.pensionCardNumber}${p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}` : undefined },
+            { label: 'Medicare', value: p.medicareNumber ? `${p.medicareNumber}${p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}` : undefined },
+            { label: 'Companion Card', value: p.companionCardNumber ? `${p.companionCardNumber}${p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}` : undefined },
+            { label: 'Private Health Fund', value: p.privateHealthFund ? `${p.privateHealthFund}${p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}` : undefined },
+            { label: 'Taxi Card', value: p.taxiCardNumber },
+            { label: 'Hair / Eye Colour', value: [p.hairColour, p.eyeColour].filter(Boolean).join(' / ') },
+            { label: 'Weight / Height', value: [p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') },
+          ].filter((item) => item.value)}
+        />
       )}
     </SectionEditPanel>
   )

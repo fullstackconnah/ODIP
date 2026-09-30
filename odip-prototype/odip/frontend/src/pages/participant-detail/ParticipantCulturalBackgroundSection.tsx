@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
@@ -22,6 +23,8 @@ function keyToTri(k: string): boolean | null {
 function yesNoUnset(value: boolean | null | undefined): string {
   return value === true ? 'Yes' : value === false ? 'No' : '—'
 }
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 /** PD-7: Cultural Background card — CORE-02's `culturalBackground` group, fully rendered (all 11 fields optional, no merge needed). */
 type CulturalBackgroundDraft = {
@@ -77,7 +80,7 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
   }
 
   return (
-    <SectionEditPanel title="Cultural Background" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Cultural Background" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
@@ -119,29 +122,21 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">CALD</span><span>{yesNoUnset(p.isCald)}</span>
-          <span className="text-[var(--color-muted-foreground)]">LGBTIQA+</span><span>{yesNoUnset(p.isLgbtqi)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Family / Community</span><span>{yesNoUnset(p.isFamilyCommunity)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Aboriginal and/or Torres Strait Islander</span><span>{yesNoUnset(p.isAboriginalOrTorresStraitIslander)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Received: Rights and Responsibilities</span><span>{yesNoUnset(p.receivedRightsAndResponsibilitiesInfo)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Received: Privacy and Confidentiality</span><span>{yesNoUnset(p.receivedPrivacyAndConfidentialityInfo)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Received: Feedback Information and Form</span><span>{yesNoUnset(p.receivedFeedbackInfo)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Received: Being Safe Information</span><span>{yesNoUnset(p.receivedBeingSafeInfo)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Received: Advocacy Information</span><span>{yesNoUnset(p.receivedAdvocacyInfo)}</span>
-          {p.personalInterests && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Personal Interests</span>
-              <span className="whitespace-pre-line">{p.personalInterests}</span>
-            </>
-          )}
-          {p.choiceControlNotes && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Choice & Control Notes</span>
-              <span className="whitespace-pre-line">{p.choiceControlNotes}</span>
-            </>
-          )}
-        </div>
+        <FactList
+          items={[
+            { label: 'CALD', value: yesNoUnset(p.isCald) },
+            { label: 'LGBTIQA+', value: yesNoUnset(p.isLgbtqi) },
+            { label: 'Family / Community', value: yesNoUnset(p.isFamilyCommunity) },
+            { label: 'Aboriginal and/or Torres Strait Islander', value: yesNoUnset(p.isAboriginalOrTorresStraitIslander) },
+            { label: 'Received: Rights and Responsibilities', value: yesNoUnset(p.receivedRightsAndResponsibilitiesInfo) },
+            { label: 'Received: Privacy and Confidentiality', value: yesNoUnset(p.receivedPrivacyAndConfidentialityInfo) },
+            { label: 'Received: Feedback Information and Form', value: yesNoUnset(p.receivedFeedbackInfo) },
+            { label: 'Received: Being Safe Information', value: yesNoUnset(p.receivedBeingSafeInfo) },
+            { label: 'Received: Advocacy Information', value: yesNoUnset(p.receivedAdvocacyInfo) },
+            ...(p.personalInterests ? [{ label: 'Personal Interests', value: pl(p.personalInterests) }] : []),
+            ...(p.choiceControlNotes ? [{ label: 'Choice & Control Notes', value: pl(p.choiceControlNotes) }] : []),
+          ]}
+        />
       )}
     </SectionEditPanel>
   )

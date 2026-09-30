@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { CHECKLIST_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
 import { parseServiceStreams } from '@/api/types/participants'
 import type { ChecklistItemType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 function Tag({ label }: { label: string }) {
   return (
@@ -89,64 +93,65 @@ export function ParticipantCommunityAccessSection({ p, participantId, canEdit }:
   }
 
   return (
-    <SectionEditPanel title="Community Access" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Community Access" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="space-y-4">
-          <FormField label="Signs I Am Happy and Settled">
+        <div className={formGrid}>
+          <FormField label="Signs I Am Happy and Settled" className={span.medium}>
             <textarea value={draft.signsHappyAndSettled} onChange={(e) => setDraft((d) => ({ ...d, signsHappyAndSettled: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="What Helps Me Calm Down">
+          <FormField label="What Helps Me Calm Down" className={span.medium}>
             <textarea value={draft.whatHelpsMeCalmDown} onChange={(e) => setDraft((d) => ({ ...d, whatHelpsMeCalmDown: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="BOC — Triggers">
+          <FormField label="BOC — Triggers" className={span.medium}>
             <textarea value={draft.bocTriggers} onChange={(e) => setDraft((d) => ({ ...d, bocTriggers: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="BOC — Early Warning Signs">
+          <FormField label="BOC — Early Warning Signs" className={span.medium}>
             <textarea value={draft.bocEarlyWarningSigns} onChange={(e) => setDraft((d) => ({ ...d, bocEarlyWarningSigns: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="BOC — De-Escalation Strategies">
+          <FormField label="BOC — De-Escalation Strategies" className={span.medium}>
             <textarea value={draft.bocDeEscalationStrategies} onChange={(e) => setDraft((d) => ({ ...d, bocDeEscalationStrategies: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="BOC — What Not To Do">
+          <FormField label="BOC — What Not To Do" className={span.medium}>
             <textarea value={draft.bocWhatNotToDo} onChange={(e) => setDraft((d) => ({ ...d, bocWhatNotToDo: e.target.value }))} rows={2} />
           </FormField>
-          <p className={`text-sm font-medium text-[var(--color-muted-foreground)]`}>What My Supports Look Like</p>
-          <FormField label="Morning">
+          <p className={`text-sm font-medium text-[var(--color-muted-foreground)] ${span.long}`}>What My Supports Look Like</p>
+          <FormField label="Morning" className={span.medium}>
             <textarea value={draft.supportsLookLikeMorning} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeMorning: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Day">
+          <FormField label="Day" className={span.medium}>
             <textarea value={draft.supportsLookLikeDay} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeDay: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Afternoon-Evening">
+          <FormField label="Afternoon-Evening" className={span.medium}>
             <textarea value={draft.supportsLookLikeAfternoonEvening} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeAfternoonEvening: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Overnight">
+          <FormField label="Overnight" className={span.medium}>
             <textarea value={draft.supportsLookLikeOvernight} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeOvernight: e.target.value }))} rows={2} />
           </FormField>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-            {p.signsHappyAndSettled && (<><span className="text-[var(--color-muted-foreground)]">Signs I Am Happy and Settled</span><span className="whitespace-pre-line">{p.signsHappyAndSettled}</span></>)}
-            {p.whatHelpsMeCalmDown && (<><span className="text-[var(--color-muted-foreground)]">What Helps Me Calm Down</span><span className="whitespace-pre-line">{p.whatHelpsMeCalmDown}</span></>)}
-            {p.bocTriggers && (<><span className="text-[var(--color-muted-foreground)]">BOC — Triggers</span><span className="whitespace-pre-line">{p.bocTriggers}</span></>)}
-            {p.bocEarlyWarningSigns && (<><span className="text-[var(--color-muted-foreground)]">BOC — Early Warning Signs</span><span className="whitespace-pre-line">{p.bocEarlyWarningSigns}</span></>)}
-            {p.bocDeEscalationStrategies && (<><span className="text-[var(--color-muted-foreground)]">BOC — De-Escalation Strategies</span><span className="whitespace-pre-line">{p.bocDeEscalationStrategies}</span></>)}
-            {p.bocWhatNotToDo && (<><span className="text-[var(--color-muted-foreground)]">BOC — What Not To Do</span><span className="whitespace-pre-line">{p.bocWhatNotToDo}</span></>)}
-            {(p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight) && (
-              <>
-                <span className="text-[var(--color-muted-foreground)]">What My Supports Look Like</span>
-                <span className="whitespace-pre-line">
-                  {[
-                    p.supportsLookLikeMorning && `Morning: ${p.supportsLookLikeMorning}`,
-                    p.supportsLookLikeDay && `Day: ${p.supportsLookLikeDay}`,
-                    p.supportsLookLikeAfternoonEvening && `Afternoon-Evening: ${p.supportsLookLikeAfternoonEvening}`,
-                    p.supportsLookLikeOvernight && `Overnight: ${p.supportsLookLikeOvernight}`,
-                  ].filter(Boolean).join('\n')}
-                </span>
-              </>
-            )}
-          </div>
+          <FactList
+            items={[
+              ...(p.signsHappyAndSettled ? [{ label: 'Signs I Am Happy and Settled', value: pl(p.signsHappyAndSettled) }] : []),
+              ...(p.whatHelpsMeCalmDown ? [{ label: 'What Helps Me Calm Down', value: pl(p.whatHelpsMeCalmDown) }] : []),
+              ...(p.bocTriggers ? [{ label: 'BOC — Triggers', value: pl(p.bocTriggers) }] : []),
+              ...(p.bocEarlyWarningSigns ? [{ label: 'BOC — Early Warning Signs', value: pl(p.bocEarlyWarningSigns) }] : []),
+              ...(p.bocDeEscalationStrategies ? [{ label: 'BOC — De-Escalation Strategies', value: pl(p.bocDeEscalationStrategies) }] : []),
+              ...(p.bocWhatNotToDo ? [{ label: 'BOC — What Not To Do', value: pl(p.bocWhatNotToDo) }] : []),
+              ...((p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight)
+                ? [{
+                    label: 'What My Supports Look Like',
+                    value: pl([
+                      p.supportsLookLikeMorning && `Morning: ${p.supportsLookLikeMorning}`,
+                      p.supportsLookLikeDay && `Day: ${p.supportsLookLikeDay}`,
+                      p.supportsLookLikeAfternoonEvening && `Afternoon-Evening: ${p.supportsLookLikeAfternoonEvening}`,
+                      p.supportsLookLikeOvernight && `Overnight: ${p.supportsLookLikeOvernight}`,
+                    ].filter(Boolean).join('\n')),
+                  }]
+                : []),
+            ]}
+            emptyMessage={answeredChecklistItems.length > 0 ? 'No behaviour details recorded' : undefined}
+          />
           {answeredChecklistItems.length > 0 && (
             <div className="mt-4 space-y-2 text-sm">
               <p className="font-medium text-[var(--color-muted-foreground)]">Community Mobility &amp; Transport Risk / Behaviours of Concern Checklist</p>

@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField, labelClass } from '@/components/FormField'
+import { Button } from '@/components/Button'
+import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { HIDPA_SUPPORT_CATEGORIES } from '@/api/types/enums'
 import {
@@ -31,6 +34,8 @@ function Tag({ label }: { label: string }) {
     </span>
   )
 }
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 /** PD-7: Medical card — CORE-02's `medical` group, fully rendered (all 8 fields, no merge needed). */
 type MedicalDraft = {
@@ -97,10 +102,10 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
   const customEntries = draft.otherDiagnoses.filter((d) => !(DIAGNOSIS_OPTIONS as readonly string[]).includes(d))
 
   return (
-    <SectionEditPanel title="Medical" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => { setDraft(saved); setCustomDiagnosisInput('') }} onCancel={() => { setDraft(saved); setCustomDiagnosisInput('') }} onSave={handleSave}>
+    <SectionEditPanel title="Medical" canEdit={canEdit} isDirty={isDirty} onEditStart={() => { setDraft(saved); setCustomDiagnosisInput('') }} onCancel={() => { setDraft(saved); setCustomDiagnosisInput('') }} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="space-y-4">
-          <FormField label="Primary Diagnosis">
+        <div className={formGrid}>
+          <FormField label="Primary Diagnosis" className={span.medium}>
             <select value={draft.primaryDiagnosis} onChange={(e) => setDraft((d) => ({ ...d, primaryDiagnosis: e.target.value }))}>
               <option value="">Select a diagnosis...</option>
               {DIAGNOSIS_OPTIONS.map((dOpt) => <option key={dOpt} value={dOpt}>{dOpt}</option>)}
@@ -108,17 +113,17 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
             </select>
           </FormField>
           {draft.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL && (
-            <FormField label="Specify Primary Diagnosis" required>
+            <FormField label="Specify Primary Diagnosis" required className={span.medium}>
               <input value={draft.primaryDiagnosisOther} onChange={(e) => setDraft((d) => ({ ...d, primaryDiagnosisOther: e.target.value }))} placeholder="e.g. Rett Syndrome" />
             </FormField>
           )}
-          <fieldset className="m-0 p-0 border-0">
+          <fieldset className={`m-0 p-0 border-0 ${span.long}`}>
             <legend className={labelClass}>Other Diagnoses</legend>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
               {DIAGNOSIS_OPTIONS.map((option) => {
                 const checked = draft.otherDiagnoses.includes(option)
                 return (
-                  <label key={option} className="flex items-center gap-3 py-1 min-h-[44px]">
+                  <label key={option} className="flex items-center gap-3 py-1 min-h-[var(--control-h)]">
                     <input
                       type="checkbox"
                       checked={checked}
@@ -158,9 +163,8 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
                 placeholder={DIAGNOSIS_OTHER_SENTINEL}
                 className="flex-1"
               />
-              <button
-                type="button"
-                className="px-3 min-h-[44px] rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-colors"
+              <Button
+                variant="secondary"
                 onClick={() => {
                   const value = customDiagnosisInput.trim()
                   if (value && !draft.otherDiagnoses.includes(value)) setDraft((d) => ({ ...d, otherDiagnoses: [...d.otherDiagnoses, value] }))
@@ -168,16 +172,16 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
                 }}
               >
                 Add
-              </button>
+              </Button>
             </div>
           </fieldset>
-          <fieldset className="m-0 p-0 border-0">
+          <fieldset className={`m-0 p-0 border-0 ${span.long}`}>
             <legend className={labelClass}>HIDPA Support Categories</legend>
             <div className="grid grid-cols-1 gap-x-4">
               {HIDPA_SUPPORT_CATEGORIES.map((category) => {
                 const checked = draft.hidpaSupportCategories.includes(category)
                 return (
-                  <label key={category} className="flex items-center gap-3 py-1 min-h-[44px]" title={HIDPA_CATEGORY_TITLES[category]}>
+                  <label key={category} className="flex items-center gap-3 py-1 min-h-[var(--control-h)]" title={HIDPA_CATEGORY_TITLES[category]}>
                     <input
                       type="checkbox"
                       checked={checked}
@@ -193,47 +197,42 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
               })}
             </div>
           </fieldset>
-          <FormField label="HIDPA Notes">
+          <FormField label="HIDPA Notes" className={span.long}>
             <textarea value={draft.hidpaNotes} onChange={(e) => setDraft((d) => ({ ...d, hidpaNotes: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Medical Summary">
+          <FormField label="Medical Summary" className={span.long}>
             <textarea value={draft.medicalSummary} onChange={(e) => setDraft((d) => ({ ...d, medicalSummary: e.target.value }))} rows={3} />
           </FormField>
-          <FormField label="Allergies">
+          <FormField label="Allergies" className={span.long}>
             <textarea value={draft.allergiesDetail} onChange={(e) => setDraft((d) => ({ ...d, allergiesDetail: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Anaphylaxis Risk" className="mb-0">
+          <FormField label="Anaphylaxis Risk" className={`mb-0 ${span.medium}`}>
             <ToggleGroup options={YES_NO_UNANSWERED_OPTIONS} value={draft.isAnaphylaxisRisk} onChange={(v) => setDraft((d) => ({ ...d, isAnaphylaxisRisk: v }))} ariaLabel="Anaphylaxis Risk" />
           </FormField>
-          <FormField label="Allergy Management Notes">
+          <FormField label="Allergy Management Notes" className={span.long}>
             <textarea value={draft.allergyManagementNotes} onChange={(e) => setDraft((d) => ({ ...d, allergyManagementNotes: e.target.value }))} rows={2} />
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Primary Diagnosis</span>
-          <span>{p.primaryDiagnosis || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Other Diagnoses</span>
-          <span className="flex flex-wrap gap-1">
-            {p.otherDiagnoses?.length ? p.otherDiagnoses.map((d) => <Tag key={d} label={d} />) : '—'}
-          </span>
-          <span className="text-[var(--color-muted-foreground)]">HIDPA Support Categories</span>
-          <span className="flex flex-wrap gap-1">
-            {hidpaCategories.length ? hidpaCategories.map((c) => <Tag key={c} label={HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c} />) : '—'}
-          </span>
-          {p.hidpaNotes && (<><span className="text-[var(--color-muted-foreground)]">HIDPA Notes</span><span className="whitespace-pre-line">{p.hidpaNotes}</span></>)}
-          {p.medicalSummary && (<><span className="text-[var(--color-muted-foreground)]">Medical Summary</span><span className="whitespace-pre-line">{p.medicalSummary}</span></>)}
-          {p.allergiesDetail && (<><span className="text-[var(--color-muted-foreground)]">Allergies</span><span className="whitespace-pre-line">{p.allergiesDetail}</span></>)}
-          {p.isAnaphylaxisRisk != null && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Anaphylaxis Risk</span>
-              <span>{p.isAnaphylaxisRisk
-                ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-destructive)]">warning</span> Yes</span>
-                : 'No'}</span>
-            </>
-          )}
-          {p.allergyManagementNotes && (<><span className="text-[var(--color-muted-foreground)]">Allergy Management Notes</span><span className="whitespace-pre-line">{p.allergyManagementNotes}</span></>)}
-        </div>
+        <FactList
+          items={[
+            { label: 'Primary Diagnosis', value: p.primaryDiagnosis },
+            { label: 'Other Diagnoses', value: p.otherDiagnoses?.length ? <span className="flex flex-wrap gap-1">{p.otherDiagnoses.map((d) => <Tag key={d} label={d} />)}</span> : undefined },
+            { label: 'HIDPA Support Categories', value: hidpaCategories.length ? <span className="flex flex-wrap gap-1">{hidpaCategories.map((c) => <Tag key={c} label={HIDPA_CATEGORY_LABELS[c as HidpaSupportCategory] ?? c} />)}</span> : undefined },
+            ...(p.hidpaNotes ? [{ label: 'HIDPA Notes', value: pl(p.hidpaNotes) }] : []),
+            ...(p.medicalSummary ? [{ label: 'Medical Summary', value: pl(p.medicalSummary) }] : []),
+            ...(p.allergiesDetail ? [{ label: 'Allergies', value: pl(p.allergiesDetail) }] : []),
+            ...(p.isAnaphylaxisRisk != null
+              ? [{
+                  label: 'Anaphylaxis Risk',
+                  value: p.isAnaphylaxisRisk
+                    ? <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none text-[var(--color-destructive)]">warning</span> Yes</span>
+                    : 'No',
+                }]
+              : []),
+            ...(p.allergyManagementNotes ? [{ label: 'Allergy Management Notes', value: pl(p.allergyManagementNotes) }] : []),
+          ]}
+        />
       )}
     </SectionEditPanel>
   )

@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 /** PD-7: Meals & Diet card — CORE-02's `mealsAndDiet` group, fully rendered (all 11 fields optional, no merge needed). */
 type MealsDietDraft = {
@@ -62,7 +65,7 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
   }
 
   return (
-    <SectionEditPanel title="Meals & Diet" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Meals & Diet" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
           <FormField label="Meal Assistance">
@@ -102,24 +105,22 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          {p.mealAssistanceDetail && (<><span className="text-[var(--color-muted-foreground)]">Meal Assistance</span><span className="whitespace-pre-line">{p.mealAssistanceDetail}</span></>)}
-          {p.chokingRiskMealDetail && (<><span className="text-[var(--color-muted-foreground)]">Choking Risk — Meal Management</span><span className="whitespace-pre-line">{p.chokingRiskMealDetail}</span></>)}
-          {p.modifiedDietDetail && (<><span className="text-[var(--color-muted-foreground)]">Modified Diet</span><span className="whitespace-pre-line">{p.modifiedDietDetail}</span></>)}
-          {p.pegRegimeMealDetail && (<><span className="text-[var(--color-muted-foreground)]">PEG Regime</span><span className="whitespace-pre-line">{p.pegRegimeMealDetail}</span></>)}
-          {p.specialUtensilsDetail && (<><span className="text-[var(--color-muted-foreground)]">Special Utensils</span><span className="whitespace-pre-line">{p.specialUtensilsDetail}</span></>)}
-          {p.specialDietaryNeedsDetail && (<><span className="text-[var(--color-muted-foreground)]">Special Dietary Needs</span><span className="whitespace-pre-line">{p.specialDietaryNeedsDetail}</span></>)}
-          {(p.favouriteBreakfast || p.favouriteLunch || p.favouriteDinner) && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Favourite Meals</span>
-              <span className="whitespace-pre-line">
-                {[p.favouriteBreakfast && `Breakfast: ${p.favouriteBreakfast}`, p.favouriteLunch && `Lunch: ${p.favouriteLunch}`, p.favouriteDinner && `Dinner: ${p.favouriteDinner}`].filter(Boolean).join('\n')}
-              </span>
-            </>
-          )}
-          {p.medicationTricks && (<><span className="text-[var(--color-muted-foreground)]">Medication Tricks</span><span className="whitespace-pre-line">{p.medicationTricks}</span></>)}
-          {p.foodsAlwaysEaten && (<><span className="text-[var(--color-muted-foreground)]">Foods Always Eaten</span><span className="whitespace-pre-line">{p.foodsAlwaysEaten}</span></>)}
-        </div>
+        <FactList
+          items={[
+            { label: 'Meal Assistance', value: pl(p.mealAssistanceDetail) },
+            { label: 'Choking Risk — Meal Management', value: pl(p.chokingRiskMealDetail) },
+            { label: 'Modified Diet', value: pl(p.modifiedDietDetail) },
+            { label: 'PEG Regime', value: pl(p.pegRegimeMealDetail) },
+            { label: 'Special Utensils', value: pl(p.specialUtensilsDetail) },
+            { label: 'Special Dietary Needs', value: pl(p.specialDietaryNeedsDetail) },
+            {
+              label: 'Favourite Meals',
+              value: pl([p.favouriteBreakfast && `Breakfast: ${p.favouriteBreakfast}`, p.favouriteLunch && `Lunch: ${p.favouriteLunch}`, p.favouriteDinner && `Dinner: ${p.favouriteDinner}`].filter(Boolean).join('\n')),
+            },
+            { label: 'Medication Tricks', value: pl(p.medicationTricks) },
+            { label: 'Foods Always Eaten', value: pl(p.foodsAlwaysEaten) },
+          ].filter((item) => item.value)}
+        />
       )}
     </SectionEditPanel>
   )

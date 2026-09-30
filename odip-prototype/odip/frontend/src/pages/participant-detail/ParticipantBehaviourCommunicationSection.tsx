@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
@@ -26,6 +27,8 @@ function yesNoUnset(value: boolean | null | undefined): string {
 }
 
 const NOT_RECORDED = ''
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 /** PD-7: Behaviour & Communication card — CORE-02's `behaviourCommunication` group, fully rendered (all 14 fields optional, no merge needed). */
 type BehaviourCommunicationDraft = {
@@ -84,7 +87,7 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
   }
 
   return (
-    <SectionEditPanel title="Behaviour & Communication" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Behaviour & Communication" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
@@ -143,22 +146,24 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Memory</span><span>{p.memory ? MEMORY_LEVEL_LABELS[p.memory] : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Memory Aids</span><span>{yesNoUnset(p.memoryAids)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Impaired Understanding</span><span>{yesNoUnset(p.impairedUnderstanding)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Impaired Judgement / Reasoning</span><span>{yesNoUnset(p.impairedJudgementReasoning)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Behaviours of Concern (Current)</span><span>{yesNoUnset(p.behavioursOfConcernCurrent)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Behaviours of Concern (5-Year History)</span><span>{yesNoUnset(p.behavioursOfConcernFiveYearHistory)}</span>
-          <span className="text-[var(--color-muted-foreground)]">Behaviour Risk Rating</span><span>{p.behaviourRiskRating ? RISK_RATING_LEVEL_LABELS[p.behaviourRiskRating] : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">RIDS Logged</span><span>{yesNoUnset(p.ridsLogged)}</span>
-          <span className="text-[var(--color-muted-foreground)]">BSP Plan Provided</span><span>{yesNoUnset(p.bspPlanProvided)}</span>
-          <span className="text-[var(--color-muted-foreground)]">BOC Chart Provided</span><span>{yesNoUnset(p.bocChartProvided)}</span>
-          {p.expressiveSkills && (<><span className="text-[var(--color-muted-foreground)]">Expressive Skills</span><span className="whitespace-pre-line">{p.expressiveSkills}</span></>)}
-          {p.receptiveSkills && (<><span className="text-[var(--color-muted-foreground)]">Receptive Skills</span><span className="whitespace-pre-line">{p.receptiveSkills}</span></>)}
-          {p.readingAbility && (<><span className="text-[var(--color-muted-foreground)]">Reading Ability</span><span className="whitespace-pre-line">{p.readingAbility}</span></>)}
-          {p.communicationAids && (<><span className="text-[var(--color-muted-foreground)]">Communication Aids</span><span className="whitespace-pre-line">{p.communicationAids}</span></>)}
-        </div>
+        <FactList
+          items={[
+            { label: 'Memory', value: p.memory ? MEMORY_LEVEL_LABELS[p.memory] : undefined },
+            { label: 'Memory Aids', value: yesNoUnset(p.memoryAids) },
+            { label: 'Impaired Understanding', value: yesNoUnset(p.impairedUnderstanding) },
+            { label: 'Impaired Judgement / Reasoning', value: yesNoUnset(p.impairedJudgementReasoning) },
+            { label: 'Behaviours of Concern (Current)', value: yesNoUnset(p.behavioursOfConcernCurrent) },
+            { label: 'Behaviours of Concern (5-Year History)', value: yesNoUnset(p.behavioursOfConcernFiveYearHistory) },
+            { label: 'Behaviour Risk Rating', value: p.behaviourRiskRating ? RISK_RATING_LEVEL_LABELS[p.behaviourRiskRating] : undefined },
+            { label: 'RIDS Logged', value: yesNoUnset(p.ridsLogged) },
+            { label: 'BSP Plan Provided', value: yesNoUnset(p.bspPlanProvided) },
+            { label: 'BOC Chart Provided', value: yesNoUnset(p.bocChartProvided) },
+            ...(p.expressiveSkills ? [{ label: 'Expressive Skills', value: pl(p.expressiveSkills) }] : []),
+            ...(p.receptiveSkills ? [{ label: 'Receptive Skills', value: pl(p.receptiveSkills) }] : []),
+            ...(p.readingAbility ? [{ label: 'Reading Ability', value: pl(p.readingAbility) }] : []),
+            ...(p.communicationAids ? [{ label: 'Communication Aids', value: pl(p.communicationAids) }] : []),
+          ]}
+        />
       )}
     </SectionEditPanel>
   )

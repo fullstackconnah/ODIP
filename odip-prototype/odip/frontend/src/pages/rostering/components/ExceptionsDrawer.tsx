@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import type { RosterExceptionDto } from '@/api/types'
 import { EmptyState } from '@/components/EmptyState'
 import { ShieldCheck, AlertOctagon, AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { formatDateAu } from '@/lib/utils'
 
@@ -31,19 +32,14 @@ export function ExceptionsDrawer({ open, onClose, exceptions, onJumpToShift }: E
         tabIndex={-1}
         className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden border-l border-border bg-card shadow-xl"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
-          <h2 id={titleId} className="font-display font-semibold text-foreground">Exceptions this week</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close panel"
-            className="rounded-lg p-1 text-muted-foreground transition-colors duration-150 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+        <div className="flex shrink-0 items-center justify-between border-b border-border p-[var(--card-pad)]">
+          <h2 id={titleId} className="font-display text-base font-semibold text-foreground">Exceptions this week</h2>
+          <Button variant="ghost" iconOnly onClick={onClose} aria-label="Close panel">
             <X className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto p-[var(--card-pad)]">
           {exceptions.length === 0 ? (
             <EmptyState
               icon={ShieldCheck}
@@ -60,7 +56,7 @@ export function ExceptionsDrawer({ open, onClose, exceptions, onJumpToShift }: E
                       type="button"
                       disabled={!exception.shiftId}
                       onClick={() => exception.shiftId && onJumpToShift(exception.shiftId)}
-                      className="w-full rounded-sm border border-border bg-surface-container-low px-3 py-2.5 text-left transition-colors duration-150 hover:bg-accent disabled:cursor-default disabled:hover:bg-surface-container-low focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="w-full rounded-[var(--radius-sm)] border border-border bg-surface-container-low px-3 py-2.5 text-left transition-colors duration-150 hover:bg-accent disabled:cursor-default disabled:hover:bg-surface-container-low focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <div className="flex items-start gap-2">
                         {blocking ? (
