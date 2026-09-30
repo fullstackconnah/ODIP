@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T11:00:57Z",
+  "generatedAt": "2026-09-30T11:36:34Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -253,7 +253,7 @@
       "name": "Row Action",
       "kind": "button",
       "refersTo": "button-row-action",
-      "description": "24px icon-only square, revealed by row hover or focus (always visible on touch).",
+      "description": "24px icon-only square, revealed by row hover or focus. On touch it is always visible, 36px, with a 44px hit area (TAP_AREA) and 8px between neighbours.",
       "html": "<button class=\"ds-row-action\" aria-label=\"Edit\">&#9998;</button>",
       "css": ".ds-row-action{width:24px;height:24px;padding:0;border:0;border-radius:0.375rem;background:transparent;color:#43493a;cursor:pointer;font-size:14px}.ds-row-action:hover{background:#efeeea;color:#396200}.ds-row-action:focus-visible{outline:none;box-shadow:0 0 0 2px #396200}"
     },
@@ -293,7 +293,7 @@
       "name": "Sidebar Navigation Item",
       "kind": "nav",
       "refersTo": "nav-item-active",
-      "description": "32px, rounded-md (not a pill); active is Pale Sprout with bold near-black text.",
+      "description": "32px on a mouse, 44px on touch (a --tap-min floor), rounded-md (not a pill); active is Pale Sprout with bold near-black text.",
       "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-active\" href=\"#\">Trips</a><a class=\"ds-nav-item\" href=\"#\">Participants</a></nav>",
       "css": ".ds-nav{width:208px;background:#f5f3ef;padding:12px;display:flex;flex-direction:column;gap:2px}.ds-nav-item{display:flex;align-items:center;height:32px;padding:0 12px;border-radius:0.5rem;font-size:14px;font-weight:500;color:#515f74;text-decoration:none}.ds-nav-item:hover{background:#eae8e4}.ds-nav-item.ds-active{background:#bbf37c;color:#0f2000;font-weight:700}"
     }
@@ -348,7 +348,7 @@
     ],
     "dos": [
       "**Do** size every control, row, card and gap from the density tokens (`h-[var(--control-h)]`, `--row-h`, `--card-pad`, `--section-gap`, `--gutter`) so the coarse-pointer flip is automatic",
-      "**Do** reach 44px on touch by token (`--control-h`, `--tap-min`) or with `TAP_AREA`, never by inflating the desktop size",
+      "**Do** reach 44px on touch by token (`--control-h`), a `--tap-min` floor (`TAP_FLOOR`, for a link with a line to itself) or the `TAP_AREA` pad, never by inflating the desktop size",
       "**Do** lay forms out with `formGrid` and `span.short | medium | long` by the width of the content",
       "**Do** put row actions in `RowActions` (opacity reveal, always visible on coarse) and keep an action that must always be seen (a status pill, a queue's only call to action) outside it",
       "**Do** show read-only detail with `FactList` / `FactBar`",

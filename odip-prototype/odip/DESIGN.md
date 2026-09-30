@@ -228,8 +228,8 @@ The ramp is short and flat because the density comes from layout. Measured at 19
 - **Body secondary** (400, 13px): table secondary text, the `PageHeader` subtitle (inline after the
   title on desktop), fact-list labels.
 - **Label** (500, 13px): form labels, sitting 4px above the field.
-- **Caption** (400-500, 0.75rem / `text-xs`, 12px): helper and error text, table column headers, small
-  buttons, counts. 12px is the floor.
+- **Caption** (400-500, 0.75rem / `text-xs`, 12px): helper and error text, table column headers, the
+  labels on mobile table cards, small buttons, counts. 12px is the floor.
 
 ### Named Rules
 
@@ -264,7 +264,8 @@ syntax (`h-[var(--control-h)]`) and never restate the pixel value.
 | `--gutter` | 20px | 16px |
 | `--tap-min` | 0px | 44px |
 
-`lg` buttons are `--control-h` + 4px (36px / 48px). Mobile bottom-nav links and Tabs carry a `--tap-min` floor.
+`lg` buttons are `--control-h` + 4px (36px / 48px). Mobile bottom-nav links, Tabs, sidebar and drawer items and
+standalone action links carry a `--tap-min` floor.
 
 ### Form grid: width by content
 `lib/formGrid.ts` supplies a 12-column grid. One column below 768px; two columns from `md`; twelve from
@@ -276,7 +277,8 @@ row). Modal bodies use the narrower `modalGrid` (two columns from `sm`, `half` /
 Body rows are `--row-h` and the header `--table-head-h`; cells take `--cell-px` horizontally. Plain-string
 cells are capped at 24rem with an ellipsis and a `title` carrying the full text. Columns carry a priority
 (`high`, `medium`, `low`, `lowest`) and drop out below xl / 2xl / 1792px rather than squeezing the rest.
-Below 768px a table becomes a stack of cards, one per row, each cell labelled by `data-label`.
+Below 768px a table becomes a stack of cards, one per row, each cell labelled by `data-label` in a 12px caption. Under a coarse pointer the cells of a card sit 12px apart
+(8px otherwise), so two neighbouring 44px hit areas never overlap.
 
 **The Density Rule.** Row height comes from `--row-h`, never from added padding. If a table is too tall,
 the answer is fewer columns, not more air.
@@ -287,12 +289,18 @@ accessibility tree. On a mouse the cluster may overlay the row's trailing cells 
 width. Under a coarse pointer there is no hover, so they are always shown and stay in the flow.
 
 ### Touch hit areas
+Two mechanisms, both driven by `--tap-min` (0px on a mouse, 44px on touch), so the desktop look is unchanged.
 `TAP_AREA` (`components/tapArea.ts`) is a transparent pseudo-element centred on a control and sized
-`max(100%, --tap-min)`. On a mouse it is the control's own box, so the desktop look is unchanged; on touch
-a 36px or 24px control gets a 44px hit area without growing. Two padded neighbours must sit far enough
-apart that the pads do not overlap (row-action clusters widen their gap to 8px on coarse). An
-`overflow-hidden` ancestor clips the pad. Controls that already floor to `--tap-min` (Tabs, standalone
-action links) do not need it.
+`max(100%, --tap-min)`: on touch a 36px or 24px control gets a 44px hit area without growing. Two padded
+neighbours must sit far enough apart that the pads do not overlap (row-action clusters and `ActionButtons`
+widen their gap to 8px on coarse). An `overflow-hidden` ancestor, or a `truncate` link, clips its own pad; a
+truncating name link takes `TAP_TRUNCATED_LINK` vertical padding from `md` instead, so its own box is 44px.
+`TAP_AREA_LINKS` is the same pad written once for every link in a table body cell, so `DataTable` gives a
+name link 44px with no caller code, and its pager buttons take `--control-h`. `TAP_FLOOR`
+(a `min-h-[var(--tap-min)]` with `inline-flex` centring under coarse only) is the other route, for a standalone
+link with a line to itself ("View All", "← Back to Trips"): the link is 44px tall and centred, which adds real
+height on touch and needs no neighbour spacing. Controls that already floor to `--tap-min` (Tabs, sidebar and drawer items,
+bottom-nav links, the header switchers) need neither.
 
 ## Elevation & Depth
 
@@ -352,6 +360,9 @@ Tactile and plain, like a well-used key on a desk.
 - **Corner Style:** `--radius-md` (8px), 1px Ruled Line border, white on Warm Paper, no shadow
 - **Internal Padding:** `--card-pad` (12px; 16px coarse); `compact` is 8px. Titles are `text-sm`
   semibold with 8px below.
+- **Empty sections:** a section with nothing recorded is one strip, a bordered, centred, muted line about 60px
+  tall, the same in Health Conditions, the ADL grids and Risks; `EmptyState` (icon, title, guidance, button) is for a
+  page-level void, never inside a card.
 - **StatCard:** a Card with a 12px label, a `text-xl` display-bold value and an optional caption; tone
   (neutral, info, success, warning, danger) tints the fill from the semantic containers.
 
@@ -367,17 +378,37 @@ bordered strip of label/value segments (12px label, 14px medium value) separated
 `DataTable` is the one table (see Layout). Header text is 12px medium muted; body is 14px tabular.
 Selection, sorting, inline editing, an optional footer/pager (`--row-h` tall) and vertical dividers are options.
 
+### Boards
+
+The schedule matrix and the roster board are grids of `--row-h` rows with a sticky first column, so each
+first column is sized by arithmetic on its content, not by taste. **Schedule:** the Resources column is 20rem
+(23rem from `xl`); a staff row is name, then the role ALONE (the region lives in the title), then the
+qualification strip, so "Senior Support Worker" reads whole beside a name. **Roster:** the participant label
+column is 195px, 280px from 1500px. A participant row header is one line: name (with the restrictive-practice
+marker, which survives truncation), the support-ratio chip, and a compact coverage badge, a warning icon and
+the number of uncovered days on the amber tint, or a check when the week is fully covered. "6 days uncovered"
+and "Fully covered" are the badge's title and accessible name, not text in the row, so the name is what keeps
+the room ("Grace Palmer-Hughes" reads whole at 1920).
+
 ### Navigation
 
 - **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block. Items are
-  32px tall, `rounded-md` (not pills), `text-sm`; group children are 28px. The active item is Pale
-  Sprout with near-black bold text; inactive is Slate Blue medium with a Mist-step hover.
+  32px tall, `rounded-md` (not pills), `text-sm`; group children are 28px. Every item, and "Sign Out",
+  carries a `--tap-min` floor, so on touch (the drawer, or a touch tablet's permanent sidebar) they are
+  44px and the list scrolls inside the drawer. The active item is Pale Sprout with near-black bold text;
+  inactive is Slate Blue medium with a Mist-step hover.
 - **Header:** 48px sticky, translucent Warm Paper with backdrop blur; global search is 32px tall and 360px
-  wide from `md`.
+  wide from `md` and 44px on touch (the box takes the floor, the input stretches to fill it). The SuperAdmin tenant and user switchers take a `--tap-min` floor (44px fits the header)
+  and show only their badge below `sm`, the name moving into the button's accessible name and tooltip.
 - **Mobile:** below `lg` a bottom bar; links have a `--tap-min` floor, the centre create action is a
-  56px round olive button. The active item is olive text.
+  56px round olive button. The active item is olive text. The open drawer and its scrim sit above the bottom
+  bar (z 60 and 55 over 50; from `lg` the sidebar drops back to 50 so modals still cover it), so
+  "Sign Out" is never covered by it.
 - **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; count
-  chips are round.
+  chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
+  so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled
+  into view inside the strip when it changes; from `md` the strip wraps as it always did. Keyboard
+  (arrows, Home, End, roving tabindex) and ARIA are the same at every width.
 - Icons are Material Symbols Outlined, always preceding the label (16-20px in chrome).
 
 ### Page header
@@ -399,8 +430,8 @@ Pale Slate. Critical, Warning and Info counts render as tinted badges with icon 
 ### Do:
 - **Do** size every control, row, card and gap from the density tokens (`h-[var(--control-h)]`,
   `--row-h`, `--card-pad`, `--section-gap`, `--gutter`) so the coarse-pointer flip is automatic
-- **Do** reach 44px on touch by token (`--control-h`, `--tap-min`) or with `TAP_AREA`, never by inflating
-  the desktop size
+- **Do** reach 44px on touch by token (`--control-h`), a `--tap-min` floor (`TAP_FLOOR`, for a link with a
+  line to itself) or the `TAP_AREA` pad, never by inflating the desktop size
 - **Do** lay forms out with `formGrid` and `span.short | medium | long` by the width of the content
 - **Do** put row actions in `RowActions` (opacity reveal, always visible on coarse) and keep an action
   that must always be seen (a status pill, a queue's only call to action) outside it
