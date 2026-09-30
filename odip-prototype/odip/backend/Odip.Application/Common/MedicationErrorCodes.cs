@@ -13,4 +13,10 @@ public static class MedicationErrorCodes
 
     /// <summary>400: the idempotency key was already used for a different medication.</summary>
     public const string AdministrationIdempotencyKeyReused = "ADMINISTRATION_IDEMPOTENCY_KEY_REUSED";
+
+    /// <summary>422: the submitted <c>scheduledAt</c> is not one of the dose slots due in the shift window.</summary>
+    public const string DoseSlotNotDue = "DOSE_SLOT_NOT_DUE";
+
+    /// <summary>409: the medication is OnHold or Ceased, so it can't be recorded from a shift.</summary>
+    public const string MedicationNotActive = "MEDICATION_NOT_ACTIVE";
 }

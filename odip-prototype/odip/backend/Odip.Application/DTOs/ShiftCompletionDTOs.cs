@@ -115,6 +115,32 @@ public record ShiftCompletionDto(
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
 public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, DateTime IncidentDateTime);
 
+/// <summary>
+/// Everything a coordinator needs to review one submitted shift in a single payload: the completion (times, variance,
+/// breaks, net worked minutes, handover, "nothing to note" confirmation, incidents), every scheduled dose in the rostered
+/// window with its outcome, PRN doses given during the shift, and the shift notes. Returned by
+/// <c>GET rostering/shifts/{id}/completion/review</c>; the Approve / Return endpoints are unchanged.
+/// </summary>
+public record ShiftCompletionReviewDto(
+    ShiftCompletionDto Completion,
+    string ParticipantName,
+    string StaffName,
+    DateOnly ServiceDate,
+    /// <summary>The provider's IANA zone; scheduled dose times are wall-clock values in it.</summary>
+    string TimeZoneId,
+    /// <summary>Scheduled doses due in the rostered window, in time order. A slot whose <c>outcome</c> is null had nothing recorded.</summary>
+    IReadOnlyList<PortalDoseSlotDto> Doses,
+    /// <summary>"As needed" doses administered between the actual start and end.</summary>
+    IReadOnlyList<ReviewPrnDoseDto> PrnDoses,
+    IReadOnlyList<ShiftNoteDto> Notes);
+
+public record ReviewPrnDoseDto(
+    Guid MedicationId,
+    string MedicationName,
+    string? Strength,
+    string DoseDescription,
+    PortalDoseOutcomeDto Outcome);
+
 public record CompletionQueueItemDto(
     Guid ShiftId,
     Guid CompletionId,

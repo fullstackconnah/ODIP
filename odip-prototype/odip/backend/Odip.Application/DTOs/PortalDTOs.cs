@@ -4,10 +4,22 @@ using Odip.Domain.Rostering;
 namespace Odip.Application.DTOs;
 
 // ══════════════════════════════════════════════════════════════
-// STAFF PORTAL DTOs ("My Shifts") — purpose-built, minimal-surface DTOs for the field-staff
-// portal. Deliberately NOT the coordinator-scoped ShiftDto/MedicationDetailDto/etc — those
-// carry fields (override reasons, findings, consent/prescriber detail, cross-tenant admin
-// info) a support worker reading their own shift has no need to see. See PortalController.
+// STAFF PORTAL DTOs ("My Shifts") — purpose-built DTOs for the field-staff portal. Deliberately
+// NOT the coordinator-scoped ShiftDto/MedicationDetailDto/etc — those carry fields (override
+// reasons, findings, consent/prescriber detail, cross-tenant admin info) a support worker reading
+// their own shift has no need to see. See PortalController.
+//
+// THE NEED-TO-KNOW RULE (shift package, decision D1). The portal returns what a support worker
+// needs to do THIS shift safely and nothing more: the critical care facts (allergies and
+// anaphylaxis, choking and diet, communication, behaviour-support essentials, HIDPA flags, the
+// address), the participant's emergency contacts, the doses due in the shift window, the routines,
+// the risks, and the previous worker's handover. It NEVER returns the NDIS number, plan or funding
+// detail, or the full diagnoses, and it carries nothing about any participant other than the one on
+// the caller's OWN shift. Anything new that goes into these DTOs needs to pass the same test:
+// "does the worker need this, on this shift, to keep this person safe?"
+//
+// Absent data is explicit: a missing value is returned as null (never as an empty string or a
+// made-up default) so the UI can say "Not recorded" instead of silently showing nothing.
 // ══════════════════════════════════════════════════════════════
 
 /// <summary>One of the caller's own rostered <see cref="Odip.Domain.Rostering.Shift"/> rows, list-shaped for the "My Shifts" week view.</summary>
@@ -48,8 +60,9 @@ public record PortalShiftsResponseDto(
 
 /// <summary>
 /// Participant fields a support worker needs on shift — support/risk flags, mobility and
-/// equipment needs, free-text summaries. Deliberately excludes NDIS/plan/funding/contact
-/// detail that isn't shift-relevant.
+/// equipment needs, free-text summaries. Excludes the NDIS number, plan, funding and full
+/// diagnoses (see the need-to-know rule at the top of this file). The critical care facts live in
+/// <see cref="PortalAtAGlanceDto"/> and the emergency contacts in <see cref="PortalEmergencyContactDto"/>.
 /// </summary>
 public record PortalParticipantSummaryDto(
     Guid Id,
@@ -132,7 +145,187 @@ public record PortalShiftDetailDto(
     IReadOnlyList<PortalHandoverTrailEntryDto> HandoverTrail,
     /// <summary>What still blocks Finish right now (only while InProgress; empty otherwise): doses in the shift window
     /// with no outcome, and a running break. Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is non-empty.</summary>
-    IReadOnlyList<PortalFinishBlockerDto> FinishBlockers);
+    IReadOnlyList<PortalFinishBlockerDto> FinishBlockers,
+    /// <summary>The provider's IANA time zone (e.g. "Australia/Sydney"). Every wall-clock time in this DTO
+    /// (<c>startTime</c>, dose <c>scheduledAt</c>, routine <c>occursAt</c>) is in this zone; instants are UTC.</summary>
+    string TimeZoneId,
+    /// <summary>The critical care facts, in fixed groups, with explicit nulls for anything not recorded.</summary>
+    PortalAtAGlanceDto AtAGlance,
+    /// <summary>Active emergency contacts, first call first (priority, then primary).</summary>
+    IReadOnlyList<PortalEmergencyContactDto> EmergencyContacts,
+    /// <summary>Scheduled doses due in the shift's ROSTERED window (one calendar date, or two for an overnight shift), in
+    /// time order, each with its state (Due / Overdue / Recorded), outcome and witness status. Overdue is judged in the
+    /// provider's local time. Active medications only.</summary>
+    IReadOnlyList<PortalDoseSlotDto> MedicationsDue,
+    /// <summary>"As needed" medications: no schedule, so no slots - with indication, limits and the rolling 24-hour picture.</summary>
+    IReadOnlyList<PortalPrnDto> Prn,
+    /// <summary>Routines relevant to the shift window, matched on the server with overnight shifts handled (an after-midnight
+    /// routine matches a 22:00-06:00 shift). Critical first, then in time order. <see cref="Routines"/> still carries
+    /// every active routine, unfiltered.</summary>
+    IReadOnlyList<PortalShiftRoutineDto> ShiftRoutines,
+    /// <summary>The caller holds a current Medication Competency credential, so may record doses. The server enforces it
+    /// on every administration (403 otherwise); this lets the UI explain instead of letting the worker tap and fail.</summary>
+    bool CanRecordDoses,
+    /// <summary>Plain-language reason when <see cref="CanRecordDoses"/> is false; null otherwise.</summary>
+    string? CanRecordDosesReason,
+    /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE; null when allowed.</summary>
+    string? CanRecordDosesReasonCode);
+
+// ── At a glance (need-to-know critical facts) ─────────────────────────────
+
+/// <summary>
+/// The critical care facts a worker must know before and during the shift, grouped as the package shows them. Every group is
+/// always present; any field inside may be null = "Not recorded". Blank or whitespace-only text is normalised to null.
+/// </summary>
+public record PortalAtAGlanceDto(
+    PortalAllergiesDto Allergies,
+    PortalDietDto Diet,
+    PortalCommunicationDto Communication,
+    PortalBehaviourDto Behaviour,
+    PortalHidpaDto Hidpa,
+    PortalAddressDto Address);
+
+public record PortalAllergiesDto(
+    string? Detail,
+    /// <summary>Tri-state on purpose: true = anaphylaxis risk, false = recorded as no risk, null = not recorded. Never coerce null to false.</summary>
+    bool? IsAnaphylaxisRisk,
+    string? ManagementNotes);
+
+public record PortalDietDto(
+    string? ChokingRiskDetail,
+    string? PegRegimeDetail,
+    string? ModifiedDietDetail,
+    string? MealAssistanceDetail,
+    /// <summary>How medication is best given alongside food.</summary>
+    string? MedicationTricks);
+
+public record PortalCommunicationDto(
+    string? ExpressiveSkills,
+    string? ReceptiveSkills,
+    string? ReadingAbility,
+    string? Aids);
+
+public record PortalBehaviourDto(
+    string? Triggers,
+    string? EarlyWarningSigns,
+    string? DeEscalationStrategies,
+    string? WhatNotToDo,
+    string? WhatHelpsMeCalmDown);
+
+/// <summary>The HIDPA (high intensity daily personal activities) flags a worker must not miss. A flag that is not set is false -
+/// the underlying data has no "not recorded" state for these.</summary>
+public record PortalHidpaDto(bool Epilepsy, bool EnteralFeeding, bool Dysphagia);
+
+public record PortalAddressDto(string? Street, string? Suburb, string? State, string? Postcode);
+
+/// <summary>One emergency contact: who to call, and how.</summary>
+public record PortalEmergencyContactDto(
+    Guid Id,
+    string Name,
+    string? Relationship,
+    string? Phone,
+    string? Mobile,
+    bool IsPrimary,
+    /// <summary>1 = first call; null when no order was recorded (those sort after the ranked ones).</summary>
+    int? PriorityOrder);
+
+// ── Doses and routines in the shift window ─────────────────────────────────
+
+/// <summary>Where a scheduled dose stands. <c>Overdue</c> = unrecorded and more than 60 minutes past its provider-local time.</summary>
+public enum PortalDoseState
+{
+    Due,
+    Overdue,
+    Recorded,
+}
+
+/// <summary>One scheduled dose due in the shift window.</summary>
+public record PortalDoseSlotDto(
+    Guid MedicationId,
+    string MedicationName,
+    string? Strength,
+    string DoseDescription,
+    MedicationForm Form,
+    MedicationRoute Route,
+    string? Directions,
+    MedicationSupportLevel SupportLevel,
+    bool IsHighRisk,
+    /// <summary>The slot as a provider-local wall-clock time (no zone suffix) - exactly what must be echoed back as
+    /// <c>scheduledAt</c> when recording the dose.</summary>
+    DateTime ScheduledAt,
+    /// <summary>"08:00".</summary>
+    string ScheduledTime,
+    PortalDoseState State,
+    /// <summary>Convenience: <c>State == Overdue</c>.</summary>
+    bool IsOverdue,
+    /// <summary>The recorded outcome, or null while nothing has been recorded for this slot.</summary>
+    PortalDoseOutcomeDto? Outcome,
+    PortalDoseWitnessDto Witness);
+
+/// <summary>A recorded outcome for a dose.</summary>
+public record PortalDoseOutcomeDto(
+    Guid AdministrationId,
+    /// <summary>Administered, Refused, Withheld, Missed (also how "not given this shift" is recorded, with its reason) or WrongMedication.</summary>
+    MedicationAdministrationStatus Status,
+    string RecordedByName,
+    /// <summary>When the dose was given (UTC), for Administered records.</summary>
+    DateTime? AdministeredAt,
+    string? AdministeredAtTimeZone,
+    /// <summary>When the record was made (UTC).</summary>
+    DateTime RecordedAt,
+    string? Reason,
+    string? DoseGiven,
+    string? Notes);
+
+/// <summary>Whether a witness is needed for a dose and where that sign-off stands.</summary>
+public record PortalDoseWitnessDto(
+    /// <summary>High-risk medication: an administered dose needs a staff witness.</summary>
+    bool Required,
+    /// <summary>The witness sign-off state of the recorded dose; null while nothing is recorded.</summary>
+    WitnessStatus? Status,
+    string? WitnessName,
+    DateTime? RequestedAt,
+    DateTime? RespondedAt);
+
+/// <summary>An "as needed" medication and what the worker needs to decide whether another dose is allowed.</summary>
+public record PortalPrnDto(
+    Guid MedicationId,
+    string MedicationName,
+    string? Strength,
+    string DoseDescription,
+    MedicationForm Form,
+    MedicationRoute Route,
+    string? Directions,
+    MedicationSupportLevel SupportLevel,
+    bool IsHighRisk,
+    string? Indication,
+    int? MaxDosesPer24h,
+    int? MinIntervalMinutes,
+    int DosesInLast24h,
+    /// <summary>The most recent administered dose (UTC), or null.</summary>
+    DateTime? LastDoseAt,
+    /// <summary>The maximum in any rolling 24 hours has been reached (recording another needs an acknowledged limit breach).</summary>
+    bool MaxDosesReached,
+    /// <summary>When the minimum interval since the last dose has elapsed (UTC); null when there is no interval or it has already elapsed.</summary>
+    DateTime? NextAvailableAt,
+    /// <summary>The newest administered dose still awaiting its outcome ("was it effective?"), for
+    /// <c>POST medications/administrations/{id}/outcome</c>.</summary>
+    Guid? OutcomePendingAdministrationId);
+
+/// <summary>A routine that applies inside the shift window.</summary>
+public record PortalShiftRoutineDto(
+    Guid Id,
+    string Title,
+    string Description,
+    RoutineCategory Category,
+    bool IsCritical,
+    TimeOnly? StartTime,
+    TimeOnly? EndTime,
+    /// <summary>Provider-local start of the routine's first occurrence inside the window (clipped to the shift's start when it began
+    /// earlier) - the time to group it under. Null for an untimed critical routine ("Anytime").</summary>
+    DateTime? OccursAt,
+    /// <summary>The occurrence falls on the day AFTER the shift's service date (an overnight shift's early hours).</summary>
+    bool AfterMidnight);
 
 /// <summary>
 /// The latest handover for a participant, as the next worker sees it. <see cref="Text"/> is null when the author wrote

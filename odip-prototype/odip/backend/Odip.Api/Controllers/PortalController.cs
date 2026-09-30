@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Odip.Api.Rostering;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -56,6 +57,7 @@ public class PortalController : ControllerBase
     private readonly ShiftBreakService _breaks;
     private readonly ShiftHandoverService _handover;
     private readonly ShiftPackageService _package;
+    private readonly MedicationAdministrationRecorder _recorder;
 
     public PortalController(
         OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
@@ -64,7 +66,8 @@ public class PortalController : ControllerBase
         TimeProvider? clock = null,
         ShiftBreakService? breaks = null,
         ShiftHandoverService? handover = null,
-        ShiftPackageService? package = null)
+        ShiftPackageService? package = null,
+        MedicationAdministrationRecorder? recorder = null)
     {
         _db = db;
         _currentTenant = currentTenant;
@@ -75,6 +78,7 @@ public class PortalController : ControllerBase
         _breaks = breaks ?? new ShiftBreakService(db, _clock);
         _handover = handover ?? new ShiftHandoverService(db, _clock);
         _package = package ?? new ShiftPackageService(db, new MedicationSlotService(db, _clock));
+        _recorder = recorder ?? new MedicationAdministrationRecorder(db, _notificationRaiser, _obligationTasks, _clock);
     }
 
     private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
@@ -187,6 +191,16 @@ public class PortalController : ControllerBase
             ? await _package.GetFinishBlockersAsync(shift, activeCompletion, ct)
             : new List<PortalFinishBlockerDto>();
 
+        // Need-to-know package data: the provider's zone, the critical care facts, emergency contacts, doses due in the
+        // rostered window (overdue in provider-local time), routines matched to the window, and whether the caller may
+        // record doses (Medication Competency).
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(NowUtc, provider.Zone));
+        var contacts = await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct);
+        var doses = await _package.GetDosesAsync(shift, provider, ct);
+        var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
+        var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
+
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
         // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
         // why". Most recent Returned row's reason, independent of the current active completion.
@@ -209,7 +223,16 @@ public class PortalController : ControllerBase
             breakDtos,
             handoverView.Latest,
             handoverView.Trail,
-            finishBlockers);
+            finishBlockers,
+            provider.Id,
+            ShiftPackageService.BuildAtAGlance(participant),
+            contacts,
+            doses.Slots,
+            doses.Prn,
+            shiftRoutines,
+            competency.IsCurrent,
+            competency.Message,
+            competency.Code);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
@@ -481,6 +504,78 @@ public class PortalController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // RECORD A DOSE FROM THE PACKAGE (shift package, D2/D3)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Records a dose (any outcome, including "not given this shift" = Missed with a reason) for one of the participant's
+    /// medications, from the caller's OWN shift. Scoped tighter than the general
+    /// <c>POST medications/{id}/administrations</c>, which stays as it is: the shift must be InProgress, the medication must
+    /// belong to the shift's participant and be Active, and a scheduled dose's <c>scheduledAt</c> must be one of the shift
+    /// window's due slots (a PRN dose has none). Then the same recorder as the general endpoint applies: Medication
+    /// Competency (403), idempotency key (200 replay), one record per slot (409 with the existing record), witness, PRN limits.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/medications/{medicationId:guid}/administrations")]
+    public async Task<ActionResult<ApiResponse<AdministrationDto>>> RecordShiftDose(
+        Guid id, Guid medicationId, [FromBody] CreateAdministrationDto dto, CancellationToken ct)
+    {
+        var staffId = await ResolveCurrentStaffIdAsync(ct);
+        if (staffId is null)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
+
+        var shift = await _db.Shifts.Include(s => s.Participant)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        if (shift?.Participant is null || shift.Participant.IsDraft)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
+
+        if (shift.Status != ShiftStatus.InProgress)
+        {
+            var (message, code) = shift.Status switch
+            {
+                ShiftStatus.Published => ("This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress),
+                ShiftStatus.PendingReview => ("This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished),
+                ShiftStatus.Completed => ("This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted),
+                ShiftStatus.Cancelled => ("This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled),
+                _ => ("This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished),
+            };
+            return Conflict(ApiResponse<AdministrationDto>.Fail(message, code));
+        }
+
+        var med = await _db.ParticipantMedications
+            .FirstOrDefaultAsync(m => m.Id == medicationId && m.ParticipantId == shift.ParticipantId, ct);
+        if (med is null)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Medication not found"));
+        if (med.Status != MedicationStatus.Active)
+            return Conflict(ApiResponse<AdministrationDto>.Fail(
+                "This medication isn't active, so it can't be recorded from the shift.", MedicationErrorCodes.MedicationNotActive));
+
+        if (med.Type == MedicationType.Regular)
+        {
+            var (windowStart, windowEnd) = ProviderLocalTime.RosteredWindowLocal(shift);
+            var dueSlots = Odip.Domain.Medications.MedicationSlotCalculator.EnumerateSlots(med, windowStart, windowEnd);
+            if (dto.ScheduledAt is not { } scheduledAt || !dueSlots.Contains(scheduledAt))
+                return UnprocessableEntity(ApiResponse<AdministrationDto>.Fail(
+                    "This isn't a dose due in this shift. Choose one of the doses listed for the shift.", MedicationErrorCodes.DoseSlotNotDue));
+        }
+        else if (dto.ScheduledAt is not null)
+        {
+            return UnprocessableEntity(ApiResponse<AdministrationDto>.Fail(
+                "An as-needed (PRN) dose has no scheduled time.", MedicationErrorCodes.DoseSlotNotDue));
+        }
+
+        // The slot is a zone-less provider-local wall-clock value; the trip link is irrelevant to a shift.
+        dto = dto with
+        {
+            ScheduledAt = dto.ScheduledAt is { } s ? DateTime.SpecifyKind(s, DateTimeKind.Unspecified) : null,
+            TripInstanceId = null,
+        };
+
+        var result = await _recorder.RecordAsync(
+            new RecordAdministrationRequest(medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId), ct);
+        return result.ToActionResult(this);
     }
 
     // ══════════════════════════════════════════════════════════════
