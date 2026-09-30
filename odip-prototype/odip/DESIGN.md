@@ -295,8 +295,11 @@ Two mechanisms, both driven by `--tap-min` (0px on a mouse, 44px on touch), so t
 neighbours must sit far enough apart that the pads do not overlap (row-action clusters and `ActionButtons`
 widen their gap to 8px on coarse). An `overflow-hidden` ancestor, or a `truncate` link, clips its own pad; a
 truncating name link takes `TAP_TRUNCATED_LINK` vertical padding from `md` instead, so its own box is 44px.
-`TAP_AREA_LINKS` is the same pad written once for every link in a table body cell, so `DataTable` gives a
-name link 44px with no caller code, and its pager buttons take `--control-h`. `TAP_FLOOR`
+`TAP_ICON_SQUARE` is the touch shape of a small icon control in a row cluster (the 36px `--control-h-sm` square
+plus the pad; `ActionButtons`, the trip Bookings and Staff tabs). `TAP_AREA_LINKS` (one `tap-area-links` utility in
+`index.css`) is the same pad written once for every link in a table body cell, so `DataTable` gives a name link 44px with no caller code, and its pager buttons take
+`--control-h`; a cell that mixes a link with small icon buttons must give those buttons the same shape, or the link's
+pad overlaps them. `TAP_FLOOR`
 (a `min-h-[var(--tap-min)]` with `inline-flex` centring under coarse only) is the other route, for a standalone
 link with a line to itself ("View All", "← Back to Trips"): the link is 44px tall and centred, which adds real
 height on touch and needs no neighbour spacing. Controls that already floor to `--tap-min` (Tabs, sidebar and drawer items,
