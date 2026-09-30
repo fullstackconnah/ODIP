@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T14:11:53Z",
+  "generatedAt": "2026-09-30T14:43:51Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -98,11 +98,11 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "The one step above the headline: a detail-page title and its glance figures only. 28px, Plus Jakarta Sans 800, 1.2 leading, -0.015em (the text-display utility)."
+        "purpose": "The one step above the headline: a detail-page or dashboard title and the figures of a glance strip or the attention band only. 28px, Plus Jakarta Sans 800, 1.2 leading, -0.015em (the text-display utility)."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Page title, 20px, one per screen (28px display on a detail page)."
+        "purpose": "Page title, 20px, one per screen (28px display on a detail page and on the dashboard)."
       },
       "title": {
         "displayName": "Title",
@@ -253,7 +253,8 @@
         "name": "Detail header pattern",
         "status": "opt-in; every default unchanged",
         "shipsOn": [
-          "Trip detail (2026-09-30)"
+          "Trip detail (2026-09-30)",
+          "Management Dashboard title and meta row (2026-10-01)"
         ],
         "adoptNext": [
           "Participant detail",
@@ -318,6 +319,63 @@
             "component": "glanceRatio(numerator, denominator)",
             "prop": "numerator, denominator",
             "effect": "the ONE spelling of an \"x / y\" figure: a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
+          }
+        ]
+      },
+      {
+        "name": "Attention band",
+        "status": "opt-in; every other StatCard unchanged",
+        "shipsOn": [
+          "Management Dashboard (2026-10-01)"
+        ],
+        "items": [
+          "Qualification Issues (link /qualifications, danger)",
+          "Critical Participant Alerts (canViewAlerts only; link /participants; danger)",
+          "Overdue (danger)",
+          "Missing Accommodation (warning)",
+          "Missing Vehicles (warning)",
+          "Missing Staff (warning)",
+          "Open Incidents (warning)",
+          "QSC Overdue (danger)",
+          "Pending Leave (canApproveLeave and a non-empty queue only; link /rostering/leave; warning)"
+        ],
+        "api": [
+          {
+            "component": "StatCard",
+            "prop": "variant",
+            "values": [
+              "default",
+              "attention"
+            ],
+            "effect": "attention: a display-step tabular figure over a 13px label in a bordered --radius-md tile; the default tile is unchanged"
+          },
+          {
+            "component": "StatCard",
+            "prop": "tone",
+            "values": [
+              "warning",
+              "danger"
+            ],
+            "effect": "attention variant: warning fills the tile with the warning-container, danger with the error-container, and the figure and label take the on-container colour (the glance strip's tints); every other tone, and zero, stays on the card fill with a muted figure"
+          },
+          {
+            "component": "StatCard",
+            "prop": "caption",
+            "effect": "attention variant: the all-clear state; on a quiet tile it is the lime positive chip beside the figure, never shown on a tint"
+          },
+          {
+            "component": "StatCard",
+            "prop": "loading",
+            "values": [
+              "false",
+              "true"
+            ],
+            "effect": "attention variant: an en dash in the muted figure style with aria-busy and a screen-reader-only \"Loading\"; never tinted, no caption, never a definite 0"
+          },
+          {
+            "component": "Attention band layout",
+            "prop": "shape",
+            "effect": "two columns below 768px; two balanced rows from 768px (an odd last item stretches over the spare slot); one row when the band's own width (a container query) gives every item 9.5rem: 1112 / 1272 / 1432px for 7 / 8 / 9 items"
           }
         ]
       }
@@ -411,6 +469,14 @@
       "description": "FactBar variant=\"glance\": equal cells in one ruled strip, a display-step tabular figure with the chip beside it and a 13px label beneath. A cell whose badge signals attention is filled with the warning or error container; quiet cells stay on the card fill.",
       "html": "<div class=\"ds-glance\"><div class=\"ds-gc ds-gc-warning\"><div class=\"ds-gc-fig\">5 / 3 <span class=\"ds-chip\">Waitlist</span></div><div class=\"ds-gc-label\">Participants / Staff</div></div><div class=\"ds-gc ds-gc-error\"><div class=\"ds-gc-fig\">2 <span class=\"ds-chip\">Action Needed</span></div><div class=\"ds-gc-label\">Outstanding Tasks</div></div><div class=\"ds-gc\"><div class=\"ds-gc-fig\">2 / 2 <span class=\"ds-chip ds-chip-neutral\">1 WC</span></div><div class=\"ds-gc-label\">High Support / Overnight</div></div></div>",
       "css": ".ds-glance{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:720px;border:1px solid #c3c9b5;border-radius:0.5rem;overflow:hidden;background:#fff}.ds-gc{display:flex;flex-direction:column;gap:2px;padding:12px 16px;color:#1b1c1a;border-left:1px solid #c3c9b5}.ds-gc:first-child{border-left:0}.ds-gc-fig{order:1;display:flex;align-items:center;gap:8px;font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;font-variant-numeric:tabular-nums}.ds-gc-label{order:2;font-size:13px;font-weight:500;color:#43493a}.ds-gc-warning{background:#fef3c7;color:#92400e}.ds-gc-error{background:#ffdad6;color:#93000a}.ds-gc-warning .ds-gc-label,.ds-gc-error .ds-gc-label{color:inherit}.ds-chip{font:700 12px/16px Manrope,system-ui,sans-serif;padding:2px 8px;border-radius:9999px;background:#fff;color:inherit}.ds-chip-neutral{background:#e4e2de;color:#43493a}"
+    },
+    {
+      "name": "Attention Band",
+      "kind": "custom",
+      "refersTo": "attention-tile",
+      "description": "StatCard variant=\"attention\": display-step tabular figures over 13px labels, one tile each. A non-zero count is filled with the glance strip's error or warning container; a zero stays on the card fill with a muted figure, and the all-clear is the lime chip.",
+      "html": "<div class=\"ds-ab\"><div class=\"ds-at ds-at-error\"><div class=\"ds-at-fig\">5</div><div class=\"ds-at-label\">Qualification Issues</div></div><div class=\"ds-at ds-at-warning\"><div class=\"ds-at-fig\">2</div><div class=\"ds-at-label\">Missing Staff</div></div><div class=\"ds-at\"><div class=\"ds-at-fig\">0 <span class=\"ds-chip\">All clear</span></div><div class=\"ds-at-label\">Critical Participant Alerts</div></div><div class=\"ds-at\"><div class=\"ds-at-fig\">0</div><div class=\"ds-at-label\">Overdue</div></div></div>",
+      "css": ".ds-ab{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:720px}.ds-at{display:flex;flex-direction:column;gap:2px;padding:12px;border:1px solid #c3c9b5;border-radius:0.5rem;background:#fff;color:#43493a}.ds-at-fig{order:1;display:flex;align-items:center;gap:8px;font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;font-variant-numeric:tabular-nums}.ds-at-label{order:2;font-size:13px;font-weight:500;line-height:1.25}.ds-at-error{background:#ffdad6;color:#93000a}.ds-at-warning{background:#fef3c7;color:#92400e}.ds-chip{font:700 12px/16px Manrope,system-ui,sans-serif;padding:2px 8px;border-radius:9999px;background:#bbf37c;color:#0f2000}"
     }
   ],
   "narrative": {
@@ -447,7 +513,7 @@
       },
       {
         "name": "The One Display Step Rule",
-        "body": "The system has exactly one type step above the 20px headline: `--text-display` (28px, 800), consumed as `text-display`. It belongs to a detail page's title and its glance figures and to nothing else. A list page, a card title, a modal or a stat card never takes it, and no second display size is added. The title is still the page's single `<h1>`, from `PageHeader`.",
+        "body": "The system has exactly one type step above the 20px headline: `--text-display` (28px, 800), consumed as `text-display`. It belongs to a detail page's title, the dashboard's title, the figures of a glance strip and the figures of the attention band, and to nothing else. A list page, a card title, a modal or an ordinary stat card never takes it, and no second display size is added. The title is still the page's single `<h1>`, from `PageHeader`.",
         "section": "typography"
       },
       {
@@ -467,12 +533,22 @@
       },
       {
         "name": "The Attention Tint Rule",
-        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used. If most segments are tinted, review the tones, not the tint.",
+        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays on the card fill.",
         "section": "components"
       },
       {
         "name": "The Detail Header Pattern",
         "body": "A record's own page can opt into the detail header: `PageHeader variant=\"detail\"` (display title grouped with a `PageHeaderMeta` row led by `StatusBadge size=\"md\"`) and `FactBar variant=\"glance\"` (big tabular figures, 13px labels beneath, a 2x2 grid below 768px, attention tints). Every default is unchanged, so a page that does not opt in renders pixel-for-pixel as before. Trip detail ships it; participant, staff, claim and accommodation detail adopt it next. It stops at the header: the tab strip and panels below stay the ordinary dense page.",
+        "section": "components"
+      },
+      {
+        "name": "The Quiet Zero Rule",
+        "body": "Only a count somebody can act on is loud. A zero never takes a tint and its figure is muted, and a value that is not known yet is an en dash, never a 0. If most items are tinted the band has stopped saying anything, so review the tones, not the tint.",
+        "section": "components"
+      },
+      {
+        "name": "The Attention Band Pattern",
+        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step title and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave), the alerts item only with `canViewAlerts` and Pending Leave only with `canApproveLeave` and a non-empty queue. A non-zero count is tinted like a glance segment (danger: error container, warning: warning container); a zero is untinted with a muted figure; an item still loading shows an en dash with `aria-busy`. Two columns below 768px, two balanced rows from 768px, one row when the band's own width gives every item 9.5rem. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
         "section": "components"
       }
     ],
@@ -485,6 +561,8 @@
       "**Do** render one `<h1>` per screen via `PageHeader`",
       "**Do** give a record's own page the detail header pattern by opting in (`variant=\"detail\"`, `variant=\"glance\"`), never by restyling the default header or bar",
       "**Do** derive a glance segment's chip and tint from one tone with `glanceState`",
+      "**Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on",
+      "**Do** show an en dash with `aria-busy`, not a `0`, for a figure whose request is still loading",
       "**Do** use `Button` for every action; it owns height, radius and focus",
       "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",
       "**Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels and the header hairline"
@@ -497,8 +575,9 @@
       "**Don't** use pure `#ffffff` as a page background or pure `#000000` as text",
       "**Don't** invent a colour outside the semantic list to express a new state",
       "**Don't** add a second page heading",
-      "**Don't** use the display step (`text-display`) anywhere but a detail page's title and its glance figures, or add a second display size",
+      "**Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size",
       "**Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container",
+      "**Don't** tint an attention tile at zero, or claim \"All clear\" before the request behind it has finished",
       "**Don't** restyle a single module more heavily than any other; design effort is uniform by commitment"
     ]
   }

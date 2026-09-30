@@ -150,6 +150,17 @@ components:
   glance-cell-error:
     backgroundColor: "{colors.error-container}"
     textColor: "{colors.on-error-container}"
+  attention-tile:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.muted-foreground}"
+    rounded: "{rounded.md}"
+    padding: "12px"
+  attention-tile-warning:
+    backgroundColor: "{colors.warning-container}"
+    textColor: "{colors.on-warning-container}"
+  attention-tile-error:
+    backgroundColor: "{colors.error-container}"
+    textColor: "{colors.on-error-container}"
 ---
 
 # Design System: ODIP
@@ -158,8 +169,12 @@ components:
 > `docs/specs/density-redesign-2026-09.md` differ, the build is recorded and the difference is noted.
 >
 > Added 2026-09-30 from the trip-detail build: the one **display type step** and the **detail header pattern**
-> (display title, meta row, glance strip with attention tint). It is opt-in and only the trip detail page ships it so far;
+> (display title, meta row, glance strip with attention tint). It is opt-in and only the trip detail page ships the whole pattern so far;
 > the other detail pages adopt it next. Everything else on this page is unchanged.
+>
+> Added 2026-10-01 from the dashboard build: the display step now also sets the **Management Dashboard title** (`PageHeader variant="detail"`,
+> its meta row a summary line of the everyday counts) and the figures of the new **attention band** (`StatCard variant="attention"`), which
+> replaces the row of equal KPI tiles. Both are opt-in; every other StatCard and every other page header is unchanged.
 
 ## Overview
 
@@ -238,10 +253,11 @@ warmer, more even rhythm for body and data. Calm rather than authoritative; the 
 the layout, not the type.
 
 ### Hierarchy
-The ramp is short and flat because the density comes from layout. Measured at 1920: h1 20px (28px on a detail page), table cells 14px.
+The ramp is short and flat because the density comes from layout. Measured at 1920: h1 20px (28px on a detail page and on the dashboard), table cells 14px.
 - **Display** (800, 1.75rem / 28px, 1.2 leading, -0.015em tracking, the `text-display` utility): the ONE step above the
-  headline, in Plus Jakarta Sans. Only the title of a detail page (`PageHeader variant="detail"`) and the figures of its glance
-  strip (`FactBar variant="glance"`, tabular figures). Its four `--text-display*` tokens sit in the density token block.
+  headline, in Plus Jakarta Sans. Only the title of a detail page and of the dashboard (`PageHeader variant="detail"`), the figures of a
+  glance strip (`FactBar variant="glance"`) and the figures of the attention band (`StatCard variant="attention"`), all in tabular figures.
+  Its four `--text-display*` tokens sit in the density token block.
 - **Headline** (700, 1.25rem / `text-xl`): the page title in `PageHeader`, one per screen. StatCard values
   use the same size in display bold.
 - **Title** (600, 0.875rem / `text-sm`): card and section headings.
@@ -261,9 +277,9 @@ pages render the tab body, not a second heading.
 never by shrinking type. Inputs are forced to 16px below 768px so iOS does not zoom on focus.
 
 **The One Display Step Rule.** The system has exactly one type step above the 20px headline: `--text-display` (28px, 800),
-consumed as `text-display`. It belongs to a detail page's title and its glance figures and to nothing else. A list page, a
-card title, a modal or a stat card never takes it, and no second display size is added. The title is still the page's single
-`<h1>`, from `PageHeader`, so The One Heading Rule holds.
+consumed as `text-display`. It belongs to a detail page's title, the dashboard's title, the figures of a glance strip and the figures
+of the attention band, and to nothing else. A list page, a card title, a modal or an ordinary stat card never takes it, and no second
+display size is added. The title is still the page's single `<h1>`, from `PageHeader`, so The One Heading Rule holds.
 
 ## Layout
 
@@ -395,7 +411,8 @@ Tactile and plain, like a well-used key on a desk.
   tall, the same in Health Conditions, the ADL grids and Risks; `EmptyState` (icon, title, guidance, button) is for a
   page-level void, never inside a card.
 - **StatCard:** a Card with a 12px label, a `text-xl` display-bold value and an optional caption; tone
-  (neutral, info, success, warning, danger) tints the fill from the semantic containers.
+  (neutral, info, success, warning, danger) tints the fill from the semantic containers. Its opt-in `variant="attention"` is the
+  attention band's tile (see Attention band); the default tile, which Vehicles still uses for its three fleet figures, is unchanged.
 
 ### Fact list and fact bar
 
@@ -450,15 +467,16 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 ### Page header
 
 One `h1` (20px bold) with the 13px muted subtitle inline after it on desktop, actions on the right. A record's own
-page can opt into `variant="detail"` (below); every other page keeps this header exactly.
+page, and the dashboard, can opt into `variant="detail"` (below); every other page keeps this header exactly.
 
 ### Detail header pattern
 
 The header of a record's own page, built from three opt-in parts. Each defaults to today's behaviour, so a page that does not
-ask for them renders pixel-for-pixel as before (checked by comparing element rects before and after on participant, staff, claim
-and accommodation detail, the lists, the dashboard and the schedule, at 1920, 1280, 800 and 390 touch). **Only the trip detail
-page opts in today; the participant, staff, claim and accommodation detail pages adopt it next**, each mapping its own facts to tones.
-It stops at the header: the tab strip and every panel below stay the ordinary dense page, which is what makes the header read as the peak.
+ask for them renders pixel-for-pixel as before (checked by comparing element rects before and after: participant, staff, claim
+and accommodation detail, the lists, the dashboard and the schedule at 1920, 1280, 800 and 390 touch for the trip build; trips, trip detail,
+participants, staff and incidents at 1920, 1280 and 390 touch for the dashboard build). **The trip detail page opts in to all three parts and
+the dashboard takes the title and the meta row; the participant, staff, claim and accommodation detail pages adopt it next**, each mapping
+their own facts to tones. It stops at the header: the tab strip and every panel below stay the ordinary dense page, which is what makes the header read as the peak.
 
 - **Title.** `PageHeader variant="detail"`: the display step (28px, Plus Jakarta Sans 800, balanced wrap), still the page's one
   `h1`. The title and its meta row are ONE block, so `--section-gap` opens below the pair rather than between them. The
@@ -466,7 +484,9 @@ It stops at the header: the tab strip and every panel below stay the ordinary de
 - **Meta row.** `PageHeaderMeta` in the subtitle slot. The status leads as `StatusBadge size="md"` (13px semibold, 24px tall); the
   quiet facts follow in 13px muted, joined by middots: "Confirmed · Caloundra QLD · SCB-2608 · 14–17 Aug 2026 · 4 days". A missing
   fact is dropped before the separators are placed, so there is never a dangling dot; a separator belongs to the item before it, so a
-  wrapped line can end with one but never begins with one. Date ranges come from `formatDateRange` and always keep the year.
+  wrapped line can end with one but never begins with one. Date ranges come from `formatDateRange` and always keep the year. The
+  dashboard's meta row has no status: it is one line of the everyday counts ("3 upcoming trips · 5 active participants · 4 outstanding tasks"),
+  each noun agreeing with its count ("1 upcoming trip", "0 active participants"), in tabular figures.
 - **Glance strip.** `FactBar variant="glance"`: equal cells in one ruled `--radius-md` strip. Each cell is a display-step tabular figure
   with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Outstanding
   Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
@@ -478,7 +498,40 @@ It stops at the header: the tab strip and every panel below stay the ordinary de
 the cell (figure, label, icon) takes the matching on-container colour, so secondary text is tinted from the hue, never grey, and the chip becomes a
 card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One
 tone decides both chip and fill (`glanceState`), so they cannot disagree, and no colour outside the two containers is ever used. Colour is never the only cue:
-the chip text says the same thing. If most segments end up tinted the strip has stopped saying anything, so review the tones, not the tint.
+the chip text says the same thing. If most segments end up tinted the strip has stopped saying anything, so review the tones, not the tint. The attention band's tiles
+follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays
+on the card fill.
+
+### Attention band
+
+The dashboard's answer to "what needs me?": one band of display-step figures directly under the title, where an item that needs action is the
+loudest thing on the page and an item at zero goes quiet. It replaces the row of equal KPI tiles, which gave "3 upcoming trips" the same weight
+as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
+`<section aria-label="Needs attention">`, opt-in, so every other StatCard is unchanged.
+
+- **Items, in a fixed order**, so a position always means the same thing: Qualification Issues (link `/qualifications`, danger), Critical
+  Participant Alerts (only with `canViewAlerts`; link `/participants`; danger), Overdue (danger), Missing Accommodation, Missing Vehicles, Missing
+  Staff and Open Incidents (warning), QSC Overdue (danger), Pending Leave (only with `canApproveLeave` and a non-empty queue; link
+  `/rostering/leave`; warning). Only those two conditions drop an item; every other one keeps its place at zero, so the layout is stable.
+- **Tile.** A display-step tabular figure over a 13px medium label, in its own bordered `--radius-md` tile with the glance cell's inset. No icon,
+  and no chip on an item that needs attention. Source order is label then figure (the strip's order), so a screen reader hears "Overdue, 2". A
+  linked tile's accessible name is its content ("Qualification Issues 5") and an unlinked one is a named group ("Overdue 2"), so the number and
+  the label are always in the name and colour never carries the meaning alone.
+- **Non-zero is loud, zero is quiet.** A non-zero count is tinted exactly as a glance segment is (The Attention Tint Rule): danger takes the error
+  container, warning the warning container, and the figure and the label take the matching on-container colour. A zero is untinted, on the card fill,
+  with the figure and the label in `muted-foreground`. The two items that carry a caption say "All clear" at zero, as the lime positive chip beside
+  the figure (the glance strip's own all-clear); it never appears on a tint.
+- **Loading is not zero.** An item whose own request is still in flight shows an en dash (`–`) in the muted figure style with `aria-busy="true"` and
+  a screen-reader-only "Loading": no definite 0, no tint, no "All clear". Critical Participant Alerts does this while the participant-alerts request loads.
+- **Shape.** Two columns below 768px (an odd last item takes the whole row, as on the trip strip). From 768px two balanced rows: ceil(n / 2) columns,
+  an odd last item stretching over the spare slot so no row has a hole. ONE row when the band's own width gives every item 9.5rem (152px), measured
+  by a container query so the 232px sidebar does not matter: n × 152 + (n − 1) × 8px, which is 1112, 1272 and 1432px for 7, 8 and 9 items. So the
+  band is one row at a 1920 viewport for every role, and two rows at 1280. Labels wrap inside their tile; nothing truncates, scrolls sideways or
+  shrinks the type.
+- **Touch.** A linked item is the whole tile and keeps a `--tap-min` floor (it is already taller than 44px).
+
+**The Quiet Zero Rule.** Only a count somebody can act on is loud. A zero never takes a tint and its figure is muted, and a value that is not
+known yet is an en dash, never a 0. If most items are tinted the band has stopped saying anything, so review the tones, not the tint.
 
 ### Status Badges & Alerts
 
@@ -505,6 +558,8 @@ everywhere; `size="md"` (13px semibold, 24px tall) is the one opt-in step up, fo
 - **Do** render one `<h1>` per screen via `PageHeader`
 - **Do** give a record's own page the detail header pattern by opting in (`variant="detail"`, `variant="glance"`), never by restyling the default header or bar
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
+- **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
+- **Do** show an en dash with `aria-busy`, not a `0`, for a figure whose request is still loading
 - **Do** use `Button` for every action; it owns height, radius and focus
 - **Do** keep compliance state, alerts and countdowns visually equal to ordinary data
 - **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels
@@ -520,6 +575,7 @@ everywhere; `size="md"` (13px semibold, 24px tall) is the one opt-in step up, fo
 - **Don't** use pure `#ffffff` as a page background or pure `#000000` as text
 - **Don't** invent a colour outside the semantic list to express a new state
 - **Don't** add a second page heading
-- **Don't** use the display step (`text-display`) anywhere but a detail page's title and its glance figures, or add a second display size
+- **Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
+- **Don't** tint an attention tile at zero, or claim "All clear" before the request behind it has finished
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment
