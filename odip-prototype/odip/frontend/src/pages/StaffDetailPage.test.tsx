@@ -215,7 +215,7 @@ describe('StaffDetailPage — Credentials tab', () => {
     expect(screen.getByText('No date set')).toBeInTheDocument()
   })
 
-  it('only shows worker screening when a number or expiry date is present', () => {
+  it('shows worker screening once an expiry date is present', () => {
     mockUseStaffOverview.mockReturnValue({
       data: makeOverview({ staff: makeStaff({ workerScreeningNumber: 'WWC-123', workerScreeningExpiryDate: daysFromToday(400) }) }),
       isLoading: false,
@@ -223,6 +223,35 @@ describe('StaffDetailPage — Credentials tab', () => {
     renderAtTab('staff-1', 'credentials')
 
     expect(screen.getByText('Worker Screening')).toBeInTheDocument()
+  })
+
+  // The one rule (lib/credentials.ts) the Qualifications list and the Dashboard count use too: worker screening has no qualification flag, so
+  // it applies once it has an expiry date. A number alone is not a credential with something to expire.
+  it('does not list worker screening for a number with no expiry date', () => {
+    mockUseStaffOverview.mockReturnValue({
+      data: makeOverview({ staff: makeStaff({ workerScreeningNumber: 'WWC-123', workerScreeningExpiryDate: null }) }),
+      isLoading: false,
+    })
+    renderAtTab('staff-1', 'credentials')
+
+    expect(screen.queryByText('Worker Screening')).not.toBeInTheDocument()
+    expect(screen.getByText('No credentials on file')).toBeInTheDocument()
+  })
+
+  it('says "Expires today" on the day and "Expires in 1 day" the day before', () => {
+    mockUseStaffOverview.mockReturnValue({
+      data: makeOverview({
+        staff: makeStaff({
+          isFirstAidQualified: true, firstAidExpiryDate: daysFromToday(0),
+          isDriverEligible: true, driverLicenceExpiryDate: daysFromToday(1),
+        }),
+      }),
+      isLoading: false,
+    })
+    renderAtTab('staff-1', 'credentials')
+
+    expect(screen.getByText('Expires today')).toBeInTheDocument()
+    expect(screen.getByText('Expires in 1 day')).toBeInTheDocument()
   })
 })
 

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveCount } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
+import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
 import { usePermissions } from '@/lib/permissions'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
@@ -56,26 +57,11 @@ export default function DashboardPage() {
 
   // Hooks must run unconditionally on every render — this has to sit above the isLoading/isError
   // early returns below, not after them.
+  // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
+  // needs action when it has no date, is expired, is due today or is due within the warning window.
   const qualIssueCount = useMemo(() => {
     const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return (allStaff as any[]).reduce((count: number, s: any) => {
-      const checks = [
-        { flag: s.isFirstAidQualified, expiry: s.firstAidExpiryDate },
-        { flag: s.isDriverEligible, expiry: s.driverLicenceExpiryDate },
-        { flag: s.isManualHandlingCompetent, expiry: s.manualHandlingExpiryDate },
-        { flag: s.isMedicationCompetent, expiry: s.medicationCompetencyExpiryDate },
-        // Worker screening has no boolean qualification flag — it only "applies" (and can be
-        // an issue) once an expiry date has actually been entered.
-        { flag: !!s.workerScreeningExpiryDate, expiry: s.workerScreeningExpiryDate },
-      ]
-      return count + checks.filter(({ flag, expiry }) => {
-        if (!flag) return false
-        if (!expiry) return true  // no date set counts as an issue
-        const diff = Math.floor((new Date(expiry + 'T00:00:00').getTime() - today.getTime()) / 86400000)
-        return diff <= warningDays
-      }).length
-    }, 0)
+    return allStaff.reduce((count, s) => count + credentialIssueCount(staffCredentials(s, { warnDays: warningDays, today })), 0)
   }, [allStaff, warningDays])
 
   if (isLoading) {

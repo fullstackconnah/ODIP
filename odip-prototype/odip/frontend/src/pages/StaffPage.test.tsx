@@ -177,6 +177,29 @@ describe('StaffPage — PP-47 worker screening icon label', () => {
 
     expect(screen.getByLabelText('Worker screening current')).toBeInTheDocument()
   })
+
+  // Expired means the expiry day has passed (lib/deadline.ts, a calendar-day compare): a screening that expires today is still current.
+  it('shows an Expired badge once the expiry day has passed, and not on the day itself', () => {
+    const iso = (offset: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() + offset)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    mockUseStaff.mockReturnValue({
+      data: [
+        makeStaff({ id: 's1', fullName: 'Alex Rivera', workerScreeningExpiryDate: iso(-1) }),
+        makeStaff({ id: 's2', fullName: 'Blake Nguyen', workerScreeningExpiryDate: iso(0) }),
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    const alex = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    const blake = screen.getByText('Blake Nguyen').closest('tr') as HTMLElement
+    expect(within(alex).getByText('Expired')).toBeInTheDocument()
+    expect(within(blake).queryByText('Expired')).not.toBeInTheDocument()
+    expect(within(blake).getByLabelText('Worker screening current')).toBeInTheDocument()
+  })
 })
 
 describe('StaffPage — cross-domain links', () => {

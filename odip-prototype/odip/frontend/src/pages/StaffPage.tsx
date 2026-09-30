@@ -12,13 +12,11 @@ import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { deadlineState } from '@/lib/deadline'
 import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
 
-function isExpired(date: string): boolean {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return new Date(date + 'T00:00:00').getTime() < today.getTime()
-}
+// A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
+const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status === 'overdue'
 
 const ACTIVE_STATUS_ITEMS = [
   { value: 'Active', label: 'Active' },

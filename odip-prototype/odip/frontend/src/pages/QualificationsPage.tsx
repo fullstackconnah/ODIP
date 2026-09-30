@@ -9,8 +9,11 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
+import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
+import { plural } from '@/lib/format'
+import type { StaffListDto } from '@/api/types/staff'
 
-type QualStatus = 'expired' | 'expiring' | 'no-date' | 'ok'
 type FilterTab = 'all' | 'expired' | 'expiring' | 'no-date'
 
 interface QualRow {
@@ -20,8 +23,7 @@ interface QualRow {
   qualification: string
   fieldKey: string
   expiryDate: string | null
-  daysUntilExpiry: number | null
-  status: QualStatus
+  state: DeadlineState
 }
 
 interface StaffGroup {
@@ -31,77 +33,43 @@ interface StaffGroup {
   rows: QualRow[]
 }
 
-const QUALS = [
-  { label: 'First Aid', flag: 'isFirstAidQualified', field: 'firstAidExpiryDate' },
-  { label: 'Driver Licence', flag: 'isDriverEligible', field: 'driverLicenceExpiryDate' },
-  { label: 'Manual Handling', flag: 'isManualHandlingCompetent', field: 'manualHandlingExpiryDate' },
-  { label: 'Medication Competency', flag: 'isMedicationCompetent', field: 'medicationCompetencyExpiryDate' },
-  // Worker screening has no boolean qualification flag — presence is determined by the
-  // expiry date itself being set, so this row is only included when a date exists.
-  { label: 'Worker Screening', flag: null, field: 'workerScreeningExpiryDate' },
-] as const
+// Which deadline states each filter tab lists ("Expiring Soon" includes a credential that expires today).
+const FILTER_STATES: Record<Exclude<FilterTab, 'all'>, DeadlineStatus[]> = {
+  expired: ['overdue'],
+  expiring: ['today', 'soon'],
+  'no-date': ['none'],
+}
 
-function buildGroups(staff: any[], warningDays: number): StaffGroup[] {
+// Which credentials apply, and what state each is in, is lib/credentials.ts: the same rule the Dashboard's "Qualification Issues" count
+// and a staff member's Credentials tab use, so the three cannot disagree.
+function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
   const groups: StaffGroup[] = []
 
   for (const s of staff) {
-    const rows: QualRow[] = []
-    let issueCount = 0
+    const credentials = staffCredentials(s, { warnDays: warningDays, today })
+    const issueCount = credentialIssueCount(credentials)
+    if (issueCount === 0) continue
 
-    for (const q of QUALS) {
-      const hasFlag = q.flag !== null
-      if (hasFlag && !s[q.flag as string]) continue
-      const expiryDate = s[q.field] as string | null
-      // No flag means there's no way to know the credential "applies" other than a date
-      // having been entered — so skip rather than surfacing a false "no-date" issue.
-      if (!hasFlag && !expiryDate) continue
-      let status: QualStatus
-      let daysUntilExpiry: number | null = null
-
-      if (!expiryDate) {
-        status = 'no-date'
-        issueCount++
-      } else {
-        const expiry = new Date(expiryDate + 'T00:00:00')
-        expiry.setHours(0, 0, 0, 0)
-        const diff = Math.floor((expiry.getTime() - today.getTime()) / 86400000)
-        daysUntilExpiry = diff
-        if (diff < 0) { status = 'expired'; issueCount++ }
-        else if (diff <= warningDays) { status = 'expiring'; issueCount++ }
-        else { status = 'ok' }
-      }
-
-      rows.push({
-        key: `${s.id}-${q.field}`,
+    groups.push({
+      staffId: s.id,
+      staffName: s.fullName,
+      issueCount,
+      rows: credentials.map(c => ({
+        key: `${s.id}-${c.field}`,
         staffId: s.id,
         staffName: s.fullName,
-        qualification: q.label,
-        fieldKey: q.field,
-        expiryDate,
-        daysUntilExpiry,
-        status,
-      })
-    }
-
-    if (issueCount > 0) {
-      groups.push({ staffId: s.id, staffName: s.fullName, issueCount, rows })
-    }
+        qualification: c.label,
+        fieldKey: c.field,
+        expiryDate: c.expiryDate,
+        state: c.state,
+      })),
+    })
   }
 
   // Sort: most issues first
   groups.sort((a, b) => b.issueCount - a.issueCount)
   return groups
-}
-
-function getStatusInfo(row: QualRow): { label: string; status: string } {
-  if (row.status === 'expired') return { label: 'EXPIRED', status: 'Cancelled' }
-  if (row.status === 'no-date') return { label: 'No date set', status: 'Draft' }
-  if (row.status === 'ok') return { label: 'Current', status: 'Confirmed' }
-  const days = row.daysUntilExpiry!
-  const label = days === 0 ? 'Expires today' : `${days} day${days === 1 ? '' : 's'}`
-  return { label, status: 'Pending' }
 }
 
 export default function QualificationsPage() {
@@ -119,15 +87,17 @@ export default function QualificationsPage() {
   const warningDays = settings?.qualificationWarningDays ?? 30
   const groups = buildGroups(allStaff, warningDays)
 
+  const hasRowIn = (g: StaffGroup, tab: Exclude<FilterTab, 'all'>) => g.rows.some(r => FILTER_STATES[tab].includes(r.state.status))
+
   const filteredGroups = filterTab === 'all'
     ? groups
-    : groups.filter(g => g.rows.some(r => r.status === filterTab))
+    : groups.filter(g => hasRowIn(g, filterTab))
 
   const counts = {
     all: groups.length,
-    expired: groups.filter(g => g.rows.some(r => r.status === 'expired')).length,
-    expiring: groups.filter(g => g.rows.some(r => r.status === 'expiring')).length,
-    'no-date': groups.filter(g => g.rows.some(r => r.status === 'no-date')).length,
+    expired: groups.filter(g => hasRowIn(g, 'expired')).length,
+    expiring: groups.filter(g => hasRowIn(g, 'expiring')).length,
+    'no-date': groups.filter(g => hasRowIn(g, 'no-date')).length,
   }
 
   function toggleGroup(id: string) {
@@ -269,7 +239,7 @@ export default function QualificationsPage() {
                   </span>
                   <span className="font-medium truncate">{group.staffName}</span>
                 </button>
-                <StatusBadge status="Cancelled" label={`${group.issueCount} issue${group.issueCount !== 1 ? 's' : ''}`} />
+                <StatusBadge tone="danger" label={plural(group.issueCount, 'issue')} />
                 <Link
                   to={`/staff/${group.staffId}/edit`}
                   aria-label={`Edit ${group.staffName}`}
@@ -290,8 +260,8 @@ export default function QualificationsPage() {
                     compact
                     className="overflow-x-auto"
                     rowClassName={(q) =>
-                      q.status === 'expired' ? 'bg-[var(--color-error-container)]/10' :
-                      q.status === 'expiring' ? 'bg-[var(--color-warning-container)]/10' : ''
+                      q.state.status === 'overdue' ? 'bg-[var(--color-error-container)]/10' :
+                      q.state.status === 'today' || q.state.status === 'soon' ? 'bg-[var(--color-warning-container)]/10' : ''
                     }
                     columns={[
                       {
@@ -321,10 +291,7 @@ export default function QualificationsPage() {
                       {
                         key: 'status',
                         header: 'Status',
-                        render: (q) => {
-                          const info = getStatusInfo(q)
-                          return <StatusBadge status={info.status} label={info.label} />
-                        },
+                        render: (q) => <StatusBadge tone={DEADLINE_TONE[q.state.status]} label={deadlineLabel(q.state, 'long')} />,
                       },
                       {
                         key: 'actions',
