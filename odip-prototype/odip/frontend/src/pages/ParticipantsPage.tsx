@@ -115,25 +115,46 @@ function useParticipantsScreen() {
     setPendingStatusChange(null)
   }
 
+  // One line per row at any desktop width: DataTable's cells never wrap, so a narrower window
+  // costs columns, not row height. Budget at 1280 (content 1280 − 232 sidebar − 2×20 gutter = 1008,
+  // 1006 inside the table border), each column padded 2×12, Manrope measured (see the density
+  // verdict report). The seeded data has no service streams and no alerts, so the Streams and Alerts
+  // columns are costed at what real data brings: streams at their 10rem cap (184) and two alert
+  // badges (94). Always shown: Name 167.5 + NDIS 98.2 + Streams 184 + wheelchair 40 + High 49.8 +
+  // Status 89.8 + Alerts 94 + chevron 40 = 763.3. 1280 adds Region 178.6: 941.9, spare 64.
+  // 1536 adds Support Ratio 102.4 and Repeat 64.4: 1108.7 of 1262. 1792 adds Plan Type 132.7:
+  // 1241.4 of 1518. The actions used to cost 213px of column; they overlay now (the 40px chevron).
   const participantColumns: Column<ParticipantListDto>[] = [
     {
       key: 'fullName',
       header: 'Name',
       sortable: true,
       render: (p) => (
+        // The link itself truncates (inline-block + truncate), not a wrapper around it: a wrapper's
+        // overflow would clip the link's focus ring.
         <Link
           to={`/participants/${p.id}`}
           aria-label={`Open ${p.fullName} profile`}
-          className="font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm"
+          title={p.fullName}
+          className="inline-block align-middle font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm md:max-w-[16rem] md:truncate"
         >
           {p.fullName}
         </Link>
       ),
     },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type' },
-    { key: 'region', header: 'Region', sortable: true },
-    { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px] py-1', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
+    { key: 'planType', header: 'Plan Type', priority: 'lowest', maxWidth: '10rem' },
+    { key: 'region', header: 'Region', sortable: true, priority: 'medium', maxWidth: '11rem' },
+    {
+      key: 'serviceStreams',
+      header: 'Streams',
+      // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
+      render: (p) => (
+        <div className="md:max-w-[10rem] md:overflow-hidden">
+          <ServiceStreamBadges value={p.serviceStreams} className="md:w-max" />
+        </div>
+      ),
+    },
     {
       key: 'mobilityAidWheelchair',
       // The emoji alone has no accessible name for a screen reader — sr-only text gives the
@@ -148,8 +169,8 @@ function useParticipantsScreen() {
       align: 'center',
     },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio' },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
+    { key: 'supportRatio', header: 'Support Ratio', priority: 'low', maxWidth: '10rem' },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', priority: 'low' },
     {
       key: 'status',
       header: 'Status',
@@ -204,11 +225,15 @@ function useParticipantsScreen() {
     {
       key: 'actions',
       header: '',
+      // `relative` anchors the overlay below; the column itself is only the chevron.
+      className: 'relative',
       render: (p) => (
         <div className="flex items-center justify-end gap-1.5">
           {/* Row actions (24px) appear on row hover / focus and are always shown on touch; the
-              chevron is the row's constant "opens the record" cue, so it stays outside. */}
-          <RowActions>
+              chevron is the row's constant "opens the record" cue, so it stays outside. On a mouse
+              the cluster overlays the row's last cells instead of reserving ~200px of column, so
+              "Change status" can never spill out of (or squeeze) its cell. */}
+          <RowActions overlay>
             {p.hasActiveMedications && (
               <Button
                 variant="ghost"
@@ -225,6 +250,7 @@ function useParticipantsScreen() {
               <Button
                 variant="secondary"
                 size="sm"
+                className="whitespace-nowrap"
                 aria-label={`Change status for ${p.fullName}`}
                 onClick={(e) => {
                   e.stopPropagation()

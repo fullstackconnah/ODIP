@@ -104,7 +104,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
 
     const banner = screen.getByRole('alert')
     expect(banner).toHaveTextContent(/1 incident/)
-    expect(banner).toHaveTextContent(/require QSC reporting/)
+    expect(banner).toHaveTextContent(/requires QSC reporting/)
     expect(banner.className).toMatch(/bg-error-container/)
     expect(banner.className).not.toMatch(/red-500/)
     expect(banner.className).not.toMatch(/text-red-400/)
@@ -379,6 +379,114 @@ describe('IncidentsPage — one-line QSC banner', () => {
     expect(banner).toHaveClass('flex', 'items-center', 'min-h-10')
     // Keeps the token colours the C-1 test pins, and no raw palette colours.
     expect(banner.className).toMatch(/bg-error-container/)
+  })
+})
+
+describe('IncidentsPage — QSC banner grammar', () => {
+  function headline(count: number): string {
+    mockUseOverdueQscIncidents.mockReturnValue({
+      data: Array.from({ length: count }, (_, n) => baseIncident({ id: `inc-${n}`, isOverdue24h: true })),
+    })
+    renderPage()
+    return screen.getByRole('alert').querySelector('.font-semibold')?.textContent ?? ''
+  }
+
+  it('says "1 incident requires" for one overdue incident', () => {
+    expect(headline(1)).toBe('1 incident requires QSC reporting — 24-hour deadline exceeded')
+  })
+
+  it('says "2 incidents require" for two, and for any larger count', () => {
+    expect(headline(2)).toBe('2 incidents require QSC reporting — 24-hour deadline exceeded')
+  })
+
+  it('never renders the ungrammatical "1 incident require"', () => {
+    mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
+    renderPage()
+
+    expect(screen.getByRole('alert').textContent).not.toMatch(/1 incident require\b/)
+  })
+})
+
+// Density verdict, narrow desktops: from 1280 up every row is exactly --row-h because a cell never
+// wraps; the columns that don't fit are dropped (by breakpoint) or cut with an ellipsis, never squeezed.
+describe('IncidentsPage — narrow-desktop columns', () => {
+  function headerIndex(label: string): number {
+    return screen.getAllByRole('columnheader').findIndex(h => h.textContent?.includes(label))
+  }
+
+  it('keeps title, severity, status, date and QSC always, and drops the rest by breakpoint (header and cells together)', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ tripInstanceId: 't-1', tripName: 'Beach Trip', involvedParticipantId: 'p-1', involvedParticipantName: 'Sam Lee' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
+    const expected: Record<string, string | null> = {
+      Title: null, Severity: null, Status: null, Date: null, QSC: null,
+      Participant: 'md:max-xl:hidden',
+      Type: 'md:max-2xl:hidden',
+      Trip: 'md:max-[1792px]:hidden',
+      'Reported By': 'md:max-[1792px]:hidden',
+    }
+    for (const [label, hidden] of Object.entries(expected)) {
+      const index = headerIndex(label)
+      expect(index, label).toBeGreaterThanOrEqual(0)
+      const th = screen.getAllByRole('columnheader')[index]
+      for (const el of [th, cells[index]]) {
+        if (hidden) expect(el, label).toHaveClass(hidden)
+        else expect(el.className, label).not.toMatch(/max-(xl|2xl|\[1792px\]):hidden/)
+      }
+    }
+  })
+
+  it('cuts a long title with an ellipsis at a responsive cap and keeps the full title in the tooltip', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ title: 'Escalation during pre-trip meet and greet' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const title = screen.getByText('Escalation during pre-trip meet and greet')
+    expect(title).toHaveAttribute('title', 'Escalation during pre-trip meet and greet')
+    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[15rem]', '2xl:max-w-[18rem]')
+    expect(title.closest('td')).toHaveClass('md:whitespace-nowrap', 'font-medium')
+    // No vertical padding: the row is the token height, not padding around a wrapped cell.
+    expect((title.closest('td') as HTMLElement).className).not.toMatch(/(^|\s)(p|py|pt|pb)-/)
+  })
+
+  it('truncates the trip and participant links themselves (not a wrapper that would clip the focus ring)', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ tripInstanceId: 't-1', tripName: 'Sunshine Coast Beach Escape', involvedParticipantId: 'p-1', involvedParticipantName: 'Grace Palmer-Hughes' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const trip = screen.getByRole('link', { name: 'Sunshine Coast Beach Escape' })
+    expect(trip).toHaveAttribute('title', 'Sunshine Coast Beach Escape')
+    // Two non-overlapping ranges (below / from 1792px), so neither depends on CSS source order.
+    expect(trip).toHaveClass('inline-block', 'md:truncate', 'md:max-[1792px]:max-w-[11rem]', 'min-[1792px]:max-w-[13rem]')
+    const participant = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    expect(participant).toHaveAttribute('title', 'Grace Palmer-Hughes')
+    expect(participant).toHaveClass('inline-block', 'md:truncate', 'md:max-w-[9rem]')
+  })
+
+  it('keeps a flagged note to one row: the flag chips stay on one line and the excerpt is cut, not clamped', async () => {
+    const user = userEvent.setup()
+    mockUseFlaggedShiftNotes.mockReturnValue({
+      data: [baseFlaggedNote({ flaggedCategories: ['Falls', 'Injury'], excerpt: 'She had a fall near the bathroom and hit her head on the tiles.' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
+    const chips = screen.getByText('falls').parentElement as HTMLElement
+    expect(chips).toHaveClass('md:w-max', 'md:flex-nowrap')
+    expect(chips.parentElement).toHaveClass('md:max-w-[16rem]', 'md:overflow-hidden')
+    const excerpt = screen.getByText(/She had a fall near the bathroom/)
+    expect(excerpt).toHaveClass('truncate', 'block')
+    expect(excerpt.className).not.toMatch(/line-clamp/)
+    expect(excerpt).toHaveAttribute('title', 'She had a fall near the bathroom and hit her head on the tiles.')
   })
 })
 

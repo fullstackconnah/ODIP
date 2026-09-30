@@ -143,6 +143,27 @@ describe('DashboardPage — density layout', () => {
     expect(trip.className).toMatch(/hidden/)
     expect(trip.className).toMatch(/@3xl:inline/)
   })
+
+  it('gives every truncated upcoming-trip cell a tooltip with its full text, destination included', () => {
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(dashboardWith({
+      upcomingTripCount: 2,
+      upcomingTrips: [
+        { id: 't-2', tripName: 'Tamborine Mountain Getaway', destination: 'Mount Tamborine QLD', startDate: '2026-08-28', status: 'OpenForBookings', currentParticipantCount: 3, maxParticipants: 8 },
+        { id: 't-3', tripName: 'Mystery Trip', destination: '', startDate: '2026-09-18', status: 'Planning', currentParticipantCount: 0, maxParticipants: 6 },
+      ],
+    }))
+    renderPage()
+
+    // "Mount Tamborine QLD" needs 123px at 12px and the cell is w-28 (112px): it is cut with an
+    // ellipsis, so the full text has to be reachable.
+    const destination = screen.getByText('Mount Tamborine QLD')
+    expect(destination).toHaveClass('truncate', 'w-28')
+    expect(destination).toHaveAttribute('title', 'Mount Tamborine QLD')
+    expect(screen.getByText('Tamborine Mountain Getaway')).toHaveAttribute('title', 'Tamborine Mountain Getaway')
+    // The "TBD" placeholder is titled too, so the cell never has a truncated, untitled state.
+    expect(screen.getByText('TBD')).toHaveAttribute('title', 'TBD')
+  })
 })
 
 describe('DashboardPage — Critical Participant Alerts card', () => {

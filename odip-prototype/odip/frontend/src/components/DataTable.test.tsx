@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DataTable, RowActions } from './DataTable'
+import { CellText, DataTable, RowActions } from './DataTable'
 import type { Column } from './DataTable'
 import { Button } from './Button'
 import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
@@ -682,6 +682,281 @@ describe('DataTable — RowActions (hover / focus reveal)', () => {
       '[&>div>:is(a,button)]:w-[var(--control-h-sm)]',
       '[&>div>:is(a,button)]:p-0',
     )
+  })
+})
+
+describe('DataTable — one-line cells (row height at any desktop width)', () => {
+  type Item = { id: string; name: string; notes: string; count: number; when: string; price: number }
+  const items: Item[] = [
+    { id: '1', name: 'Sunshine Coast Beach Escape', notes: 'A long free-text note that would otherwise wrap', count: 7, when: '2026-08-14', price: 1234.5 },
+  ]
+
+  it('never lets a body cell wrap from md up, and leaves the mobile card view free to wrap', () => {
+    render(<DataTable data={items} columns={[{ key: 'name', header: 'Name' }]} keyField="id" />)
+
+    const cell = screen.getAllByRole('cell')[0]
+    expect(cell).toHaveClass('md:whitespace-nowrap')
+    // Every nowrap / truncate class is md-scoped: below 768px the row is a padded flex card whose
+    // text has to be able to wrap inside it.
+    expect(cell.className).not.toMatch(/(^|\s)(whitespace-nowrap|truncate)(\s|$)/)
+    const text = screen.getByText('Sunshine Coast Beach Escape')
+    expect(text.className).not.toMatch(/(^|\s)(truncate|max-w-)/)
+  })
+
+  it('renders a plain string as one truncating line with its full text in the title', () => {
+    render(<DataTable data={items} columns={[{ key: 'name', header: 'Name' }]} keyField="id" />)
+
+    const text = screen.getByText('Sunshine Coast Beach Escape')
+    expect(text.tagName).toBe('SPAN')
+    expect(text).toHaveClass('block', 'md:truncate', 'md:max-w-[var(--cell-max,24rem)]')
+    expect(text).toHaveAttribute('title', 'Sunshine Coast Beach Escape')
+    // No cap given: falls back to the 24rem default, so free text can't widen the table without bound.
+    expect(text.getAttribute('style')).toBeNull()
+  })
+
+  it('takes the cap from maxWidth: a px number or any CSS length', () => {
+    render(
+      <DataTable
+        data={items}
+        columns={[
+          { key: 'name', header: 'Name', maxWidth: 160 },
+          { key: 'notes', header: 'Notes', maxWidth: '12rem' },
+        ]}
+        keyField="id"
+      />,
+    )
+
+    expect(screen.getByText('Sunshine Coast Beach Escape').getAttribute('style')).toContain('--cell-max: 160px')
+    expect(screen.getByText(/A long free-text note/).getAttribute('style')).toContain('--cell-max: 12rem')
+  })
+
+  it('titles a custom render that returns a plain string, but not one that returns elements', () => {
+    render(
+      <DataTable
+        data={items}
+        columns={[
+          { key: 'name', header: 'Name', render: row => row.name.toUpperCase() },
+          { key: 'notes', header: 'Notes', render: row => <em>{row.notes}</em> },
+        ]}
+        keyField="id"
+      />,
+    )
+
+    expect(screen.getByText('SUNSHINE COAST BEACH ESCAPE')).toHaveAttribute('title', 'SUNSHINE COAST BEACH ESCAPE')
+    // An element limits itself (see CellText); DataTable doesn't wrap or title it.
+    const em = screen.getByText(/A long free-text note/)
+    expect(em.tagName).toBe('EM')
+    expect(em).not.toHaveAttribute('title')
+    expect(em.parentElement?.tagName).toBe('TD')
+  })
+
+  it('leaves numbers, formatted dates and currency, and the empty dash untitled: nothing there to reveal', () => {
+    render(
+      <DataTable
+        data={[{ ...items[0], notes: null as unknown as string }]}
+        columns={[
+          { key: 'count', header: 'Count' },
+          { key: 'when', header: 'When', type: 'date' },
+          { key: 'price', header: 'Price', type: 'currency' },
+          { key: 'notes', header: 'Notes' },
+        ]}
+        keyField="id"
+      />,
+    )
+
+    for (const cell of screen.getAllByRole('cell')) {
+      expect(cell.querySelector('[title]')).toBeNull()
+    }
+    expect(screen.getAllByRole('cell')[3]).toHaveTextContent('—')
+  })
+
+  it('lets a column opt back in to wrapping (prose): no nowrap on its cell and no truncating wrapper', () => {
+    render(
+      <DataTable
+        data={items}
+        columns={[
+          { key: 'name', header: 'Name' },
+          { key: 'notes', header: 'Notes', wrap: true },
+        ]}
+        keyField="id"
+      />,
+    )
+
+    const [nameCell, notesCell] = screen.getAllByRole('cell')
+    expect(nameCell).toHaveClass('md:whitespace-nowrap')
+    expect(notesCell.className).not.toMatch(/whitespace-nowrap/)
+    expect(notesCell.querySelector('[title]')).toBeNull()
+    expect(notesCell.firstChild?.nodeType).toBe(Node.TEXT_NODE)
+  })
+})
+
+describe('DataTable — CellText', () => {
+  it('is a one-line block, cut at the caller\'s md max-width, titled with its string children', () => {
+    render(<CellText className="md:max-w-[9rem] 2xl:max-w-[16rem]">Mount Tamborine QLD · Gold Coast Hinterland</CellText>)
+
+    const text = screen.getByText('Mount Tamborine QLD · Gold Coast Hinterland')
+    expect(text).toHaveClass('block', 'md:truncate', 'md:max-w-[9rem]', '2xl:max-w-[16rem]')
+    expect(text).toHaveAttribute('title', 'Mount Tamborine QLD · Gold Coast Hinterland')
+  })
+
+  it('takes an explicit title, and adds none for element children', () => {
+    const { rerender } = render(<CellText title="Full text">Short</CellText>)
+    expect(screen.getByText('Short')).toHaveAttribute('title', 'Full text')
+
+    rerender(<CellText><b>Bold</b></CellText>)
+    expect(screen.getByText('Bold').parentElement).not.toHaveAttribute('title')
+  })
+})
+
+describe('DataTable — column priority (dropping columns instead of squeezing them)', () => {
+  type Item = { id: string; a: string; b: string; c: string; d: string; e: string }
+  const items: Item[] = [{ id: '1', a: 'alpha', b: 'bravo', c: 'charlie', d: 'delta', e: 'echo' }]
+  const columns: Column<Item>[] = [
+    { key: 'a', header: 'A' },
+    { key: 'b', header: 'B', priority: 'high' },
+    { key: 'c', header: 'C', priority: 'medium' },
+    { key: 'd', header: 'D', priority: 'low' },
+    { key: 'e', header: 'E', priority: 'lowest' },
+  ]
+
+  it('keeps high (and the default) always, and drops medium below xl, low below 2xl, lowest below 1792px', () => {
+    render(<DataTable data={items} columns={columns} keyField="id" />)
+
+    const headers = screen.getAllByRole('columnheader')
+    const cells = screen.getAllByRole('cell')
+    const hiddenClass: Array<string | null> = [null, null, 'md:max-xl:hidden', 'md:max-2xl:hidden', 'md:max-[1792px]:hidden']
+    hiddenClass.forEach((cls, i) => {
+      for (const el of [headers[i], cells[i]]) {
+        if (cls) expect(el).toHaveClass(cls)
+        else expect(el.className).not.toMatch(/hidden/)
+      }
+    })
+  })
+
+  it('only ever hides from md up, so the mobile card view keeps every field and its data-label', () => {
+    render(<DataTable data={items} columns={columns} keyField="id" />)
+
+    for (const el of [...screen.getAllByRole('columnheader'), ...screen.getAllByRole('cell')]) {
+      expect(el.className).not.toMatch(/(^|\s)(hidden|max-\w+:hidden)(\s|$)/)
+    }
+    // Hidden by CSS only: the cell and its label are still in the DOM for the card view.
+    expect(screen.getByText('delta').closest('td')).toHaveAttribute('data-label', 'D')
+    expect(screen.getByText('echo').closest('td')).toHaveAttribute('data-label', 'E')
+  })
+
+  it('hides an editing cell with its column too, so an edited row never shears against its header', () => {
+    const editable: Column<Item>[] = [
+      { key: 'a', header: 'A' },
+      { key: 'd', header: 'D', priority: 'low', editable: { render: (row, onChange) => <input aria-label="edit-d" defaultValue={row.d} onChange={e => onChange(e.target.value)} /> } },
+    ]
+    render(<DataTable data={items} columns={editable} keyField="id" editingRow="1" onEditChange={vi.fn()} />)
+
+    expect(screen.getByLabelText('edit-d').closest('td')).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByRole('columnheader', { name: 'D' })).toHaveClass('md:max-2xl:hidden')
+  })
+})
+
+describe('DataTable — minWidth', () => {
+  type Item = { id: string; name: string; status: string }
+  const items: Item[] = [{ id: '1', name: 'Bianca', status: 'Draft' }]
+
+  it('reserves the column width from md up, on the header and every cell, through a custom property', () => {
+    render(
+      <DataTable
+        data={items}
+        columns={[
+          { key: 'name', header: 'Name' },
+          { key: 'status', header: 'Status', minWidth: '10.25rem' },
+        ]}
+        keyField="id"
+      />,
+    )
+
+    const th = screen.getByRole('columnheader', { name: 'Status' })
+    const td = screen.getByText('Draft').closest('td') as HTMLElement
+    for (const el of [th, td]) {
+      expect(el).toHaveClass('md:min-w-[var(--col-min)]')
+      expect(el.getAttribute('style')).toContain('--col-min: 10.25rem')
+    }
+    // md-scoped, so a mobile card cell isn't forced to that width.
+    expect(td.className).not.toMatch(/(^|\s)min-w-/)
+    // Columns that don't ask for one carry neither the class nor the property.
+    const name = screen.getByRole('columnheader', { name: 'Name' })
+    expect(name.className).not.toMatch(/min-w-/)
+    expect(name.getAttribute('style')).toBeNull()
+  })
+
+  it('takes a plain number as px', () => {
+    render(<DataTable data={items} columns={[{ key: 'status', header: 'Status', minWidth: 164 }]} keyField="id" />)
+
+    expect(screen.getByRole('columnheader', { name: 'Status' }).getAttribute('style')).toContain('--col-min: 164px')
+  })
+})
+
+describe('DataTable — RowActions overlay', () => {
+  const overlayColumns: Column<Row>[] = [
+    ...columns,
+    {
+      key: 'actions',
+      header: '',
+      className: 'relative',
+      render: (row) => (
+        <RowActions overlay>
+          <Button variant="secondary" size="sm" aria-label={`Change status for ${row.name}`}>Change status</Button>
+        </RowActions>
+      ),
+    },
+  ]
+
+  it('takes the cluster out of the flow on a mouse at md+, without touching its reveal or keyboard reach', () => {
+    render(<DataTable data={rows} columns={overlayColumns} keyField="id" />)
+
+    const cluster = screen.getByRole('button', { name: 'Change status for Bianca' }).parentElement as HTMLElement
+    expect(cluster).toHaveClass(
+      'md:pointer-fine:absolute',
+      'md:pointer-fine:right-full',
+      'md:pointer-fine:inset-y-0',
+      // Solid row background under the buttons, fading out over the 24px left padding.
+      'md:pointer-fine:bg-[linear-gradient(to_left,var(--row-bg)_calc(100%_-_1.5rem),transparent)]',
+      'md:pointer-fine:[--row-bg:var(--color-card)]',
+      'md:pointer-fine:group-hover/row:[--row-bg:color-mix(in_srgb,var(--color-accent)_50%,var(--color-card))]',
+    )
+    // The same opacity-only reveal as the in-flow cluster.
+    expect(cluster).toHaveClass('opacity-0', 'group-hover/row:opacity-100', 'group-focus-within/row:opacity-100', 'focus-within:opacity-100', '[@media(pointer:coarse)]:opacity-100')
+    expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible|sr-only)(\s|$)|pointer-events/)
+    // Never absolute below md or on a touch screen: there it is always shown and covers nothing.
+    expect(cluster.className).not.toMatch(/(^|\s)(absolute|right-full|inset-y-0)(\s|$)/)
+  })
+
+  it('stays in the flow, with no overlay classes, when overlay is not asked for', () => {
+    const inFlow: Column<Row>[] = [
+      ...columns,
+      { key: 'actions', header: '', render: (row) => <RowActions><Button size="sm" aria-label={`Edit ${row.name}`}>e</Button></RowActions> },
+    ]
+    render(<DataTable data={rows} columns={inFlow} keyField="id" />)
+
+    const cluster = screen.getByRole('button', { name: 'Edit Bianca' }).parentElement as HTMLElement
+    expect(cluster.className).not.toMatch(/pointer-fine|absolute/)
+  })
+
+  it('renders nothing for an empty overlay cluster, so a hover never paints a blank patch', () => {
+    const empty: Column<Row>[] = [
+      ...columns,
+      { key: 'actions', header: '', className: 'relative', render: () => <RowActions overlay>{false}{null}</RowActions> },
+    ]
+    const { container } = render(<DataTable data={rows} columns={empty} keyField="id" />)
+
+    expect(container.querySelector('[class*="group-hover/row:opacity-100"]')).toBeNull()
+  })
+
+  it('keeps an overlaid action keyboard-reachable: Tab from a clickable row lands on it', async () => {
+    const user = userEvent.setup()
+    render(<DataTable data={rows} columns={overlayColumns} keyField="id" onRowClick={vi.fn()} />)
+
+    await user.tab()
+    expect(screen.getAllByRole('row')[1]).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Change status for Bianca' })).toHaveFocus()
   })
 })
 

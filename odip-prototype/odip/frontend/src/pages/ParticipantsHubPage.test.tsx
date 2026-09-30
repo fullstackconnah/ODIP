@@ -142,3 +142,51 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
     expect(screen.queryByRole('link', { name: /New enquiry/i })).not.toBeInTheDocument()
   })
 })
+
+// Density verdict: the header block was ~136px before the first row because the stage's description
+// sat in its own row inside the panel, under a generic subtitle that restated the tab labels.
+describe('ParticipantsHubPage — one description line, not two', () => {
+  const ACTIVE = 'The operational register — participants you can roster and book.'
+  const ENQUIRIES = 'Lightweight capture of new prospects before intake.'
+
+  it('shows the active stage\'s description once, as the inline subtitle beside the H1', () => {
+    renderHub()
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
+    expect(screen.getAllByText(ACTIVE)).toHaveLength(1)
+    expect(h1.parentElement).toContainElement(screen.getByText(ACTIVE))
+    // The generic subtitle that repeated the three tab labels is gone.
+    expect(screen.queryByText(/one view, three stages/i)).not.toBeInTheDocument()
+  })
+
+  it('opens the panel straight onto its table: no description paragraph inside it', () => {
+    renderHub()
+
+    const panel = screen.getByRole('tabpanel')
+    expect(within(panel).queryByText(ACTIVE)).not.toBeInTheDocument()
+    // The empty state is the panel's first content now, not a paragraph the hub put above it.
+    expect(panel).toHaveTextContent(/No participants yet/i)
+    expect(panel.firstElementChild?.tagName).not.toBe('P')
+  })
+
+  it('swaps the subtitle with the stage, still a single line', async () => {
+    const user = userEvent.setup()
+    renderHub()
+
+    await user.click(screen.getByRole('tab', { name: 'Enquiries' }))
+    expect(screen.getByText(ENQUIRIES)).toBeInTheDocument()
+    expect(screen.queryByText(ACTIVE)).not.toBeInTheDocument()
+    expect(within(screen.getByRole('tabpanel')).queryByText(ENQUIRIES)).not.toBeInTheDocument()
+  })
+
+  it('keeps the title row and the tab strip in one block-flow wrapper, with no section gap between them', () => {
+    renderHub()
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
+    const tablist = screen.getByRole('tablist', { name: 'Lifecycle stages' })
+    const root = tablist.closest('.animate-fade-in') as HTMLElement
+    expect(root).toContainElement(h1)
+    // Plain block flow: a flex column with a section gap is what opened 16px between the two.
+    expect(root.className).toBe('animate-fade-in')
+  })
+})

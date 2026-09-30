@@ -111,6 +111,31 @@ describe('RestrictivePracticesTab', () => {
     expect(screen.getByText('Seclusion room used during acute crisis periods only.')).toBeInTheDocument()
   })
 
+  it('paints the type badges and the "Needs classification" chip from tokens, not raw Tailwind palette or hex', () => {
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [
+        makePractice({ id: 'rp-m', type: 'MechanicalRestraint', description: 'Lap belt in the vehicle.' }),
+        makePractice({ id: 'rp-p', type: 'PhysicalRestraint', description: 'Guided hold during transfers.' }),
+        makePractice({ id: 'rp-e', type: 'EnvironmentalRestraint', description: 'Locked pantry.' }),
+        makePractice({ id: 'rp-u', type: 'Unclassified', description: 'Locked doors overnight for safety.' }),
+      ],
+      isLoading: false,
+    })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    // amber-100 / amber-800 are exactly --color-warning-container / --color-on-warning-container.
+    const warning = ['bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]']
+    expect(screen.getByText('Mechanical restraint')).toHaveClass(...warning)
+    expect(screen.getByText('Physical restraint')).toHaveClass(...warning)
+    expect(screen.getByText(/needs classification/i)).toHaveClass(...warning)
+    // The hard-coded #0d1c2e text on the info pill is the foreground token now.
+    expect(screen.getByText('Environmental restraint')).toHaveClass('bg-[var(--color-secondary-container)]', 'text-[var(--color-foreground)]')
+    for (const el of document.querySelectorAll('span')) {
+      expect(el.className).not.toMatch(/amber-|#[0-9a-f]{3,6}/i)
+    }
+  })
+
   it('shows an overdue review-date pill for a past review date on an active entry', () => {
     mockUseRestrictivePractices.mockReturnValue({
       data: [makePractice({ reviewDate: '2020-01-01' })],

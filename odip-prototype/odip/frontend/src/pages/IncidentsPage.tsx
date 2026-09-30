@@ -1,7 +1,7 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -58,31 +58,39 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
   const { id: currentUserId } = usePermissions()
 
   const columns: Column<FlaggedShiftNoteDto>[] = [
-    { key: 'age', header: 'Age', className: 'tabular-nums whitespace-nowrap', render: row => formatNoteAge(row.createdAt) },
+    { key: 'age', header: 'Age', className: 'tabular-nums', render: row => formatNoteAge(row.createdAt) },
     { key: 'shiftDate', header: 'Shift date', render: row => formatDateAu(row.shiftDate) },
     {
       key: 'participantName',
       header: 'Participant',
       render: row => (
-        <Link to={`/participants/${row.participantId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/participants/${row.participantId}`}
+          title={row.participantName}
+          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[12rem] md:truncate"
+        >
           {row.participantName}
         </Link>
       ),
     },
-    { key: 'staffName', header: 'Staff', render: row => row.staffName ?? '—' },
+    { key: 'staffName', header: 'Staff', maxWidth: '10rem', render: row => row.staffName ?? '—' },
     {
       key: 'flaggedCategories',
       header: 'Flags',
+      // One line at md+ like every other cell: the chips stay on a single row (w-max) and the group
+      // is clipped at 16rem, instead of wrapping and pushing the row past --row-h.
       render: row => (
-        <div className="flex flex-wrap gap-1">
-          {row.flaggedCategories.map(category => (
-            <span
-              key={category}
-              className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"
-            >
-              {SHIFT_NOTE_FLAG_LABELS[category] ?? category}
-            </span>
-          ))}
+        <div className="md:max-w-[16rem] md:overflow-hidden">
+          <div className="flex flex-wrap gap-1 md:w-max md:flex-nowrap">
+            {row.flaggedCategories.map(category => (
+              <span
+                key={category}
+                className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+              >
+                {SHIFT_NOTE_FLAG_LABELS[category] ?? category}
+              </span>
+            ))}
+          </div>
         </div>
       ),
     },
@@ -90,7 +98,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       key: 'excerpt',
       header: 'Excerpt',
       render: row => (
-        <span title={row.excerpt} className="line-clamp-1 max-w-xs text-[var(--color-muted-foreground)]">
+        <span title={row.excerpt} className="block max-w-xs truncate text-[var(--color-muted-foreground)]">
           {row.excerpt}
         </span>
       ),
@@ -235,15 +243,34 @@ export default function IncidentsPage() {
     setPage(1)
   }
 
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
+  // drops columns instead of growing rows. The primary columns (title, severity, status, date, QSC,
+  // actions) are always there; participant needs 1280, type 1536, trip and reported-by 1792.
+  // Budget, widest seeded rows, each column padded 2×12 (Manrope measured, see the density verdict
+  // report). 1280 (content 1280 − 232 − 2×20 = 1008, 1006 inside the border): title 264 (capped) +
+  // participant 165.1 + severity 88.2 + status 113.2 + date 104.3 + QSC 124.8 + actions 76 = 935.6,
+  // spare 70. 1536 adds type: 1125.3 of 1262. 1792 adds trip and reported-by: 1467.5 of 1518. The
+  // old layout always needed 1467.5, so its rows wrapped at every viewport under 1742px.
   const incidentColumns: Column<any>[] = [
-    { key: 'title', header: 'Title', sortable: true, className: 'font-medium py-1' },
-    { key: 'incidentType', header: 'Type', sortable: true },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      className: 'font-medium',
+      render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
+    },
+    { key: 'incidentType', header: 'Type', sortable: true, priority: 'low', maxWidth: '9rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
+      priority: 'lowest',
       render: (i) => i.tripInstanceId && i.tripName ? (
-        <Link to={`/trips/${i.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/trips/${i.tripInstanceId}`}
+          title={i.tripName}
+          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem]"
+        >
           {i.tripName}
         </Link>
       ) : (i.tripName ?? '—'),
@@ -251,15 +278,20 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
+      priority: 'medium',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
-        <Link to={`/participants/${i.involvedParticipantId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/participants/${i.involvedParticipantId}`}
+          title={i.involvedParticipantName}
+          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[9rem] md:truncate 2xl:max-w-[12rem]"
+        >
           {i.involvedParticipantName}
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
-    { key: 'reportedByName', header: 'Reported By' },
+    { key: 'reportedByName', header: 'Reported By', priority: 'lowest', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
     {
       key: 'qscReportingStatus',
@@ -283,6 +315,10 @@ export default function IncidentsPage() {
   // Same condition the body uses to swap in the queue: a ?view=flagged-notes link from someone who
   // can't see the tab still lands on the incidents list.
   const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
+  // "1 incident requires", "2 incidents require": the verb agrees with the count.
+  const qscHeadline = overdueQsc.length === 1
+    ? '1 incident requires QSC reporting — 24-hour deadline exceeded'
+    : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
   const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
       <Plus className="w-4 h-4" /> Report Incident
@@ -363,7 +399,7 @@ export default function IncidentsPage() {
         >
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <p className="min-w-0 flex-1 text-sm md:truncate">
-            <span className="font-semibold">{overdueQsc.length} incident{overdueQsc.length !== 1 ? 's' : ''} require QSC reporting — 24-hour deadline exceeded</span>
+            <span className="font-semibold">{qscHeadline}</span>
             <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
           </p>
           <Link to="/incidents?qsc=overdue" className="shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2">

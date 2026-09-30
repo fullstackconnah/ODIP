@@ -17,8 +17,8 @@ import type { TripClaimListDto, ShiftClaimPreviewResponseDto } from '@/api/types
 // generated below) rather than only shift claims, so a coordinator has one place to see all of a
 // participant's NDIS claims.
 const KIND_COLOR_MAP: Record<string, string> = {
-  trip: 'bg-blue-100 text-blue-700',
-  shift: 'bg-purple-100 text-purple-700',
+  trip: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
+  shift: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
 }
 
 /** yyyy-MM-dd in the viewer's local time — never UTC, which can silently shift the date near

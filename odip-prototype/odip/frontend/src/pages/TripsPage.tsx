@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
@@ -156,6 +156,20 @@ export default function TripsPage() {
     })
   }
 
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
+  // costs width, never height. What gives, at the seeded data's widest rows, each column padded 2×12
+  // (Manrope measured, see the density verdict report):
+  //   1280 (content 1280 − 232 sidebar − 2×20 gutter = 1008, 1006 inside the table border):
+  //     Trip 233 + Destination 216 + Dates 198 + Status 164 + Pax 95 + edit 48 = 953, spare 53.
+  //     Lead, the trip code and "(4d)" are dropped. 1366 adds the code (+70) and lets the destination
+  //     grow to 13.5rem (+24); 1536 adds Lead (+124).
+  //   1536: 303 + 240 + 198 + 164 + 95 + 124 + 48 = 1172, spare 90. 1792 adds "(4d)" and room for
+  //     the full destination; at 1920 the spare is ~330px and spreads over the columns.
+  // The caps below bound the two cells that can grow without limit.
+  // They are ranges that never overlap: Tailwind emits the arbitrary `min-[…px]` variants BEFORE the
+  // named breakpoints, so they could not be trusted to override an `md:` / `2xl:` class on one element.
+  const NAME_CAP = 'md:max-2xl:max-w-[14rem] 2xl:max-[1792px]:max-w-[18rem] min-[1792px]:max-w-[22rem]'
+  const DESTINATION_CAP = 'md:max-[1366px]:max-w-[12rem] min-[1366px]:max-[1792px]:max-w-[13.5rem] min-[1792px]:max-w-[22rem]'
   const tripColumns: Column<TripListDto>[] = [
     {
       key: 'tripName',
@@ -163,10 +177,16 @@ export default function TripsPage() {
       sortable: true,
       render: (t) => (
         // One line: name, then the muted code (13px, the floor for secondary table text). A
-        // stacked name/code cell is two lines and pushes the row past --row-h.
+        // stacked name/code cell is two lines and pushes the row past --row-h. The name is cut at
+        // its cap with the code in its tooltip; below 1366px the code itself gives way first.
         <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate font-semibold text-[var(--color-foreground)]">{t.tripName}</span>
-          {t.tripCode && <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{t.tripCode}</span>}
+          <span
+            className={`truncate font-semibold text-[var(--color-foreground)] ${NAME_CAP}`}
+            title={t.tripCode ? `${t.tripName} (${t.tripCode})` : t.tripName}
+          >
+            {t.tripName}
+          </span>
+          {t.tripCode && <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--color-muted-foreground)] md:max-[1366px]:hidden">{t.tripCode}</span>}
         </div>
       ),
     },
@@ -175,32 +195,35 @@ export default function TripsPage() {
       header: 'Destination',
       sortable: true,
       render: (t) => (
-        <span className="text-[var(--color-muted-foreground)]">
-          {t.destination || 'TBD'}{t.region ? ` · ${t.region}` : ''}
-        </span>
+        <CellText className={`text-[var(--color-muted-foreground)] ${DESTINATION_CAP}`}>
+          {`${t.destination || 'TBD'}${t.region ? ` · ${t.region}` : ''}`}
+        </CellText>
       ),
     },
     {
       key: 'startDate',
       header: 'Dates',
       sortable: true,
-      className: 'whitespace-nowrap',
       render: (t) => (
         <span className="tabular-nums text-[var(--color-muted-foreground)]">
-          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-[13px]">({t.durationDays}d)</span>
+          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-[13px] md:max-[1792px]:hidden">({t.durationDays}d)</span>
         </span>
       ),
     },
     {
       key: 'status',
       header: 'Status',
+      // "Open For Bookings" is the widest label: 104px of text + 10 left / 24 right padding for the
+      // caret in the pill + 24 of cell padding = 162px. Reserved up front so the column doesn't jump
+      // when a trip's status changes to it.
+      minWidth: '10.25rem',
       render: (t) => (
         <span onClick={e => e.stopPropagation()} className="inline-flex items-center">
           <Dropdown
             variant="pill"
             value={t.status}
             onChange={val => handleStatusChange(t, val as TripStatus)}
-            colorClass={`${getStatusColor(t.status)} h-[var(--control-h-sm)]`}
+            colorClass={`${getStatusColor(t.status)} h-[var(--control-h-sm)] whitespace-nowrap`}
             items={TRIP_STATUS_ITEMS}
           />
         </span>
@@ -210,7 +233,6 @@ export default function TripsPage() {
       key: 'currentParticipantCount',
       header: 'Pax',
       align: 'center',
-      className: 'whitespace-nowrap',
       render: (t) => (
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {t.currentParticipantCount}/{t.maxParticipants || '—'}
@@ -224,6 +246,8 @@ export default function TripsPage() {
       key: 'leadCoordinatorName',
       header: 'Lead',
       sortable: true,
+      priority: 'low',
+      maxWidth: '10rem',
       render: (t) => t.leadCoordinatorName || '—',
     },
     {

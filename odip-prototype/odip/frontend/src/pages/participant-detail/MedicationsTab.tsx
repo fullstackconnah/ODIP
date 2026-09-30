@@ -14,14 +14,14 @@ import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/inciden
 
 const MED_STATUS_COLOR_MAP: Record<string, string> = {
   active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  onhold: 'bg-amber-100 text-amber-800',
+  onhold: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   ceased: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
   administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-amber-100 text-amber-800',
+  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 

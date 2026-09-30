@@ -79,6 +79,15 @@ describe('participant-detail/MedicationsTab — connection map: incident link/fi
     })
   })
 
+  it('paints a Withheld dose with the warning tokens (amber-100/800 are exactly those), not raw Tailwind amber', () => {
+    mockUseParticipantAdministrations.mockReturnValue({ data: [administration({ status: 'Withheld' })] })
+    renderTab()
+
+    const badge = screen.getByText('Withheld')
+    expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    expect(badge.className).not.toMatch(/amber-/)
+  })
+
   it('shows neither link nor action for an Administered row', () => {
     mockUseParticipantAdministrations.mockReturnValue({ data: [administration({ status: 'Administered' })] })
     renderTab()

@@ -178,3 +178,86 @@ describe('TripsPage — table view density', () => {
     expect(wrapper.className).toBe('')
   })
 })
+
+// Density verdict, narrow desktops: the table is the default from 1280, and every row must still be
+// exactly --row-h there. Cells never wrap (DataTable), so the page decides what gives when the
+// window is narrow: caps that cut text with an ellipsis, and columns that drop by breakpoint.
+describe('TripsPage — narrow-desktop table', () => {
+  it('cuts a long trip name at a responsive cap and keeps the name and code in its tooltip', () => {
+    renderPage()
+
+    const name = screen.getByText('Beach Weekend')
+    // Three ranges that never overlap (below 1536, 1536-1791, 1792+): the built CSS emits the
+    // arbitrary `min-[1792px]` variant before the named breakpoints, so a stacked `md:` / `2xl:`
+    // cap would win over it at 1920.
+    expect(name).toHaveClass('truncate', 'md:max-2xl:max-w-[14rem]', '2xl:max-[1792px]:max-w-[18rem]', 'min-[1792px]:max-w-[22rem]')
+    expect(name.className).not.toMatch(/(^|\s)(md|2xl):max-w-/)
+    expect(name).toHaveAttribute('title', 'Beach Weekend (BW-2610)')
+  })
+
+  it('titles a trip without a code with just its name', () => {
+    mockUseTrips.mockReturnValue({ data: [trip({ tripCode: null })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Beach Weekend')).toHaveAttribute('title', 'Beach Weekend')
+  })
+
+  it('drops the trip code below 1366px (it is in the name\'s tooltip) and shows it from there up', () => {
+    renderPage()
+
+    const code = screen.getByText('BW-2610')
+    expect(code).toHaveClass('md:max-[1366px]:hidden')
+    // Hidden only on the desktop table; the mobile card view keeps it.
+    expect(code.className).not.toMatch(/(^|\s)hidden(\s|$)/)
+  })
+
+  it('cuts the destination and region at a cap that grows with the room, full text in the title', () => {
+    mockUseTrips.mockReturnValue({
+      data: [trip({ destination: 'Mount Tamborine QLD', region: 'Gold Coast Hinterland' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const destination = screen.getByText('Mount Tamborine QLD · Gold Coast Hinterland')
+    // Three non-overlapping ranges (below 1366, 1366-1791, 1792+), so none depends on CSS source order:
+    // 12rem keeps 1280 (the tightest width) 53px clear, 13.5rem returns at 1366, 22rem at 1792.
+    expect(destination).toHaveClass(
+      'block', 'md:truncate',
+      'md:max-[1366px]:max-w-[12rem]', 'min-[1366px]:max-[1792px]:max-w-[13.5rem]', 'min-[1792px]:max-w-[22rem]',
+    )
+    expect(destination.className).not.toMatch(/(^|\s)(md|2xl):max-w-/)
+    expect(destination).toHaveAttribute('title', 'Mount Tamborine QLD · Gold Coast Hinterland')
+  })
+
+  it('drops the Lead column below 2xl, header and cell together, and the duration until 1792px', () => {
+    renderPage()
+
+    expect(screen.getByRole('columnheader', { name: 'Lead' })).toHaveClass('md:max-2xl:hidden')
+    const lead = screen.getByText('Alex Rivera')
+    expect(lead).toHaveAttribute('title', 'Alex Rivera')
+    expect(lead.closest('td')).toHaveClass('md:max-2xl:hidden')
+    // "(4d)" is 13px secondary text that costs 30px of the Dates column: it returns with the room, at 1792.
+    expect(screen.getByText('(4d)')).toHaveClass('text-[13px]', 'md:max-[1792px]:hidden')
+    // Every other column stays at 1280.
+    for (const label of ['Trip', 'Destination', 'Dates', 'Status', 'Pax']) {
+      expect(screen.getByRole('columnheader', { name: label }).className, label).not.toMatch(/max-(xl|2xl)/)
+    }
+  })
+
+  it('keeps the status pill on one line, in a column wide enough for "Open For Bookings" plus its caret', () => {
+    mockUseTrips.mockReturnValue({ data: [trip({ status: 'OpenForBookings' })], isLoading: false })
+    renderPage()
+
+    const pill = screen.getByRole('button', { name: 'Open For Bookings' })
+    expect(pill).toHaveClass('whitespace-nowrap', 'h-[var(--control-h-sm)]')
+    const header = screen.getByRole('columnheader', { name: 'Status' })
+    const cell = pill.closest('td') as HTMLElement
+    for (const el of [header, cell]) {
+      expect(el).toHaveClass('md:min-w-[var(--col-min)]')
+      expect(el.getAttribute('style')).toContain('--col-min: 10.25rem')
+    }
+    // 10.25rem = 164px. The pill is 10px left padding + 104.3px of 12px/500 text + 24px right padding
+    // (room for the caret) = 138.3px, and the cell adds 2 x 12px: 162.3px. It fits with 1.7px to spare.
+    expect(10.25 * 16).toBeGreaterThanOrEqual(10 + 104.3 + 24 + 2 * 12)
+  })
+})

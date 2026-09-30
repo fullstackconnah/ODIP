@@ -88,7 +88,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                       </p>
                     </div>
                     {b.highSupportRequired && (
-                      <span className="material-symbols-outlined text-[#8e337b] shrink-0" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>medical_services</span>
+                      <span className="material-symbols-outlined text-[var(--color-on-accessible-container)] shrink-0" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>medical_services</span>
                     )}
                   </div>
                 ))}
