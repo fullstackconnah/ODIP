@@ -329,3 +329,20 @@ describe('TripsPage — 44px hit areas on a touch screen', () => {
     expect(screen.queryByText('Trip detail page')).not.toBeInTheDocument()
   })
 })
+
+// The app shell no longer has a "New Trip" shortcut (AppLayout's sidebar call to action and the mobile bottom-nav "+" are
+// gone), so this header button is how a coordinator starts a trip from the nav. It stays, for everyone who can write.
+describe('TripsPage — starting a new trip', () => {
+  it('keeps the "New Trip" button in the page header, linking to /trips/new', () => {
+    renderPage()
+
+    expect(screen.getByRole('link', { name: /New Trip/ })).toHaveAttribute('href', '/trips/new')
+  })
+
+  it('hides the button from a role that cannot write', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    renderPage()
+
+    expect(screen.queryByRole('link', { name: /New Trip/ })).not.toBeInTheDocument()
+  })
+})

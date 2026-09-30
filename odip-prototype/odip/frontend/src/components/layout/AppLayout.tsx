@@ -1,12 +1,11 @@
-import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import {
   LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, Plus, ChevronDown, Receipt,
+  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, ChevronDown, Receipt,
   CalendarClock, Pill, CalendarCheck2, ClipboardCheck, CalendarOff, FileCheck
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
-import { Button } from '@/components/Button'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
@@ -99,12 +98,15 @@ function isRouteActive(to: string, pathname: string): boolean {
 const allNavLeaves: NavLeaf[] = navItems.flatMap(item => ('children' in item ? item.children : [item]))
 
 /**
- * Mobile bottom-nav link: icon over label, 42px tall and as wide as its label ("Trips" is 28px). Touch needs 44px each
- * way, so the box gets a `--tap-min` floor (0px on a mouse, 44px under `pointer: coarse`) and centres its content.
- * A floor, not TAP_AREA's pad: the links sit in a `justify-around` row where a pad wider than the gap would overlap the
- * next link, and a floor cannot — the extra width is taken out of the row's free space. Nothing changes on a mouse.
+ * Mobile bottom-nav link: icon over label, 42px tall. The links share the row in equal-width cells (`flex-1`), so
+ * however many the role is allowed to see (Dashboard, Trips, People, Settings; three for a SupportWorker) they stay
+ * evenly spaced whatever their label widths ("Trips" is 28px, "Dashboard" 61px), and every cell is wider than 44px (78px
+ * at 360px wide with four links). Touch needs 44px each way, so the box also gets a `--tap-min` floor (0px on a mouse,
+ * 44px under `pointer: coarse`) and centres its content.
+ * A floor, not TAP_AREA's pad: the cells tile the row edge to edge, so a pad reaching past a cell would overlap the next
+ * link, and a floor cannot. Nothing changes on a mouse.
  */
-const MOBILE_NAV_LINK = 'flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
+const MOBILE_NAV_LINK = 'flex flex-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
 
 /**
  * Whether a leaf's NavLink should require an exact path match (React Router's `end`) rather
@@ -227,16 +229,6 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
             <p className="text-xs text-[var(--color-muted-foreground)] opacity-70 leading-none mt-0.5">NDIS Management</p>
           </div>
         </div>
-
-        {/* New Trip CTA — top of nav, below brand */}
-        {permissions.canWrite && (
-          <div className="px-1 pt-2 pb-1 shrink-0">
-            <Button to="/trips/new" size="md" className="w-full">
-              <Plus className="w-4 h-4" />
-              New Trip
-            </Button>
-          </div>
-        )}
 
         {/* Nav. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
             `--tap-min` floor: 32px (28px for a group child) on a mouse as before, 44px under a coarse pointer, where
@@ -448,10 +440,12 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         </main>
       </div>
 
-      {/* Mobile bottom nav — items and the FAB are gated the same as the sidebar (same
-          canAccessPage/canWrite helper), so a ReadOnly or restricted role never sees a link or
-          a create action it doesn't have access to. */}
-      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
+      {/* Mobile bottom nav — items are gated the same as the sidebar (same canAccessPage
+          helper), so a restricted role never sees a link it doesn't have access to. There is no
+          create shortcut here (or in the sidebar): creating a trip is the "New Trip" button in
+          the Trips page header. The links share the row in equal-width cells (MOBILE_NAV_LINK),
+          so the row needs no spacer or justify rule whatever number of them a role sees. */}
+      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex items-center z-50">
         {permissions.canAccessPage('dashboard') && (
           <NavLink to="/" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
@@ -463,13 +457,6 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
             <span className="text-xs font-medium">Trips</span>
           </NavLink>
-        )}
-        {permissions.canWrite && (
-          <Link to="/trips/new" className="relative -top-5">
-            <div className="w-14 h-14 bg-[var(--color-primary)] text-white rounded-full shadow-2xl shadow-[var(--color-primary)]/40 flex items-center justify-center">
-              <Plus className="w-6 h-6" />
-            </div>
-          </Link>
         )}
         {permissions.canAccessPage('participants') && (
           // Match the desktop Participants entry's matchActive predicate: anything under

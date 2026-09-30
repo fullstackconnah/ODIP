@@ -29,6 +29,10 @@ vi.mock('@/api/hooks', async (importOriginal) => {
   }
 })
 
+// A SuperAdmin's header also renders the tenant switcher, whose own TanStack Query hook needs a QueryClientProvider this
+// suite does not set up. It is header chrome, not navigation, so stub it: the role-by-role nav tests below cover SuperAdmin.
+vi.mock('@/components/layout/TenantSwitcher', () => ({ default: () => null }))
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -271,11 +275,28 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
-  it('does not use the ::before pad on the bottom-nav links: a floor cannot overlap its neighbours in the justify-around row', () => {
+  it('does not use the ::before pad on the bottom-nav links: the cells tile the row, so a pad past a cell would overlap its neighbour and a floor cannot', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     renderAt('/')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
     for (const link of within(nav).getAllByRole('link')) expect(link.className).not.toContain('before:')
+  })
+
+  it('shares the bottom-nav row in equal-width cells with nothing else in it, so the links stay evenly spaced with the centre create action gone', () => {
+    for (const [role, count] of [['Admin', 4], ['SupportWorker', 3]] as const) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderAt('/trips')
+      const nav = screen.getByRole('navigation', { name: 'Mobile' })
+      const links = within(nav).getAllByRole('link')
+      expect(links, role).toHaveLength(count)
+      // Every child of the row is one of the links (no spacer or placeholder where the "+" was), each an equal `flex-1`
+      // cell, and the row no longer distributes free space with justify-around.
+      expect(nav.childElementCount, role).toBe(count)
+      for (const link of links) expect(link, `${role}: ${link.textContent}`).toHaveClass('flex-1')
+      expect(nav.className).not.toContain('justify-')
+      unmount()
+      localStorage.clear()
+    }
   })
 
   it('keeps the active colour on the padded links', () => {
@@ -348,15 +369,13 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     expect(signOut).toHaveClass('h-8', FLOOR)
   })
 
-  it('floors every link in the drawer, not just the ones asserted by name', () => {
+  it('floors every link and button in the drawer, not just the ones asserted by name', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     renderAt('/trips')
 
-    const items = [
-      ...within(sidebar()).getByRole('navigation', { name: 'Main' }).querySelectorAll('a, button'),
-      within(sidebar()).getByRole('button', { name: /Sign Out$/ }),
-    ]
-    // The "New Trip" call to action is a Button md (44px on touch by its own token), so it is outside `nav`.
+    // Everything interactive in the aside: the Main nav's links and group toggles, and Sign Out. Nothing is exempt: the
+    // "New Trip" call to action above the nav (a Button md, which took its own 44px token) is gone.
+    const items = Array.from(sidebar().querySelectorAll('a, button'))
     expect(items.length).toBeGreaterThan(12)
     for (const item of items) expect(item, item.textContent ?? '').toHaveClass(FLOOR)
   })
@@ -385,5 +404,103 @@ describe('AppLayout — header search field on touch', () => {
     expect(box).toHaveClass('hidden', 'md:flex', 'items-center', 'h-8', 'min-h-[var(--tap-min)]', 'w-[360px]')
     expect(input).toHaveClass('pointer-coarse:self-stretch', 'w-full')
     expect(input.className).not.toMatch(/(^|\s)(h-|min-h-|self-stretch)/)
+  })
+})
+
+// The shell used to carry a "New Trip" shortcut in two places: a full-width call to action at the top of the sidebar (one
+// <aside> is both the permanent sidebar and the mobile drawer, so it was in the drawer too) and a round "+" in the centre
+// of the mobile bottom nav. Both linked to /trips/new and showed for every role that can write (all but SupportWorker).
+// They are gone on purpose: a trip is created from the "New Trip" button in the Trips page header (TripsPage.test.tsx).
+// Everything else in the shell is gated exactly as before.
+describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the bottom nav', () => {
+  const ROLES = ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly', 'SupportWorker']
+  const signIn = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role }))
+  const sidebar = () => screen.getByRole('complementary') as HTMLElement
+  const mainNav = () => within(sidebar()).getByRole('navigation', { name: 'Main' })
+  const hrefs = (root: HTMLElement) => Array.from(root.querySelectorAll('a')).map(a => a.getAttribute('href'))
+  // Links and buttons in the sidebar outside its Main nav: only Sign Out. The CTA lived in exactly this slot, between
+  // the brand and the nav, so any control added back there (whatever its label) fails.
+  const controlsOutsideNav = () =>
+    Array.from(sidebar().querySelectorAll('a, button'))
+      .filter(el => !el.closest('nav'))
+      .map(el => el.textContent?.trim())
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it.each(ROLES)('renders no link to /trips/new and no "New Trip" text anywhere in the shell for %s', role => {
+    signIn(role)
+    const { container } = renderAt('/trips')
+
+    expect(container.querySelector('a[href^="/trips/new"]')).toBeNull()
+    expect(container).not.toHaveTextContent(/new trip/i)
+  })
+
+  it.each(ROLES)('has no call to action in the sidebar for %s: outside the Main nav its only control is Sign Out', role => {
+    signIn(role)
+    renderAt('/trips')
+
+    expect(controlsOutsideNav()).toEqual(['Sign Out'])
+    expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
+    expect(sidebar()).not.toHaveTextContent(/new trip/i)
+  })
+
+  it.each(ROLES)('has none in the opened drawer for %s either', role => {
+    signIn(role)
+    renderAt('/trips')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    // Open: the same <aside> slides in, so this is the drawer a phone user sees.
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
+    expect(sidebar()).toHaveClass('translate-x-0')
+    expect(controlsOutsideNav()).toEqual(['Sign Out'])
+    expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
+    expect(sidebar()).not.toHaveTextContent(/new trip/i)
+  })
+
+  const FULL_BOTTOM_NAV = ['/', '/trips', '/participants', '/settings']
+  it.each<[string, string[]]>([
+    ['SuperAdmin', FULL_BOTTOM_NAV],
+    ['Admin', FULL_BOTTOM_NAV],
+    ['Coordinator', FULL_BOTTOM_NAV],
+    // ReadOnly had the "+" too: canWrite is true for it (the backend is what blocks the save).
+    ['ReadOnly', FULL_BOTTOM_NAV],
+    // A SupportWorker never had the "+" (canWrite is false) and still has no Settings (canAccessPage): three links.
+    ['SupportWorker', ['/', '/trips', '/participants']],
+  ])('has only the page links the role may open in the bottom nav for %s, none of them a create shortcut', (role, expected) => {
+    signIn(role)
+    renderAt('/trips')
+
+    const nav = screen.getByRole('navigation', { name: 'Mobile' })
+    expect(hrefs(nav)).toEqual(expected)
+    expect(nav.querySelector('a[href^="/trips/new"]')).toBeNull()
+    expect(nav).not.toHaveTextContent(/new trip/i)
+  })
+
+  it('still lists every sidebar link, in order, for an Admin', () => {
+    signIn('Admin')
+    renderAt('/trips')
+
+    expect(hrefs(mainNav())).toEqual([
+      '/', '/portal',
+      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
+      '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions',
+      '/billing',
+      '/participants', '/medications', '/caregiver-submissions',
+      '/staff', '/tasks', '/incidents', '/qualifications', '/settings',
+    ])
+  })
+
+  it('still hides the pages a SupportWorker may not open (Bookings, Rostering, Billing, Staff, Qualifications, Settings) from the sidebar', () => {
+    signIn('SupportWorker')
+    renderAt('/trips')
+
+    expect(hrefs(mainNav())).toEqual([
+      '/', '/portal',
+      '/trips', '/schedule',
+      '/participants', '/medications', '/caregiver-submissions',
+      '/tasks', '/incidents',
+    ])
   })
 })
