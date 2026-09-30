@@ -26,7 +26,7 @@ vi.mock('../client', () => ({
 import {
   useStartBreak, useEndBreak, useEditBreak, useDeleteBreak, useAcknowledgeHandover, useRecordShiftDose, useFinishShift,
 } from './portal'
-import { useShiftCompletionReview } from './rostering'
+import { useShiftCompletionReview, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch } from './rostering'
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -205,5 +205,40 @@ describe('coordinator completion review', () => {
     renderHook(() => useShiftCompletionReview(undefined), { wrapper: wrapper(qc) })
 
     expect(mockApiGet).not.toHaveBeenCalled()
+  })
+
+  // The review has its own cache key, which ['rostering-completion', id] does NOT prefix-match: without these the review page would keep
+  // showing the pre-decision completion after Approve / Return.
+  it('Approve refreshes the open review for that shift', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useApproveCompletion(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync('shift-1')
+
+    expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/approve')
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review', 'shift-1'] })
+  })
+
+  it('Return posts the reason and refreshes the open review for that shift', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useReturnCompletion(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync({ shiftId: 'shift-1', data: { reason: 'Please add the 12:30 dose.' } })
+
+    expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/return', { reason: 'Please add the 12:30 dose.' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review', 'shift-1'] })
+  })
+
+  it('Approve-batch refreshes every open review', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useApproveCompletionsBatch(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync(['shift-1', 'shift-2'])
+
+    expect(mockApiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['shift-1', 'shift-2'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review'] })
   })
 })

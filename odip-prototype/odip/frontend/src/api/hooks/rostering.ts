@@ -178,6 +178,7 @@ export function useApproveCompletion() {
     onSuccess: (_, shiftId) => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -191,6 +192,7 @@ export function useReturnCompletion() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -204,6 +206,8 @@ export function useApproveCompletionsBatch() {
       apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', { shiftIds }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
