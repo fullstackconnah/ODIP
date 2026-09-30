@@ -7,6 +7,8 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern } from '@/api/hooks'
+import { Button } from '@/components/Button'
+import { modalGrid } from '@/lib/formGrid'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
 
@@ -118,21 +120,16 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         tabIndex={-1}
         className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden border-l border-border bg-card shadow-xl"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
-          <h2 id={titleId} className="font-display font-semibold text-foreground">
+        <div className="flex shrink-0 items-center justify-between border-b border-border p-[var(--card-pad)]">
+          <h2 id={titleId} className="font-display text-base font-semibold text-foreground">
             {isEdit ? 'Edit pattern' : 'New pattern'}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close panel"
-            className="rounded-lg p-1 text-muted-foreground transition-colors duration-150 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button variant="ghost" iconOnly onClick={onClose} aria-label="Close panel">
             <X className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex flex-1 flex-col gap-[var(--field-gap-y)] overflow-y-auto p-[var(--card-pad)]">
           <FormField label="Participant" required>
             <Dropdown
               variant="form"
@@ -159,7 +156,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             <Dropdown variant="form" value={dayOfWeek} onChange={setDayOfWeek} disabled={!canWrite} items={DAY_OPTIONS} />
           </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={modalGrid}>
             <FormField label="Start time" required>
               <input type="time" value={startTime} disabled={!canWrite} onChange={e => setStartTime(e.target.value)} />
             </FormField>
@@ -172,7 +169,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => setEndsNextDay(e.target.checked)} />
           </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={modalGrid}>
             <FormField label="Ratio">
               <Dropdown
                 variant="form"
@@ -193,7 +190,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={modalGrid}>
             <FormField label="Effective from" required>
               <input type="date" value={effectiveFrom} disabled={!canWrite} onChange={e => setEffectiveFrom(e.target.value)} />
             </FormField>
@@ -207,39 +204,26 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </FormField>
 
           {error && (
-            <div role="alert" className="rounded-sm bg-error-container px-3 py-2 text-sm text-destructive">
+            <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
               {error}
             </div>
           )}
         </div>
 
         {canWrite && (
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-6 py-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border p-[var(--card-pad)]">
             {isEdit ? (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-destructive transition-colors duration-150 hover:bg-error-container focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <Button variant="ghost" onClick={() => setConfirmDelete(true)} className="text-[var(--color-destructive)] hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]">
                 <Trash2 className="h-4 w-4" /> Delete
-              </button>
+              </Button>
             ) : <span />}
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
-              >
+              <Button variant="ghost" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isBusy || !canSave}
-                className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleSave} disabled={isBusy || !canSave}>
                 {isBusy ? 'Saving…' : 'Save'}
-              </button>
+              </Button>
             </div>
           </div>
         )}

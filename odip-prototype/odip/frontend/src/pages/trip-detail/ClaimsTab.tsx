@@ -92,14 +92,14 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+        <div className="bg-red-50 border border-red-100 rounded-[var(--radius-md)] px-4 py-3 text-sm text-red-700 flex items-start gap-2">
           <span className="mt-0.5">⚠</span>
           <span>{error}</span>
         </div>
       )}
 
       {claims.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center text-[var(--color-muted-foreground)]">
+        <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-8 text-center text-[var(--color-muted-foreground)]">
           No claims yet. Generate a claim once the trip is complete.
         </div>
       ) : (

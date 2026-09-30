@@ -57,10 +57,10 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
     const title = leave.notes ?? `Unavailable ${windowLabel}`
 
     return (
-      <div style={{ gridColumn: `${startCol} / ${endCol}` }} className="relative min-h-[1.75rem]">
+      <div style={{ gridColumn: `${startCol} / ${endCol}` }} className="relative h-[var(--control-h-sm)]">
         <div
           style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-          className={`absolute inset-y-0 flex items-center gap-1 overflow-hidden rounded-sm px-1 text-[11px] italic text-muted-foreground ${
+          className={`absolute inset-y-0 flex items-center gap-1 overflow-hidden rounded-sm px-1 text-xs italic text-muted-foreground ${
             pendingRecurring ? 'border border-dashed border-muted-foreground bg-muted/40' : 'bg-muted'
           }`}
           title={title}
@@ -78,7 +78,7 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
   return (
     <div
       style={{ gridColumn: `${startCol} / ${endCol}` }}
-      className={`flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs italic text-muted-foreground ${
+      className={`flex h-[var(--control-h-sm)] items-center gap-1.5 rounded-sm px-2 text-[13px] italic text-muted-foreground ${
         pending ? 'border border-dashed border-muted-foreground bg-muted/40' : 'bg-muted'
       }`}
       title={leave.notes ?? label}

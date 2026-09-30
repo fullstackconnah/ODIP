@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
+import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
@@ -79,7 +80,7 @@ function PatternsSkeleton() {
   const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'Status', '']
   const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-14', 'w-8']
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-card" aria-hidden="true">
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-card" aria-hidden="true">
       <table className="w-full text-sm">
         <thead className="bg-accent">
           <tr className={dividerClass}>
@@ -165,18 +166,14 @@ export default function PatternsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Shift patterns"
         subtitle="Weekly recurring shifts that generate real shifts onto the roster."
         action={canWrite && (
-          <button
-            type="button"
-            onClick={() => setSlideOverTarget({ mode: 'create' })}
-            className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20 transition-all duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button onClick={() => setSlideOverTarget({ mode: 'create' })} size="md">
             <Plus className="h-4 w-4" /> New pattern
-          </button>
+          </Button>
         )}
       />
 

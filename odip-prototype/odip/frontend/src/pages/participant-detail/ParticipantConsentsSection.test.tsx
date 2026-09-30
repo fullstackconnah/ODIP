@@ -61,6 +61,15 @@ describe('ParticipantConsentsSection', () => {
     expect(screen.getAllByText('Not recorded')).toHaveLength(7)
   })
 
+  it('shows a muted "No consents recorded" line, not an empty body under the title, when no consent rows come back', () => {
+    mockUseParticipantConsents.mockReturnValue({ data: [], isLoading: false })
+    render(<ParticipantConsentsSection participantId="participant-1" />)
+
+    expect(screen.getByRole('heading', { name: 'Consents' })).toBeInTheDocument()
+    expect(screen.getByText('No consents recorded')).toBeInTheDocument()
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+  })
+
   it('shows Granted/Declined status distinctly, and only shows a signed-by line for a granted consent', () => {
     const data = unansweredConsents()
     data[0] = makeConsent({ consentType: 'PhotoVideo', granted: true, signedByName: 'Sophie Brown', signedDate: '2026-01-15' })

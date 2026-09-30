@@ -106,6 +106,10 @@ export default function ParticipantConsentsSection({ participantId }: { particip
           <ConsentSkeleton />
           <ConsentSkeleton />
         </div>
+      ) : ordered.length === 0 ? (
+        // GetForParticipant normally returns a row per ConsentType, but a still-empty list must not
+        // leave a titled card with an empty body — say so in one muted line (density spec §5).
+        <p className="text-sm text-[var(--color-muted-foreground)]">No consents recorded</p>
       ) : (
         <div className="space-y-2">
           {ordered.map((consent) => {

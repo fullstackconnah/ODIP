@@ -66,7 +66,7 @@ export function PlanTypeComplianceBanner({ message }: { message: string | null |
   return (
     <div
       role="status"
-      className="flex items-start gap-2 p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20"
+      className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20"
     >
       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
       <span>{message}</span>

@@ -38,7 +38,7 @@ function stageBadge(row: WorklistRow): { status: string; label: string } {
 export default function OnboardingPage() {
   const screen = useOnboardingScreen()
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader
         title="Onboarding"
         subtitle={`${screen.allRowsCount} participant${screen.allRowsCount !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}

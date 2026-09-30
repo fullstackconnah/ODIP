@@ -135,11 +135,11 @@ function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
             <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-destructive)] shrink-0" aria-label="Critical" />
           )}
           <p className="font-medium text-[var(--color-foreground)]">{routine.title}</p>
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
             {ROUTINE_CATEGORY_LABELS[routine.category]}
           </span>
           {routine.isCritical && (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
               Critical
             </span>
           )}

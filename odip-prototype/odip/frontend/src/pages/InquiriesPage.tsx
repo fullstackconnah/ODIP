@@ -16,7 +16,7 @@ import { usePermissions } from '@/lib/permissions'
 export default function InquiriesPage() {
   const screen = useInquiriesScreen()
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Enquiries"
         subtitle="Capture new enquiries and start their intake. Starting intake creates an inactive draft participant you can come back to."
@@ -131,7 +131,7 @@ function useInquiriesScreen() {
           Could not load enquiries. Please try again.
         </Callout>
       )}
-      {!canManageParticipantLifecycle && <p role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
+      {!canManageParticipantLifecycle && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
       {showEmptyState && <EmptyState icon={ClipboardPlus} title="No enquiries captured yet" description="Capture a light enquiry when someone first contacts the service, then start their draft intake when ready." action={canManageParticipantLifecycle ? { label: 'New enquiry', onClick: openNew } : undefined} />}
       {showTable && !isLoading && filtered.length === 0

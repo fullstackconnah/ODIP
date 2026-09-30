@@ -217,7 +217,7 @@ export default function BillableEventFormPanel({ isOpen, onClose, event, default
         </div>
 
         {locked && (
-          <div className="mx-6 mt-4 flex items-start gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-3 text-sm text-[var(--color-muted-foreground)]">
+          <div className="mx-6 mt-4 flex items-start gap-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] px-4 py-3 text-sm text-[var(--color-muted-foreground)]">
             <Lock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
             <span>
               This event has status <strong className="text-[var(--color-foreground)]">{event?.status}</strong> and has already
@@ -419,7 +419,7 @@ export default function BillableEventFormPanel({ isOpen, onClose, event, default
             </FormField>
 
             {error && (
-              <div role="alert" className="bg-[var(--color-error-container)] rounded-xl px-4 py-3 text-sm text-[var(--color-destructive)]">
+              <div role="alert" className="bg-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-destructive)]">
                 {error}
               </div>
             )}

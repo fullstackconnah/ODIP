@@ -95,7 +95,7 @@ export default function RosteringTab({ participantId }: { participantId: string 
                         leave was approved after the fact is actually a hole, not a normal covered
                         shift. */}
                     {s.assigneeOnApprovedLeave && (
-                      <p className="text-[10px] font-semibold text-[var(--color-destructive)]">On leave</p>
+                      <p className="text-[13px] leading-tight font-semibold text-[var(--color-destructive)]">On leave</p>
                     )}
                   </div>
                 ) : (

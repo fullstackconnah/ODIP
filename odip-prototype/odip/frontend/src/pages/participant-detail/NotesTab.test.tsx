@@ -116,6 +116,25 @@ describe('NotesTab', () => {
     expect(mockRegenerateMutateAsync).toHaveBeenCalledWith('auto-1')
   })
 
+  it('styles the drift hint with the warning tokens, not raw amber', () => {
+    mockUseParticipantNotes.mockReturnValue({
+      data: [makeNote({ sourceKey: 'safety:allergies', hasSourceDrift: true })],
+      isLoading: false,
+    })
+
+    render(<NotesTab participantId="participant-1" />)
+
+    const hint = screen.getByText(/source data has changed since this note was edited/i).closest('[class*="warning-container"]') as HTMLElement
+    expect(hint).not.toBeNull()
+    // amber-50 -> warning container, amber-800 -> on-warning container, amber-200 -> the warning colour at 40%.
+    expect(hint).toHaveClass(
+      'bg-[var(--color-warning-container)]',
+      'text-[var(--color-on-warning-container)]',
+      'border-[var(--color-warning)]/40',
+    )
+    expect(hint.className).not.toMatch(/amber-/)
+  })
+
   it('hides the drift hint actions for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     mockUseParticipantNotes.mockReturnValue({

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, type RenderResult } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { RosterGrid } from './RosterGrid'
-import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift } from '../test-fixtures'
+import { RosterGrid, RosterGridSkeleton } from './RosterGrid'
+import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift, WEEK_DAYS } from '../test-fixtures'
 
 function noop() {}
 
@@ -46,7 +46,8 @@ describe('RosterGrid — always renders the full grid', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
     expect(screen.getByText('Mia Chen')).toBeInTheDocument()
-    expect(screen.getByText('Fully covered')).toBeInTheDocument()
+    // The coverage state is a compact badge (a check here); "Fully covered" is its accessible name and title.
+    expect(screen.getByRole('img', { name: 'Fully covered' })).toBeInTheDocument()
   })
 })
 
@@ -119,5 +120,89 @@ describe('RosterGrid — cross-domain links', () => {
 
     expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1')
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+  })
+})
+
+describe('RosterGrid — density', () => {
+  it('does not repeat the participant name on chips in a participant row: the chip names the covering staff member', () => {
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p1',
+        fullName: 'Mia Chen',
+        daysWithoutCover: 6,
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })],
+      })],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    // The participant appears once (the row header); the covering staff member once (the chip label).
+    expect(screen.getAllByText('Mia Chen')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+  })
+
+  it('shows "Unfilled" on an unfilled shift inside a participant row', () => {
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p1',
+        fullName: 'Mia Chen',
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: null, staffName: null })],
+      })],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    expect(screen.getByText('Unfilled')).toBeInTheDocument()
+  })
+
+  it('in a staff row the chip names the participant and the staff member is named once, by the row header link', () => {
+    const board = makeStaffBoard({
+      staffRows: [makeStaffRow({
+        staffId: 'staff-9',
+        fullName: 'Alex Rivera',
+        shifts: [makeShift({ participantId: 'p1', participantName: 'Mia Chen', staffId: 'staff-9', staffName: 'Alex Rivera' })],
+      })],
+      unfilled: [],
+    })
+    renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
+
+    expect(screen.getAllByRole('link', { name: 'Alex Rivera' })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
+  })
+
+  it('sizes row headers and day cells from --row-h so a row is 34px at a fine pointer and grows under a coarse one', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    expect(container.querySelector('.sticky.left-0.z-10')).toHaveClass('min-h-[var(--row-h)]')
+    expect(screen.getAllByRole('button', { name: /^Add a shift for/ })[0]).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
+  })
+
+  it('pins the day header row and scrolls inside its own frame from md up, so the sticky header actually engages', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    const frame = container.firstElementChild as HTMLElement
+    expect(frame).toHaveClass('overflow-auto')
+    expect(frame.className).toMatch(/md:max-h-/)
+    expect(screen.getByText('Mon').parentElement).toHaveClass('sticky', 'top-0')
+  })
+
+  it('widens the sticky first column to 280px from a 1500px viewport through a CSS variable; below that it keeps the 195px column', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    // Only the wide-screen class sets the variable; the grid template and the scroll padding read it with the
+    // 195px lib width as the var() fallback, so a narrower window gets exactly the board it always had (195 +
+    // the week strip's 921px fits from 1390px) and a wide one gets the room a one-line participant header needs:
+    // 280px = 17px rule and padding + the longest fixture name with its marker (167px) + 8 + the 31px ratio chip
+    // + 8 + the 35px coverage count badge, with ~14px to spare. 1500px is where 280 + 921 + 2 + the 272px of
+    // sidebar and gutters + ~17px of scrollbar (1492px) fits.
+    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]')
+    expect(container.firstElementChild!.className).not.toMatch(/1480px|264px/)
+  })
+
+  it('gives the loading skeleton the same frame, so the column does not jump when the real board arrives', () => {
+    const { container } = render(<RosterGridSkeleton days={WEEK_DAYS} />)
+
+    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]', 'overflow-auto')
   })
 })

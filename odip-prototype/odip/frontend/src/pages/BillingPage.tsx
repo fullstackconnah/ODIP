@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Layers, Plus, Pencil, Lock, Wallet, Receipt, ClipboardList, Filter, FileStack,
 } from 'lucide-react'
@@ -13,10 +12,11 @@ import type { FundingSourceDto, ServiceBookingListDto, BillableEventDto } from '
 import { PageHeader } from '@/components/PageHeader'
 import { Tabs } from '@/components/Tabs'
 import { DataTable, type Column } from '@/components/DataTable'
-import { EmptyState } from '@/components/EmptyState'
+import { EmptyState, type EmptyStateProps } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 
@@ -71,30 +71,46 @@ function toUpdateFundingSourcePayload(fs: FundingSourceDto, isActive: boolean) {
 
 const filterSelectWrapClass = 'w-44'
 
+/**
+ * An EmptyState whose call to action is a real `<Button size="md">`. EmptyState's own `action` slot draws a
+ * hand-rolled `min-h-[44px] rounded-lg` text button that ignores the density tokens (44px on a mouse); this
+ * leaves that slot unset and puts the Button directly under the empty state instead — 32px on a fine
+ * pointer, 44px on a coarse one, both from the tokens — at the spacing the slot used (gap-3 + mt-2 = 20px).
+ * `secondary`, because every tab's toolbar above already carries the primary "New …" button. Delete this
+ * once EmptyState's action renders through Button.
+ */
+function EmptyStateWithAction({ action, ...emptyState }: Omit<EmptyStateProps, 'action'> & { action?: { label: string; onClick: () => void } }) {
+  return (
+    <div className="flex flex-col items-center gap-5 pb-10">
+      {/* pb-0!: the wrapper carries the 40px bottom padding EmptyState's py-10 would otherwise put under the description. */}
+      <EmptyState {...emptyState} className="pb-0!" />
+      {action && (
+        <Button variant="secondary" size="md" onClick={action.onClick}>
+          {action.label}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export default function BillingPage() {
   const { canWrite } = usePermissions()
   const [tab, setTab] = useState<'funding' | 'bookings' | 'events'>('funding')
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Billing"
         subtitle="Funding sources, service bookings, and billable events"
         action={(
           <div className="flex items-center gap-2">
-            <Link
-              to="/billing/claim-batches"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-            >
+            <Button to="/billing/claim-batches" variant="secondary" size="md">
               <FileStack className="w-4 h-4" /> View claim batches
-            </Link>
+            </Button>
             {canWrite && (
-              <Link
-                to="/billing/claim-batches/new"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-              >
+              <Button to="/billing/claim-batches/new" size="md">
                 <Layers className="w-4 h-4" /> New claim batch
-              </Link>
+              </Button>
             )}
           </div>
         )}
@@ -188,13 +204,15 @@ function FundingSourcesTab() {
       key: 'actions',
       header: '',
       render: fs => canWrite ? (
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
           onClick={e => { e.stopPropagation(); setEditing(fs); setPanelOpen(true) }}
-          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
           aria-label={`Edit funding source for ${fs.participantName}`}
         >
-          <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-        </button>
+          <Pencil className="w-4 h-4" />
+        </Button>
       ) : null,
     },
   ]
@@ -225,12 +243,9 @@ function FundingSourcesTab() {
           </div>
         </div>
         {canWrite && (
-          <button
-            onClick={() => { setEditing(undefined); setPanelOpen(true) }}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-          >
+          <Button onClick={() => { setEditing(undefined); setPanelOpen(true) }} size="md">
             <Plus className="w-4 h-4" /> New Funding Source
-          </button>
+          </Button>
         )}
       </div>
 
@@ -238,14 +253,14 @@ function FundingSourcesTab() {
         <TableSkeleton columns={8} />
       ) : fundingSources.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Wallet}
             title="No funding sources match your filters"
             description="Try a different participant or route type, or clear your filters to see all funding sources."
             action={{ label: 'Clear filters', onClick: () => { setParticipantFilter(''); setRouteTypeFilter('') } }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Wallet}
             title="No funding sources yet"
             description="A funding source is a pool of money attached to a participant — an NDIS plan budget category, a private payer, or a B2B customer. Add one to start billing against it."
@@ -338,7 +353,7 @@ function ServiceBookingsTab() {
               items={[{ value: '', label: 'All Participants' }, ...participants.map(p => ({ value: p.id, label: p.fullName }))]}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] px-3 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] cursor-pointer select-none focus-within:ring-2 focus-within:ring-[var(--color-ring)]">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] cursor-pointer select-none focus-within:ring-2 focus-within:ring-[var(--color-ring)]">
             <input
               type="checkbox"
               checked={activeOnly}
@@ -349,12 +364,12 @@ function ServiceBookingsTab() {
           </label>
         </div>
         {canWrite && (
-          <button
+          <Button
             onClick={() => setPanelOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
+            size="md"
           >
             <Plus className="w-4 h-4" /> New Service Booking
-          </button>
+          </Button>
         )}
       </div>
 
@@ -362,14 +377,14 @@ function ServiceBookingsTab() {
         <TableSkeleton columns={7} />
       ) : serviceBookings.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Receipt}
             title="No service bookings match your filters"
             description="Try a different participant, or turn off the active-only toggle to include expired bookings."
             action={{ label: 'Clear filters', onClick: () => { setParticipantFilter(''); setActiveOnly(false) } }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Receipt}
             title="No service bookings yet"
             description="A service booking mirrors a PRODA service booking for agency-managed funding, with lines that track exactly how much of each support item is left to claim. This is what prevents the #1 cause of claim rejections — claiming more than the remaining balance."
@@ -463,15 +478,17 @@ function BillableEventsTab() {
         if (!canWrite) return null
         const locked = isBillableEventLocked(ev.status)
         return (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
             onClick={e => { e.stopPropagation(); if (!locked) openEdit(ev) }}
             disabled={locked}
             aria-label={locked ? `Edit disabled — this event has status ${ev.status} and can no longer be changed` : `Edit billable event for ${ev.participantName}`}
             title={locked ? `Locked — already ${ev.status.toLowerCase()}` : 'Edit'}
-            className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
           >
-            {locked ? <Lock className="w-4 h-4 text-[var(--color-muted-foreground)]" /> : <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />}
-          </button>
+            {locked ? <Lock className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+          </Button>
         )
       },
     },
@@ -516,7 +533,7 @@ function BillableEventsTab() {
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
               aria-label="Delivered from date"
-              className="px-3 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+              className="px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
             <span className="text-sm text-[var(--color-muted-foreground)]">to</span>
             <input
@@ -524,17 +541,14 @@ function BillableEventsTab() {
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
               aria-label="Delivered to date"
-              className="px-3 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+              className="px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
             />
           </div>
         </div>
         {canWrite && (
-          <button
-            onClick={() => { setEditing(undefined); setPanelOpen(true) }}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-all"
-          >
+          <Button onClick={() => { setEditing(undefined); setPanelOpen(true) }} size="md">
             <Plus className="w-4 h-4" /> New Billable Event
-          </button>
+          </Button>
         )}
       </div>
 
@@ -542,14 +556,14 @@ function BillableEventsTab() {
         <TableSkeleton columns={9} />
       ) : events.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={ClipboardList}
             title="No billable events match your filters"
             description="Try a different participant, status, stream, or date range, or clear your filters to see all billable events."
             action={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={ClipboardList}
             title="No billable events yet"
             description="A billable event is the universal billing unit — every income stream (trips, shifts, STA nights, training) produces these, and the router turns them into claim lines or invoice lines. Add one to get started."

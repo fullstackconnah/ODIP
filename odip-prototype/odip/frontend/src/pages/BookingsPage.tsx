@@ -32,7 +32,7 @@ export default function BookingsPage() {
   const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
 
   if (isError) return (
-    <div className="p-8 text-center text-red-600">Failed to load bookings. Please refresh the page.</div>
+    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load bookings. Please refresh the page.</div>
   )
 
   function handleStatusChange(booking: BookingListDto, status: BookingStatus) {
@@ -44,7 +44,7 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Bookings"
         subtitle={`${totalCount} booking${totalCount !== 1 ? 's' : ''}`}

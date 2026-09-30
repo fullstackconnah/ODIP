@@ -4,9 +4,11 @@ import type { AxiosError } from 'axios'
 import { useForm, useWatch } from 'react-hook-form'
 import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
-import { ArrowLeft, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/Card'
+import { PageHeader } from '@/components/PageHeader'
+import { TAP_FLOOR } from '@/components/tapArea'
 import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
@@ -547,14 +549,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="flex items-center gap-4">
-        <Link to="/incidents" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Incident Report' : 'Report New Incident'}</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/incidents" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Incidents</Link>
       </div>
+      <PageHeader title={isEdit ? 'Edit Incident Report' : 'Report New Incident'} />
 
       {marPrefill && (
         <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
@@ -593,7 +593,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractIncidentErrorMessage(mutation.error, isEdit)}
         </div>
       )}

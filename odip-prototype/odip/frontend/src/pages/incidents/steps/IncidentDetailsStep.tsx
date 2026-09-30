@@ -5,6 +5,7 @@ import { Card } from '@/components/Card'
 import { BodyDiagram } from '@/components/BodyDiagram'
 import type { BodyRegion, InjuryType } from '@/api/types/enums'
 import type { IncidentFormData } from '../incidentFormSchema'
+import { formGrid, span } from '@/lib/formGrid'
 
 export type IncidentDetailsStepProps = {
   register: UseFormRegister<IncidentFormData>
@@ -27,39 +28,41 @@ export function IncidentDetailsStep({ register, control, errors, incidentType, w
   const { fields, append, remove } = useFieldArray({ control, name: 'injuries' })
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Incident Details" className="md:col-span-2 space-y-4">
-        <FormField label="Date & Time" required error={errors.incidentDateTime?.message}>
-          <input type="datetime-local" {...register('incidentDateTime')} />
-        </FormField>
-
-        <FormField label="Location">
-          <input {...register('location')} placeholder="Where the incident occurred" />
-        </FormField>
-
-        <FormField label="Description" required error={errors.description?.message}>
-          <textarea {...register('description')} rows={5} placeholder="Detailed description of the incident..." />
-        </FormField>
-
-        <FormField label="Immediate Actions Taken">
-          <textarea {...register('immediateActionsTaken')} rows={3} placeholder="What was done immediately in response..." />
-        </FormField>
-
-        <FormField label="Were Emergency Services Called?" layout="checkbox">
-          <input type="checkbox" {...register('wereEmergencyServicesCalled')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-        </FormField>
-
-        {wereEmergencyServicesCalled && (
-          <FormField label="Emergency Services Details">
-            <textarea {...register('emergencyServicesDetails')} rows={2} placeholder="Which services, response details..." />
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Incident Details">
+        <div className={formGrid}>
+          <FormField label="Date & Time" required error={errors.incidentDateTime?.message} className={span.short}>
+            <input type="datetime-local" {...register('incidentDateTime')} />
           </FormField>
-        )}
+
+          <FormField label="Location" className={span.medium}>
+            <input {...register('location')} placeholder="Where the incident occurred" />
+          </FormField>
+
+          <FormField label="Description" required error={errors.description?.message} className={span.long}>
+            <textarea {...register('description')} rows={4} placeholder="Detailed description of the incident..." />
+          </FormField>
+
+          <FormField label="Immediate Actions Taken" className={span.long}>
+            <textarea {...register('immediateActionsTaken')} rows={3} placeholder="What was done immediately in response..." />
+          </FormField>
+
+          <FormField label="Were Emergency Services Called?" layout="checkbox" className={span.short}>
+            <input type="checkbox" {...register('wereEmergencyServicesCalled')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
+
+          {wereEmergencyServicesCalled && (
+            <FormField label="Emergency Services Details" className={span.long}>
+              <textarea {...register('emergencyServicesDetails')} rows={2} placeholder="Which services, response details..." />
+            </FormField>
+          )}
+        </div>
       </Card>
 
       {incidentType === 'Injury' && (
-        <Card title="Injuries" className="md:col-span-2 space-y-4">
+        <Card title="Injuries">
           {errors.injuries?.message && (
-            <p role="alert" className="text-xs text-[var(--color-destructive)]">{errors.injuries.message}</p>
+            <p role="alert" className="text-xs text-[var(--color-destructive)] mb-2">{errors.injuries.message}</p>
           )}
           <BodyDiagram
             injuries={fields.map((f) => ({ region: f.region as BodyRegion, injuryType: f.injuryType as InjuryType, description: f.description }))}

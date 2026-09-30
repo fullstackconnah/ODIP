@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useDroppable } from '@dnd-kit/core'
 import type { RosterStaffRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
@@ -16,6 +17,11 @@ export type StaffRowProps = {
   onAddShift: (staffId: string, day: string) => void
 }
 
+// Shared by the compliance-note buttons: truncates inline; on focus it pops out into a card showing the
+// full note (the note was already long-form text that only ever fit as a truncated line).
+const NOTE_BUTTON =
+  'min-w-0 max-w-full truncate rounded-sm text-left text-[13px] leading-4 focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:leading-snug focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
 export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift }: StaffRowProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `staff:${row.staffId}`, disabled: !canWrite })
 
@@ -27,59 +33,55 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
 
   return (
     <>
-      <div className="sticky left-0 z-10 flex flex-col gap-1.5 border-b border-r border-border bg-card px-4 py-2.5">
-        <div className="min-w-0">
-          <p className="truncate font-display text-sm font-semibold text-foreground" title={row.fullName}>
-            {row.fullName}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">{row.role}</p>
-        </div>
+      {/*
+        Row header: two tight lines inside one --row-h row. Line 1 is the name, which gets the column's
+        full width (long names like "Marcus Papadopoulos" must not truncate to a stub). Line 2 is the
+        secondary facts: the role — or, when the row carries a compliance note, the note in its place,
+        since a flag outranks a static role and the role is still on the name's tooltip — and the
+        rostered/target hours. The hours meter is the 2px rule along the cell's bottom edge, so it costs
+        no height. The name is a link to the staff page: it replaces the staff-name link the chips used
+        to repeat in every one of this row's cells.
+      */}
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
+        <Link
+          to={`/staff/${row.staffId}`}
+          className="block truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={`${row.fullName} — ${row.role}`}
+        >
+          {row.fullName}
+        </Link>
 
-        {/* Reserved compliance-note line, always rendered (empty for 'Ok' rows) so every row
-            takes the same height whether or not it carries a note — this used to sit beside the
-            name in a `justify-between` row and steal its width, which is why names like "Isabella
-            Ferraro" or "Marcus Papadopoulos" were truncating to unreadable stubs. The name above
-            now has the column's full width to itself; the note moved here as its own line and
-            keeps the same truncate + focus-popout disclosure as before. */}
-        <div className="flex h-4 min-w-0 items-center gap-1">
-          {row.compliance === 'Warning' && (
+        <div className="flex min-w-0 items-center justify-between gap-2 text-[13px] leading-4 text-muted-foreground">
+          {row.compliance === 'Warning' ? (
             <span className="relative flex min-w-0 items-center gap-1">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-warning)]" aria-hidden="true" />
-              <button
-                type="button"
-                aria-label={row.complianceNotes[0]}
-                className="min-w-0 max-w-full truncate rounded-sm text-left text-[11px] text-muted-foreground focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:text-foreground focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <button type="button" aria-label={row.complianceNotes[0]} className={`${NOTE_BUTTON} text-muted-foreground focus:text-foreground`}>
                 {row.complianceNotes[0]}
               </button>
             </span>
-          )}
-          {row.compliance === 'Blocked' && (
+          ) : row.compliance === 'Blocked' ? (
             <span className="relative flex min-w-0 items-center">
-              <button
-                type="button"
-                aria-label={row.complianceNotes[0] ?? 'Blocked'}
-                className="min-w-0 max-w-full truncate rounded-sm text-left text-[11px] font-medium text-destructive focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <button type="button" aria-label={row.complianceNotes[0] ?? 'Blocked'} className={`${NOTE_BUTTON} font-medium text-destructive`}>
                 {row.complianceNotes[0] ?? 'Blocked'}
               </button>
             </span>
+          ) : (
+            <span className="min-w-0 truncate">{row.role}</span>
           )}
+          <span className="shrink-0 tabular-nums">{formatHoursMeter(row.rosteredHours, row.targetHours)}</span>
         </div>
-        <div>
-          <div className="h-1 w-full overflow-hidden rounded-sm bg-input">
-            <div
-              className={`h-full rounded-sm transition-[width] duration-200 ${overTarget ? 'bg-[var(--color-warning)]' : 'bg-primary'}`}
-              style={{ width: `${meterPct}%` }}
-            />
-          </div>
-          <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">{formatHoursMeter(row.rosteredHours, row.targetHours)}</p>
+
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-input" aria-hidden="true">
+          <div
+            className={`h-full transition-[width] duration-200 ${overTarget ? 'bg-[var(--color-warning)]' : 'bg-primary'}`}
+            style={{ width: `${meterPct}%` }}
+          />
         </div>
       </div>
 
       <div
         ref={setNodeRef}
-        className={`grid gap-1 border-b border-border p-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
+        className={`grid gap-x-1 gap-y-0.5 border-b border-border px-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length), gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (

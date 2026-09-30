@@ -36,7 +36,7 @@ function ShiftsSkeleton() {
             <div className="h-4 w-40 rounded bg-[var(--color-accent)] animate-pulse mb-2" />
             <div className="space-y-2">
               {[0, 1].map(row => (
-                <div key={row} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4">
+                <div key={row} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-2">
                       <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
@@ -154,7 +154,7 @@ export default function PortalShiftsPage() {
                   <Link
                     key={shift.id}
                     to={`/portal/shifts/${shift.id}`}
-                    className="block bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 transition-colors"
+                    className="block bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -168,7 +168,7 @@ export default function PortalShiftsPage() {
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <StatusBadge status={shift.status} />
                         {shift.nightType !== 'None' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          <span className="inline-flex items-center gap-1 text-[13px] text-[var(--color-muted-foreground)]">
                             <Moon className="w-3 h-3" /> {shift.nightType}
                           </span>
                         )}
@@ -185,7 +185,7 @@ export default function PortalShiftsPage() {
               <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">Trip assignments</h2>
               <div className="space-y-2">
                 {tripAssignments.map(a => (
-                  <div key={a.id} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4">
+                  <div key={a.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-medium text-[var(--color-foreground)] truncate">{a.tripName}</p>

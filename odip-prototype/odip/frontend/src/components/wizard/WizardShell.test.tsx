@@ -20,7 +20,7 @@ describe('WizardShell', () => {
 
     const aside = screen.getByRole('complementary', { name: /wizard steps/i })
     expect(aside).toBeInTheDocument()
-    expect(aside).toHaveClass('lg:w-60', 'lg:shrink-0', 'min-w-0')
+    expect(aside).toHaveClass('lg:w-52', 'lg:shrink-0', 'min-w-0')
 
     // Content is a labelled section, NOT a <main>: AppLayout already provides the single
     // authenticated-shell <main id="main">, and nesting another one would be a landmark

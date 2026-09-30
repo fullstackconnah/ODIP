@@ -16,6 +16,7 @@ import { MOBILITY_SUPPORT_OPTIONS, AMBULANT_STATUS_LABELS, RISK_RATING_LEVEL_LAB
 import { AMBULANT_STATUSES, RISK_RATING_LEVELS, PERSONAL_CARE_LEVELS } from '@/api/types/enums'
 import { ReadOnlyField } from '../profileHelpers'
 import { yesNoUnknown } from '../profileFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
   { value: 'true', label: 'Yes' },
@@ -29,22 +30,24 @@ export function MobilityFunctionalStep({ control, register, participant }: {
   participant: ParticipantDetailDto
 }) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Support Needs (from Intake)" className="space-y-3">
-        <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} />
-        <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} />
-        <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} />
-        <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} />
-        <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} />
-        <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} />
-        <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} />
-        <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} />
-        <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} />
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Support Needs (from Intake)">
+        <div className={formGrid}>
+          <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} />
+          <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} />
+          <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} />
+          <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} />
+          <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} />
+          <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} />
+          <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} />
+          <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} />
+          <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} />
+        </div>
       </Card>
 
-      <div className="space-y-6">
-        <Card title="Mobility Support" className="space-y-4">
-          <FormField label="Mobility Support Options">
+      <Card title="Mobility Support">
+        <div className={formGrid}>
+          <FormField label="Mobility Support Options" className={span.long}>
             <Controller
               control={control}
               name="mobilitySupportOptions"
@@ -70,25 +73,27 @@ export function MobilityFunctionalStep({ control, register, participant }: {
               )}
             />
           </FormField>
-          <TextAreaField label="Mobility Notes" id="mobilityNotes" rows={2} {...register('mobilityNotes')} />
-          <TextAreaField label="Equipment Requirements" id="equipmentRequirements" rows={2} {...register('equipmentRequirements')} />
-          <TextAreaField label="Transport Requirements" id="transportRequirements" rows={2} {...register('transportRequirements')} />
-        </Card>
+          <TextAreaField label="Mobility Notes" id="mobilityNotes" rows={2} {...register('mobilityNotes')} className={span.long} />
+          <TextAreaField label="Equipment Requirements" id="equipmentRequirements" rows={2} {...register('equipmentRequirements')} className={span.long} />
+          <TextAreaField label="Transport Requirements" id="transportRequirements" rows={2} {...register('transportRequirements')} className={span.long} />
+        </div>
+      </Card>
 
-        <Card title="Functional Detail" className="space-y-4">
-          <FormField label="Ambulant Status">
+      <Card title="Functional Detail">
+        <div className={formGrid}>
+          <FormField label="Ambulant Status" className={span.medium}>
             <select id="ambulantStatus" {...register('ambulantStatus')}>
               <option value="">Not specified</option>
               {AMBULANT_STATUSES.map((s) => <option key={s} value={s}>{AMBULANT_STATUS_LABELS[s]}</option>)}
             </select>
           </FormField>
-          <FormField label="Falls Risk Rating">
+          <FormField label="Falls Risk Rating" className={span.medium}>
             <select id="fallsRiskRating" {...register('fallsRiskRating')}>
               <option value="">Not specified</option>
               {RISK_RATING_LEVELS.map((r) => <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>)}
             </select>
           </FormField>
-          <FormField label="Uneven Ground">
+          <FormField label="Uneven Ground" className={span.medium}>
             <Controller
               control={control}
               name="unevenGroundFlag"
@@ -99,19 +104,19 @@ export function MobilityFunctionalStep({ control, register, participant }: {
               )}
             />
           </FormField>
-          <FormField label="Level of Personal Care">
+          <FormField label="Level of Personal Care" className={span.medium}>
             <select id="levelOfPersonalCare" {...register('levelOfPersonalCare')}>
               <option value="">Not specified</option>
               {PERSONAL_CARE_LEVELS.map((l) => <option key={l} value={l}>{PERSONAL_CARE_LEVEL_LABELS[l]}</option>)}
             </select>
           </FormField>
-          <FormField label="Orthotics"><input id="orthotics" {...register('orthotics')} /></FormField>
-          <FormField label="Continence Support"><input id="continenceSupportDetail" {...register('continenceSupportDetail')} /></FormField>
-          <FormField label="Colostomy / Catheter / Enema / Suppository"><input id="bowelCareDetail" {...register('bowelCareDetail')} /></FormField>
-          <FormField label="Menstruation Support"><input id="menstruationSupport" {...register('menstruationSupport')} /></FormField>
-          <FormField label="Skin Integrity"><input id="skinIntegrity" {...register('skinIntegrity')} /></FormField>
-        </Card>
-      </div>
+          <FormField label="Orthotics" className={span.medium}><input id="orthotics" {...register('orthotics')} /></FormField>
+          <FormField label="Continence Support" className={span.medium}><input id="continenceSupportDetail" {...register('continenceSupportDetail')} /></FormField>
+          <FormField label="Colostomy / Catheter / Enema / Suppository" className={span.medium}><input id="bowelCareDetail" {...register('bowelCareDetail')} /></FormField>
+          <FormField label="Menstruation Support" className={span.medium}><input id="menstruationSupport" {...register('menstruationSupport')} /></FormField>
+          <FormField label="Skin Integrity" className={span.medium}><input id="skinIntegrity" {...register('skinIntegrity')} /></FormField>
+        </div>
+      </Card>
     </div>
   )
 }

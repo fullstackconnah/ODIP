@@ -105,3 +105,21 @@ describe('RosterBoardPage — ASSIGNEE_ON_LEAVE exception comes from the server'
     expect(screen.getByRole('button', { name: '0 exceptions' })).toBeInTheDocument()
   })
 })
+
+describe('RosterBoardPage — load error', () => {
+  it('offers Retry as a Button at --control-h, not EmptyState\'s hand-rolled 44px link, and refetches when pressed', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    mockUseRosterBoard.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    const { container } = renderPage()
+
+    expect(screen.getByText('Couldn\'t load the roster board')).toBeInTheDocument()
+    const retry = screen.getByRole('button', { name: 'Retry' })
+    expect(retry).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+    // EmptyState's own action slot is where that min-h-[44px] button comes from; it is left unused here.
+    expect(container.querySelector('.min-h-\\[44px\\]')).toBeNull()
+
+    await user.click(retry)
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+})

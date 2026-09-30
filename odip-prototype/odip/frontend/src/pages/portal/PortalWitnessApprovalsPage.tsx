@@ -19,7 +19,7 @@ function formatDateTime(value: string | null, timeZone: string | null) {
 /** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */
 function SkeletonCard() {
   return (
-    <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4 animate-pulse">
+    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 animate-pulse">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="h-4 w-40 bg-[var(--color-muted)] rounded" />
@@ -170,7 +170,7 @@ export default function PortalWitnessApprovalsPage() {
       ) : (
         <div className="space-y-3">
           {list.map(request => (
-            <div key={request.id} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-4">
+            <div key={request.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   {request.sourceType === 'Incident' ? (

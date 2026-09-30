@@ -71,6 +71,19 @@ describe('ClaimBatchesPage', () => {
     expect(screen.queryByText('No claim batches yet')).not.toBeInTheDocument()
   })
 
+  it('keeps the page header (H1 and Build action) when the fetch fails, with the error below it', () => {
+    mockUseClaimBatches.mockReturnValue({ data: undefined, isLoading: false, isError: true })
+    renderPage()
+
+    const heading = screen.getByRole('heading', { level: 1, name: 'Claim Batches' })
+    expect(screen.getByRole('link', { name: /build claim batch/i })).toBeInTheDocument()
+    // The error is rendered after the header, not instead of it.
+    const error = screen.getByText(/failed to load claim batches/i)
+    expect(heading.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // "0 claim batches" would misreport a failed fetch as an empty list.
+    expect(screen.queryByText(/\d+ claim batch/i)).not.toBeInTheDocument()
+  })
+
   it('links a row to the claim batch detail route', async () => {
     mockUseClaimBatches.mockReturnValue({
       data: [baseBatch()],

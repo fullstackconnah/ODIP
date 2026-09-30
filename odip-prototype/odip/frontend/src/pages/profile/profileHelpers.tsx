@@ -26,7 +26,7 @@ export function ReadOnlyField({ field, label, value, hint }: { field: string; la
 export function ReadOnlyGroupField({ field, label, children }: { field: string; label: string; children: React.ReactNode }) {
   return (
     <FormField label={label} hint="Captured at Intake — read-only here">
-      <div id={field} aria-readonly="true" role="group" aria-label={label} className="text-sm text-[var(--color-muted-foreground)] p-2.5 rounded-lg bg-[var(--color-accent)]/40">
+      <div id={field} aria-readonly="true" role="group" aria-label={label} className="text-sm text-[var(--color-muted-foreground)] p-2.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)]/40">
         {children}
       </div>
     </FormField>

@@ -39,3 +39,33 @@ describe('ScheduleAssignmentCell — keyboard accessibility (PP-9)', () => {
     expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()
   })
 })
+
+describe('ScheduleAssignmentCell — density', () => {
+  it('is a 28px chip (row-h less 6px, so it scales under a coarse pointer) with 14px text in every state', () => {
+    const { rerender } = render(<ScheduleAssignmentCell status="Available" clickable onClick={vi.fn()} />)
+    const expected = ['h-[calc(var(--row-h)_-_6px)]', 'text-sm']
+    expect(screen.getByRole('button', { name: 'Assign' })).toHaveClass(...expected)
+
+    rerender(<ScheduleAssignmentCell status="Assigned" onUnassign={vi.fn()} unassignLabel="Unassign" />)
+    expect(screen.getByRole('button', { name: 'Unassign' })).toHaveClass(...expected)
+
+    rerender(<ScheduleAssignmentCell status="Conflict" />)
+    expect(screen.getByText('Conflict').parentElement).toHaveClass(...expected)
+  })
+
+  it('reads the Tentative label in on-warning-container, not the ~2:1 --color-warning amber, while the dot keeps the warning hue', () => {
+    render(<ScheduleAssignmentCell status="Tentative" />)
+
+    const chip = screen.getByText('Tentative').parentElement as HTMLElement
+    expect(chip).toHaveClass('text-[var(--color-on-warning-container)]')
+    expect(chip.firstElementChild).toHaveClass('bg-[var(--color-warning)]')
+  })
+
+  it('truncates a long role inside the chip instead of widening the trip column, keeping the full role on hover', () => {
+    render(<ScheduleAssignmentCell status="Assigned" role="Senior Support / Driver" />)
+
+    const role = screen.getByText('· Senior Support / Driver')
+    expect(role).toHaveClass('truncate')
+    expect(role).toHaveAttribute('title', 'Senior Support / Driver')
+  })
+})

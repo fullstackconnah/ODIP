@@ -11,12 +11,16 @@ export type EmptyStateProps = {
   description?: string
   action?: EmptyStateAction
   className?: string
+  /** 'inline' trims vertical padding to py-6 for use inside a table body / dense panel;
+   * defaults to 'default' (py-10) for a full page-level empty state. */
+  size?: 'default' | 'inline'
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, className, size = 'default' }: EmptyStateProps) {
+  const paddingClass = size === 'inline' ? 'py-6' : 'py-10'
   return (
-    <div className={`flex flex-col items-center justify-center text-center py-24 gap-3 ${className ?? ''}`}>
-      <Icon className="w-16 h-16 text-[var(--color-foreground)] opacity-20" />
+    <div className={`flex flex-col items-center justify-center text-center ${paddingClass} gap-3 ${className ?? ''}`}>
+      <Icon className="w-10 h-10 text-[var(--color-foreground)] opacity-20" />
       <p className="text-lg font-semibold text-[var(--color-muted-foreground)]">{title}</p>
       {description && (
         <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">{description}</p>

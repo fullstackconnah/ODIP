@@ -34,19 +34,19 @@ const STREAM_OPTIONS = INCOME_STREAMS.map(value => ({ value, label: INCOME_STREA
 const NO_EVENTS: BillableEventDto[] = []
 
 const dateInputClass =
-  'px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm ' +
+  'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-50 disabled:cursor-not-allowed transition-all'
 
 const filterLabelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
 const primaryBtn =
-  'inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium ' +
+  'inline-flex items-center gap-2 px-4 h-[var(--control-h)] rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium ' +
   'hover:bg-[var(--color-primary)]/90 active:bg-[var(--color-primary)]/80 focus-visible:outline-none focus-visible:ring-2 ' +
   'focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ' +
   'transition-all shadow-md shadow-[var(--color-primary)]/20'
 
 const secondaryBtn =
-  'inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] ' +
+  'inline-flex items-center gap-2 px-4 h-[var(--control-h)] rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] ' +
   'text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-accent)] active:bg-[var(--color-accent)]/70 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
@@ -62,7 +62,7 @@ function TableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <>
       <div role="status" aria-live="polite" className="sr-only">Loading unclaimed billable events…</div>
-      <div aria-hidden="true" className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+      <div aria-hidden="true" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
         <div className="h-10 bg-[var(--color-accent)]" />
         <div className="divide-y divide-[var(--color-border)]">
           {Array.from({ length: rows }).map((_, i) => (
@@ -296,7 +296,7 @@ export default function ClaimBatchBuilderPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/billing" className={linkBtn}>← Back to Billing</Link>
       </div>
@@ -307,7 +307,7 @@ export default function ClaimBatchBuilderPage() {
       />
 
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl p-4">
+      <div className="flex flex-wrap items-end gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)]">
         <div>
           <label id="filter-participant-label" className={filterLabelClass}>Participant</label>
           <ParticipantPicker
@@ -361,7 +361,7 @@ export default function ClaimBatchBuilderPage() {
       {canWrite && (
         <>
           {/* Selection summary + actions */}
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)]">
             <div>
               <p className="text-sm font-semibold text-[var(--color-foreground)]">
                 {selectedCount} event{selectedCount !== 1 ? 's' : ''} selected
@@ -383,7 +383,7 @@ export default function ClaimBatchBuilderPage() {
                   )}
                   {validateMutation.isPending ? 'Validating…' : 'Validate selection'}
                 </button>
-                <p className="text-[11px] text-[var(--color-muted-foreground)]">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
                   Read-only — validating never creates or changes anything.
                 </p>
                 {validateMutation.isError && (
@@ -404,7 +404,7 @@ export default function ClaimBatchBuilderPage() {
                   Create claim batch
                 </button>
                 {createHelpText && (
-                  <p id={createHelpId} className="text-[11px] text-[var(--color-muted-foreground)]">{createHelpText}</p>
+                  <p id={createHelpId} className="text-xs text-[var(--color-muted-foreground)]">{createHelpText}</p>
                 )}
               </div>
             </div>
@@ -413,7 +413,7 @@ export default function ClaimBatchBuilderPage() {
           {/* Validation result banner */}
           {validation && (
             <div
-              className={`flex items-start gap-3 p-4 rounded-xl border text-sm ${
+              className={`flex items-start gap-3 p-4 rounded-[var(--radius-md)] border text-sm ${
                 isValidationStale
                   ? 'bg-[var(--color-surface-container-low)] border-[var(--color-border)] text-[var(--color-muted-foreground)]'
                   : errorCount > 0
@@ -456,7 +456,7 @@ export default function ClaimBatchBuilderPage() {
 
       {/* Table / states */}
       {isError ? (
-        <div className="p-8 text-center text-[var(--color-destructive)]">
+        <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">
           Failed to load billable events. Please refresh the page.
         </div>
       ) : isLoading && events.length === 0 ? (

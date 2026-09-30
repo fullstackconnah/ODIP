@@ -76,6 +76,19 @@ describe('ClaimsTab — list', () => {
     expect(screen.getByText(`${formatDateAu('2026-01-01')} – ${formatDateAu('2026-01-14')}`)).toBeInTheDocument()
   })
 
+  it('colours the kind chips from tokens (trip = secondary container, shift = accessible container), not raw blue and purple', () => {
+    mockUseParticipantClaims.mockReturnValue({ data: [tripClaim(), shiftClaim()], isLoading: false })
+    renderTab()
+
+    const trip = screen.getByText('Trip')
+    const shift = screen.getByText('Shift')
+    expect(trip).toHaveClass('bg-[var(--color-secondary-container)]', 'text-[var(--color-info)]')
+    expect(shift).toHaveClass('bg-[var(--color-accessible-container)]', 'text-[var(--color-on-accessible-container)]')
+    // Still told apart at a glance: two different token pairs.
+    expect(trip.className).not.toBe(shift.className)
+    for (const chip of [trip, shift]) expect(chip.className).not.toMatch(/(blue|purple)-\d/)
+  })
+
   it('shows an empty state when the participant has no claims', () => {
     renderTab()
     expect(screen.getByText('No claims yet')).toBeInTheDocument()

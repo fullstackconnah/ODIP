@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useCreateElectronicSigningSnapshot, useSubmitElectronicSigningEvidence } from '@/api/hooks'
 import type { ElectronicSigningSnapshotDto, ServiceAgreementDraftDto } from '@/api/types'
+import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
 
 type Props = { participantId: string; draft: ServiceAgreementDraftDto }
@@ -66,24 +67,24 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
     })
   }
 
-  return <section aria-labelledby={`signing-evidence-${draft.id}`} className="rounded-xl border border-[var(--color-warning)]/50 bg-[var(--color-warning-container)]/20 p-4 space-y-4">
+  return <section aria-labelledby={`signing-evidence-${draft.id}`} className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/50 bg-[var(--color-warning-container)]/20 p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
     <div>
       <h3 id={`signing-evidence-${draft.id}`} className="font-semibold">In-app electronic signing evidence</h3>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Records signing evidence for review. It stays pending verification and doesn't create a signed agreement, approval, billing authority or permission to schedule.</p>
     </div>
     {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Signing evidence can't be recorded until this agreement template is approved.</p>}
-    {evidencePermitted && !snapshot && <button type="button" onClick={showDocument} disabled={createSnapshot.isPending} className="inline-flex items-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-sm font-medium disabled:opacity-50">
+    {evidencePermitted && !snapshot && <Button variant="secondary" size="md" onClick={showDocument} disabled={createSnapshot.isPending} className="self-start">
       {createSnapshot.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Display immutable document before recording evidence
-    </button>}
+    </Button>}
     {evidencePermitted && snapshot && <>
-      <div className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
         <p className="text-sm font-medium">Immutable document version {snapshot.draftVersion}</p>
         <p className="mt-1 break-all text-xs text-[var(--color-muted-foreground)]">SHA-256: {snapshot.documentHash}</p>
-        <pre aria-label="Complete immutable document JSON" className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--color-muted)] p-3 text-xs text-[var(--color-foreground)]">{snapshot.documentJson}</pre>
+        <pre aria-label="Complete immutable document JSON" className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-sm)] bg-[var(--color-muted)] p-3 text-xs text-[var(--color-foreground)]">{snapshot.documentJson}</pre>
       </div>
-      <fieldset className="space-y-3" disabled={submitEvidence.isPending}>
+      <fieldset className="flex flex-col gap-2" disabled={submitEvidence.isPending}>
         <legend className="text-sm font-medium">Signer attestation</legend>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2">
           <FormField label="Signer full name" required>
             <input value={signerName} onChange={event => setSignerName(event.target.value)} />
           </FormField>
@@ -104,11 +105,11 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
           <input type="checkbox" className="w-4 h-4 rounded border-[var(--color-border)]" checked={intendsToSign} onChange={event => setIntendsToSign(event.target.checked)} />
         </FormField>
       </fieldset>
-      <button type="button" onClick={submit} disabled={submitEvidence.isPending} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+      <Button variant="primary" size="md" onClick={submit} disabled={submitEvidence.isPending} className="self-start">
         {submitEvidence.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Record PendingVerification evidence
-      </button>
+      </Button>
     </>}
-    {error && <p role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-sm text-[var(--color-destructive)]">{error}</p>}
+    {error && <p role="alert" className="p-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-sm text-[var(--color-destructive)]">{error}</p>}
     {success && <p role="status" className="text-sm">{success}</p>}
   </section>
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useActivities, useCreateScheduledActivity, useUpdateScheduledActivity } from '@/api/hooks'
+import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { Modal } from '@/components/Modal'
 import { Dropdown } from './Dropdown'
 import type { ActivityDto, ScheduledActivityDto, CreateScheduledActivityDto, UpdateScheduledActivityDto } from '@/api/types'
@@ -128,7 +129,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
 
   const isSubmitting = createActivity.isPending || updateActivity.isPending
 
-  const inputClass = "w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+  const inputClass = "w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
   const labelClass = "block text-sm font-medium mb-1"
 
   return (
@@ -138,9 +139,9 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
       title={editingActivity ? 'Edit Activity' : 'Add Activity'}
       footer={
         <>
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">Cancel</button>
+          <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]">Cancel</button>
           <button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}
-            className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50">
+            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50">
             {isSubmitting ? 'Saving...' : editingActivity ? 'Update' : 'Add Activity'}
           </button>
         </>
@@ -148,7 +149,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
     >
 
         {!editingActivity && (
-          <div className="flex gap-1 mb-4 bg-[var(--color-surface)] rounded-lg p-1">
+          <div className="flex gap-1 mb-4 bg-[var(--color-surface)] rounded-[var(--radius-md)] p-1">
             {(['library', 'custom'] as const).map(tab => (
               <button key={tab} onClick={() => setSourceTab(tab)}
                 className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${sourceTab === tab ? 'bg-[var(--color-card)] font-medium shadow-sm' : 'text-[var(--color-muted-foreground)]'}`}>
@@ -175,30 +176,30 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
           </div>
         )}
 
-        <div className="space-y-3">
-          <div>
+        <div className={modalGrid}>
+          <div className={modalSpan.full}>
             <label className={labelClass}>Title *</label>
             <input value={title} onChange={e => setTitle(e.target.value)} className={inputClass} placeholder="Activity title" maxLength={200} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          <div className="contents">
+            <div className={modalSpan.half}>
               <label className={labelClass}>Start Time</label>
               <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inputClass} />
             </div>
-            <div>
+            <div className={modalSpan.half}>
               <label className={labelClass}>End Time</label>
               <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputClass} />
             </div>
           </div>
 
-          <div>
+          <div className={modalSpan.full}>
             <label className={labelClass}>Location</label>
             <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Location" maxLength={200} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          <div className="contents">
+            <div className={modalSpan.half}>
               <label className={labelClass}>Status *</label>
               <Dropdown
                 variant="form"
@@ -207,63 +208,63 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
                 items={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
               />
             </div>
-            <div>
+            <div className={modalSpan.half}>
               <label className={labelClass}>Estimated Cost</label>
               <input type="number" min="0" step="0.01" value={estimatedCost} onChange={e => setEstimatedCost(e.target.value)} className={inputClass} placeholder="0.00" />
             </div>
           </div>
 
-          <div>
+          <div className={modalSpan.full}>
             <label className={labelClass}>Booking Reference</label>
             <input value={bookingReference} onChange={e => setBookingReference(e.target.value)} className={inputClass} placeholder="e.g. BK-12345" maxLength={200} />
           </div>
 
-          <details className="group">
+          <details className="group sm:col-span-2">
             <summary className="text-sm font-medium cursor-pointer text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
               Provider Details
             </summary>
-            <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--color-border)]">
-              <div>
+            <div className={`mt-3 pl-2 border-l-2 border-[var(--color-border)] ${modalGrid}`}>
+              <div className={modalSpan.full}>
                 <label className={labelClass}>Provider Name</label>
                 <input value={providerName} onChange={e => setProviderName(e.target.value)} className={inputClass} placeholder="Provider name" maxLength={200} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+              <div className="contents">
+                <div className={modalSpan.half}>
                   <label className={labelClass}>Phone</label>
                   <input value={providerPhone} onChange={e => setProviderPhone(e.target.value)} className={inputClass} placeholder="Phone" maxLength={50} />
                 </div>
-                <div>
+                <div className={modalSpan.half}>
                   <label className={labelClass}>Email</label>
                   <input type="email" value={providerEmail} onChange={e => setProviderEmail(e.target.value)} className={inputClass} placeholder="Email" maxLength={200} />
                 </div>
               </div>
-              <div>
+              <div className={modalSpan.full}>
                 <label className={labelClass}>Website</label>
                 <input value={providerWebsite} onChange={e => setProviderWebsite(e.target.value)} className={inputClass} placeholder="https://..." maxLength={500} />
               </div>
             </div>
           </details>
 
-          <details className="group" open={!!(accessibilityNotes || notes)}>
+          <details className="group sm:col-span-2" open={!!(accessibilityNotes || notes)}>
             <summary className="text-sm font-medium cursor-pointer text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
               Notes
             </summary>
-            <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--color-border)]">
-              <div>
+            <div className={`mt-3 pl-2 border-l-2 border-[var(--color-border)] ${modalGrid}`}>
+              <div className={modalSpan.full}>
                 <label className={labelClass}>Accessibility Notes</label>
-                <textarea value={accessibilityNotes} onChange={e => setAccessibilityNotes(e.target.value)} className={inputClass} rows={2} placeholder="Accessibility requirements..." />
+                <textarea value={accessibilityNotes} onChange={e => setAccessibilityNotes(e.target.value)} className={inputClass} rows={3} placeholder="Accessibility requirements..." />
               </div>
-              <div>
+              <div className={modalSpan.full}>
                 <label className={labelClass}>General Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} className={inputClass} rows={2} placeholder="Additional notes..." />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} className={inputClass} rows={3} placeholder="Additional notes..." />
               </div>
             </div>
           </details>
         </div>
 
-        {timeError && <p className="mt-3 text-sm text-red-500">{timeError}</p>}
+        {timeError && <p className="mt-3 text-sm text-[var(--color-destructive)]">{timeError}</p>}
         {(createActivity.isError || updateActivity.isError) && (
-          <p className="mt-3 text-sm text-red-500">Failed to save activity. Please try again.</p>
+          <p className="mt-3 text-sm text-[var(--color-destructive)]">Failed to save activity. Please try again.</p>
         )}
 
     </Modal>

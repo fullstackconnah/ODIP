@@ -10,7 +10,7 @@ type MedicationForChips = {
   drugSchedule: DrugSchedule
 }
 
-const CHIP_BASE = 'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap'
+const CHIP_BASE = 'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap'
 
 /** Small chips summarising a medication's clinical/compliance-relevant flags. */
 export function MedicationBadges({ medication, className }: { medication: MedicationForChips; className?: string }) {
@@ -26,7 +26,7 @@ export function MedicationBadges({ medication, className }: { medication: Medica
 
   if (medication.drugSchedule === 'Schedule4' || medication.drugSchedule === 'Schedule8') {
     chips.push(
-      <span key="schedule" className={`${CHIP_BASE} bg-amber-100 text-amber-800`}>
+      <span key="schedule" className={`${CHIP_BASE} bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]`}>
         {DRUG_SCHEDULE_LABELS[medication.drugSchedule]}
       </span>
     )
@@ -34,7 +34,7 @@ export function MedicationBadges({ medication, className }: { medication: Medica
 
   if (medication.isPsychotropic) {
     chips.push(
-      <span key="psychotropic" className={`${CHIP_BASE} bg-[var(--color-secondary-container)] text-[#0d1c2e]`}>
+      <span key="psychotropic" className={`${CHIP_BASE} bg-[var(--color-secondary-container)] text-[var(--color-foreground)]`}>
         <Brain className="w-3 h-3" /> Psychotropic
       </span>
     )
@@ -63,8 +63,8 @@ export function MedicationBadges({ medication, className }: { medication: Medica
 
 const FLAG_STYLES: Record<MedicationComplianceFlag, string> = {
   ChemicalRestraintUnauthorised: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  ReviewOverdue: 'bg-amber-100 text-amber-800',
-  ConsentMissing: 'bg-amber-100 text-amber-800',
+  ReviewOverdue: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  ConsentMissing: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
 }
 
 /** Standalone chips for a medication's `complianceFlags` — used in the Register table's Flags column. */

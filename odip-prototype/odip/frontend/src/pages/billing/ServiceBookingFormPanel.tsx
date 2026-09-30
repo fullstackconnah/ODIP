@@ -207,7 +207,7 @@ export default function ServiceBookingFormPanel({ isOpen, onClose, defaultPartic
             )}
             <div className="space-y-2">
               {fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2 bg-[var(--color-accent)] rounded-xl p-3">
+                <div key={field.id} className="flex items-start gap-2 bg-[var(--color-accent)] rounded-[var(--radius-md)] p-3">
                   <div className="flex-1 space-y-2">
                     <FormField label={`Support Item Number (line ${index + 1})`} error={errors.lines?.[index]?.supportItemNumber?.message} className="mb-0">
                       <input {...register(`lines.${index}.supportItemNumber` as const)} placeholder="e.g. 04_104_0125_6_1" />
@@ -232,7 +232,7 @@ export default function ServiceBookingFormPanel({ isOpen, onClose, defaultPartic
           </fieldset>
 
           {error && (
-            <div role="alert" className="bg-[var(--color-error-container)] rounded-xl px-4 py-3 text-sm text-[var(--color-destructive)]">
+            <div role="alert" className="bg-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-destructive)]">
               {error}
             </div>
           )}

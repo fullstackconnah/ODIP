@@ -4,12 +4,15 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateAccommodation, useUpdateAccommodation, useAccommodationDetail } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -125,137 +128,132 @@ export default function AccommodationCreatePage() {
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="flex items-center gap-4">
-        <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Accommodation' : 'New Accommodation'}</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Accommodation</Link>
       </div>
+      <PageHeader title={isEdit ? 'Edit Accommodation' : 'New Accommodation'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.`)}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Property Information */}
-        <Card title="Property Information" className="space-y-4">
-          <FormField label="Property Name" required error={errors.propertyName?.message}>
-            <input {...register('propertyName')} placeholder="e.g. Sunrise Beach House" autoFocus />
-          </FormField>
+        <Card title="Property Information">
+          <div className={formGrid}>
+            <FormField label="Property Name" required error={errors.propertyName?.message} className={span.medium}>
+              <input {...register('propertyName')} placeholder="e.g. Sunrise Beach House" autoFocus />
+            </FormField>
 
-          <FormField label="Provider / Owner">
-            <input {...register('providerOwner')} placeholder="e.g. Coastal Properties" />
-          </FormField>
+            <FormField label="Provider / Owner" className={span.medium}>
+              <input {...register('providerOwner')} placeholder="e.g. Coastal Properties" />
+            </FormField>
 
-          <FormField label="Location">
-            <input {...register('location')} placeholder="e.g. Gold Coast" />
-          </FormField>
+            <FormField label="Location" className={span.medium}>
+              <input {...register('location')} placeholder="e.g. Gold Coast" />
+            </FormField>
 
-          <FormField label="Region">
-            <input {...register('region')} placeholder="e.g. South East QLD" />
-          </FormField>
+            <FormField label="Region" className={span.short}>
+              <input {...register('region')} placeholder="e.g. South East QLD" />
+            </FormField>
+          </div>
         </Card>
 
         {/* Address & Contact */}
-        <Card title="Address & Contact" className="space-y-4">
-          <FormField label="Address">
-            <input {...register('address')} placeholder="e.g. 123 Ocean Drive" />
-          </FormField>
+        <Card title="Address & Contact">
+          <div className={formGrid}>
+            <FormField label="Address" className={span.long}>
+              <input {...register('address')} placeholder="e.g. 123 Ocean Drive" />
+            </FormField>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <FormField label="Suburb">
+            <FormField label="Suburb" className={span.short}>
               <input {...register('suburb')} placeholder="e.g. Surfers Paradise" />
             </FormField>
-            <FormField label="State">
+            <FormField label="State" className={span.short}>
               <input {...register('state')} placeholder="e.g. QLD" />
             </FormField>
-            <FormField label="Postcode">
+            <FormField label="Postcode" className={span.short}>
               <input {...register('postcode')} placeholder="e.g. 4217" />
             </FormField>
-          </div>
 
-          <FormField label="Contact Person">
-            <input {...register('contactPerson')} placeholder="e.g. Jane Smith" />
-          </FormField>
+            <FormField label="Contact Person" className={span.medium}>
+              <input {...register('contactPerson')} placeholder="e.g. Jane Smith" />
+            </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Email" error={errors.email?.message}>
+            <FormField label="Email" error={errors.email?.message} className={span.medium}>
               <input type="email" {...register('email')} placeholder="e.g. jane@example.com" />
             </FormField>
-            <FormField label="Phone">
+            <FormField label="Phone" className={span.medium}>
               <input {...register('phone')} placeholder="e.g. 07 1234 5678" />
             </FormField>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Mobile">
+            <FormField label="Mobile" className={span.medium}>
               <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
             </FormField>
-            <FormField label="Website">
+            <FormField label="Website" className={span.medium}>
               <input {...register('website')} placeholder="e.g. https://..." />
             </FormField>
           </div>
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility" className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <FormField label="Bedrooms">
+        <Card title="Capacity & Accessibility">
+          <div className={formGrid}>
+            <FormField label="Bedrooms" className={span.short}>
               <input type="number" min="0" {...register('bedroomCount')} placeholder="0" />
             </FormField>
-            <FormField label="Beds">
+            <FormField label="Beds" className={span.short}>
               <input type="number" min="0" {...register('bedCount')} placeholder="0" />
             </FormField>
-            <FormField label="Max Capacity">
+            <FormField label="Max Capacity" className={span.short}>
               <input type="number" min="0" {...register('maxCapacity')} placeholder="0" />
             </FormField>
+
+            <FormField label="Bedding Configuration" className={span.medium}>
+              <input {...register('beddingConfiguration')} placeholder="e.g. 2 queen, 4 single" />
+            </FormField>
+
+            <FormField label="Wheelchair Accessible" layout="checkbox" className={span.short}>
+              <input type="checkbox" {...register('isWheelchairAccessible')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
+
+            <FormField label="Fully Modified" layout="checkbox" className={span.short}>
+              <input type="checkbox" {...register('isFullyModified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
+
+            <FormField label="Semi Modified" layout="checkbox" className={span.short}>
+              <input type="checkbox" {...register('isSemiModified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
           </div>
-
-          <FormField label="Bedding Configuration">
-            <input {...register('beddingConfiguration')} placeholder="e.g. 2 queen, 4 single" />
-          </FormField>
-
-          <FormField label="Wheelchair Accessible" layout="checkbox">
-            <input type="checkbox" {...register('isWheelchairAccessible')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-
-          <FormField label="Fully Modified" layout="checkbox">
-            <input type="checkbox" {...register('isFullyModified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
-
-          <FormField label="Semi Modified" layout="checkbox">
-            <input type="checkbox" {...register('isSemiModified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
         </Card>
 
         {/* Notes */}
-        <Card title="Notes" className="space-y-4">
-          <FormField label="Accessibility Notes">
-            <textarea {...register('accessibilityNotes')} rows={2} placeholder="Accessibility details..." />
-          </FormField>
+        <Card title="Notes">
+          <div className={formGrid}>
+            <FormField label="Accessibility Notes" className={span.long}>
+              <textarea {...register('accessibilityNotes')} rows={2} placeholder="Accessibility details..." />
+            </FormField>
 
-          <FormField label="Hoist / Bathroom Notes">
-            <textarea {...register('hoistBathroomNotes')} rows={2} placeholder="Hoist or bathroom details..." />
-          </FormField>
+            <FormField label="Hoist / Bathroom Notes" className={span.long}>
+              <textarea {...register('hoistBathroomNotes')} rows={2} placeholder="Hoist or bathroom details..." />
+            </FormField>
 
-          <FormField label="General Notes">
-            <textarea {...register('generalNotes')} rows={3} placeholder="Any additional notes..." />
-          </FormField>
+            <FormField label="General Notes" className={span.long}>
+              <textarea {...register('generalNotes')} rows={3} placeholder="Any additional notes..." />
+            </FormField>
+          </div>
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" to={isEdit ? `/accommodation/${id}` : '/accommodation'}>Cancel</Button>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Accommodation')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

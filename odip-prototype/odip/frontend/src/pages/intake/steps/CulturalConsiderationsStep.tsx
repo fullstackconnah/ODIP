@@ -11,15 +11,15 @@ import { YesNoToggleField } from '../intakeHelpers'
 
 export function CulturalConsiderationsStep({ control }: { control: Control<ParticipantFormData> }) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Cultural Background" className="space-y-4">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Cultural Background" className="space-y-[var(--field-gap-y)]">
         <YesNoToggleField control={control} name="isCald" label="Culturally and Linguistically Diverse (CALD)" />
         <YesNoToggleField control={control} name="isLgbtqi" label="LGBTIQA+" />
         <YesNoToggleField control={control} name="isFamilyCommunity" label="Family / Community" />
         <YesNoToggleField control={control} name="isAboriginalOrTorresStraitIslander" label="Aboriginal and/or Torres Strait Islander" />
       </Card>
 
-      <Card title="Information Received" className="space-y-4">
+      <Card title="Information Received" className="space-y-[var(--field-gap-y)]">
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Has the participant (or their representative) received and understood the following?
         </p>

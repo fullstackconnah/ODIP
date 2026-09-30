@@ -22,21 +22,21 @@ export function UnfilledLane({ days, shifts, canWrite, onOpen, onAssignTo, onDel
 
   return (
     <>
-      <div className="sticky left-0 z-10 flex items-center border-b border-r border-border bg-surface-container px-4 py-2 text-sm font-semibold text-foreground">
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center border-b border-r border-border bg-surface-container px-2 text-sm font-semibold text-foreground">
         Unfilled
         {shifts.length > 0 && (
-          <span className="ml-2 rounded-sm bg-secondary-container px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+          <span className="ml-2 rounded-sm bg-secondary-container px-1.5 py-0.5 text-xs font-medium text-foreground">
             {shifts.length}
           </span>
         )}
       </div>
       <div
         ref={setNodeRef}
-        className={`grid gap-1 border-b border-border bg-surface-container p-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
+        className={`grid gap-x-1 gap-y-0.5 border-b border-border px-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : 'bg-surface-container'}`}
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length) }}
       >
         {days.map((day, i) => (
-          <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[2.25rem] flex-col gap-1 rounded-sm p-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>
+          <div key={day} style={{ gridColumn: i + 1, gridRow: 1 }} className={`flex min-h-[calc(var(--row-h)_-_1px)] flex-col justify-center gap-1 rounded-sm px-0.5 py-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`}>
             {shifts
               .filter(s => s.serviceDate === day)
               .map(shift => (

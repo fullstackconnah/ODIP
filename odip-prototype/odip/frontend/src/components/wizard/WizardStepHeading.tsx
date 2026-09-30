@@ -50,7 +50,7 @@ export function WizardStepHeading({ stepKey, label }: WizardStepHeadingProps) {
       <h2
         ref={headingRef}
         tabIndex={-1}
-        className="text-lg font-semibold text-[var(--color-foreground)] mb-4 focus:outline-none"
+        className="text-base font-semibold text-[var(--color-foreground)] mb-2 focus:outline-none"
       >
         {label}
       </h2>

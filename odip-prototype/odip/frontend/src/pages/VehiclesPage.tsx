@@ -1,12 +1,14 @@
 import { useVehicles, useDeleteVehicle, useUpdateVehicle } from '@/api/hooks'
 import type { VehicleListDto } from '@/api/types'
-import { Link } from 'react-router-dom'
 import { formatDateAu } from '@/lib/utils'
 import { Plus, Pencil, Trash2, ArchiveRestore, Car, Bus, Truck, Users, Wrench, Calendar, Accessibility } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Button } from '@/components/Button'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { StatCard } from '@/components/StatCard'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -43,7 +45,7 @@ function StatCell({ icon: Icon, label, value, status }: {
         <Icon className="w-4 h-4 text-[var(--color-secondary)]" />
       </div>
       <div>
-        <p className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider">{label}</p>
+        <p className="text-xs uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider">{label}</p>
         <p className={`font-bold text-sm ${valueColor}`}>{value}</p>
       </div>
     </div>
@@ -74,44 +76,24 @@ export default function VehiclesPage() {
   const accessibleCount = vehicles.filter((v: VehicleListDto) => v.vehicleType === 'AccessibleVan' || v.wheelchairPositions > 0).length
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Page header */}
       <PageHeader
         title="Vehicles"
         subtitle={`${vehicles.length} ${showArchived ? 'archived' : 'active'} vehicle${vehicles.length !== 1 ? 's' : ''}`}
         action={!showArchived && canWrite && (
-          <Link
-            to="/vehicles/new"
-            className="flex items-center gap-2 px-4 md:px-5 py-2 md:py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white text-sm font-bold hover:opacity-90 transition-all shadow-md flex-shrink-0"
-          >
+          <Button to="/vehicles/new" size="md">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Vehicle</span><span className="sm:hidden">Add</span>
-          </Link>
+          </Button>
         )}
-      />
-
-      {/* Filter chips */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setShowArchived(false)}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            !showArchived
-              ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-              : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container)]'
-          }`}
-        >
-          Active
-        </button>
-        <button
-          onClick={() => setShowArchived(true)}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            showArchived
-              ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-              : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container)]'
-          }`}
-        >
-          Archived
-        </button>
-      </div>
+      >
+        <ToggleGroup
+          ariaLabel="Filter vehicles by status"
+          options={[{ key: 'active', label: 'Active' }, { key: 'archived', label: 'Archived' }]}
+          value={showArchived ? 'archived' : 'active'}
+          onChange={key => setShowArchived(key === 'archived')}
+        />
+      </PageHeader>
 
       {/* Loading state */}
       {isLoading ? (
@@ -125,7 +107,7 @@ export default function VehiclesPage() {
         />
       ) : (
         /* Vehicle grid */
-        <div className="grid md:grid-cols-2 gap-4 md:gap-6">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">
           {vehicles.map((v: VehicleListDto) => {
             const typeKey = (v.vehicleType as VehicleTypeKey) in vehicleTypeConfig
               ? (v.vehicleType as VehicleTypeKey)
@@ -137,18 +119,18 @@ export default function VehiclesPage() {
             return (
               <div
                 key={v.id}
-                className="bg-[var(--color-card)] rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-[var(--color-foreground)]/5 transition-all duration-500"
+                className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden hover:shadow-md transition-all"
               >
-                <div className="p-6">
+                <div className="p-[var(--card-pad)]">
                   {/* Card header */}
-                  <div className="flex items-start gap-4 mb-5">
-                    <div className={`w-14 h-14 rounded-2xl ${iconBg} flex items-center justify-center shrink-0`}>
-                      <TypeIcon className={`w-7 h-7 ${iconColor}`} />
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-[var(--radius-md)] ${iconBg} flex items-center justify-center shrink-0`}>
+                      <TypeIcon className={`w-5 h-5 ${iconColor}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h3 className="font-bold text-[var(--color-foreground)] text-base truncate">{v.vehicleName}</h3>
+                          <h3 className="font-bold text-[var(--color-foreground)] text-sm truncate">{v.vehicleName}</h3>
                           <p className="text-xs text-[var(--color-muted-foreground)] font-mono mt-0.5">
                             {v.registration || 'No registration'}
                           </p>
@@ -162,7 +144,7 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Stats grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-[var(--field-gap-x)] gap-y-2 mb-3">
                     <StatCell icon={Users} label="Seating" value={`${v.totalSeats} seats`} />
                     <StatCell
                       icon={Accessibility}
@@ -185,28 +167,34 @@ export default function VehiclesPage() {
 
                   {/* Action row */}
                   {canWrite && (
-                    <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 flex gap-3">
-                      <Link
+                    <div className="border-t border-[var(--color-border)] pt-2 flex gap-2">
+                      <Button
                         to={`/vehicles/${v.id}/edit`}
                         onClick={e => e.stopPropagation()}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-[var(--color-surface-container-high)] text-[var(--color-foreground)] text-sm font-bold hover:opacity-80 transition-all"
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1"
                       >
-                        <Pencil className="w-4 h-4" /> Edit
-                      </Link>
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </Button>
                       {showArchived ? (
-                        <button
+                        <Button
                           onClick={e => handleRestore(e, v)}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm font-bold hover:opacity-80 transition-all"
+                          variant="primary"
+                          size="sm"
+                          className="flex-1"
                         >
-                          <ArchiveRestore className="w-4 h-4" /> Restore
-                        </button>
+                          <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                        </Button>
                       ) : (
-                        <button
+                        <Button
                           onClick={e => handleDelete(e, v)}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-[var(--color-surface-container-high)] text-[var(--color-muted-foreground)] text-sm font-bold hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)] transition-all"
+                          variant="secondary"
+                          size="sm"
+                          className="flex-1 hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]"
                         >
-                          <Trash2 className="w-4 h-4" /> Archive
-                        </button>
+                          <Trash2 className="w-3.5 h-3.5" /> Archive
+                        </Button>
                       )}
                     </div>
                   )}
@@ -219,19 +207,10 @@ export default function VehiclesPage() {
 
       {/* Summary stats */}
       {!isLoading && vehicles.length > 0 && (
-        <div className="mt-8 grid sm:grid-cols-3 gap-4">
-          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5">
-            <p className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider mb-1">Total Fleet Capacity</p>
-            <p className="text-2xl font-bold text-[var(--color-primary)]">{totalSeats} <span className="text-base font-semibold">Passengers</span></p>
-          </div>
-          <div className="bg-[var(--color-surface-container-low)] rounded-2xl p-5">
-            <p className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] tracking-wider mb-1">Wheelchair Positions</p>
-            <p className="text-2xl font-bold text-[var(--color-on-accessible-container)]">{totalWheelchair} <span className="text-base font-semibold">Available</span></p>
-          </div>
-          <div className="bg-[var(--color-primary-fixed)] rounded-2xl p-5">
-            <p className="text-[10px] uppercase font-bold text-[var(--color-on-primary-fixed)] tracking-wider mb-1 opacity-70">Accessible Vehicles</p>
-            <p className="text-2xl font-bold text-[var(--color-on-primary-fixed)]">{accessibleCount} <span className="text-base font-semibold">in Fleet</span></p>
-          </div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
+          <StatCard label="Total Fleet Capacity" value={`${totalSeats} passengers`} />
+          <StatCard label="Wheelchair Positions" value={`${totalWheelchair} available`} />
+          <StatCard label="Accessible Vehicles" value={`${accessibleCount} in fleet`} />
         </div>
       )}
 

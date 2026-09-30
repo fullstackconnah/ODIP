@@ -67,7 +67,7 @@ function ShiftCompletionCard({
   const showReturnedBanner = shift.status === 'Published' && shift.returnCount > 0 && !!shift.lastReturnReason
 
   return (
-    <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
       <h2 className="font-semibold flex items-center gap-2"><Clock className="w-4 h-4" /> Shift completion</h2>
 
       {showReturnedBanner && (
@@ -172,11 +172,11 @@ export default function PortalShiftDetailPage() {
         <span className="sr-only" role="status" aria-live="polite">Loading shift…</span>
         <div aria-hidden="true" className="space-y-6">
           <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
-          <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
             <div className="h-5 w-40 rounded bg-[var(--color-accent)] animate-pulse" />
             <div className="h-4 w-56 rounded bg-[var(--color-accent)] animate-pulse" />
           </div>
-          <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
             <div className="h-4 w-32 rounded bg-[var(--color-accent)] animate-pulse" />
             <div className="h-4 w-full rounded bg-[var(--color-accent)] animate-pulse" />
             <div className="h-4 w-2/3 rounded bg-[var(--color-accent)] animate-pulse" />
@@ -234,7 +234,7 @@ export default function PortalShiftDetailPage() {
       </Link>
 
       {/* Shift time/status */}
-      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold">{participant.fullName}</h1>
@@ -272,7 +272,7 @@ export default function PortalShiftDetailPage() {
       )}
 
       {/* Participant summary */}
-      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-4">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2"><Armchair className="w-4 h-4" /> Participant summary</h2>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <div>
@@ -329,7 +329,7 @@ export default function PortalShiftDetailPage() {
       </div>
 
       {/* Routines relevant to this shift */}
-      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
         <h2 className="font-semibold">Routines for this shift</h2>
         {relevantRoutines.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No routines recorded for this shift.</p>
@@ -345,7 +345,7 @@ export default function PortalShiftDetailPage() {
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {routine.isCritical && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--color-on-error-container)]" aria-label="Critical" />}
                   <span className="font-medium">{routine.title}</span>
-                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)] whitespace-nowrap">
                     {ROUTINE_CATEGORY_LABELS[routine.category]}
                   </span>
                 </div>
@@ -361,7 +361,7 @@ export default function PortalShiftDetailPage() {
 
       {/* Risks for this participant (INTAKE-09) — active entries only, same read-only pattern as
           Routines above; not shift-window filtered, since a risk applies regardless of time of day. */}
-      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Risks</h2>
         {shift.riskEntries.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No risks recorded for this participant.</p>
@@ -383,7 +383,7 @@ export default function PortalShiftDetailPage() {
       </div>
 
       {/* Active medications summary */}
-      <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><Pill className="w-4 h-4" /> Active medications</h2>
         {shift.medications.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No active medications recorded for this participant.</p>

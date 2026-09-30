@@ -56,7 +56,7 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
           {note.isPinned && <Pin className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" aria-label="Pinned note" />}
           <p className="font-medium text-[var(--color-foreground)] truncate">{note.title}</p>
           {note.sourceKey && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
               <Sparkles className="w-3 h-3" /> Auto-generated
             </span>
           )}
@@ -92,7 +92,7 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
       </div>
       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap mt-1.5">{note.description}</p>
       {note.hasSourceDrift && (
-        <div className="flex items-start gap-2 mt-3 p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs">
+        <div className="flex items-start gap-2 mt-3 p-2.5 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] border border-[var(--color-warning)]/40 text-xs">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p>Source data has changed since this note was edited.</p>

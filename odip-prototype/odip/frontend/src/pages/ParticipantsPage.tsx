@@ -1,11 +1,13 @@
 import { useParticipants, useDeleteParticipant, useUpdateParticipant, useParticipantAlertsAggregate } from '@/api/hooks'
 import { maskNdisNumber } from '@/lib/utils'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { Button } from '@/components/Button'
+import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
@@ -23,20 +25,25 @@ const ACTIVE_STATUS_COLORS: Record<string, string> = {
 export default function ParticipantsPage() {
   const screen = useParticipantsScreen()
   return (
-    <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="Participants"
-        subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
-        action={!screen.showArchived && screen.canWrite && (
-          <Link to="/participants/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20 transition-all">
-            <Plus className="w-4 h-4" /> New Participant
-          </Link>
-        )}
-      >
-        {screen.toggleButtons}
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {/* PageHeader's title row and filter row are siblings. Directly inside this flex column the
+          section gap opens between them (32 + 16 + 8 + 32 = 88px); in a plain wrapper they stay in
+          block flow: 32px title row + 8px + 32px filters = 72px, the spec §3 header budget. */}
+      <div>
+        <PageHeader
+          title="Participants"
+          subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
+          action={!screen.showArchived && screen.canWrite && (
+            <Button to="/participants/new" size="md">
+              <Plus className="w-4 h-4" /> New Participant
+            </Button>
+          )}
+        >
+          {screen.toggleButtons}
 
-        <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants..." />
-      </PageHeader>
+          <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants..." />
+        </PageHeader>
+      </div>
 
       {screen.body}
     </div>
@@ -109,25 +116,46 @@ function useParticipantsScreen() {
     setPendingStatusChange(null)
   }
 
+  // One line per row at any desktop width: DataTable's cells never wrap, so a narrower window
+  // costs columns, not row height. Budget at 1280 (content 1280 − 232 sidebar − 2×20 gutter = 1008,
+  // 1006 inside the table border), each column padded 2×12, Manrope measured (see the density
+  // verdict report). The seeded data has no service streams and no alerts, so the Streams and Alerts
+  // columns are costed at what real data brings: streams at their 10rem cap (184) and two alert
+  // badges (94). Always shown: Name 167.5 + NDIS 98.2 + Streams 184 + wheelchair 40 + High 49.8 +
+  // Status 89.8 + Alerts 94 + chevron 40 = 763.3. 1280 adds Region 178.6: 941.9, spare 64.
+  // 1536 adds Support Ratio 102.4 and Repeat 64.4: 1108.7 of 1262. 1792 adds Plan Type 132.7:
+  // 1241.4 of 1518. The actions used to cost 213px of column; they overlay now (the 40px chevron).
   const participantColumns: Column<ParticipantListDto>[] = [
     {
       key: 'fullName',
       header: 'Name',
       sortable: true,
       render: (p) => (
+        // The link itself truncates (inline-block + truncate), not a wrapper around it: a wrapper's
+        // overflow would clip the link's focus ring.
         <Link
           to={`/participants/${p.id}`}
           aria-label={`Open ${p.fullName} profile`}
-          className="font-medium text-[var(--color-foreground)] group-hover:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm"
+          title={p.fullName}
+          className={`inline-block align-middle font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm md:max-w-[16rem] md:truncate ${TAP_TRUNCATED_LINK}`}
         >
           {p.fullName}
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type' },
-    { key: 'region', header: 'Region', sortable: true },
-    { key: 'serviceStreams', header: 'Streams', className: 'max-w-[220px]', render: (p) => <ServiceStreamBadges value={p.serviceStreams} /> },
+    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'planType', header: 'Plan Type', priority: 'lowest', maxWidth: '10rem' },
+    { key: 'region', header: 'Region', sortable: true, priority: 'medium', maxWidth: '11rem' },
+    {
+      key: 'serviceStreams',
+      header: 'Streams',
+      // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
+      render: (p) => (
+        <div className="md:max-w-[10rem] md:overflow-hidden">
+          <ServiceStreamBadges value={p.serviceStreams} className="md:w-max" />
+        </div>
+      ),
+    },
     {
       key: 'mobilityAidWheelchair',
       // The emoji alone has no accessible name for a screen reader — sr-only text gives the
@@ -142,8 +170,8 @@ function useParticipantsScreen() {
       align: 'center',
     },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio' },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
+    { key: 'supportRatio', header: 'Support Ratio', priority: 'low', maxWidth: '10rem' },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', priority: 'low' },
     {
       key: 'status',
       header: 'Status',
@@ -198,35 +226,45 @@ function useParticipantsScreen() {
     {
       key: 'actions',
       header: '',
+      // `relative` anchors the overlay below; the column itself is only the chevron.
+      className: 'relative',
       render: (p) => (
-        <span className="flex items-center justify-end gap-2">
-          {p.hasActiveMedications && (
-            <button
-              type="button"
-              title="View medications"
-              aria-label={`View medications for ${p.fullName}`}
-              onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
-              className="p-1.5 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-accent)] transition-colors"
-            >
-              <Pill className="w-4 h-4" />
-            </button>
-          )}
-          {canWrite && (
-            <button
-              type="button"
-              aria-label={`Change status for ${p.fullName}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
-              }}
-              className="text-xs px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-            >
-              Change status
-            </button>
-          )}
-          {canWrite && actionButtons(p)}
-          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
-        </span>
+        <div className="flex items-center justify-end gap-1.5">
+          {/* Row actions (24px) appear on row hover / focus and are always shown on touch; the
+              chevron is the row's constant "opens the record" cue, so it stays outside. On a mouse
+              the cluster overlays the row's last cells instead of reserving ~200px of column, so
+              "Change status" can never spill out of (or squeeze) its cell. */}
+          <RowActions overlay>
+            {p.hasActiveMedications && (
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                title="View medications"
+                aria-label={`View medications for ${p.fullName}`}
+                onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
+              >
+                <Pill className="w-4 h-4" />
+              </Button>
+            )}
+            {canWrite && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="whitespace-nowrap"
+                aria-label={`Change status for ${p.fullName}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setPendingStatusChange({ id: p.id, nextIsActive: !p.isActive })
+                }}
+              >
+                Change status
+              </Button>
+            )}
+            {canWrite && actionButtons(p)}
+          </RowActions>
+          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover/row:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
+        </div>
       ),
     },
   ]

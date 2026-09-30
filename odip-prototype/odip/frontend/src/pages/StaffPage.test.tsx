@@ -196,3 +196,46 @@ describe('StaffPage — cross-domain links', () => {
     expect(within(row).queryByRole('link', { name: /leave.*availability/i })).not.toBeInTheDocument()
   })
 })
+
+// Density review — table rows land on --row-h only if nothing inside them is taller than 24px:
+// the row actions and the status pill are all --control-h-sm, and the actions appear on hover/focus.
+describe('StaffPage — density row actions', () => {
+  it('pins the Active/Inactive status pill to the 24px --control-h-sm token and keeps it always visible', () => {
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    const pill = within(row).getByRole('button', { name: /^active$/i })
+    expect(pill).toHaveClass('h-[var(--control-h-sm)]')
+    // A status is information, not an action: nothing above it in the row fades it out.
+    expect(pill.closest('[class*="group-hover/row:opacity-100"]')).toBeNull()
+  })
+
+  it('renders the leave link as a 24px icon square inside the hover/focus-revealed action cluster', () => {
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    const leave = within(row).getByRole('link', { name: /leave.*availability/i })
+    expect(leave).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
+
+    const cluster = leave.parentElement as HTMLElement
+    expect(cluster).toHaveClass('opacity-0', 'group-hover/row:opacity-100', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
+    // Opacity only — the actions stay in the tab order and the accessibility tree.
+    expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible)(\s|$)/)
+    // The archive-flow Edit/Archive icons are in the same cluster, so they reveal together.
+    expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/staff/s1/edit')
+    expect(within(cluster).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  it('keeps the title row and the filter row in one block-flow wrapper so the header is 72px, not gap-spaced', () => {
+    renderPage()
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Staff' })
+    const search = screen.getByPlaceholderText(/search staff/i)
+    const wrapper = h1.parentElement?.parentElement?.parentElement as HTMLElement
+    // The wrapper is a plain <div> (block flow): PageHeader's rows are 32 + 8 + 32px. Directly
+    // inside the page's flex column the section gap would open between them (88px).
+    expect(wrapper).toContainElement(search)
+    expect(wrapper.tagName).toBe('DIV')
+    expect(wrapper.className).toBe('')
+  })
+})

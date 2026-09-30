@@ -4,7 +4,6 @@ import { useParticipantRiskEntries, useCreateRiskEntry, useUpdateRiskEntry, useD
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
-import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
 import { AT_RISK_PARTIES } from '@/api/types/enums'
@@ -42,7 +41,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
   return (
     <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">
           {AT_RISK_PARTY_LABELS[entry.atRiskParty]}
         </span>
         {canWrite && (
@@ -82,7 +81,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
  * short, infrequently-touched list per participant (unlike Routines' per-day/time structure or
  * Restrictive Practices' compliance-authorisation detail, both of which justify their own tab),
  * so a section here avoids further tab-bar crowding. UI/CRUD wiring otherwise mirrors
- * RoutinesTab.tsx closely (Modal add/edit, ConfirmDialog delete, EmptyState, active/inactive
+ * RoutinesTab.tsx closely (Modal add/edit, ConfirmDialog delete, a compact empty strip, active/inactive
  * split) — new participants instead get their initial risk entries created transactionally with
  * the participant via the intake wizard (see the retired single-step wizard's riskEntries field);
  * this section is the only write path from here on.
@@ -206,12 +205,17 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           <RiskEntrySkeleton />
         </div>
       ) : activeEntries.length === 0 ? (
-        <EmptyState
-          icon={AlertTriangle}
-          title="No risks recorded"
-          description="Capture potential risks in supporting this participant, categorised by who is at risk — the participant, other participants, the public, or staff."
-          action={canWriteRisks && participantId ? { label: 'Add risk', onClick: openCreate } : undefined}
-        />
+        // The same compact strip Health Conditions and the ADL grids use for "nothing recorded" (a bordered,
+        // centred, muted line about 60px tall), not an EmptyState: its 40px icon, 18px title, three lines of
+        // guidance and a 44px button made this card a ~300px void in the middle of the page. The "Add risk"
+        // action it repeated is the button in the card header (same label, same gate), and the guidance is kept
+        // as the strip's tooltip.
+        <p
+          className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-[var(--cell-px)] py-5 text-center text-sm text-[var(--color-muted-foreground)]"
+          title="Capture potential risks in supporting this participant, categorised by who is at risk — the participant, other participants, the public, or staff."
+        >
+          No risks recorded
+        </p>
       ) : (
         <div className="space-y-3">
           {activeEntries.map(entry => (

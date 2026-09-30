@@ -71,7 +71,7 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
           )}
         </div>
       ) : schedule.map((day: TripDayDto) => (
-        <div key={day.id} className="bg-white rounded-2xl p-5">
+        <div key={day.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <span className="w-10 h-10 rounded-lg bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)] font-bold text-sm">
@@ -95,7 +95,7 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
               {day.scheduledActivities.map((a: ScheduledActivityDto) => {
                 const isExpanded = expandedActivities.has(a.id)
                 return (
-                  <div key={a.id} className="bg-[var(--color-surface-container-low)] rounded-2xl">
+                  <div key={a.id} className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)]">
                     <div
                       className="flex items-center gap-3 p-3 cursor-pointer"
                       onClick={() => toggleActivityExpanded(a.id)}

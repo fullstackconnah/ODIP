@@ -14,6 +14,7 @@ import type { ParticipantFormData } from '@/lib/participantSchema'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import { PERSONAL_ADL_TYPES, ADL_LEVELS } from '@/api/types/enums'
 import type { AdlType } from '@/api/types/enums'
+import { formGrid, span } from '@/lib/formGrid'
 
 export function DailyLivingStep({ control, register, adlFieldArray, watchedValues, caVisible }: {
   control: Control<ParticipantFormData>
@@ -23,7 +24,7 @@ export function DailyLivingStep({ control, register, adlFieldArray, watchedValue
   caVisible: boolean
 }) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Activities of Daily Living" className="space-y-0">
         {adlFieldArray.fields.map((field, index) => {
           const type = field.adlType as AdlType
@@ -64,28 +65,32 @@ export function DailyLivingStep({ control, register, adlFieldArray, watchedValue
         })}
       </Card>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card title="Meals & Diet" className="space-y-4">
-          <TextAreaField label="Meal Assistance" id="mealAssistanceDetail" rows={2} {...register('mealAssistanceDetail')} />
-          <TextAreaField label="Choking Risk — Meal Management" id="chokingRiskMealDetail" rows={2} {...register('chokingRiskMealDetail')} />
-          <FormField label="Modified Diet"><input id="modifiedDietDetail" {...register('modifiedDietDetail')} /></FormField>
-          <FormField label="PEG Regime"><input id="pegRegimeMealDetail" {...register('pegRegimeMealDetail')} /></FormField>
-          <FormField label="Special Utensils"><input id="specialUtensilsDetail" {...register('specialUtensilsDetail')} /></FormField>
-          <TextAreaField label="Special Dietary Needs" id="specialDietaryNeedsDetail" rows={2} {...register('specialDietaryNeedsDetail')} />
-          <FormField label="Favourite Breakfast"><input id="favouriteBreakfast" {...register('favouriteBreakfast')} /></FormField>
-          <FormField label="Favourite Lunch"><input id="favouriteLunch" {...register('favouriteLunch')} /></FormField>
-          <FormField label="Favourite Dinner"><input id="favouriteDinner" {...register('favouriteDinner')} /></FormField>
-          <FormField label="Medication Tricks"><input id="medicationTricks" {...register('medicationTricks')} /></FormField>
-          <FormField label="Foods Always Eaten"><input id="foodsAlwaysEaten" {...register('foodsAlwaysEaten')} /></FormField>
+      <div className="grid md:grid-cols-2 gap-[var(--section-gap)] items-start">
+        <Card title="Meals & Diet">
+          <div className={formGrid}>
+            <TextAreaField label="Meal Assistance" id="mealAssistanceDetail" rows={2} {...register('mealAssistanceDetail')} className={span.long} />
+            <TextAreaField label="Choking Risk — Meal Management" id="chokingRiskMealDetail" rows={2} {...register('chokingRiskMealDetail')} className={span.long} />
+            <FormField label="Modified Diet" className={span.medium}><input id="modifiedDietDetail" {...register('modifiedDietDetail')} /></FormField>
+            <FormField label="PEG Regime" className={span.medium}><input id="pegRegimeMealDetail" {...register('pegRegimeMealDetail')} /></FormField>
+            <FormField label="Special Utensils" className={span.medium}><input id="specialUtensilsDetail" {...register('specialUtensilsDetail')} /></FormField>
+            <TextAreaField label="Special Dietary Needs" id="specialDietaryNeedsDetail" rows={2} {...register('specialDietaryNeedsDetail')} className={span.long} />
+            <FormField label="Favourite Breakfast" className={span.medium}><input id="favouriteBreakfast" {...register('favouriteBreakfast')} /></FormField>
+            <FormField label="Favourite Lunch" className={span.medium}><input id="favouriteLunch" {...register('favouriteLunch')} /></FormField>
+            <FormField label="Favourite Dinner" className={span.medium}><input id="favouriteDinner" {...register('favouriteDinner')} /></FormField>
+            <FormField label="Medication Tricks" className={span.medium}><input id="medicationTricks" {...register('medicationTricks')} /></FormField>
+            <FormField label="Foods Always Eaten" className={span.medium}><input id="foodsAlwaysEaten" {...register('foodsAlwaysEaten')} /></FormField>
+          </div>
         </Card>
 
-        <Card title="About Me" className="space-y-4">
-          <TextAreaField label="Goals" id="goals" rows={2} {...register('goals')} />
-          <TextAreaField label="Support Areas" id="supportAreas" rows={2} {...register('supportAreas')} />
-          <TextAreaField label="Strengths / Fears" id="strengthsFears" rows={2} {...register('strengthsFears')} />
-          <TextAreaField label="Things to Know" id="thingsToKnow" rows={2} {...register('thingsToKnow')} />
-          <TextAreaField label="Who/What Is Important" id="whoIsImportant" rows={2} {...register('whoIsImportant')} />
-          <TextAreaField label="Likes & Dislikes" id="likesDislikes" rows={2} {...register('likesDislikes')} />
+        <Card title="About Me">
+          <div className={formGrid}>
+            <TextAreaField label="Goals" id="goals" rows={2} {...register('goals')} className={span.long} />
+            <TextAreaField label="Support Areas" id="supportAreas" rows={2} {...register('supportAreas')} className={span.long} />
+            <TextAreaField label="Strengths / Fears" id="strengthsFears" rows={2} {...register('strengthsFears')} className={span.long} />
+            <TextAreaField label="Things to Know" id="thingsToKnow" rows={2} {...register('thingsToKnow')} className={span.long} />
+            <TextAreaField label="Who/What Is Important" id="whoIsImportant" rows={2} {...register('whoIsImportant')} className={span.long} />
+            <TextAreaField label="Likes & Dislikes" id="likesDislikes" rows={2} {...register('likesDislikes')} className={span.long} />
+          </div>
         </Card>
       </div>
     </div>

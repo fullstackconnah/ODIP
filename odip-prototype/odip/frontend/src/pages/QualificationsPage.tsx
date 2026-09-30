@@ -6,6 +6,7 @@ import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
+import { PageHeader } from '@/components/PageHeader'
 import { UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -195,17 +196,19 @@ export default function QualificationsPage() {
 
   if (allStaff.length === 0) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-2xl font-bold">Staff Qualification Expiry</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-            Warning window: {warningDays} days —{' '}
-            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-              change in Settings
-            </Link>
-            {' '}· showing active staff only
-          </p>
-        </div>
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+        <PageHeader
+          title="Staff Qualification Expiry"
+          subtitle={(
+            <>
+              Warning window: {warningDays} days —{' '}
+              <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
+                change in Settings
+              </Link>
+              {' '}· showing active staff only
+            </>
+          )}
+        />
         <EmptyState
           icon={UserCog}
           title="No staff members yet"
@@ -217,17 +220,19 @@ export default function QualificationsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold">Staff Qualification Expiry</h1>
-        <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-          Warning window: {warningDays} days —{' '}
-          <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-            change in Settings
-          </Link>
-          {' '}· showing active staff only
-        </p>
-      </div>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <PageHeader
+        title="Staff Qualification Expiry"
+        subtitle={(
+          <>
+            Warning window: {warningDays} days —{' '}
+            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
+              change in Settings
+            </Link>
+            {' '}· showing active staff only
+          </>
+        )}
+      />
 
       {/* Filter tabs */}
       <Tabs
@@ -239,7 +244,7 @@ export default function QualificationsPage() {
 
       {/* Empty state */}
       {filteredGroups.length === 0 ? (
-        <Card className="p-12 text-center">
+        <Card className="p-[var(--card-pad)] text-center">
           <span className="material-symbols-outlined text-5xl leading-none text-[var(--color-primary)] mb-3 block">check_circle</span>
           <p className="font-semibold text-[var(--color-foreground)]">All qualifications are current</p>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
@@ -249,11 +254,11 @@ export default function QualificationsPage() {
       ) : (
         <div className="space-y-3">
           {filteredGroups.map(group => (
-            <div key={group.staffId} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] overflow-hidden">
+            <div key={group.staffId} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
               {/* Accordion header — a flex row of TWO sibling interactive elements, never one
                   nested inside the other: the native <button> (chevron + name) toggles the
                   accordion, and a separate Link navigates to the staff record. */}
-              <div className="flex w-full items-center gap-3 p-4 hover:bg-[var(--color-accent)]/50 transition-colors">
+              <div className="flex w-full items-center gap-3 p-[var(--card-pad)] hover:bg-[var(--color-accent)]/50 transition-colors">
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.staffId)}

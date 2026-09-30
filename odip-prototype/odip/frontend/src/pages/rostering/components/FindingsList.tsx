@@ -34,7 +34,7 @@ export function FindingsList({ findings, className }: FindingsListProps) {
             )}
             <span>{finding.message}</span>
             {!blocking && finding.requiresReason && (
-              <span className="ml-auto shrink-0 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-on-warning-container)]">
+              <span className="ml-auto shrink-0 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]">
                 Reason required
               </span>
             )}

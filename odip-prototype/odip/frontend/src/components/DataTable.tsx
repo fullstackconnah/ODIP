@@ -1,13 +1,24 @@
-import { type ReactNode, Fragment, useState, useMemo, useRef, useEffect } from 'react'
+import { type CSSProperties, type ReactNode, Children, Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
+import { TAP_AREA_LINKS } from './tapArea'
 
 // ── Types ────────────────────────────────────────────────────────
 
 export type ColumnType = 'text' | 'date' | 'currency' | 'boolean' | 'badge' | 'custom'
+
+/**
+ * How early a column is dropped when the desktop table runs out of room. Only the table (md+)
+ * drops columns; the mobile card view (below md) always keeps every field.
+ *  - `'high'` (default): always shown.
+ *  - `'medium'`: hidden below xl (1280px).
+ *  - `'low'`: hidden below 2xl (1536px).
+ *  - `'lowest'`: hidden below 1792px.
+ */
+export type ColumnPriority = 'high' | 'medium' | 'low' | 'lowest'
 
 type ColumnBase<T> = {
   header: string | ReactNode
@@ -15,6 +26,26 @@ type ColumnBase<T> = {
   sortable?: boolean
   align?: 'left' | 'center' | 'right'
   hidden?: boolean
+  /**
+   * Narrowest this column is ever laid out at (md+): a px number or any CSS length (`'10.25rem'`),
+   * border-box, so it includes the cell's horizontal padding. Reserve room for content that changes
+   * size in place (a status pill whose label swaps between "Draft" and "Open For Bookings") so the
+   * column doesn't jump when it changes.
+   */
+  minWidth?: number | string
+  /**
+   * Cap for a plain-string cell (md+): a px number or any CSS length. Text longer than this is cut
+   * with an ellipsis and its full text goes in the cell's `title`. Defaults to 24rem, so a free-text
+   * column can never widen the table without bound. It applies only to cells DataTable renders as
+   * text (no `render`, or a `render` that returns a string); a cell that returns elements limits
+   * itself, see `CellText`.
+   */
+  maxWidth?: number | string
+  /** Which viewports keep this column (md+); see `ColumnPriority`. Default `'high'`: always. */
+  priority?: ColumnPriority
+  /** Let this column's cells wrap onto several lines (prose such as notes). The row then grows past
+   * `--row-h`. Default: body cells never wrap, so every row is exactly `--row-h` at any width. */
+  wrap?: boolean
   editable?: {
     /**
      * `ctx.errorId` is the id of the row's error message element (see `rowError` on
@@ -77,6 +108,10 @@ export type DataTableProps<T> = {
    */
   rowError?: (row: T) => string | undefined
   className?: string
+  /**
+   * Extra-tight rows: the `--row-h` token minus 4px (30px on a mouse, 44px on a touch screen —
+   * it never drops below a usable coarse-pointer row). Default rows are exactly `--row-h`.
+   */
   compact?: boolean
   selectable?: boolean
   selectedRows?: Set<string>
@@ -148,6 +183,52 @@ function renderCell<T>(row: T, col: Column<T>, rowIndex: number): ReactNode {
     default:
       return value != null ? String(value) : '—'
   }
+}
+
+// ── Responsive columns and single-line cells ─────────────────────
+
+// Tailwind only emits classes it can read as whole literals, so each level is spelled out. Every
+// one starts at `md:`: below 768px `.mobile-card-table` (index.css) turns rows into cards and every
+// field stays. `max-xl` / `max-2xl` are strict (`width < 1280px` / `< 1536px`), so a column is
+// still there at exactly 1280 (medium) or 1536 (low).
+const PRIORITY_HIDDEN_CLASS: Record<ColumnPriority, string> = {
+  high: '',
+  medium: 'md:max-xl:hidden',
+  low: 'md:max-2xl:hidden',
+  lowest: 'md:max-[1792px]:hidden',
+}
+
+/** A number is px, a string is passed through as a CSS length. */
+function cssLength(value: number | string): string {
+  return typeof value === 'number' ? `${value}px` : value
+}
+
+/**
+ * The text of a cell that is just a string, or null when it isn't one. Only real strings get a
+ * `title` and the ellipsis cap: an element the caller rendered limits itself, a formatted
+ * date/currency is never long, and a number or the empty-cell dash has nothing to reveal.
+ */
+function plainTextOf<T>(row: T, col: Column<T>, content: ReactNode): string | null {
+  if (typeof content !== 'string' || content === '' || content === '—') return null
+  if (col.render) return content
+  if (col.type === 'date' || col.type === 'currency') return null
+  return typeof getValue(row, col.key) === 'string' ? content : null
+}
+
+/**
+ * One line of text for a custom-rendered cell, cut with an ellipsis at whatever `md:max-w-*` the
+ * caller gives it, with the full text in `title` (taken from `children` when that is a string).
+ * DataTable does the same for plain-string cells on its own; reach for this inside `render` when a
+ * cell needs its own cap. Let the cap grow with the room by stacking named breakpoints
+ * (`md:max-w-[9rem] 2xl:max-w-[16rem]`), but not with an arbitrary `min-[1792px]:max-w-*` on top of
+ * them: Tailwind emits arbitrary min-width variants BEFORE the named ones, so at 1792+ the named
+ * cap wins. Use ranges that don't overlap instead (`md:max-2xl:max-w-* 2xl:max-[1792px]:max-w-*
+ * min-[1792px]:max-w-*`). For a link, put the truncation on the link itself, not on a wrapper: the
+ * wrapper's `overflow: hidden` would clip the link's focus ring.
+ */
+export function CellText({ children, title, className = '' }: { children: ReactNode; title?: string; className?: string }) {
+  const full = title ?? (typeof children === 'string' ? children : undefined)
+  return <span className={`block md:truncate ${className}`} title={full}>{children}</span>
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -237,21 +318,48 @@ export function DataTable<T>({
     }
   }
 
-  const cellPadding = compact ? 'px-2 py-1.5' : 'p-3'
+  // Row geometry comes from the density tokens (spec §1/§4) and never from vertical padding:
+  //  - body rows: `height: var(--row-h)` on the <tr> (34px fine / 48px coarse). A table row's
+  //    height is a minimum, so a row only grows past the token if a cell gets taller than it. Cells
+  //    never wrap (below), so that can't happen from a narrow window; 24px row actions, pills and
+  //    32px inline editors all fit inside 34px (36/44px inside 48px on coarse pointers, where those
+  //    controls grow with their own tokens).
+  //  - header row: `height: var(--table-head-h)` (32px / 40px).
+  //  - cells get --cell-px horizontally, no vertical padding, and `align-middle`, so content is
+  //    centred in the row instead of stacking padding on top of it (which is what made rows 43px).
+  //  - body cells are `whitespace-nowrap` (unless the column opts in with `wrap`), so a narrower
+  //    window costs a column, not a row height: a plain string is cut with an ellipsis at its cap
+  //    (`maxWidth`, full text in `title`), a custom cell limits itself (`CellText`), and a column
+  //    that is low `priority` is dropped below its breakpoint instead of being squeezed.
+  //  - `md:` on the body row, the nowrap, the truncation and the column-width vars: below 768px
+  //    `.mobile-card-table` (index.css) turns each <tr> into a padded flex card, where a fixed
+  //    height would clip it and text has to be free to wrap inside the card.
+  //  - `compact` is the same token minus 4px (30px fine, 44px coarse), so it stays extra-tight on
+  //    a mouse without dropping below a usable row on a touch screen.
+  const cellPaddingX = 'px-[var(--cell-px)]'
+  const cellClass = `${cellPaddingX} align-middle`
+  // Per-column classes shared by the header and body cells: which viewports keep the column, and
+  // its `minWidth` (via a custom property so it, too, only applies from md up).
+  const columnClass = (col: Column<T>) =>
+    `${PRIORITY_HIDDEN_CLASS[col.priority ?? 'high']} ${col.minWidth != null ? 'md:min-w-[var(--col-min)]' : ''}`
+  const columnStyle = (col: Column<T>): CSSProperties | undefined =>
+    col.minWidth != null ? ({ '--col-min': cssLength(col.minWidth) } as CSSProperties) : undefined
+  const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
+  const headerRowHeight = 'h-[var(--table-head-h)]'
   const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
-    <div className={className ?? 'relative bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-x-auto'}>
+    <div className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
       {loading && data.length > 0 && (
-        <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-2xl">
+        <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-md">
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <table className="w-full text-sm mobile-card-table">
-        <thead className="bg-[var(--color-accent)]">
-          <tr className={dividerClass}>
+      <table className="w-full text-sm tabular-nums mobile-card-table">
+        <thead className="sticky top-0 z-[1] bg-[var(--color-card)]">
+          <tr className={`${dividerClass} ${headerRowHeight}`}>
             {selectable && (
-              <th className={`${cellPadding} w-10`}>
+              <th className={`${cellClass} w-10`}>
                 <input
                   ref={selectAllRef}
                   type="checkbox"
@@ -283,7 +391,8 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${alignClass} ${cellPadding} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${columnClass(col)} ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  style={columnStyle(col)}
                   aria-sort={isSortable ? (isSorted ? (activeSort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
@@ -318,7 +427,7 @@ export function DataTable<T>({
         <tbody className="divide-y divide-[var(--color-border)]">
           {loading && data.length === 0 && (
             <tr>
-              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} py-8 text-center text-[var(--color-muted-foreground)]`}>
+              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} py-6 text-center text-[var(--color-muted-foreground)]`}>
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
                   Loading...
@@ -328,7 +437,7 @@ export function DataTable<T>({
           )}
           {!loading && sortedData.length === 0 && (
             <tr>
-              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} py-6 text-center text-[var(--color-muted-foreground)]`} aria-live="polite">
+              <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} py-6 text-center text-[var(--color-muted-foreground)]`} aria-live="polite">
                 {emptyMessage}
               </td>
             </tr>
@@ -346,14 +455,20 @@ export function DataTable<T>({
             return (
               <Fragment key={rowKey}>
                 <tr
-                  className={`hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
+                  className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
                   onClick={isClickable ? () => onRowClick(row) : undefined}
-                  onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) } } : undefined}
+                  onKeyDown={isClickable ? (e) => {
+                    // Only the row itself activates it. Enter/Space on a control inside the row (a
+                    // row action, a status pill, a checkbox) bubbles up here too, and must keep doing
+                    // its own job — not navigate away with its default action cancelled.
+                    if (e.target !== e.currentTarget) return
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(row) }
+                  } : undefined}
                   tabIndex={isClickable ? 0 : undefined}
                 >
                   {selectable && (
                     <td
-                      className={`${cellPadding} w-10`}
+                      className={`${cellClass} w-10`}
                       onClick={e => e.stopPropagation()}
                     >
                       <input
@@ -378,22 +493,41 @@ export function DataTable<T>({
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
+                        <td key={col.key} className={`${cellClass} ${alignClass} ${columnClass(col)} ${col.className ?? ''}`} style={columnStyle(col)} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
                     }
 
+                    const content = renderCell(row, col, rowIndex)
+                    const text = col.wrap ? null : plainTextOf(row, col, content)
+
+                    // TAP_AREA_LINKS: under a coarse pointer every link in a body cell (a name, a trip, "Open")
+                    // gets a 44px hit area from a transparent ::before, so a caller's `render` needs nothing and
+                    // a 19px link is not a 19px target on a phone. Nothing at all on a mouse.
                     return (
-                      <td key={col.key} className={`${cellPadding} ${alignClass} ${col.className ?? ''}`} data-label={typeof col.header === 'string' ? col.header : ''}>
-                        {renderCell(row, col, rowIndex)}
+                      <td
+                        key={col.key}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        style={columnStyle(col)}
+                        data-label={typeof col.header === 'string' ? col.header : ''}
+                      >
+                        {text != null ? (
+                          <span
+                            className="block md:truncate md:max-w-[var(--cell-max,24rem)]"
+                            style={col.maxWidth != null ? ({ '--cell-max': cssLength(col.maxWidth) } as CSSProperties) : undefined}
+                            title={text}
+                          >
+                            {text}
+                          </span>
+                        ) : content}
                       </td>
                     )
                   })}
                 </tr>
                 {errorMessage && (
                   <tr className={dividerClass}>
-                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPadding} pt-0`}>
+                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} pb-2`}>
                       <p id={rowErrorId} role="alert" className="text-xs text-[var(--color-destructive)]">{errorMessage}</p>
                     </td>
                   </tr>
@@ -409,7 +543,7 @@ export function DataTable<T>({
         )}
       </table>
       {pagination && pagination.totalCount > 0 && (
-        <div className={`flex items-center justify-between text-sm ${cellPadding} border-t border-[var(--color-border)]`}>
+        <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm ${cellPaddingX} border-t border-[var(--color-border)]`}>
           <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
             {Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
@@ -422,7 +556,7 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
               aria-label="Previous page"
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
@@ -430,13 +564,77 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= Math.ceil(pagination.totalCount / pagination.pageSize)}
               aria-label="Next page"
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Row actions ──────────────────────────────────────────────────
+
+// Reveal is opacity only — never display:none / visibility:hidden — so every control stays in the
+// tab order and in the accessibility tree; keyboard focus lands on it and `focus-within` shows it.
+// Deliberately no `pointer-events: none` while hidden either: voice-control and switch tools click
+// an element by its coordinates, and would hit the cell underneath instead. Coarse pointers
+// (touch) have no hover, so the actions are always shown there.
+const ROW_ACTIONS_REVEAL = [
+  'opacity-0 transition-opacity',
+  'group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100',
+  '[@media(pointer:coarse)]:opacity-100',
+].join(' ')
+
+// Bridge for the hand-rolled icon group in `ActionButtons` (what `useArchiveRestore().actionButtons`
+// renders): its <a>/<button> children are p-1.5 (28px), which would out-size the 24px row actions
+// beside them. Pinning them to the same --control-h-sm square as `Button iconOnly` keeps a row's
+// actions one height. Targets only ActionButtons' direct icon children, so text buttons in the
+// same cluster are untouched. Drop it once ActionButtons itself renders `Button iconOnly`. (Under a
+// coarse pointer ActionButtons agrees with this pin on its own: it is 36px there wherever it sits, with
+// TAP_AREA's 44px hit area and the 8px gap `RowActions` and ActionButtons both open.)
+const ROW_ACTIONS_LEGACY_ICONS = [
+  '[&>div>:is(a,button)]:inline-flex [&>div>:is(a,button)]:items-center [&>div>:is(a,button)]:justify-center',
+  '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',
+].join(' ')
+
+// Overlay mode: on a mouse (`pointer-fine`) at md+ the cluster leaves the table's flow and sits on
+// top of the row's last data cells, so its column costs no width — a cluster with "Change status"
+// in it reserved ~200px of every row and was what squeezed the other columns at 1280-1440. It is
+// anchored to the left edge of the cell it lives in (`right-full`, that cell being `relative`) and
+// hides what it covers: the row's own background, solid under the buttons and fading out over its
+// 24px left padding. `--row-bg` is the card colour, switched to the hover row's tint (accent at 50%
+// over card) while the row is hovered, so the patch never shows against the row. Touch
+// (`pointer: coarse`, no hover to reveal it) and the mobile card view keep it in the flow, where it
+// is always shown and covers nothing.
+const ROW_ACTIONS_OVERLAY = [
+  'md:pointer-fine:absolute md:pointer-fine:right-full md:pointer-fine:inset-y-0 md:pointer-fine:pl-6 md:pointer-fine:pr-1.5',
+  'md:pointer-fine:[--row-bg:var(--color-card)] md:pointer-fine:group-hover/row:[--row-bg:color-mix(in_srgb,var(--color-accent)_50%,var(--color-card))]',
+  'md:pointer-fine:bg-[linear-gradient(to_left,var(--row-bg)_calc(100%_-_1.5rem),transparent)]',
+].join(' ')
+
+/**
+ * A table row's action cluster (edit / archive / quick links / status change). Right-aligned,
+ * shown while its row is hovered or holds keyboard focus and always shown on coarse pointers
+ * (spec §4). Render it inside a `DataTable` cell — the reveal keys off the `group/row` class
+ * DataTable puts on every body row, so outside a row it would stay hidden. Content should be
+ * `Button size="sm"` / `iconOnly` (24px) so the row keeps its `--row-h` height. Keep an action
+ * that must always be visible (a row's status pill, a queue's only call to action) out of it.
+ * Under `pointer: coarse` those buttons are 36px with a 44px hit area (TAP_AREA, 4px past each edge),
+ * so the gap opens from 6px to 8px: neighbouring hit areas touch and never overlap.
+ *
+ * `overlay` takes the cluster out of the flow on a mouse (see ROW_ACTIONS_OVERLAY): use it for a
+ * cluster wide enough to matter, in a `relative` cell (`className: 'relative'` on the column) that
+ * holds only what must stay visible, such as the chevron. It renders nothing when it has no children,
+ * so an empty cluster never leaves a blank patch over its neighbours on hover.
+ */
+export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
+  if (overlay && Children.toArray(children).length === 0) return null
+  return (
+    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
+      {children}
     </div>
   )
 }

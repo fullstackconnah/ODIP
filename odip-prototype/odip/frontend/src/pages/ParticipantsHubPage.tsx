@@ -80,29 +80,34 @@ export default function ParticipantsHubPage() {
   // the user per-stage orientation even though there's one route behind it all.
   useDocumentTitle(activeMeta.title)
 
+  // The stage's one-line description used to sit in its own row inside every panel (20px + 16px of
+  // spacing) under a generic page subtitle that just restated the three tab labels. It now IS the
+  // inline subtitle beside the H1 (see `subtitle` below), so a panel is only its table.
   const items: TabItem[] = useMemo(
     () => TABS.map(t => ({
       id: t.id,
       label: t.label,
       content: (
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--color-muted-foreground)]">{t.description}</p>
+        <>
           {t.id === 'enquiries' && <InquiriesTable />}
           {t.id === 'onboarding' && <OnboardingTable />}
           {t.id === 'active' && <ParticipantsTable />}
-        </div>
+        </>
       ),
     })),
     [],
   )
 
+  // Block flow, not a flex column with a section gap: the title row (32px) and the tab strip (40px
+  // + its 1px rule) sit directly on each other, 73px in all, where the old markup spent 32 + 16 +
+  // 41 and then a 36px description row before the table.
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="animate-fade-in">
       <PageHeader
         title="Participants"
-        subtitle="Enquiries, onboarding and active participants — one view, three stages."
+        subtitle={activeMeta.description}
         action={canManageParticipantLifecycle ? (
-          <Button to="/participants/new-inquiry" size="lg">
+          <Button to="/participants/new-inquiry" size="md">
             <Plus className="w-4 h-4" /> New enquiry
           </Button>
         ) : undefined}

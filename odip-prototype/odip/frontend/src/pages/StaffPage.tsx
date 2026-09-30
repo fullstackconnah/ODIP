@@ -1,11 +1,12 @@
 import { useStaff, useDeleteStaff, useUpdateStaff } from '@/api/hooks'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Button } from '@/components/Button'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
@@ -120,7 +121,7 @@ export default function StaffPage() {
             variant="pill"
             value={current}
             onChange={val => handleStatusChange(s, val)}
-            colorClass={ACTIVE_STATUS_COLORS[current]}
+            colorClass={`${ACTIVE_STATUS_COLORS[current]} h-[var(--control-h-sm)]`}
             items={ACTIVE_STATUS_ITEMS}
             disabled={!canWrite}
           />
@@ -131,38 +132,45 @@ export default function StaffPage() {
       key: 'actions',
       header: '',
       render: (s) => (
-        <div className="flex items-center justify-end gap-1">
+        // Row actions (24px) appear on row hover / focus and are always shown on touch.
+        <RowActions>
           {canAccessLeaveApprovals && (
-            <Link
+            <Button
               to={`/rostering/leave?userId=${s.id}`}
               onClick={e => e.stopPropagation()}
-              className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors inline-block"
+              variant="ghost"
+              size="sm"
+              iconOnly
               title="Leave & availability"
               aria-label="Leave & availability"
             >
               <CalendarOff className="w-4 h-4" />
-            </Link>
+            </Button>
           )}
           {actionButtons(s)}
-        </div>
+        </RowActions>
       ),
     },
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="Staff"
-        subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
-        action={!showArchived && canWrite && (
-          <Link to="/staff/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-            <Plus className="w-4 h-4" /> New Staff
-          </Link>
-        )}
-      >
-        {toggleButtons}
-        <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
-      </PageHeader>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)
+          instead of the flex column's section gap opening between them. */}
+      <div>
+        <PageHeader
+          title="Staff"
+          subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
+          action={!showArchived && canWrite && (
+            <Button to="/staff/new" size="md">
+              <Plus className="w-4 h-4" /> New Staff
+            </Button>
+          )}
+        >
+          {toggleButtons}
+          <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
+        </PageHeader>
+      </div>
 
       {!isLoading && staff.length === 0 ? (
         search ? (

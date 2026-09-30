@@ -17,8 +17,8 @@ import type { TripClaimListDto, ShiftClaimPreviewResponseDto } from '@/api/types
 // generated below) rather than only shift claims, so a coordinator has one place to see all of a
 // participant's NDIS claims.
 const KIND_COLOR_MAP: Record<string, string> = {
-  trip: 'bg-blue-100 text-blue-700',
-  shift: 'bg-purple-100 text-purple-700',
+  trip: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
+  shift: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
 }
 
 /** yyyy-MM-dd in the viewer's local time — never UTC, which can silently shift the date near
@@ -212,7 +212,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       }
     >
       {error && (
-        <div role="alert" className="mb-4 flex items-start gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div role="alert" className="mb-4 flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-error-container)] bg-[var(--color-error-container)]/40 px-4 py-3 text-sm text-[var(--color-on-error-container)]">
           <span className="mt-0.5">⚠</span>
           <span>{error}</span>
         </div>

@@ -14,6 +14,7 @@ import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import { ReadOnlyField } from '../profileHelpers'
 import { yesNoUnknown } from '../profileFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
   { value: 'true', label: 'Yes' },
@@ -33,83 +34,89 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
 }) {
   const hidden = hiddenFields ?? EMPTY
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Behaviour Summary (from Intake)" className="space-y-3">
-        <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} />
-        <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} />
-        <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} />
-        <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} />
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Behaviour Summary (from Intake)">
+        <div className={formGrid}>
+          <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} />
+          <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} />
+          <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} />
+          <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} />
+        </div>
       </Card>
 
-      <div className="space-y-6">
-        <Card title="Cognition" className="space-y-4">
-          <FormField label="Memory">
+      <Card title="Cognition">
+        <div className={formGrid}>
+          <FormField label="Memory" className={span.medium}>
             <select id="memory" {...register('memory')}>
               <option value="">Not specified</option>
               {MEMORY_LEVELS.map((m) => <option key={m} value={m}>{MEMORY_LEVEL_LABELS[m]}</option>)}
             </select>
           </FormField>
-          <FormField label="Memory Aids">
+          <FormField label="Memory Aids" className={span.medium}>
             <Controller control={control} name="memoryAids" render={({ field }) => (
               <select id="memoryAids" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-          <FormField label="Impaired Understanding">
+          <FormField label="Impaired Understanding" className={span.medium}>
             <Controller control={control} name="impairedUnderstanding" render={({ field }) => (
               <select id="impairedUnderstanding" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-          <FormField label="Impaired Judgement / Reasoning">
+          <FormField label="Impaired Judgement / Reasoning" className={span.medium}>
             <Controller control={control} name="impairedJudgementReasoning" render={({ field }) => (
               <select id="impairedJudgementReasoning" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-        </Card>
+        </div>
+      </Card>
 
-        <Card title="Behaviour Risk" className="space-y-4">
+      <Card title="Behaviour Risk">
+        <div className={formGrid}>
           {!hidden.has('behaviourRiskRating') && (
-            <FormField label="Behaviour Risk Rating">
+            <FormField label="Behaviour Risk Rating" className={span.medium}>
               <select id="behaviourRiskRating" {...register('behaviourRiskRating')}>
                 <option value="">Not specified</option>
                 {RISK_RATING_LEVELS.map((r) => <option key={r} value={r}>{RISK_RATING_LEVEL_LABELS[r]}</option>)}
               </select>
             </FormField>
           )}
-          <FormField label="RIDS Logged">
+          <FormField label="RIDS Logged" className={span.medium}>
             <Controller control={control} name="ridsLogged" render={({ field }) => (
               <select id="ridsLogged" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-          <FormField label="BSP Plan Provided">
+          <FormField label="BSP Plan Provided" className={span.medium}>
             <Controller control={control} name="bspPlanProvided" render={({ field }) => (
               <select id="bspPlanProvided" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-          <FormField label="BOC Chart Provided">
+          <FormField label="BOC Chart Provided" className={span.medium}>
             <Controller control={control} name="bocChartProvided" render={({ field }) => (
               <select id="bocChartProvided" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
                 {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )} />
           </FormField>
-        </Card>
+        </div>
+      </Card>
 
-        <Card title="Communication" className="space-y-4">
-          <TextAreaField label="Receptive Skills" id="receptiveSkills" rows={2} {...register('receptiveSkills')} />
-          <TextAreaField label="Reading Ability" id="readingAbility" rows={2} {...register('readingAbility')} />
-          <TextAreaField label="Communication Aids" id="communicationAids" rows={2} {...register('communicationAids')} />
-        </Card>
-      </div>
+      <Card title="Communication">
+        <div className={formGrid}>
+          <TextAreaField label="Receptive Skills" id="receptiveSkills" rows={2} {...register('receptiveSkills')} className={span.long} />
+          <TextAreaField label="Reading Ability" id="readingAbility" rows={2} {...register('readingAbility')} className={span.long} />
+          <TextAreaField label="Communication Aids" id="communicationAids" rows={2} {...register('communicationAids')} className={span.long} />
+        </div>
+      </Card>
     </div>
   )
 }

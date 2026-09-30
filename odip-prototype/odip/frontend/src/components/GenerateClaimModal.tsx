@@ -71,7 +71,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
     )
   }
 
-  const inputClass = "w-full px-3 py-2 rounded-xl border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] bg-[var(--color-surface)]"
+  const inputClass = "w-full px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] bg-[var(--color-surface)]"
   const labelClass = "block text-sm text-[var(--color-muted-foreground)] mb-1"
 
   return (
@@ -85,14 +85,14 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
           <>
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
             >
               Cancel
             </button>
             <button
               onClick={handlePreview}
               disabled={previewClaim.isPending}
-              className="px-4 py-2 text-sm rounded-full bg-[var(--color-primary)] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
             >
               {previewClaim.isPending ? 'Loading...' : 'Preview Claim \u2192'}
             </button>
@@ -101,21 +101,21 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
           <div className="flex justify-between w-full">
             <button
               onClick={() => { setStep('input'); setError(null) }}
-              className="px-4 py-2 text-sm rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
             >
               &larr; Back
             </button>
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
+                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleGenerate}
                 disabled={generateClaim.isPending}
-                className="px-4 py-2 text-sm rounded-full bg-[var(--color-primary)] text-white font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
               >
                 {generateClaim.isPending ? 'Generating...' : 'Confirm & Generate'}
               </button>
@@ -125,7 +125,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       }
     >
         {error && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-sm text-red-700 flex items-start gap-2 mb-4">
+          <div className="bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2 mb-4">
             <span className="mt-0.5">&#9888;</span>
             <span>{error}</span>
           </div>
@@ -134,7 +134,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
         {step === 'input' && (
           <>
             {/* Trip summary */}
-            <div className="mb-5">
+            <div className="mb-[var(--section-gap)]">
               <p className="font-medium text-[var(--color-foreground)]">{trip.tripName}</p>
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 {startDate} &ndash; {endDate} ({durationDays} day{durationDays !== 1 ? 's' : ''})
@@ -142,9 +142,9 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             </div>
 
             {/* Confirm Trip Times */}
-            <div className="mb-5">
+            <div className="mb-[var(--section-gap)]">
               <h4 className="text-sm font-medium text-[var(--color-muted-foreground)] mb-3">Confirm Trip Times</h4>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
                 <div>
                   <label className={labelClass}>Departure Time</label>
                   <input
@@ -179,9 +179,9 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             </div>
 
             {/* Trip Info (read-only) */}
-            <div className="mb-5">
+            <div className="mb-[var(--section-gap)]">
               <h4 className="text-sm font-medium text-[var(--color-muted-foreground)] mb-3">Trip Info</h4>
-              <div className="bg-[var(--color-surface)] rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-[var(--card-pad)] grid grid-cols-1 sm:grid-cols-2 gap-[var(--field-gap-y)] text-sm">
                 <div>
                   <span className="text-[var(--color-muted-foreground)]">Staff Assigned</span>
                   <p className="font-medium">{trip.staffAssignedCount ?? '—'}</p>
@@ -199,7 +199,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
         {step === 'preview' && previewData && (
           <>
             {/* Summary card */}
-            <div className="bg-[var(--color-surface)] rounded-xl p-4 mb-5">
+            <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-4 mb-[var(--section-gap)]">
               <div className="flex items-baseline justify-between mb-2">
                 <span className="text-sm text-[var(--color-muted-foreground)]">Total Estimate</span>
                 <span className="text-xl font-semibold">${previewData.totalAmount?.toFixed(2)}</span>
@@ -215,7 +215,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             </div>
 
             {/* Line items table */}
-            <div className="mb-5">
+            <div className="mb-[var(--section-gap)]">
               <h4 className="text-sm font-medium text-[var(--color-muted-foreground)] mb-3">Line Items</h4>
               <DataTable
                 data={(previewData.lineItems ?? []).map((item: ClaimPreviewLineItemDto, i: number) => ({ ...item, _idx: i }))}

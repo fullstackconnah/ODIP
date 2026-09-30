@@ -12,14 +12,14 @@ import { formatWithTimeZone } from '@/lib/utils'
 const ADMIN_STATUS_COLOR_MAP: Record<string, string> = {
   administered: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   refused: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  withheld: 'bg-amber-100 text-amber-800',
+  withheld: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   missed: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   wrongmedication: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 const WITNESS_STATUS_COLOR_MAP: Record<string, string> = {
   notrequired: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-  pending: 'bg-amber-100 text-amber-800',
+  pending: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   approved: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   declined: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
@@ -88,7 +88,7 @@ export default function ReportTab() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full sm:w-64">
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-participant">Participant</label>

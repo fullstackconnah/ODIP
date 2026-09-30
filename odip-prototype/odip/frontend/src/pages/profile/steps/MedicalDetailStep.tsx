@@ -18,6 +18,7 @@ import { HIDPA_CATEGORY_LABELS } from '@/api/types/participants'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { HealthConditionType } from '@/api/types/enums'
 import { ReadOnlyField } from '../profileHelpers'
+import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
   { value: 'true', label: 'Yes' },
@@ -34,79 +35,85 @@ export function MedicalDetailStep({ control, register, errors, participant, heal
   watchedValues: Partial<ParticipantFormData>
 }) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="space-y-6">
-        <ReadOnlyField field="medicalSummary" label="Medical Summary (from Intake)" value={participant.medicalSummary || '—'} />
-
-        <Card title="Diagnoses & HIDPA" className="space-y-4">
-          <FormField label="Primary Diagnosis">
-            <select id="primaryDiagnosis" {...register('primaryDiagnosis')}>
-              <option value="">Not specified</option>
-              {DIAGNOSIS_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-              <option value={DIAGNOSIS_OTHER_SENTINEL}>{DIAGNOSIS_OTHER_SENTINEL}</option>
-            </select>
-          </FormField>
-          {watchedValues.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL && (
-            <FormField label="Specify Primary Diagnosis" error={errors.primaryDiagnosisOther?.message}>
-              <input id="primaryDiagnosisOther" {...register('primaryDiagnosisOther')} />
-            </FormField>
-          )}
-          <FormField label="Other Diagnoses (one per line)">
-            <Controller
-              control={control}
-              name="otherDiagnoses"
-              render={({ field }) => (
-                <textarea
-                  id="otherDiagnoses"
-                  rows={3}
-                  value={(field.value ?? []).join('\n')}
-                  onChange={(e) => field.onChange(e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))}
-                />
-              )}
-            />
-          </FormField>
-          <FormField label="HIDPA Support Categories">
-            <Controller
-              control={control}
-              name="hidpaSupportCategories"
-              render={({ field }) => (
-                <div id="hidpaSupportCategories" className="flex flex-wrap gap-2">
-                  {HIDPA_SUPPORT_CATEGORIES.map((cat) => {
-                    const checked = (field.value ?? []).includes(cat)
-                    return (
-                      <label key={cat} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked ? [...(field.value ?? []), cat] : (field.value ?? []).filter((c) => c !== cat)
-                            field.onChange(next)
-                          }}
-                        />
-                        {HIDPA_CATEGORY_LABELS[cat]}
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            />
-          </FormField>
+    <div className="grid md:grid-cols-2 gap-[var(--section-gap)] items-start">
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <Card>
+          <ReadOnlyField field="medicalSummary" label="Medical Summary (from Intake)" value={participant.medicalSummary || '—'} />
         </Card>
 
-        <Card title="Allergies" className="space-y-4">
-          <TextAreaField label="Allergies Detail" id="allergiesDetail" rows={2} {...register('allergiesDetail')} />
-          <FormField label="Anaphylaxis Risk">
-            <Controller
-              control={control}
-              name="isAnaphylaxisRisk"
-              render={({ field }) => (
-                <select id="isAnaphylaxisRisk" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
-                  {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              )}
-            />
-          </FormField>
-          <TextAreaField label="Allergy Management Notes" id="allergyManagementNotes" rows={2} {...register('allergyManagementNotes')} />
+        <Card title="Diagnoses & HIDPA">
+          <div className={formGrid}>
+            <FormField label="Primary Diagnosis" className={span.medium}>
+              <select id="primaryDiagnosis" {...register('primaryDiagnosis')}>
+                <option value="">Not specified</option>
+                {DIAGNOSIS_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                <option value={DIAGNOSIS_OTHER_SENTINEL}>{DIAGNOSIS_OTHER_SENTINEL}</option>
+              </select>
+            </FormField>
+            {watchedValues.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL && (
+              <FormField label="Specify Primary Diagnosis" error={errors.primaryDiagnosisOther?.message} className={span.medium}>
+                <input id="primaryDiagnosisOther" {...register('primaryDiagnosisOther')} />
+              </FormField>
+            )}
+            <FormField label="Other Diagnoses (one per line)" className={span.long}>
+              <Controller
+                control={control}
+                name="otherDiagnoses"
+                render={({ field }) => (
+                  <textarea
+                    id="otherDiagnoses"
+                    rows={3}
+                    value={(field.value ?? []).join('\n')}
+                    onChange={(e) => field.onChange(e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))}
+                  />
+                )}
+              />
+            </FormField>
+            <FormField label="HIDPA Support Categories" className={span.long}>
+              <Controller
+                control={control}
+                name="hidpaSupportCategories"
+                render={({ field }) => (
+                  <div id="hidpaSupportCategories" className="flex flex-wrap gap-2">
+                    {HIDPA_SUPPORT_CATEGORIES.map((cat) => {
+                      const checked = (field.value ?? []).includes(cat)
+                      return (
+                        <label key={cat} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked ? [...(field.value ?? []), cat] : (field.value ?? []).filter((c) => c !== cat)
+                              field.onChange(next)
+                            }}
+                          />
+                          {HIDPA_CATEGORY_LABELS[cat]}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              />
+            </FormField>
+          </div>
+        </Card>
+
+        <Card title="Allergies">
+          <div className={formGrid}>
+            <TextAreaField label="Allergies Detail" id="allergiesDetail" rows={2} {...register('allergiesDetail')} className={span.long} />
+            <FormField label="Anaphylaxis Risk" className={span.medium}>
+              <Controller
+                control={control}
+                name="isAnaphylaxisRisk"
+                render={({ field }) => (
+                  <select id="isAnaphylaxisRisk" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
+                    {TRI_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+              />
+            </FormField>
+            <TextAreaField label="Allergy Management Notes" id="allergyManagementNotes" rows={2} {...register('allergyManagementNotes')} className={span.long} />
+          </div>
         </Card>
       </div>
 

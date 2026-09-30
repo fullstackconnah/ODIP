@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Pencil } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -88,24 +89,20 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
       className={className}
       action={
         canEdit && !editing ? (
-          <button
-            type="button"
-            onClick={handleEdit}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 min-h-[44px] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
+          <Button variant="ghost" size="sm" onClick={handleEdit}>
             <Pencil className="w-3.5 h-3.5" /> Edit
-          </button>
+          </Button>
         ) : undefined
       }
     >
       {error && (
-        <div role="alert" className="mb-4 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div role="alert" className="mb-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {error}
         </div>
       )}
 
       {saved && (
-        <div role="status" className="mb-4 p-3 rounded-lg bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm border border-[var(--color-on-primary-fixed)]/20">
+        <div role="status" className="mb-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm border border-[var(--color-on-primary-fixed)]/20">
           Saved.
         </div>
       )}
@@ -113,23 +110,13 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
       {children(editing)}
 
       {editing && (
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-4">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={isSaving}
-            className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
+        <div className="mt-[var(--section-gap)] flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-[var(--card-pad)]">
+          <Button variant="secondary" onClick={handleCancel} disabled={isSaving}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save'}
-          </button>
+          </Button>
         </div>
       )}
 

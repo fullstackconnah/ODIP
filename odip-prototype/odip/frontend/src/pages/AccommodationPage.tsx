@@ -6,8 +6,11 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ActionButtons } from '@/components/ActionButtons'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Button } from '@/components/Button'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 
@@ -34,26 +37,22 @@ export default function AccommodationPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Accommodation"
         subtitle={`${filtered.length} properties`}
         action={!showArchived && canWrite && (
-          <Link to="/accommodation/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20 flex-shrink-0">
+          <Button to="/accommodation/new" size="md">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Accommodation</span><span className="sm:hidden">New</span>
-          </Link>
+          </Button>
         )}
       >
-        <div className="flex gap-2">
-          <button onClick={() => setShowArchived(false)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${!showArchived ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]'}`}>
-            Active
-          </button>
-          <button onClick={() => setShowArchived(true)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showArchived ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]'}`}>
-            Archived
-          </button>
-        </div>
+        <ToggleGroup
+          ariaLabel="Filter properties by status"
+          options={[{ key: 'active', label: 'Active' }, { key: 'archived', label: 'Archived' }]}
+          value={showArchived ? 'archived' : 'active'}
+          onChange={key => setShowArchived(key === 'archived')}
+        />
         <SearchInput value={search} onChange={setSearch} placeholder="Search properties..." />
       </PageHeader>
 
@@ -67,11 +66,11 @@ export default function AccommodationPage() {
           action={properties.length === 0 && !showArchived && canWrite ? { label: 'Add your first property', to: '/accommodation/new' } : undefined}
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">
           {filtered.map((a: any) => (
-            <div key={a.id} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 hover:border-[var(--color-primary)]/30 transition-colors">
-              <div className="flex items-start justify-between mb-3">
-                <Link to={`/accommodation/${a.id}`} className="font-semibold hover:underline">{a.propertyName}</Link>
+            <div key={a.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] hover:border-[var(--color-primary)]/30 transition-colors">
+              <div className="flex items-start justify-between mb-2">
+                <Link to={`/accommodation/${a.id}`} className={`${TAP_FLOOR} font-semibold hover:underline`}>{a.propertyName}</Link>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={a.isActive ? 'Active' : 'Inactive'} />
                   <ActionButtons
@@ -85,8 +84,8 @@ export default function AccommodationPage() {
                 <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {a.location || '—'} {a.region ? `· ${a.region}` : ''}</p>
                 <div className="flex flex-wrap gap-2">
                   {a.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">accessible</span> Accessible</span>}
-                  {a.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Fully Modified</span>}
-                  {a.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Semi Modified</span>}
+                  {a.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-foreground)]">Fully Modified</span>}
+                  {a.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-foreground)]">Semi Modified</span>}
                 </div>
                 <div className="flex gap-4 pt-2 border-t border-[var(--color-border)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">bed</span> {a.bedCount || '—'} beds</span>

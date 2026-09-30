@@ -420,7 +420,7 @@ export default function IntakeWizardPage() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6">
+    <div className="w-full min-w-0 max-w-full flex flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <button
@@ -428,11 +428,11 @@ export default function IntakeWizardPage() {
           onClick={back.onBack}
           data-testid="intake-header-back"
           aria-label={back.ariaLabel}
-          className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+          className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-accent)] transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-xl md:text-2xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
+        <h1 className="text-xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
       </div>
 
       {saveMutation.isError && (
@@ -464,9 +464,9 @@ export default function IntakeWizardPage() {
           // inside a <Card> below to read as a distinct panel. The scroll-margin utilities
           // stay here — they were originally on the outer wrapper because of the fixed
           // bottom nav, and they continue to apply to every form control inside this form.
-          className="[&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44 space-y-6"
+          className="[&_input]:scroll-mt-20 [&_input]:scroll-mb-44 [&_textarea]:scroll-mt-20 [&_textarea]:scroll-mb-44 [&_select]:scroll-mt-20 [&_select]:scroll-mb-44 [&_button]:scroll-mt-20 [&_button]:scroll-mb-44 flex flex-col gap-[var(--section-gap)]"
         >
-          <Card className="space-y-6">
+          <Card className="space-y-4">
             <WizardStepHeading
               stepKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
               label={isReviewStep ? 'Review' : currentStep.label}
@@ -489,7 +489,7 @@ export default function IntakeWizardPage() {
                 header doc) — existing rows are already managed via the detail page's Contacts tab,
                 surfaced here read-only so resuming doesn't look like they've vanished. */}
             {isEditMode && existingContactRoles.length > 0 && (
-              <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)] text-sm">
+              <div className="mb-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm">
                 <p className="font-medium mb-1">{existingContactRoles.length} contact{existingContactRoles.length === 1 ? '' : 's'} already recorded</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {existingContactRoles.map((role) => (
@@ -529,7 +529,7 @@ export default function IntakeWizardPage() {
                 header doc) — existing rows are already managed via the detail page's Risks
                 section, surfaced here read-only so resuming doesn't look like they've vanished. */}
             {isEditMode && existingRiskEntries.length > 0 && (
-              <div className="mb-4 p-3 rounded-lg bg-[var(--color-accent)] text-sm">
+              <div className="mb-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm">
                 <p className="font-medium mb-1">{existingRiskEntries.length} risk {existingRiskEntries.length === 1 ? 'entry' : 'entries'} already recorded</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {existingRiskEntries.map((entry) => (

@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_AREA } from '@/components/tapArea'
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { formatEffectiveRange } from '../rostering/lib/roster'
 import type { ScheduleAvailabilityItemDto } from '@/api/types'
 
 const availTypeColors: Record<string, string> = {
-  Available:   'text-emerald-600 bg-emerald-50',
+  Available:   'text-[var(--color-on-primary-fixed)] bg-[var(--color-primary-fixed)]/30',
   Unavailable: 'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
   Leave:       'text-[var(--color-destructive)] bg-[var(--color-error-container)]/60',
-  // #8e337b (the text color) has no token equivalent in index.css — left as a literal hex.
-  // The background half (#ffd7ef) does match --color-accessible-container exactly.
-  Training:    'text-[#8e337b] bg-[var(--color-accessible-container)]/60',
+  Training:    'text-[var(--color-on-accessible-container)] bg-[var(--color-accessible-container)]/60',
   Preferred:   'text-[var(--color-secondary)] bg-[var(--color-secondary-container)]/40',
-  Tentative:   'text-amber-700 bg-amber-50',
+  Tentative:   'text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)]/60',
 }
 
 interface AvailabilityListProps {
@@ -54,16 +53,16 @@ export default function AvailabilityList({ staffId, availability }: Availability
   const manageLink = `/rostering/leave?userId=${staffId}`
 
   return (
-    <div className="pl-8 py-3">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">Availability</p>
-        <Link to={manageLink} className="text-xs text-[var(--color-primary)] hover:underline">
+    <div className="pl-8 py-2">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[13px] font-semibold text-[var(--color-muted-foreground)]">Availability</p>
+        <Link to={manageLink} className={`${TAP_AREA} text-[13px] text-[var(--color-primary)] hover:underline`}>
           Manage on Leave page →
         </Link>
       </div>
       <div className="space-y-2">
         {availability.length === 0 && (
-          <p className="text-xs text-[var(--color-muted-foreground)] italic py-1">
+          <p className="text-[13px] text-[var(--color-muted-foreground)] italic py-1">
             No leave, unavailability or availability records in this schedule window.{' '}
             <Link to={manageLink} className="text-[var(--color-primary)] hover:underline">Manage on Leave page →</Link>
           </p>
@@ -71,8 +70,8 @@ export default function AvailabilityList({ staffId, availability }: Availability
         {availability.map(item => {
           const { label, colorClass } = badgeForItem(item)
           return (
-            <div key={item.id} className="flex items-center gap-2 text-xs">
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold text-center ${colorClass}`}>
+            <div key={item.id} className="flex items-center gap-2 text-[13px]">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold text-center ${colorClass}`}>
                 {label}
               </span>
               <span className="text-[var(--color-muted-foreground)]">{windowForItem(item)}</span>

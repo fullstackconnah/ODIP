@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
@@ -42,21 +44,23 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
   }
 
   return (
-    <SectionEditPanel title="Risks & Hazards Summary" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Risks & Hazards Summary" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="space-y-4">
-          <FormField label="Behaviour Risk Summary">
+        <div className={formGrid}>
+          <FormField label="Behaviour Risk Summary" className={span.long}>
             <textarea value={draft.behaviourRiskSummary} onChange={(e) => setDraft((d) => ({ ...d, behaviourRiskSummary: e.target.value }))} rows={3} />
           </FormField>
-          <FormField label="General Notes">
+          <FormField label="General Notes" className={span.long}>
             <textarea value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} rows={3} />
           </FormField>
         </div>
       ) : (
-        <div className="text-sm space-y-2 text-[var(--color-muted-foreground)]">
-          {p.behaviourRiskSummary && <p><strong>Behaviour Risk Summary:</strong> {p.behaviourRiskSummary}</p>}
-          {p.notes && <p><strong>General Notes:</strong> {p.notes}</p>}
-        </div>
+        <FactList
+          items={[
+            { label: 'Behaviour Risk Summary', value: p.behaviourRiskSummary },
+            { label: 'General Notes', value: p.notes },
+          ].filter((item) => item.value)}
+        />
       )}
     </SectionEditPanel>
   )

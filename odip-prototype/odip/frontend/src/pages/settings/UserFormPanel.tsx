@@ -138,7 +138,7 @@ export default function UserFormPanel({
   }
 
   const inputClass =
-    'w-full px-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass =
     'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
@@ -268,7 +268,7 @@ export default function UserFormPanel({
                 <button
                   type="button"
                   onClick={() => setPassword(Math.random().toString(36).slice(-10) + 'A1!')}
-                  className="px-3 py-2 border border-[var(--color-border)] rounded-xl text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
+                  className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
                 >
                   Generate
                 </button>
@@ -286,7 +286,7 @@ export default function UserFormPanel({
                 aria-checked={isActive}
                 onClick={() => setIsActive(v => !v)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isActive ? 'bg-[var(--color-primary)]' : 'bg-gray-300'
+                  isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
                 }`}
               >
                 <span
@@ -303,7 +303,7 @@ export default function UserFormPanel({
 
           {/* Error message */}
           {error && (
-            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-700">
+            <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
               {error}
             </div>
           )}

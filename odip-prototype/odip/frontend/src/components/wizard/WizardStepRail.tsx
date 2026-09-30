@@ -81,7 +81,7 @@ export function WizardStepRail<V>({
 
   const buttonClasses = (isCurrent: boolean, isCompleted: boolean, isClickable: boolean) =>
     [
-      'flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
+      'flex items-center gap-2 px-3 py-1.5 min-h-[var(--control-h)] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
       // In vertical mode the button should be full-width, text-left, and use a square-ish radius
       // so it reads as a list item rather than a pill. The lg: vertical variant applies the same
       // shape without locking the mobile/tablet horizontal mode.

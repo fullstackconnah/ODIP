@@ -23,7 +23,7 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
 }) {
   const { fields: riskEntryFields, append: appendRiskEntry, remove: removeRiskEntry } = riskEntryFieldArray
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Risks & Hazards" className="space-y-4">
         <TextAreaField label="Behaviour Risk Summary" id="behaviourRiskSummary" {...register('behaviourRiskSummary')} rows={3} placeholder="Behaviour risk notes..." />
 
@@ -38,7 +38,7 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
         {riskEntryFields.length > 0 && (
           <div className="space-y-3">
             {riskEntryFields.map((field, index) => (
-              <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+              <div key={field.id} className="p-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] space-y-3">
                 <div className="flex items-start gap-2">
                   <FormField label="At Risk" className="flex-1 mb-0">
                     <Controller
@@ -61,7 +61,7 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
                     onClick={() => removeRiskEntry(index)}
                     aria-label={`Remove risk entry ${index + 1}`}
                     title="Remove risk entry"
-                    className="mt-6 p-1.5 min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+                    className="mt-6 p-1.5 min-w-[var(--control-h)] min-h-[var(--control-h)] rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -75,7 +75,7 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
         <button
           type="button"
           onClick={() => appendRiskEntry({ atRiskParty: 'Participant', description: '', mitigationNotes: '' })}
-          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+          className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-[var(--radius-sm)]"
         >
           <Plus className="w-4 h-4" /> Add risk entry
         </button>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import StaffDetailPage from './StaffDetailPage'
 import type { StaffOverviewDto } from '@/api/types/staff'
@@ -118,6 +118,15 @@ describe('StaffDetailPage — header', () => {
     expect(screen.getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
   })
 
+  it('starts the meta row at the region, with no stray leading separator, when the staff member has no position', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ position: undefined }) }), isLoading: false })
+    renderAt('staff-1')
+
+    // The span holds just the region — not " · North".
+    expect(screen.getByText('North')).toBeInTheDocument()
+    expect(screen.queryByText(/^\s*·/)).not.toBeInTheDocument()
+  })
+
   it('shows Inactive status for an inactive staff member', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ isActive: false }) }), isLoading: false })
     renderAt('staff-1')
@@ -144,6 +153,16 @@ describe('StaffDetailPage — Availability tab (default)', () => {
     // AvailabilityList instead. It's ambiguous too (the header link plus the empty-state's own
     // repeated link), hence getAllByText rather than getByText.
     expect(screen.getAllByText(/manage on leave page/i).length).toBeGreaterThan(0)
+  })
+
+  it('flushes the list to the Card padding — AvailabilityList\'s own pl-8 indent (built for the Schedule accordion) read as a blank ~30px icon slot here', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+
+    // The list's own label sits under a wrapper carrying `[&>div]:p-0`, which zeroes the padding of
+    // the wrapper's direct child (AvailabilityList's root) — jsdom has no CSS, so the class is the proof.
+    const label = screen.getByText('Availability', { selector: 'p' })
+    expect(label.closest('[class~="[&>div]:p-0"]')).not.toBeNull()
   })
 })
 
@@ -296,5 +315,63 @@ describe('StaffDetailPage — Completions tab', () => {
     renderAtTab('staff-1', 'completions')
 
     expect(screen.getByText('No recent completions')).toBeInTheDocument()
+  })
+})
+
+// Density verdict (mobile) — the header used to keep the Back / Leave & availability / Edit cluster
+// `shrink-0` beside the H1, which squeezed the name to "C…" and pushed the page 10-41px wider than a
+// phone (scrollWidth 400 at 390, 401 at 360). PageHeader now stacks the cluster on its own row below
+// md; the cluster itself must be allowed to wrap. jsdom applies no CSS, so these assert the class contract.
+describe('StaffDetailPage — mobile header and tap targets', () => {
+  it('lets the Back / Leave / Edit cluster wrap instead of holding it at its full width', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+
+    const cluster = screen.getByRole('link', { name: /edit/i }).parentElement!
+    expect(cluster).toContainElement(screen.getByRole('link', { name: /back to staff/i }))
+    expect(cluster).toHaveClass('flex', 'flex-wrap')
+    expect(cluster).not.toHaveClass('shrink-0')
+  })
+
+  it('gives the completions-review link the --tap-min floor (44px under a coarse pointer, unchanged on a mouse)', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAtTab('staff-1', 'completions')
+
+    expect(screen.getByRole('link', { name: /open completions review/i })).toHaveClass('min-h-[var(--tap-min)]')
+  })
+
+  it('gives the participant, trip and incident row links the --tap-min floor', () => {
+    mockUseStaffOverview.mockReturnValue({
+      data: makeOverview({
+        upcomingShifts: [
+          {
+            shiftId: 'shift-1', serviceDate: '2026-09-20', startTime: '08:00:00', endTime: '16:00:00',
+            endsNextDay: false, participantId: 'participant-1', participantName: 'Mia Chen', status: 'Published',
+          },
+        ],
+        upcomingTripAssignments: [
+          { assignmentId: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Byron Bay Winter Weekender', startDate: '2026-09-21', endDate: '2026-09-24' },
+        ],
+        recentIncidents: [
+          {
+            id: 'inc-1', serviceType: 'Trip', tripInstanceId: null, tripName: null, incidentType: 'Injury',
+            otherTypeSpecify: null, severity: 'Low', status: 'Closed', title: 'Minor graze',
+            incidentDateTime: '2026-09-01T10:00:00Z', location: null, reportedByName: 'Jack',
+            involvedParticipantId: null, involvedParticipantName: null, qscReportingStatus: 'NotRequired',
+            isOverdue24h: false, createdAt: '2026-09-01T11:00:00Z', medicationAdministrationId: null,
+            shiftId: null, shiftNoteId: null,
+          },
+        ],
+      }),
+      isLoading: false,
+    })
+
+    renderAtTab('staff-1', 'upcoming')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveClass('min-h-[var(--tap-min)]')
+    expect(screen.getByRole('link', { name: 'Byron Bay Winter Weekender' })).toHaveClass('min-h-[var(--tap-min)]')
+
+    cleanup()
+    renderAtTab('staff-1', 'incidents')
+    expect(screen.getByRole('link', { name: 'Minor graze' })).toHaveClass('min-h-[var(--tap-min)]')
   })
 })

@@ -197,7 +197,7 @@ describe('Tabs primitive — parent-rendered panels (migrated pages)', () => {
     expect(badge!.textContent).toBe('4')
   })
 
-  it('wraps gracefully on overflow with many tabs (Participant detail has 11)', () => {
+  it('is one scrolling row below md and wraps from md up with many tabs (Participant detail has 11)', () => {
     // Construct the worst-case Participant detail tab set (Details + Contacts + Bookings +
     // Support + Medications + Notes + Routines + Restrictive + Claims + Rostering + History).
     const manyTabs: TabItem[] = [
@@ -214,16 +214,17 @@ describe('Tabs primitive — parent-rendered panels (migrated pages)', () => {
       { id: 'history', label: 'History', icon: Users },
     ]
     render(<ExternalHarness tabs={manyTabs} initial="details" />)
-    // All 11 are rendered (the tablist wraps and/or scrolls horizontally instead of
-    // overflowing the page gutter).
+    // All 11 are rendered (the tablist scrolls horizontally below md and wraps from md up, instead
+    // of overflowing the page gutter).
     expect(screen.getAllByRole('tab')).toHaveLength(11)
-    // The tablist container itself owns the overflow handling — `overflow-x-auto` for narrow
-    // viewports + `flex-wrap` so the strip rolls onto a second row on medium viewports
-    // (matches the live layout observed on Participant detail with 11 tabs). A regression
-    // that drops the wrapper or the flex-wrap would be caught here.
+    // The tablist container itself owns the overflow handling: below md a single row that scrolls
+    // sideways (`flex-nowrap` + `overflow-x-auto`; five wrapped 44px rows cost ~240px of a phone),
+    // from md up `md:flex-wrap` so the strip rolls onto a second row on medium viewports (matches the
+    // live layout observed on Participant detail with 11 tabs). A regression that drops the wrapper,
+    // the nowrap or the md wrap would be caught here.
     const tablist = screen.getByRole('tablist', { name: 'Billing sections' })
-    expect(tablist.className).toContain('overflow-x-auto')
-    expect(tablist.className).toContain('flex-wrap')
+    expect(tablist).toHaveClass('flex', 'flex-nowrap', 'overflow-x-auto', 'md:flex-wrap')
+    expect(tablist).not.toHaveClass('flex-wrap')
     // And every tab is `whitespace-nowrap` so a long label like "Restrictive Practices"
     // doesn't reflow inside the tab button itself.
     for (const tab of screen.getAllByRole('tab')) {

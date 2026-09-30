@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Check, ShieldAlert } from 'lucide-react'
 import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
@@ -27,45 +27,77 @@ export type ParticipantRowProps = {
 export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
+  const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
+  const uncoveredLabel = `${row.daysWithoutCover} day${row.daysWithoutCover === 1 ? '' : 's'} uncovered`
 
   return (
     <>
-      <div className="sticky left-0 z-10 flex flex-col gap-1.5 border-b border-r border-border bg-card px-4 py-2.5">
-        <div className="min-w-0">
+      {/*
+        Row header: ONE line inside the --row-h row — name, then the support ratio as a chip, then the
+        coverage state, in that order. The name group (participant link + the restrictive-practice marker,
+        which is a safety signal and must survive) takes whatever width is left and truncates with a title;
+        the ratio chip and the coverage badge are shrink-0, so neither is ever squeezed or cut, and `gap-2`
+        keeps the name from touching them. Coverage is the visible signal for the gap this row-per-participant
+        layout exists to surface. A trip bar rendered below can explain an otherwise-empty week without this
+        reading as a failure.
+
+        The coverage state is a COUNT BADGE at every column width: a warning icon and the number of uncovered
+        days on the amber tint, or a check when the week is fully covered. The words ("6 days uncovered",
+        "Fully covered") are the badge's title and aria-label, not text in the row. They used to be spelled out
+        in the wide column, and that is what cost the row its identity: 110px of "6 days uncovered" plus the 31px
+        ratio chip and two 8px gaps left 90px of the 247px content box for the name, so "Grace Palmer-Hughes"
+        (151px, plus the 12px restrictive-practice marker and its 4px gap = 167px) read "Grace Pa…" while the
+        same three words repeated down every row. The 35px count badge leaves 165px of the 247px box at the old
+        264px column and 181px at RosterGrid's 280px one, so a name up to ~167px shows whole with its marker
+        (a longer one truncates, with its title). Below 1500px the 195px column keeps the same badge and gives
+        the name ~96px, as it always did. There is no visually-hidden (sr-only) text: those 1px clip boxes are
+        what a "clipped without an ellipsis" audit reports, and role="img" + aria-label announces the same thing.
+      */}
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
+        <div className="flex min-w-0 items-center gap-1">
           <Link
             to={`/participants/${row.participantId}`}
-            className="block truncate font-display text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-5 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >
             {row.fullName}
           </Link>
-          <p className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
-            {RATIO_LABELS[row.supportRatio] ?? row.supportRatio} support
-            {row.hasRestrictivePractice && (
-              <span role="img" aria-label="Restrictive practice authorised" title="Restrictive practice authorised">
-                <ShieldAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
-              </span>
-            )}
-          </p>
+          {row.hasRestrictivePractice && (
+            <span className="shrink-0 text-muted-foreground" role="img" aria-label="Restrictive practice authorised" title="Restrictive practice authorised">
+              <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+            </span>
+          )}
         </div>
 
-        {/* Coverage indicator derived from daysWithoutCover — the visible signal for the gap
-            this row-per-participant layout exists to surface. A trip bar rendered below can
-            explain an otherwise-empty week without this reading as a failure. */}
-        <div className="flex h-4 min-w-0 items-center">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span
+            role="img"
+            aria-label={`${ratioLabel} support`}
+            title={`${ratioLabel} support`}
+            className="inline-flex h-5 items-center rounded-sm bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
+          >
+            {ratioLabel}
+          </span>
           {hideCoverageBadge ? null : covered ? (
-            <span className="text-[11px] text-muted-foreground">Fully covered</span>
+            <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-muted-foreground">
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#b45309]">
+            <span
+              role="img"
+              aria-label={uncoveredLabel}
+              title={uncoveredLabel}
+              className="inline-flex h-5 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+            >
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              {row.daysWithoutCover} day{row.daysWithoutCover === 1 ? '' : 's'} uncovered
+              <span className="tabular-nums">{row.daysWithoutCover}</span>
             </span>
           )}
         </div>
       </div>
 
       <div
-        className="grid gap-1 border-b border-border p-1"
+        className="grid gap-x-1 gap-y-0.5 border-b border-border px-1"
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length), gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (
@@ -76,6 +108,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             shifts={row.shifts.filter(s => s.serviceDate === day)}
             canWrite={canWrite}
             addLabel={`Add a shift for ${row.fullName} on ${formatDayAccessibleName(day)}`}
+            chipContext="participant"
             onAdd={() => onAddShift(row.participantId, row.fullName, day)}
             onOpen={onOpen}
             onAssignTo={onAssignTo}

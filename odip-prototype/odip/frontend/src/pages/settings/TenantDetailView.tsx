@@ -22,11 +22,11 @@ interface TenantDetailViewProps {
 // ---------------------------------------------------------------------------
 
 const ROLE_COLORS: Record<string, string> = {
-  SuperAdmin: 'bg-purple-100 text-purple-700',
-  Admin: 'bg-blue-100 text-blue-700',
+  SuperAdmin: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
+  Admin: 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]',
   Coordinator: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-  SupportWorker: 'bg-amber-100 text-amber-700',
-  ReadOnly: 'bg-gray-100 text-gray-600',
+  SupportWorker: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  ReadOnly: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ export default function TenantDetailView({
   const activeUsers = useMemo(() => users.filter(u => u.isActive).length, [users])
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       {/* ── Back / Breadcrumb ──────────────────────────────────── */}
       <button
         type="button"
@@ -65,14 +65,14 @@ export default function TenantDetailView({
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-[var(--color-foreground)]">
+            <h2 className="text-xl font-bold text-[var(--color-foreground)]">
               {tenant.name}
             </h2>
             <span
               className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 tenant.isActive
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                  : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
               }`}
             >
               {tenant.isActive ? 'Active' : 'Inactive'}
@@ -104,13 +104,13 @@ export default function TenantDetailView({
       {/* ── Summary Cards ──────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
         <SummaryCard
-          icon={<Users className="w-5 h-5 text-blue-500" />}
+          icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
           value={users.length}
           label="Total Users"
           loading={usersLoading}
         />
         <SummaryCard
-          icon={<UserCheck className="w-5 h-5 text-green-500" />}
+          icon={<UserCheck className="w-5 h-5 text-[var(--color-primary)]" />}
           value={activeUsers}
           label="Active Users"
           loading={usersLoading}
@@ -124,7 +124,7 @@ export default function TenantDetailView({
       </div>
 
       {/* ── Users Table ────────────────────────────────────────── */}
-      <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
           <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h3>
         </div>
@@ -150,7 +150,7 @@ export default function TenantDetailView({
                 render: (user: TenantUserDto) => (
                   <span
                     className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'
+                      ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                     }`}
                   >
                     {user.role}
@@ -164,8 +164,8 @@ export default function TenantDetailView({
                   <span
                     className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       user.isActive
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-600'
+                        ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                     }`}
                   >
                     {user.isActive ? 'Active' : 'Inactive'}
@@ -192,7 +192,7 @@ export default function TenantDetailView({
       </div>
 
       {/* ── Provider Settings (collapsible) ────────────────────── */}
-      <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <button
           type="button"
           onClick={() => setProviderOpen(prev => !prev)}
@@ -244,8 +244,8 @@ function SummaryCard({
   loading: boolean
 }) {
   return (
-    <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-4 flex items-center gap-4">
-      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--color-accent)]">
+    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex items-center gap-4">
+      <div className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-accent)]">
         {icon}
       </div>
       <div>
@@ -340,7 +340,7 @@ function Badge({
   return (
     <span
       className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+        active ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
       }`}
     >
       {active ? activeLabel : inactiveLabel}

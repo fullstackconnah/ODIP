@@ -181,7 +181,7 @@ export function ShiftNotesSection({
   }
 
   return (
-    <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5 space-y-4">
+    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 space-y-4">
       <h2 className="font-semibold flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Shift notes</h2>
 
       {isLoading ? (

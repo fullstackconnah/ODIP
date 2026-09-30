@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
@@ -66,93 +68,59 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
   return (
     <SectionEditPanel title="Key Identifiers" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="grid md:grid-cols-2 gap-4">
-          <FormField label="Pension Card Number">
+        <div className={formGrid}>
+          <FormField label="Pension Card Number" className={span.medium}>
             <input value={draft.pensionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, pensionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Pension Card Expiry">
+          <FormField label="Pension Card Expiry" className={span.short}>
             <input type="date" value={draft.pensionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, pensionCardExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Medicare Number">
+          <FormField label="Medicare Number" className={span.medium}>
             <input value={draft.medicareNumber} onChange={(e) => setDraft((d) => ({ ...d, medicareNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Medicare Expiry">
+          <FormField label="Medicare Expiry" className={span.short}>
             <input type="date" value={draft.medicareExpiry} onChange={(e) => setDraft((d) => ({ ...d, medicareExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Companion Card Number">
+          <FormField label="Companion Card Number" className={span.medium}>
             <input value={draft.companionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, companionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Companion Card Expiry">
+          <FormField label="Companion Card Expiry" className={span.short}>
             <input type="date" value={draft.companionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, companionCardExpiry: e.target.value }))} />
           </FormField>
-          <FormField label="Private Health Fund">
+          <FormField label="Private Health Fund" className={span.medium}>
             <input value={draft.privateHealthFund} onChange={(e) => setDraft((d) => ({ ...d, privateHealthFund: e.target.value }))} />
           </FormField>
-          <FormField label="Private Health Membership Number">
+          <FormField label="Private Health Membership Number" className={span.medium}>
             <input value={draft.privateHealthMembershipNumber} onChange={(e) => setDraft((d) => ({ ...d, privateHealthMembershipNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Taxi Card Number">
+          <FormField label="Taxi Card Number" className={span.medium}>
             <input value={draft.taxiCardNumber} onChange={(e) => setDraft((d) => ({ ...d, taxiCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Hair Colour">
+          <FormField label="Hair Colour" className={span.short}>
             <input value={draft.hairColour} onChange={(e) => setDraft((d) => ({ ...d, hairColour: e.target.value }))} />
           </FormField>
-          <FormField label="Eye Colour">
+          <FormField label="Eye Colour" className={span.short}>
             <input value={draft.eyeColour} onChange={(e) => setDraft((d) => ({ ...d, eyeColour: e.target.value }))} />
           </FormField>
-          <FormField label="Weight (kg)">
+          <FormField label="Weight (kg)" className={span.short}>
             <input type="number" min="0" max="999.99" step="0.1" value={draft.weightKg} onChange={(e) => setDraft((d) => ({ ...d, weightKg: e.target.value }))} />
           </FormField>
-          <FormField label="Height (cm)">
+          <FormField label="Height (cm)" className={span.short}>
             <input type="number" min="0" max="999.99" step="0.1" value={draft.heightCm} onChange={(e) => setDraft((d) => ({ ...d, heightCm: e.target.value }))} />
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          {p.pensionCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Pension Card</span>
-              <span>{p.pensionCardNumber}{p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.medicareNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Medicare</span>
-              <span>{p.medicareNumber}{p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.companionCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Companion Card</span>
-              <span>{p.companionCardNumber}{p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}</span>
-            </>
-          )}
-          {p.privateHealthFund && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Private Health Fund</span>
-              <span>{p.privateHealthFund}{p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}</span>
-            </>
-          )}
-          {p.taxiCardNumber && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Taxi Card</span>
-              <span>{p.taxiCardNumber}</span>
-            </>
-          )}
-          {(p.hairColour || p.eyeColour) && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Hair / Eye Colour</span>
-              <span>{[p.hairColour, p.eyeColour].filter(Boolean).join(' / ') || '—'}</span>
-            </>
-          )}
-          {(p.weightKg != null || p.heightCm != null) && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Weight / Height</span>
-              <span>{[p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') || '—'}</span>
-            </>
-          )}
-          {!hasAnyData && <span className="text-[var(--color-muted-foreground)] sm:col-span-2">No key identifiers recorded</span>}
-        </div>
+        <FactList
+          items={[
+            { label: 'Pension Card', value: p.pensionCardNumber ? `${p.pensionCardNumber}${p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}` : undefined },
+            { label: 'Medicare', value: p.medicareNumber ? `${p.medicareNumber}${p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}` : undefined },
+            { label: 'Companion Card', value: p.companionCardNumber ? `${p.companionCardNumber}${p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}` : undefined },
+            { label: 'Private Health Fund', value: p.privateHealthFund ? `${p.privateHealthFund}${p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}` : undefined },
+            { label: 'Taxi Card', value: p.taxiCardNumber },
+            { label: 'Hair / Eye Colour', value: [p.hairColour, p.eyeColour].filter(Boolean).join(' / ') },
+            { label: 'Weight / Height', value: [p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') },
+          ].filter((item) => item.value)}
+        />
       )}
     </SectionEditPanel>
   )

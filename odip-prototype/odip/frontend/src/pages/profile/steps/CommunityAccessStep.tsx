@@ -19,6 +19,7 @@ import type { ChecklistItemType } from '@/api/types/enums'
 import { COMMUNITY_ACCESS_RISK_ITEM_TYPE_LABELS, RISK_RATING_LEVELS, ROAD_TRAFFIC_RISK_ITEM_TYPES, BEHAVIOURS_OF_CONCERN_RISK_ITEM_TYPES } from '@/api/types/enums'
 import { RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import type { CommunityAccessRiskItemType } from '@/api/types/enums'
+import { formGrid, span } from '@/lib/formGrid'
 
 export function CommunityAccessStep({ control, register, checklistFieldArray, riskItemsFieldArray, watchedValues }: {
   control: Control<ParticipantFormData>
@@ -28,22 +29,26 @@ export function CommunityAccessStep({ control, register, checklistFieldArray, ri
   watchedValues: Partial<ParticipantFormData>
 }) {
   return (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card title="About Me & Behaviours of Concern" className="space-y-4">
-          <TextAreaField label="Signs I Am Happy and Settled" id="signsHappyAndSettled" rows={2} {...register('signsHappyAndSettled')} />
-          <TextAreaField label="What Helps Me Calm Down" id="whatHelpsMeCalmDown" rows={2} {...register('whatHelpsMeCalmDown')} />
-          <TextAreaField label="BOC — Triggers" id="bocTriggers" rows={2} {...register('bocTriggers')} />
-          <TextAreaField label="BOC — Early Warning Signs" id="bocEarlyWarningSigns" rows={2} {...register('bocEarlyWarningSigns')} />
-          <TextAreaField label="BOC — De-Escalation Strategies" id="bocDeEscalationStrategies" rows={2} {...register('bocDeEscalationStrategies')} />
-          <TextAreaField label="BOC — What Not To Do" id="bocWhatNotToDo" rows={2} {...register('bocWhatNotToDo')} />
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <div className="grid md:grid-cols-2 gap-[var(--section-gap)] items-start">
+        <Card title="About Me & Behaviours of Concern">
+          <div className={formGrid}>
+            <TextAreaField label="Signs I Am Happy and Settled" id="signsHappyAndSettled" rows={2} {...register('signsHappyAndSettled')} className={span.long} />
+            <TextAreaField label="What Helps Me Calm Down" id="whatHelpsMeCalmDown" rows={2} {...register('whatHelpsMeCalmDown')} className={span.long} />
+            <TextAreaField label="BOC — Triggers" id="bocTriggers" rows={2} {...register('bocTriggers')} className={span.long} />
+            <TextAreaField label="BOC — Early Warning Signs" id="bocEarlyWarningSigns" rows={2} {...register('bocEarlyWarningSigns')} className={span.long} />
+            <TextAreaField label="BOC — De-Escalation Strategies" id="bocDeEscalationStrategies" rows={2} {...register('bocDeEscalationStrategies')} className={span.long} />
+            <TextAreaField label="BOC — What Not To Do" id="bocWhatNotToDo" rows={2} {...register('bocWhatNotToDo')} className={span.long} />
+          </div>
         </Card>
 
-        <Card title="What My Supports Look Like" className="space-y-4">
-          <TextAreaField label="Morning" id="supportsLookLikeMorning" rows={2} {...register('supportsLookLikeMorning')} />
-          <TextAreaField label="Day" id="supportsLookLikeDay" rows={2} {...register('supportsLookLikeDay')} />
-          <TextAreaField label="Afternoon / Evening" id="supportsLookLikeAfternoonEvening" rows={2} {...register('supportsLookLikeAfternoonEvening')} />
-          <TextAreaField label="Overnight" id="supportsLookLikeOvernight" rows={2} {...register('supportsLookLikeOvernight')} />
+        <Card title="What My Supports Look Like">
+          <div className={formGrid}>
+            <TextAreaField label="Morning" id="supportsLookLikeMorning" rows={2} {...register('supportsLookLikeMorning')} className={span.long} />
+            <TextAreaField label="Day" id="supportsLookLikeDay" rows={2} {...register('supportsLookLikeDay')} className={span.long} />
+            <TextAreaField label="Afternoon / Evening" id="supportsLookLikeAfternoonEvening" rows={2} {...register('supportsLookLikeAfternoonEvening')} className={span.long} />
+            <TextAreaField label="Overnight" id="supportsLookLikeOvernight" rows={2} {...register('supportsLookLikeOvernight')} className={span.long} />
+          </div>
         </Card>
       </div>
 

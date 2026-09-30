@@ -108,7 +108,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
         <button
           type="button"
           onClick={() => remove(rowIndex)}
-          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)]"
+          className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)]"
           aria-label="Remove witness"
         >
           <X className="w-4 h-4" />
@@ -118,13 +118,13 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
   ]
 
   return (
-    <div className="space-y-6">
-      <Card title="Witnesses" className="space-y-4">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Witnesses">
         {errors.witnesses?.message && (
-          <p role="alert" className="text-xs text-[var(--color-destructive)]">{errors.witnesses.message}</p>
+          <p role="alert" className="text-xs text-[var(--color-destructive)] mb-2">{errors.witnesses.message}</p>
         )}
 
-        <div className="grid md:grid-cols-[1fr_1fr_auto] gap-3 items-end p-4 rounded-xl bg-[var(--color-accent)]/40 border border-[var(--color-border)]">
+        <div className="grid md:grid-cols-[1fr_1fr_auto] gap-3 items-end p-[var(--card-pad)] rounded-[var(--radius-md)] bg-[var(--color-accent)]/40 border border-[var(--color-border)] mb-3">
           <FormField label="Witness type">
             <div className="flex gap-2" role="radiogroup" aria-label="Witness type">
               <button
@@ -132,7 +132,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
                 role="radio"
                 aria-checked={mode === 'staff'}
                 onClick={() => setMode('staff')}
-                className={`min-h-[44px] flex-1 px-3 rounded-lg border text-sm ${mode === 'staff' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
+                className={`h-[var(--control-h)] flex-1 px-3 rounded-[var(--radius-sm)] border text-sm ${mode === 'staff' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
               >
                 Staff member
               </button>
@@ -141,7 +141,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
                 role="radio"
                 aria-checked={mode === 'external'}
                 onClick={() => setMode('external')}
-                className={`min-h-[44px] flex-1 px-3 rounded-lg border text-sm ${mode === 'external' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
+                className={`h-[var(--control-h)] flex-1 px-3 rounded-[var(--radius-sm)] border text-sm ${mode === 'external' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
               >
                 Someone else
               </button>
@@ -172,7 +172,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
             type="button"
             onClick={handleAdd}
             disabled={mode === 'staff' ? !staffId : !externalName.trim()}
-            className="min-h-[44px] px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium disabled:opacity-50"
+            className="h-[var(--control-h)] px-4 rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-white text-sm font-medium disabled:opacity-50"
           >
             Add
           </button>

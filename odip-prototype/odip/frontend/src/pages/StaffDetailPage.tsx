@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import { useStaffOverview, useSettings } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -20,6 +22,10 @@ import type { CompletionQueueItemDto } from '@/api/types/rostering'
 type Tab = 'availability' | 'credentials' | 'upcoming' | 'incidents' | 'completions'
 
 const TAB_KEYS: Tab[] = ['availability', 'credentials', 'upcoming', 'incidents', 'completions']
+
+/** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
+ * 44px floor under a coarse pointer (fits the 48px coarse row). */
+const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
 
 type CredentialStatus = 'expired' | 'expiring' | 'ok' | 'no-date'
 
@@ -99,36 +105,38 @@ export default function StaffDetailPage() {
   if (!overview) return <div className="text-center py-12">Staff member not found</div>
 
   const { staff } = overview
+  // Join only the parts that exist: an empty position used to leave the row starting with a
+  // stray " · " separator.
+  const positionAndRegion = [staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start gap-4">
-        <Link to="/staff" className="mt-1 p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold">{staff.fullName}</h1>
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <PageHeader
+        title={staff.fullName}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
+            <span>{positionAndRegion}</span>
           </div>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{staff.position} · {staff.region || 'No region'}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canAccessLeaveApprovals && (
-            <Link
-              to={`/rostering/leave?userId=${id}`}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-all"
-            >
-              <CalendarOff className="w-4 h-4" /> Leave & availability
-            </Link>
-          )}
-          {canWrite && (
-            <Link to={`/staff/${id}/edit`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-              <Pencil className="w-4 h-4" /> Edit
-            </Link>
-          )}
-        </div>
-      </div>
+        }
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button to="/staff" variant="secondary" size="md" aria-label="Back to staff">
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Button>
+            {canAccessLeaveApprovals && (
+              <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
+                <CalendarOff className="w-4 h-4" /> Leave & availability
+              </Button>
+            )}
+            {canWrite && (
+              <Button to={`/staff/${id}/edit`} variant="primary" size="md">
+                <Pencil className="w-4 h-4" /> Edit
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <Tabs
         tabs={[
@@ -145,7 +153,13 @@ export default function StaffDetailPage() {
 
       {tab === 'availability' && (
         <Card>
-          <AvailabilityList staffId={id!} availability={overview.availability} />
+          {/* AvailabilityList's root carries `pl-8 py-2` — an indent for the Schedule page's
+              accordion rows. Inside this Card it read as a blank ~30px icon slot left of the
+              "Availability" label (no icon was ever meant to fill it), so flush it to the Card's
+              own padding from out here. */}
+          <div className="[&>div]:p-0">
+            <AvailabilityList staffId={id!} availability={overview.availability} />
+          </div>
         </Card>
       )}
 
@@ -156,11 +170,11 @@ export default function StaffDetailPage() {
           ) : (
             <ul className="divide-y divide-[var(--color-border)]">
               {credentialRows.map((row) => (
-                <li key={row.key} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                <li key={row.key} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium">{row.label}</p>
                     {row.expiryDate && (
-                      <p className="text-xs text-[var(--color-muted-foreground)]">Expires {formatDateAu(row.expiryDate)}</p>
+                      <p className="text-xs tabular-nums text-[var(--color-muted-foreground)]">Expires {formatDateAu(row.expiryDate)}</p>
                     )}
                   </div>
                   {credentialBadge(row)}
@@ -172,7 +186,7 @@ export default function StaffDetailPage() {
       )}
 
       {tab === 'upcoming' && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-[var(--section-gap)]">
           <Card title="Upcoming shifts">
             <DataTable
               data={overview.upcomingShifts}
@@ -193,7 +207,7 @@ export default function StaffDetailPage() {
                   key: 'participantName',
                   header: 'Participant',
                   render: (s: StaffOverviewUpcomingShiftDto) => (
-                    <Link to={`/participants/${s.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/participants/${s.participantId}`} className={ROW_LINK}>
                       {s.participantName}
                     </Link>
                   ),
@@ -212,7 +226,7 @@ export default function StaffDetailPage() {
                   key: 'tripName',
                   header: 'Trip',
                   render: (a: StaffOverviewTripAssignmentDto) => (
-                    <Link to={`/trips/${a.tripInstanceId}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/trips/${a.tripInstanceId}`} className={ROW_LINK}>
                       {a.tripName}
                     </Link>
                   ),
@@ -238,7 +252,7 @@ export default function StaffDetailPage() {
                   key: 'title',
                   header: 'Title',
                   render: (i: IncidentListDto) => (
-                    <Link to={`/incidents/${i.id}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/incidents/${i.id}`} className={ROW_LINK}>
                       {i.title}
                     </Link>
                   ),
@@ -256,7 +270,7 @@ export default function StaffDetailPage() {
         <Card
           title="Recent completions"
           action={
-            <Link to="/rostering/completions" className="text-xs text-[var(--color-primary)] hover:underline">
+            <Link to="/rostering/completions" className="inline-flex min-h-[var(--tap-min)] items-center text-xs text-[var(--color-primary)] hover:underline">
               Open completions review →
             </Link>
           }

@@ -108,39 +108,37 @@ export default function OnboardingDetailPage() {
   // in-app history when the user got here via a non-hub route, and otherwise fall back to the
   // hub's Onboarding tab so the user always lands on the right stage.
 
-  return <div className="space-y-6">
-    <div className="space-y-3">
-      <div className="flex items-start gap-4">
-        <button
-          type="button"
-          onClick={back.onBack}
-          aria-label={back.ariaLabel}
-          className="p-1.5 rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)] transition-colors"
+  return <div className="flex flex-col gap-[var(--section-gap)]">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <PageHeader
+        title={headingTitle}
+        subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
+        action={
+          <Button variant="secondary" size="md" onClick={back.onBack} aria-label={back.ariaLabel}>
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
+        }
+      />
+      {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
+          overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
+        <Card title="Current stage">
+          <p className="font-semibold">{d.isReady ? 'Complete' : 'Onboarding in progress'}</p>
+          <p className="mt-1 text-sm tabular-nums">Progress: {completedGateCount} of {gates.length} gates complete</p>
+        </Card>
+        <section
+          aria-labelledby="recommended-action-heading"
+          className="!border-2 !border-[var(--color-primary)] !bg-[var(--color-accent)] bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]"
         >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <PageHeader
-            title={headingTitle}
-            subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
-          />
-        </div>
+          <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Recommended next action</p>
+          <h2 id="recommended-action-heading" className="mt-1 text-base font-semibold">{recommended.label}</h2>
+          <p className="mt-1 text-sm">{recommended.reason}</p>
+          <div className="mt-2">
+            {canManageParticipantLifecycle ? recommended.action : <p className="text-sm font-medium">Read-only access: lifecycle changes are unavailable for this role.</p>}
+          </div>
+        </section>
       </div>
-      <Card title="Current stage">
-        <p className="font-semibold">{d.isReady ? 'Complete' : 'Onboarding in progress'}</p>
-        <p className="mt-2 text-sm">Progress: {completedGateCount} of {gates.length} gates complete</p>
-      </Card>
-      <section
-        aria-labelledby="recommended-action-heading"
-        className="!border-2 !border-[var(--color-primary)] !bg-[var(--color-accent)] bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5"
-      >
-        <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Recommended next action</p>
-        <h2 id="recommended-action-heading" className="mt-1 text-lg font-semibold">{recommended.label}</h2>
-        <p className="mt-1 text-sm">{recommended.reason}</p>
-        <div className="mt-3">
-          {canManageParticipantLifecycle ? recommended.action : <p className="text-sm font-medium">Read-only access: lifecycle changes are unavailable for this role.</p>}
-        </div>
-      </section>
       <p className="text-sm text-[var(--color-muted-foreground)]">Completing these steps doesn't activate the participant or allow bookings, rostering, invoicing or claims.</p>
     </div>
 
@@ -152,20 +150,20 @@ export default function OnboardingDetailPage() {
       </Callout>
     ) : null}
 
-    <section aria-labelledby="onboarding-gates-heading" className="space-y-3">
-      <h2 id="onboarding-gates-heading" className="text-lg font-semibold">Onboarding gates</h2>
+    <section aria-labelledby="onboarding-gates-heading" className="flex flex-col gap-2">
+      <h2 id="onboarding-gates-heading" className="text-base font-semibold">Onboarding gates</h2>
       {gates.map(gate => (
-        <article key={gate.label} className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] p-5">
+        <article key={gate.label} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold">{gate.label}</h3>
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status={gate.state} />
               {gate.state !== 'Complete' && gate.fixRoute && (
-                <Button variant="secondary" to={gate.fixRoute.to}>{gate.fixRoute.label}</Button>
+                <Button variant="secondary" size="sm" to={gate.fixRoute.to}>{gate.fixRoute.label}</Button>
               )}
             </div>
           </div>
-          {gate.context ? <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
+          {gate.context ? <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
         </article>
       ))}
     </section>
@@ -174,7 +172,7 @@ export default function OnboardingDetailPage() {
       ? (
         <Card aria-labelledby="readiness-reasons-heading">
           <h2 id="readiness-reasons-heading" className="font-semibold">What's still missing</h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
         </Card>
       )
       : null}

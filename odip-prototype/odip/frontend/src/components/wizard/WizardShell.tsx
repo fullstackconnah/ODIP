@@ -29,7 +29,7 @@ export type WizardShellProps = {
   contentClassName?: string
 }
 
-const RAIL_WIDTH_CLASS = 'lg:w-60'
+const RAIL_WIDTH_CLASS = 'lg:w-52'
 
 export function WizardShell({
   rail,
@@ -42,7 +42,7 @@ export function WizardShell({
   return (
     <div
       className={[
-        'flex flex-col gap-6 lg:flex-row lg:gap-8',
+        'flex flex-col gap-6 lg:flex-row lg:gap-4',
         // Every flex child gets min-w-0 so a long field content can't force horizontal page
         // overflow — same guard the wizard body already uses.
         className,

@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
+import { Button } from '@/components/Button'
 import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
@@ -55,9 +56,9 @@ export default function TasksPage() {
       header: '',
       hidden: showArchived,
       render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' ? (
-        <button onClick={(e) => markComplete(e, t)} className="p-1 rounded hover:bg-green-500/20 text-[var(--color-muted-foreground)] hover:text-green-400 transition-colors" title="Mark complete">
+        <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
           <CheckCircle className="w-4 h-4" />
-        </button>
+        </Button>
       ) : null,
     },
     { key: 'title', header: 'Task', sortable: true, className: 'font-medium' },
@@ -127,14 +128,14 @@ export default function TasksPage() {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Tasks"
         subtitle={`${tasks.length} task${tasks.length !== 1 ? 's' : ''}`}
         action={!showArchived && canWrite && (
-          <Link to="/tasks/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
+          <Button to="/tasks/new" size="md">
             <Plus className="w-4 h-4" /> New Task
-          </Link>
+          </Button>
         )}
       >
         {toggleButtons}

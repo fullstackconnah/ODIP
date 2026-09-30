@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SupportProfileTab from './SupportProfileTab'
 import type { ParticipantDetailDto, SupportProfileDto } from '@/api/types/participants'
+import { TAP_AREA } from '@/components/tapArea'
 
 const {
   mockUseParticipant, mockUseSupportProfile, mockPatchMutateAsync, mockUpdateSupportProfileMutateAsync,
@@ -84,7 +85,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.click(within(card).getByLabelText('High Support'))
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -108,7 +109,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isHighSupport: false }), isLoading: false })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     const checkbox = within(card).getByLabelText('High Support') as HTMLInputElement
     expect(checkbox.checked).toBe(false)
@@ -133,7 +134,7 @@ describe('SupportProfileTab — Support Needs section (supportNeedsMobility grou
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByText('High Support').closest('.rounded-xl') as HTMLElement
+    const card = screen.getByText('High Support').closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.click(within(card).getByLabelText('High Support'))
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -171,7 +172,7 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
     })
     render(<SupportProfileTab participantId="participant-1" />)
 
-    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-xl') as HTMLElement
+    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
     await user.type(within(card).getByLabelText('Communication Notes'), 'Uses AAC device.')
     await user.click(within(card).getByRole('button', { name: 'Save' }))
@@ -192,13 +193,91 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
 
     expect(screen.getByText('Legacy PRN note.')).toBeInTheDocument()
 
-    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-xl') as HTMLElement
+    const card = screen.getByRole('heading', { name: 'Support Profile' }).closest('.rounded-md') as HTMLElement
     await user.click(within(card).getByRole('button', { name: /edit/i }))
 
     // The text is still shown (and even labelled, for a11y) while the section is mid-edit, but
     // there is no editable textbox for it anywhere — UpdateSupportProfileDto has no field for it.
     expect(within(card).queryByRole('textbox', { name: /restrictive practice details/i })).not.toBeInTheDocument()
     expect(within(card).getByText('Legacy PRN note.')).toBeInTheDocument()
+  })
+})
+
+describe('SupportProfileTab — density layout (finish review)', () => {
+  function cardFor(heading: string): HTMLElement {
+    return screen.getByRole('heading', { name: heading }).closest('.rounded-md') as HTMLElement
+  }
+
+  it('lays the cards on the auto-fill, items-start section grid, with a min(…,100%) floor so it collapses to one column on a phone', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const { container } = render(<SupportProfileTab participantId="participant-1" />)
+
+    // jsdom has no layout, so the class is the only observable proof of the mobile fix: a bare
+    // minmax(26rem,1fr) floor (416px) overflows a 390px viewport and scrolls the page sideways.
+    const grid = container.firstElementChild as HTMLElement
+    expect(grid).toHaveClass('grid', 'items-start')
+    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
+  })
+
+  it('renders the read-only rows as a semantic fact list (label + value), not a 50/50 grid of spans', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ isHighSupport: true, ambulantStatus: 'NoAssist', overnightSupport: 'ActiveNight', overnightRatio: 'OneToOne' }),
+      isLoading: false,
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const highSupport = screen.getByText('High Support')
+    expect(highSupport.tagName).toBe('DT')
+    expect(highSupport.nextElementSibling).toHaveTextContent('Yes')
+    expect(screen.getByText('Ambulant Status').nextElementSibling).toHaveTextContent('No Assist')
+    expect(within(cardFor('Overnight Support')).getByText('Overnight Support', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Active Night (1:1)')
+  })
+
+  it('collapses a card whose values are all empty to one "Not recorded" line instead of rows of dashes', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    // makeParticipant() records no mobility aids/support, no equipment and no Mobility & Functional data.
+    for (const heading of ['Mobility Aids & Support', 'Equipment', 'Mobility & Functional']) {
+      const card = cardFor(heading)
+      expect(within(card).getByText('Not recorded')).toBeInTheDocument()
+      expect(card.querySelector('dl')).toBeNull()
+    }
+    // Support Notes keeps its own, more specific wording.
+    expect(within(cardFor('Support Notes')).getByText('No support notes recorded')).toBeInTheDocument()
+  })
+
+  it('only gives a Support Notes / Mobility & Functional detail row to a note that actually has content', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ mobilityNotes: 'Prefers left-side approach.', orthotics: 'AFO both feet.' }),
+      isLoading: false,
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const notes = within(cardFor('Support Notes'))
+    expect(notes.getByText('Mobility Notes').nextElementSibling).toHaveTextContent('Prefers left-side approach.')
+    expect(notes.queryByText('Equipment Requirements')).not.toBeInTheDocument()
+    expect(notes.queryByText('Transport Requirements')).not.toBeInTheDocument()
+
+    const functional = within(cardFor('Mobility & Functional'))
+    expect(functional.getByText('Orthotics').nextElementSibling).toHaveTextContent('AFO both feet.')
+    expect(functional.queryByText('Skin Integrity')).not.toBeInTheDocument()
+    // The four core ratings still get a row, dashed when unrecorded.
+    expect(functional.getByText('Ambulant Status').nextElementSibling).toHaveTextContent('—')
+  })
+
+  it('shows "None" for no overnight support, and never prints "undefined" when the payload omits overnightSupport', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ overnightSupport: 'None' }), isLoading: false })
+    const { unmount } = render(<SupportProfileTab participantId="participant-1" />)
+    expect(within(cardFor('Overnight Support')).getByText('None')).toBeInTheDocument()
+    unmount()
+
+    // A DTO from an older API build / the mock API has no overnightSupport at all.
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ overnightSupport: undefined, overnightRatio: undefined }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+    const card = cardFor('Overnight Support')
+    expect(card).not.toHaveTextContent(/undefined/)
+    expect(within(card).getByText('Not recorded')).toBeInTheDocument()
   })
 })
 
@@ -210,6 +289,43 @@ describe('SupportProfileTab — read-only display', () => {
     render(<SupportProfileTab participantId="participant-1" onNavigateToTab={onNavigateToTab} />)
 
     expect(screen.getByText('Yes')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /view restrictive practices tab/i }))
+    expect(onNavigateToTab).toHaveBeenCalledWith('restrictive-practices')
+  })
+})
+
+// Density verdict, touch: both "View Restrictive Practices tab" links are 32px-and-under text buttons. Under
+// `pointer: coarse` they carry the TAP_AREA pad (a 44px hit area centred on the text) rather than growing.
+describe('SupportProfileTab — 44px coarse-pointer hit area', () => {
+  const pad = TAP_AREA.split(' ')
+
+  it('pads the link in the Support Needs fact list', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ hasRestrictivePracticeFlag: true }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const link = screen.getByRole('button', { name: /view restrictive practices tab/i })
+    expect(link).toHaveClass(...pad, 'text-xs', 'hover:underline')
+  })
+
+  it('pads the link beside the Restrictive Practice Details heading too', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockUseSupportProfile.mockReturnValue({
+      data: { id: 'sp-1', participantId: 'participant-1', communicationNotes: null, behaviourSupportNotes: null, restrictivePracticeDetails: 'Legacy PRN note.', manualHandlingNotes: null, medicationHealthSummary: null, emergencyConsiderations: null, travelSpecificNotes: null, reviewDate: null },
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const links = screen.getAllByRole('button', { name: /view restrictive practices tab/i })
+    // one in the Support Needs list, one beside the details heading
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveClass(...pad)
+  })
+
+  it('still navigates from the padded link', async () => {
+    const user = userEvent.setup()
+    const onNavigateToTab = vi.fn()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ hasRestrictivePracticeFlag: true }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" onNavigateToTab={onNavigateToTab} />)
+
     await user.click(screen.getByRole('button', { name: /view restrictive practices tab/i }))
     expect(onNavigateToTab).toHaveBeenCalledWith('restrictive-practices')
   })

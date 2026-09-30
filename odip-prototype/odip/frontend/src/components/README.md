@@ -29,6 +29,7 @@ copying it.
 - [PageHeader](#pageheader)
 - [Tabs](#tabs)
 - [ActionButtons](#actionbuttons)
+- [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -524,7 +525,9 @@ Accessibility contract: `role="tablist"` / `role="tab"` / `role="tabpanel"`, `ar
 `aria-controls` (only when a real panel exists), roving tabindex, ArrowLeft/ArrowRight (wrapping),
 Home/End, and disabled tabs skipped. An `active` value that matches no enabled tab falls back to
 the first enabled tab rather than rendering a strip with nothing selected. Long tab sets
-(e.g. the 11-tab participant detail) wrap and scroll rather than overflowing the page.
+(e.g. the 11-tab participant detail) never overflow the page: below `md` the strip is ONE row that scrolls
+sideways (scrollbar hidden, each tab a `--tap-min` 44px on touch), and the active tab is scrolled into view inside
+the strip whenever `active` changes; from `md` up it wraps onto extra rows as before.
 
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a
@@ -538,6 +541,46 @@ the first enabled tab rather than rendering a strip with nothing selected. Long 
 actions. Props: `editTo` (renders a `<Link>`), `onEdit`, `onDelete`, `onRestore`,
 `showArchived` (swaps Delete for Restore). Every button stops click propagation, so it's
 safe to drop into a `DataTable` row that also has `onRowClick`.
+
+---
+
+## Touch hit areas
+
+Spec §1: on a touch screen (`pointer: coarse`) a 36px control keeps its size and gets a hit area padded to 44px.
+`tapArea.ts` exports `TAP_AREA`, the one class list that does it: a transparent, centred `::before` sized
+`max(100%, var(--tap-min))`. `--tap-min` (index.css) is `0px` on a mouse — the pseudo-element is then exactly the
+control's own box, so nothing changes on desktop — and `44px` under coarse. A tap in the padding is a tap on the
+control (the pseudo-element belongs to it). Already applied to `Button` (`size="sm"` and `iconOnly`) and the
+`Dropdown` pill and menu triggers; add it to any other content-sized control shorter than 44px.
+
+Rules: `TAP_AREA` includes `relative`, so the control takes no other `position`; the pad reaches
+`(44 − visual size) / 2` past each edge, so neighbouring controls must sit at least that far apart under coarse
+(widen the gap with `pointer-coarse:gap-*`, as `RowActions` does: 6px → 8px); an `overflow-hidden` ancestor clips the
+pad. For controls that sit flush in a `justify-around` row (the mobile bottom nav) use a `min-h/min-w-[var(--tap-min)]`
+floor instead — it cannot overlap a neighbour. `Dropdown variant="icon"` is deliberately not padded (its one consumer
+is flush against a roster chip).
+
+Three more pieces of the same story (all in `tapArea.ts` or built on it):
+
+- **`TAP_FLOOR`** (`min-h-[var(--tap-min)]`, with `inline-flex` and `items-center` under `pointer-coarse:` only) is the
+  other route, for a standalone link that has a line to itself: "View All", "← Back to Trips" on the create pages. The
+  link is 44px tall on touch (0px floor on a mouse, where it stays the plain inline link box for box) and centred in
+  that height. It adds real layout height, so it needs no neighbour spacing and can never be clipped by an `overflow`
+  ancestor; prefer the pad where growing the box would move things.
+- **`TAP_AREA_LINKS`** is `TAP_AREA` for every link in a table cell, written once on `DataTable`'s body `<td>`: a
+  `render: row => <Link>` gets a 44px hit area with no caller code, and on a mouse not even `position` changes. It is a
+  single class, `tap-area-links`, a `@utility` in `index.css` (all of it inside `@media (pointer: coarse)`), so a cell
+  carries one class name rather than ten arbitrary-variant ones. A `truncate`/`overflow-hidden` link clips its own pad, so
+  give it `TAP_TRUNCATED_LINK` (vertical padding from md up) instead. The pager's Previous/Next take `--control-h` (44px
+  on touch) rather than a pad.
+- **`TAP_ICON_SQUARE`** is the touch shape of a small icon control in a row cluster: `TAP_AREA` plus the
+  `--control-h-sm` square (36px) with the icon centred, under `pointer-coarse:` only. `ActionButtons` uses it, and so
+  do the hand-rolled icon clusters on the trip detail Bookings and Staff tabs; two neighbours need 8px between them
+  there (a `gap-2` row) so their pads touch and never overlap. A link that sits in such a cluster and is NOT padded
+  the same way would take DataTable's `TAP_AREA_LINKS` pad and overlap its small neighbours.
+- **`ActionButtons`** carries `TAP_ICON_SQUARE` on each icon control: the `--control-h-sm` square (36px) under coarse
+  wherever it sits (a DataTable row or a card), and it opens its gap from 4px to 8px there so the pads touch and never
+  overlap.
 
 ---
 

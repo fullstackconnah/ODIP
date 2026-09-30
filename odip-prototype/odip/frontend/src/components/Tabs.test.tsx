@@ -232,3 +232,172 @@ describe('Tabs primitive — accessibility and keyboard', () => {
     for (const p of hidden) expect(p).toHaveAttribute('tabindex', '-1')
   })
 })
+
+// Density verdict (mobile) — jsdom applies no CSS, so this asserts the class contract: every tab takes
+// a floor from the --tap-min token (0 on a mouse, 44px under `pointer: coarse`) rather than a fixed
+// pixel height, so the touch target grows without Tabs branching on the pointer type.
+describe('Tabs primitive — touch target height', () => {
+  it('gives every tab the --tap-min height floor, disabled or not', () => {
+    const tabs: TabItem[] = [
+      { id: 'one', label: 'One', content: <div>panel-one</div> },
+      { id: 'two', label: 'Two', content: <div>panel-two</div>, disabled: true },
+    ]
+    render(<Harness tabs={tabs} initial="one" />)
+
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('min-h-[var(--tap-min)]')
+    }
+  })
+})
+
+// Density polish (N1) — on a phone a 10-tab strip used to wrap into five 44px rows (~240px before any
+// content). Below md it is now ONE row that scrolls sideways; from md up it wraps as before. jsdom applies
+// no CSS, so the layout is pinned as classes and the scroll-into-view behaviour with mocked geometry.
+describe('Tabs primitive — one scrolling strip below md', () => {
+  it('is a single non-wrapping, horizontally scrolling row below md with its scrollbar hidden', () => {
+    render(<Harness tabs={demoTabs} initial="one" />)
+
+    const strip = screen.getByRole('tablist', { name: 'Demo tabs' })
+    expect(strip).toHaveClass('flex', 'flex-nowrap', 'overflow-x-auto')
+    // The scrollbar is hidden on the strip only below md (Tailwind has no scrollbar-width utility).
+    expect(strip).toHaveClass('max-md:[scrollbar-width:none]', 'max-md:[&::-webkit-scrollbar]:hidden')
+    // Never a bare `flex-wrap`: that is the five-row phone layout this replaced.
+    expect(strip).not.toHaveClass('flex-wrap')
+  })
+
+  it('wraps from md up, where the strip has the room, exactly as before', () => {
+    render(<Harness tabs={demoTabs} initial="one" />)
+
+    const strip = screen.getByRole('tablist', { name: 'Demo tabs' })
+    expect(strip).toHaveClass('md:flex-wrap', 'gap-x-4', 'gap-y-1', 'border-b')
+    // The scrollbar stays available from md up: the hiding classes are all `max-md:`.
+    expect(strip.className).not.toMatch(/(^|\s)(?:md:)?\[scrollbar-width/)
+  })
+
+  it('never lets a tab shrink or wrap its label inside the scrolling row', () => {
+    render(<Harness tabs={demoTabs} initial="one" />)
+
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('shrink-0', 'whitespace-nowrap')
+    }
+  })
+
+  it('keeps the tab semantics of the strip: roving tabindex, aria-selected and ArrowRight/Home/End', async () => {
+    const user = userEvent.setup()
+    render(<Harness tabs={demoTabs} initial="one" />)
+
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('tabindex', '-1')
+    screen.getByRole('tab', { name: 'One' }).focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveFocus()
+    await user.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'Three' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Home}')
+    expect(screen.getByRole('tab', { name: 'One' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('Tabs primitive — the active tab scrolls into view inside the strip', () => {
+  const manyTabs: TabItem[] = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ({ id, label: id.toUpperCase() }))
+
+  type Box = { left: number; width: number }
+  const rect = ({ left, width }: Box) => ({ left, right: left + width, width, top: 0, bottom: 44, height: 44, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
+
+  /** Gives the strip and its tabs the geometry jsdom does not have: a 300px window on 1000px of tabs. */
+  function mockGeometry(strip: HTMLElement, opts: { scrollWidth?: number; scrollLeft?: number; boxes: Record<string, Box> }) {
+    Object.defineProperty(strip, 'scrollWidth', { configurable: true, value: opts.scrollWidth ?? 1000 })
+    Object.defineProperty(strip, 'clientWidth', { configurable: true, value: 300 })
+    strip.scrollLeft = opts.scrollLeft ?? 0
+    strip.getBoundingClientRect = () => rect({ left: 0, width: 300 })
+    for (const [name, box] of Object.entries(opts.boxes)) {
+      screen.getByRole('tab', { name }).getBoundingClientRect = () => rect(box)
+    }
+  }
+
+  function setup(initial = 'a') {
+    const scrollTo = vi.fn()
+    const view = render(<Tabs tabs={manyTabs} active={initial} onChange={() => {}} ariaLabel="Many" />)
+    const strip = screen.getByRole('tablist', { name: 'Many' })
+    strip.scrollTo = scrollTo as unknown as typeof strip.scrollTo
+    const select = (id: string) => view.rerender(<Tabs tabs={manyTabs} active={id} onChange={() => {}} ariaLabel="Many" />)
+    return { strip, scrollTo, select }
+  }
+
+  it('centres a newly active tab that is cut off, clamped to the strip’s scroll range', () => {
+    const { strip, scrollTo, select } = setup('a')
+    mockGeometry(strip, { boxes: { E: { left: 500, width: 100 } } })
+
+    select('e')
+
+    // 0 + (500 - 0) - (300 - 100) / 2 = 400, inside [0, 1000 - 300].
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith({ left: 400 })
+  })
+
+  it('never scrolls past either end of the strip', () => {
+    const { strip, scrollTo, select } = setup('a')
+    mockGeometry(strip, { boxes: { F: { left: 900, width: 100 }, A: { left: -800, width: 100 } } })
+
+    select('f')
+    // 0 + (900 - 0) - 100 = 800, clamped to scrollWidth - clientWidth = 700.
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 700 })
+    strip.scrollLeft = 700
+    select('a')
+    // 700 + (-800 - 0) - 100 = -200, clamped to 0.
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 0 })
+  })
+
+  it('leaves the strip alone when the active tab is already fully visible', () => {
+    const { strip, scrollTo, select } = setup('a')
+    mockGeometry(strip, { boxes: { B: { left: 100, width: 100 } } })
+
+    select('b')
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the strip does not overflow (the wrapping layout from md up)', () => {
+    const { strip, scrollTo, select } = setup('a')
+    mockGeometry(strip, { scrollWidth: 300, boxes: { E: { left: 500, width: 100 } } })
+
+    select('e')
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('moves only the strip: it never calls scrollIntoView, which would scroll the page as well', () => {
+    const scrollIntoView = vi.fn()
+    const proto = Element.prototype as unknown as Record<string, unknown>
+    proto.scrollIntoView = scrollIntoView
+    try {
+      const { strip, select } = setup('a')
+      mockGeometry(strip, { boxes: { E: { left: 500, width: 100 } } })
+      select('e')
+      expect(scrollIntoView).not.toHaveBeenCalled()
+    } finally {
+      // jsdom has no scrollIntoView of its own: put the prototype back as it was.
+      delete proto.scrollIntoView
+    }
+  })
+
+  it('falls back to assigning scrollLeft where the element has no scrollTo', () => {
+    const { strip, select } = setup('a')
+    // An environment without Element.scrollTo (jsdom itself has none: setup() had to add one).
+    ;(strip as unknown as { scrollTo?: unknown }).scrollTo = undefined
+    mockGeometry(strip, { boxes: { E: { left: 500, width: 100 } } })
+
+    select('e')
+
+    expect(strip.scrollLeft).toBe(400)
+  })
+
+  it('does nothing for an unknown or disabled active id', () => {
+    const { strip, scrollTo, select } = setup('a')
+    mockGeometry(strip, { boxes: { E: { left: 500, width: 100 } } })
+
+    select('missing')
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+})

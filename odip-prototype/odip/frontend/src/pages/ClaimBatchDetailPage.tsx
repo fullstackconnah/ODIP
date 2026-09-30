@@ -4,15 +4,11 @@ import type { BillableEventDto } from '@/api/types'
 import { DataTable } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { StatCard } from '@/components/StatCard'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
+import { FactBar } from '@/components/FactBar'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { CheckCircle2, Clock, Download, FileWarning, Loader2 } from 'lucide-react'
-
-const primaryBtn =
-  'inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium ' +
-  'hover:bg-[var(--color-primary)]/90 active:bg-[var(--color-primary)]/80 focus-visible:outline-none focus-visible:ring-2 ' +
-  'focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ' +
-  'transition-all shadow-md shadow-[var(--color-primary)]/20'
 
 const linkBtn =
   'text-xs font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none ' +
@@ -29,27 +25,23 @@ function formatDateTimeAu(value: string | null | undefined): string {
 // loaded states, and avoids a bare spinner per the surface's quality bar.
 function DetailSkeleton() {
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div role="status" aria-live="polite" className="sr-only">Loading claim batch…</div>
-      <div aria-hidden="true" className="space-y-6">
+      <div aria-hidden="true" className="flex flex-col gap-[var(--section-gap)]">
         <div className="h-4 w-32 rounded bg-[var(--color-input)] animate-pulse" />
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-7 w-64 rounded bg-[var(--color-input)] animate-pulse" />
+            <div className="h-6 w-64 rounded bg-[var(--color-input)] animate-pulse" />
             <div className="h-4 w-40 rounded bg-[var(--color-input)] animate-pulse" />
           </div>
-          <div className="h-10 w-44 rounded-lg bg-[var(--color-input)] animate-pulse" />
+          <div className="h-8 w-44 rounded-[var(--radius-md)] bg-[var(--color-input)] animate-pulse" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 rounded-xl bg-[var(--color-input)] animate-pulse" />
-          ))}
-        </div>
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+        <div className="h-11 rounded-[var(--radius-md)] bg-[var(--color-input)] animate-pulse" />
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
           <div className="h-10 bg-[var(--color-accent)]" />
           <div className="divide-y divide-[var(--color-border)]">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 p-3">
+              <div key={i} className="flex items-center gap-4 p-2">
                 <div className="h-4 flex-[2] rounded bg-[var(--color-input)] animate-pulse" />
                 <div className="h-4 flex-1 rounded bg-[var(--color-input)] animate-pulse" />
                 <div className="h-4 flex-1 rounded bg-[var(--color-input)] animate-pulse" />
@@ -72,7 +64,7 @@ export default function ClaimBatchDetailPage() {
 
   if (isError || !batch) {
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
         <EmptyState
           icon={FileWarning}
           title="Claim batch not found"
@@ -92,16 +84,15 @@ export default function ClaimBatchDetailPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/billing/claim-batches" className={linkBtn}>← Back to Claim Batches</Link>
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold text-[var(--color-foreground)] font-mono">{batch.fileName}</h1>
-          {isSubmitted ? (
+      <PageHeader
+        title={batch.fileName}
+        subtitle={
+          isSubmitted ? (
             <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-semibold">
               <CheckCircle2 className="w-3.5 h-3.5" /> Submitted to NDIA
             </span>
@@ -109,41 +100,44 @@ export default function ClaimBatchDetailPage() {
             <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-[var(--color-input)] text-[var(--color-muted-foreground)] font-semibold">
               <Clock className="w-3.5 h-3.5" /> Draft — not yet submitted
             </span>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={downloadProdaFile.isPending || events.length === 0}
-            className={primaryBtn}
-          >
-            {downloadProdaFile.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
+          )
+        }
+        action={
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleDownload}
+              disabled={downloadProdaFile.isPending || events.length === 0}
+            >
+              {downloadProdaFile.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloadProdaFile.isPending ? 'Preparing file…' : 'Download PRODA file'}
+            </Button>
+            {downloadProdaFile.isError && (
+              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
             )}
-            {downloadProdaFile.isPending ? 'Preparing file…' : 'Download PRODA file'}
-          </button>
-          {downloadProdaFile.isError && (
-            <p role="alert" className="text-xs text-[var(--color-destructive)]">
-              Couldn't download the file. Try again, or contact support if this keeps happening.
-            </p>
-          )}
-        </div>
-      </div>
+          </div>
+        }
+      />
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Events" value={events.length} />
-        <StatCard label="Total Amount" value={formatCurrency(batch.totalAmount)} />
-        <StatCard label="Created" value={formatDateTimeAu(batch.createdAt)} />
-        <StatCard label="Submitted" value={isSubmitted ? formatDateTimeAu(batch.submittedAt) : 'Not yet submitted'} />
-      </div>
+      <FactBar
+        segments={[
+          { label: 'Events', value: <span className="tabular-nums">{events.length}</span> },
+          { label: 'Total Amount', value: <span className="tabular-nums">{formatCurrency(batch.totalAmount)}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatDateTimeAu(batch.createdAt)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{isSubmitted ? formatDateTimeAu(batch.submittedAt) : 'Not yet submitted'}</span> },
+        ]}
+      />
 
       {/* Events table */}
-      <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
-        <div className="px-4 py-3 bg-[var(--color-surface-container-low)] flex items-center justify-between">
+      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+        <div className="px-[var(--card-pad)] py-2 bg-[var(--color-surface-container-low)] flex items-center justify-between">
           <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Batch Events</h2>
           <span className="text-xs text-[var(--color-muted-foreground)]">{events.length} events</span>
         </div>
@@ -175,7 +169,7 @@ export default function ClaimBatchDetailPage() {
                 key: 'supportItemNumber',
                 header: 'Support Item',
                 sortable: true,
-                className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
+                className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
               },
               { key: 'dayType', header: 'Day Type', sortable: true },
               {
@@ -183,7 +177,7 @@ export default function ClaimBatchDetailPage() {
                 header: 'Dates',
                 sortable: true,
                 render: (e: BillableEventDto) => (
-                  <span className="text-xs text-[var(--color-muted-foreground)] whitespace-nowrap">
+                  <span className="text-sm tabular-nums text-[var(--color-muted-foreground)] whitespace-nowrap">
                     {formatDateAu(e.supportsDeliveredFrom)} – {formatDateAu(e.supportsDeliveredTo)}
                   </span>
                 ),
@@ -192,7 +186,9 @@ export default function ClaimBatchDetailPage() {
                 key: 'quantity',
                 header: 'Qty / Hours',
                 align: 'right' as const,
-                render: (e: BillableEventDto) => (e.hours != null ? `${e.hours}h` : e.quantity != null ? String(e.quantity) : '—'),
+                render: (e: BillableEventDto) => (
+                  <span className="tabular-nums">{e.hours != null ? `${e.hours}h` : e.quantity != null ? String(e.quantity) : '—'}</span>
+                ),
               },
               {
                 key: 'totalAmount',
@@ -200,7 +196,7 @@ export default function ClaimBatchDetailPage() {
                 type: 'currency' as const,
                 align: 'right' as const,
                 sortable: true,
-                className: 'font-medium',
+                className: 'font-medium tabular-nums',
               },
               {
                 key: 'status',
@@ -210,13 +206,13 @@ export default function ClaimBatchDetailPage() {
               {
                 key: 'claimReference',
                 header: 'Reference',
-                className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
+                className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
               },
             ]}
             footer={
               <tr>
-                <td colSpan={5} className="p-3 text-right font-semibold text-[var(--color-foreground)]">Total</td>
-                <td className="p-3 text-right font-bold text-[var(--color-foreground)]">{formatCurrency(batch.totalAmount)}</td>
+                <td colSpan={5} className="p-2 text-right font-semibold text-[var(--color-foreground)]">Total</td>
+                <td className="p-2 text-right font-bold tabular-nums text-[var(--color-foreground)]">{formatCurrency(batch.totalAmount)}</td>
                 <td colSpan={2} />
               </tr>
             }

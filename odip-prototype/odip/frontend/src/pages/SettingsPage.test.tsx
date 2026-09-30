@@ -3,10 +3,13 @@ import { act } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, settingsData } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
+  // Event Templates tab data; defaults to "no templates" (see beforeEach).
+  mockUseEventTemplates: vi.fn((): { data: unknown[] | undefined; isLoading?: boolean } => ({ data: [] })),
   // A stable object reference, matching what TanStack Query actually hands a real useSettings()
   // call across re-renders (same cached `data` identity until it's refetched) — an inline object
   // literal in the mock factory would give QualificationSettingsTab's
@@ -30,8 +33,18 @@ function renderSettingsPage() {
   return { router, ...render(<RouterProvider router={router} />) }
 }
 
+// The Support Catalogue tab invalidates queries after an import, so it needs a QueryClient the other tabs don't.
+function renderSettingsPageWithQueryClient() {
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
+}
+
 vi.mock('@/api/hooks', () => ({
-  useEventTemplates: () => ({ data: [] }),
+  useEventTemplates: mockUseEventTemplates,
   useActivities: () => ({ data: [] }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
@@ -73,6 +86,114 @@ vi.mock('@/lib/permissions', () => ({
 
 beforeEach(() => {
   mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+  mockUseEventTemplates.mockReturnValue({ data: [] })
+})
+
+describe('SettingsPage — Event Templates tab', () => {
+  it('shows an empty state with a single "+ New Template" action when there are no templates', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    expect(screen.getByText('No event templates yet')).toBeInTheDocument()
+    // The action lives inside the empty state, not duplicated in the toolbar.
+    const actions = screen.getAllByRole('button', { name: '+ New Template' })
+    expect(actions).toHaveLength(1)
+
+    await user.click(actions[0])
+    expect(await screen.findByRole('heading', { name: 'New Template' })).toBeInTheDocument()
+  })
+
+  it('shows the empty state when every template is inactive', () => {
+    mockUseEventTemplates.mockReturnValue({
+      data: [{ id: 't1', eventName: 'Old Escape', eventCode: 'OE', isActive: false }],
+    })
+    renderSettingsPage()
+
+    expect(screen.getByText('No event templates yet')).toBeInTheDocument()
+    expect(screen.queryByText('Old Escape')).not.toBeInTheDocument()
+  })
+
+  it('lists active templates with the toolbar action and no empty state', () => {
+    mockUseEventTemplates.mockReturnValue({
+      data: [{ id: 't1', eventName: 'Beach Escape', eventCode: 'BE', isActive: true }],
+    })
+    renderSettingsPage()
+
+    expect(screen.getByText('Beach Escape')).toBeInTheDocument()
+    expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '+ New Template' })).toHaveLength(1)
+  })
+
+  it('does not claim there are no templates while they are still loading', () => {
+    mockUseEventTemplates.mockReturnValue({ data: undefined, isLoading: true })
+    renderSettingsPage()
+
+    expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
+  })
+
+  it('draws the empty-state "+ New Template" as a Button at --control-h (32px, 44px on a coarse pointer), not a hand-rolled 44px link', () => {
+    const { container } = renderSettingsPage()
+
+    const action = screen.getByRole('button', { name: '+ New Template' })
+    expect(action).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+    // EmptyState's own action slot is the only place that min-h-[44px] link-button is drawn; it is left unused here.
+    expect(container.querySelector('.min-h-\\[44px\\]')).toBeNull()
+  })
+})
+
+describe('SettingsPage — buttons are the Button primitive', () => {
+  it('draws Save Settings as a Button at --control-h, not a hand-rolled rounded-full pill', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
+
+    const save = screen.getByRole('button', { name: 'Save Settings' })
+    expect(save).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+    expect(save.className).not.toMatch(/rounded-full|py-2\.5/)
+  })
+
+  it('draws the Public Holidays actions as Buttons: + Add Holiday and Sync Holidays at --control-h, the add-row Save and Cancel at --control-h-sm', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    for (const name of ['+ Add Holiday', 'Sync Holidays']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-full/)
+    }
+
+    await user.click(screen.getByRole('button', { name: '+ Add Holiday' }))
+    for (const name of ['Save', 'Cancel']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveClass('h-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-(lg|full)/)
+    }
+
+    // Cancel still closes the add row.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByPlaceholderText('Holiday name')).not.toBeInTheDocument()
+  })
+
+  it('opens the catalogue import from a Button, and closes it from a labelled iconOnly Close button (the bare ✕ glyph had no name)', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+
+    await user.click(open)
+    expect(screen.getByText('Import NDIS Support Catalogue')).toBeInTheDocument()
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(close).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]')
+
+    await user.click(close)
+    expect(screen.queryByText('Import NDIS Support Catalogue')).not.toBeInTheDocument()
+  })
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {

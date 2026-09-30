@@ -15,6 +15,7 @@ import type { ParticipantDetailDto } from '@/api/types/participants'
 import { GENDER_LABELS } from '@/api/types/participants'
 import { GENDERS } from '@/api/types/enums'
 import { ReadOnlyField, ReadOnlyGroupField } from '../profileHelpers'
+import { formGrid, span } from '@/lib/formGrid'
 
 const EMPTY: ReadonlySet<string> = new Set()
 
@@ -30,50 +31,52 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
 }) {
   const hidden = hiddenFields ?? EMPTY
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Identity (from Intake)" className="space-y-4">
-        <ReadOnlyField field="firstName" label="First Name" value={participant.firstName || '—'} />
-        <ReadOnlyField field="lastName" label="Last Name" value={participant.lastName || '—'} />
-        <ReadOnlyField field="preferredName" label="Preferred Name" value={participant.preferredName || '—'} />
-        <ReadOnlyField field="dateOfBirth" label="Date of Birth" value={participant.dateOfBirth || '—'} />
-        <ReadOnlyField field="phone" label="Phone" value={participant.phone || '—'} />
-        <ReadOnlyField field="email" label="Email" value={participant.email || '—'} />
-        <ReadOnlyField field="addressStreet" label="Address — Street" value={participant.addressStreet || '—'} />
-        <ReadOnlyField field="addressSuburb" label="Address — Suburb" value={participant.addressSuburb || '—'} />
-        <ReadOnlyField field="addressState" label="Address — State" value={participant.addressState || '—'} />
-        <ReadOnlyField field="addressPostcode" label="Address — Postcode" value={participant.addressPostcode || '—'} />
-        <ReadOnlyField field="ndisNumber" label="NDIS Number" value={participant.ndisNumber || '—'} />
-        <ReadOnlyField field="planStartDate" label="Plan Start Date" value={participant.planStartDate || '—'} />
-        <ReadOnlyField field="planEndDate" label="Plan End Date" value={participant.planEndDate || '—'} />
-        <ReadOnlyField field="planType" label="Plan Type" value={participant.planType || '—'} />
-        <ReadOnlyField field="fundingSource" label="Funding Source" value={participant.fundingSource || '—'} />
-        <ReadOnlyGroupField field="contactRoles" label="Contacts">
-          Managed on the participant's Contacts tab.
-        </ReadOnlyGroupField>
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Identity (from Intake)">
+        <div className={formGrid}>
+          <ReadOnlyField field="firstName" label="First Name" value={participant.firstName || '—'} />
+          <ReadOnlyField field="lastName" label="Last Name" value={participant.lastName || '—'} />
+          <ReadOnlyField field="preferredName" label="Preferred Name" value={participant.preferredName || '—'} />
+          <ReadOnlyField field="dateOfBirth" label="Date of Birth" value={participant.dateOfBirth || '—'} />
+          <ReadOnlyField field="phone" label="Phone" value={participant.phone || '—'} />
+          <ReadOnlyField field="email" label="Email" value={participant.email || '—'} />
+          <ReadOnlyField field="addressStreet" label="Address — Street" value={participant.addressStreet || '—'} />
+          <ReadOnlyField field="addressSuburb" label="Address — Suburb" value={participant.addressSuburb || '—'} />
+          <ReadOnlyField field="addressState" label="Address — State" value={participant.addressState || '—'} />
+          <ReadOnlyField field="addressPostcode" label="Address — Postcode" value={participant.addressPostcode || '—'} />
+          <ReadOnlyField field="ndisNumber" label="NDIS Number" value={participant.ndisNumber || '—'} />
+          <ReadOnlyField field="planStartDate" label="Plan Start Date" value={participant.planStartDate || '—'} />
+          <ReadOnlyField field="planEndDate" label="Plan End Date" value={participant.planEndDate || '—'} />
+          <ReadOnlyField field="planType" label="Plan Type" value={participant.planType || '—'} />
+          <ReadOnlyField field="fundingSource" label="Funding Source" value={participant.fundingSource || '—'} />
+          <ReadOnlyGroupField field="contactRoles" label="Contacts">
+            Managed on the participant's Contacts tab.
+          </ReadOnlyGroupField>
+        </div>
       </Card>
 
-      <div className="space-y-6">
-        <Card title="Additional Personal Details" className="space-y-4">
-          <FormField label="Middle Name">
+      <Card title="Additional Personal Details">
+        <div className={formGrid}>
+          <FormField label="Middle Name" className={span.medium}>
             <input id="middleName" {...register('middleName')} />
           </FormField>
-          <FormField label="Gender">
+          <FormField label="Gender" className={span.short}>
             <select id="gender" {...register('gender')}>
               <option value="">Not specified</option>
               {GENDERS.map((g) => <option key={g} value={g}>{GENDER_LABELS[g]}</option>)}
             </select>
           </FormField>
-          <FormField label="Gender Self-Description">
+          <FormField label="Gender Self-Description" className={span.medium}>
             <input id="genderSelfDescription" {...register('genderSelfDescription')} />
           </FormField>
-          <FormField label="Place of Birth">
+          <FormField label="Place of Birth" className={span.medium}>
             <input id="placeOfBirth" {...register('placeOfBirth')} />
           </FormField>
-          <FormField label="Country">
+          <FormField label="Country" className={span.medium}>
             <input id="country" {...register('country')} />
           </FormField>
           {!hidden.has('preferredStaffId') && (
-            <FormField label="Preferred Staff Member">
+            <FormField label="Preferred Staff Member" className={span.medium}>
               <Controller
                 control={control}
                 name="preferredStaffId"
@@ -89,32 +92,36 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
               />
             </FormField>
           )}
-          <CheckboxField label="Disability Support for Older Australians (DSOA)" id="isDsoa" {...register('isDsoa')} />
-        </Card>
+          <CheckboxField label="Disability Support for Older Australians (DSOA)" id="isDsoa" {...register('isDsoa')} className={span.medium} />
+        </div>
+      </Card>
 
-        <Card title="Identification Cards" className="space-y-4">
-          <FormField label="Pension Card Number"><input id="pensionCardNumber" {...register('pensionCardNumber')} /></FormField>
-          <FormField label="Pension Card Expiry"><input id="pensionCardExpiry" type="date" {...register('pensionCardExpiry')} /></FormField>
-          <FormField label="Medicare Number"><input id="medicareNumber" {...register('medicareNumber')} /></FormField>
-          <FormField label="Medicare Expiry"><input id="medicareExpiry" type="date" {...register('medicareExpiry')} /></FormField>
-          <FormField label="Companion Card Number"><input id="companionCardNumber" {...register('companionCardNumber')} /></FormField>
-          <FormField label="Companion Card Expiry"><input id="companionCardExpiry" type="date" {...register('companionCardExpiry')} /></FormField>
-        </Card>
+      <Card title="Identification Cards">
+        <div className={formGrid}>
+          <FormField label="Pension Card Number" className={span.medium}><input id="pensionCardNumber" {...register('pensionCardNumber')} /></FormField>
+          <FormField label="Pension Card Expiry" className={span.short}><input id="pensionCardExpiry" type="date" {...register('pensionCardExpiry')} /></FormField>
+          <FormField label="Medicare Number" className={span.medium}><input id="medicareNumber" {...register('medicareNumber')} /></FormField>
+          <FormField label="Medicare Expiry" className={span.short}><input id="medicareExpiry" type="date" {...register('medicareExpiry')} /></FormField>
+          <FormField label="Companion Card Number" className={span.medium}><input id="companionCardNumber" {...register('companionCardNumber')} /></FormField>
+          <FormField label="Companion Card Expiry" className={span.short}><input id="companionCardExpiry" type="date" {...register('companionCardExpiry')} /></FormField>
+        </div>
+      </Card>
 
-        <Card title="Private Health, Taxi Card & Physical Description" className="space-y-4">
-          <FormField label="Private Health Fund"><input id="privateHealthFund" {...register('privateHealthFund')} /></FormField>
-          <FormField label="Private Health Membership Number"><input id="privateHealthMembershipNumber" {...register('privateHealthMembershipNumber')} /></FormField>
-          <FormField label="Taxi Card Number"><input id="taxiCardNumber" {...register('taxiCardNumber')} /></FormField>
-          <FormField label="Hair Colour"><input id="hairColour" {...register('hairColour')} /></FormField>
-          <FormField label="Eye Colour"><input id="eyeColour" {...register('eyeColour')} /></FormField>
-          <FormField label="Weight (kg)" error={errors.weightKg?.message}>
+      <Card title="Private Health, Taxi Card & Physical Description">
+        <div className={formGrid}>
+          <FormField label="Private Health Fund" className={span.medium}><input id="privateHealthFund" {...register('privateHealthFund')} /></FormField>
+          <FormField label="Private Health Membership Number" className={span.medium}><input id="privateHealthMembershipNumber" {...register('privateHealthMembershipNumber')} /></FormField>
+          <FormField label="Taxi Card Number" className={span.medium}><input id="taxiCardNumber" {...register('taxiCardNumber')} /></FormField>
+          <FormField label="Hair Colour" className={span.short}><input id="hairColour" {...register('hairColour')} /></FormField>
+          <FormField label="Eye Colour" className={span.short}><input id="eyeColour" {...register('eyeColour')} /></FormField>
+          <FormField label="Weight (kg)" error={errors.weightKg?.message} className={span.short}>
             <input id="weightKg" type="number" min="0" max="999.99" step="0.1" {...register('weightKg')} />
           </FormField>
-          <FormField label="Height (cm)" error={errors.heightCm?.message}>
+          <FormField label="Height (cm)" error={errors.heightCm?.message} className={span.short}>
             <input id="heightCm" type="number" min="0" max="999.99" step="0.1" {...register('heightCm')} />
           </FormField>
-        </Card>
-      </div>
+        </div>
+      </Card>
     </div>
   )
 }

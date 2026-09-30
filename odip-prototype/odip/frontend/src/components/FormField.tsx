@@ -18,8 +18,15 @@ export type FormFieldProps = {
   children: ReactNode
 }
 
-export const inputClass = 'w-full px-4 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
-export const labelClass = 'block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]'
+const CONTROL_SURFACE = 'px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+
+export const inputClass = `w-full h-[var(--control-h)] ${CONTROL_SURFACE}`
+// A textarea must not carry the single-line control's fixed height, or its `rows` attribute is
+// ignored (it stayed one line tall however many rows a caller asked for). `min-h` keeps an empty
+// or rows={1} textarea level with its 32px/44px neighbours; `h-auto` lets `rows` set the height;
+// `py-1.5` keeps text off the border, which a fixed-height single line never needed.
+export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${CONTROL_SURFACE}`
+export const labelClass = 'block text-[13px] font-medium mb-1 text-[var(--color-muted-foreground)]'
 
 const NATIVE_INPUTS = ['input', 'select', 'textarea']
 
@@ -66,10 +73,11 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
       : children
     return (
       <div className={className}>
-        {/* min-h-[44px] gives the label — checkbox + text as one target — a WCAG 2.5.5-sized
-            hit area without inflating the visual checkbox (still w-4 h-4 via checkboxChild's own
+        {/* min-h-[var(--control-h)] gives the label — checkbox + text as one target — a
+            WCAG 2.5.5-sized hit area (32px on fine pointers, 44px under `pointer: coarse`)
+            without inflating the visual checkbox (still w-4 h-4 via checkboxChild's own
             className); the label wraps the input so the whole row remains one click/tap target. */}
-        <label className="flex items-center gap-3 py-1 min-h-[44px]">
+        <label className="flex items-center gap-3 py-1 min-h-[var(--control-h)]">
           {checkboxChild}
           <span className="text-sm text-[var(--color-foreground)]">
             {label}{required && ' *'}
@@ -90,9 +98,11 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
     && typeof children.type === 'string'
     && NATIVE_INPUTS.includes(children.type)
 
+  const isTextarea = isValidElement(children) && children.type === 'textarea'
+
   const enhanced = isNativeInput && !isCheckboxOrRadio
     ? cloneElement(children as ReactElement<EnhancedChildProps>, {
-        className: `${inputClass} ${(children.props as { className?: string }).className ?? ''}`,
+        className: `${isTextarea ? textareaClass : inputClass} ${(children.props as { className?: string }).className ?? ''}`,
         ...(existingId ? {} : { id: fieldId }),
         ...(required ? { 'aria-required': 'true' } : {}),
         ...(error ? { 'aria-invalid': 'true' } : {}),

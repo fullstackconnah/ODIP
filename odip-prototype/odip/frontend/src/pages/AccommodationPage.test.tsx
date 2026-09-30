@@ -66,11 +66,36 @@ describe('AccommodationPage — accessible names on action buttons (PP-69)', () 
   })
 })
 
+describe('AccommodationPage — card grid', () => {
+  it('collapses to one column on a phone through a min(22rem,100%) track floor', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    // jsdom has no layout, so the class is the only observable proof: a bare minmax(22rem,1fr)
+    // floor (352px) overflows a 320-360px phone viewport.
+    const grid = screen.getByRole('link', { name: 'Sunrise House' }).closest('.grid')!
+    expect(grid).toHaveClass('items-start', 'grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]')
+  })
+})
+
 describe('AccommodationPage — empty states (PP-94)', () => {
   it('shows a "no properties yet" empty state when the list is genuinely empty', () => {
     mockUseAccommodation.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
     expect(screen.getByText(/no properties yet/i)).toBeInTheDocument()
+  })
+})
+
+// Density polish (touch): the card's title link was a 24px target. It is a standalone link on the card's header line, so
+// it takes the --tap-min floor (inline-flex + centring under `pointer: coarse` only, so a mouse sees the same link).
+describe('AccommodationPage — card title link touch target', () => {
+  it('floors the property-name link at --tap-min and keeps its destination', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    const title = screen.getAllByRole('link', { name: 'Sunrise House' })[0]
+    expect(title).toHaveAttribute('href', '/accommodation/acc-1')
+    expect(title).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'font-semibold', 'hover:underline')
   })
 })

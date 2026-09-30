@@ -1,12 +1,14 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
-import { DataTable, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
+import { Button } from '@/components/Button'
+import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -57,31 +59,39 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
   const { id: currentUserId } = usePermissions()
 
   const columns: Column<FlaggedShiftNoteDto>[] = [
-    { key: 'age', header: 'Age', className: 'tabular-nums whitespace-nowrap', render: row => formatNoteAge(row.createdAt) },
+    { key: 'age', header: 'Age', className: 'tabular-nums', render: row => formatNoteAge(row.createdAt) },
     { key: 'shiftDate', header: 'Shift date', render: row => formatDateAu(row.shiftDate) },
     {
       key: 'participantName',
       header: 'Participant',
       render: row => (
-        <Link to={`/participants/${row.participantId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/participants/${row.participantId}`}
+          title={row.participantName}
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[12rem] md:truncate ${TAP_TRUNCATED_LINK}`}
+        >
           {row.participantName}
         </Link>
       ),
     },
-    { key: 'staffName', header: 'Staff', render: row => row.staffName ?? '—' },
+    { key: 'staffName', header: 'Staff', maxWidth: '10rem', render: row => row.staffName ?? '—' },
     {
       key: 'flaggedCategories',
       header: 'Flags',
+      // One line at md+ like every other cell: the chips stay on a single row (w-max) and the group
+      // is clipped at 16rem, instead of wrapping and pushing the row past --row-h.
       render: row => (
-        <div className="flex flex-wrap gap-1">
-          {row.flaggedCategories.map(category => (
-            <span
-              key={category}
-              className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"
-            >
-              {SHIFT_NOTE_FLAG_LABELS[category] ?? category}
-            </span>
-          ))}
+        <div className="md:max-w-[16rem] md:overflow-hidden">
+          <div className="flex flex-wrap gap-1 md:w-max md:flex-nowrap">
+            {row.flaggedCategories.map(category => (
+              <span
+                key={category}
+                className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+              >
+                {SHIFT_NOTE_FLAG_LABELS[category] ?? category}
+              </span>
+            ))}
+          </div>
         </div>
       ),
     },
@@ -89,7 +99,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       key: 'excerpt',
       header: 'Excerpt',
       render: row => (
-        <span title={row.excerpt} className="line-clamp-1 max-w-xs text-[var(--color-muted-foreground)]">
+        <span title={row.excerpt} className="block max-w-xs truncate text-[var(--color-muted-foreground)]">
           {row.excerpt}
         </span>
       ),
@@ -99,13 +109,14 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       header: '',
       align: 'right',
       render: row => (
-        <button
-          type="button"
+        // Always visible (not a hover-revealed RowActions): filing an incident is this queue's
+        // whole purpose, so hiding its only action behind a hover would hide the queue's point.
+        <Button
+          size="sm"
           onClick={() => navigate('/incidents/new', { state: buildFlaggedNotePrefill(row, currentUserId) })}
-          className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90"
         >
           File incident
-        </button>
+        </Button>
       ),
     },
   ]
@@ -233,15 +244,34 @@ export default function IncidentsPage() {
     setPage(1)
   }
 
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
+  // drops columns instead of growing rows. The primary columns (title, severity, status, date, QSC,
+  // actions) are always there; participant needs 1280, type 1536, trip and reported-by 1792.
+  // Budget, widest seeded rows, each column padded 2×12 (Manrope measured, see the density verdict
+  // report). 1280 (content 1280 − 232 − 2×20 = 1008, 1006 inside the border): title 264 (capped) +
+  // participant 165.1 + severity 88.2 + status 113.2 + date 104.3 + QSC 124.8 + actions 76 = 935.6,
+  // spare 70. 1536 adds type: 1125.3 of 1262. 1792 adds trip and reported-by: 1467.5 of 1518. The
+  // old layout always needed 1467.5, so its rows wrapped at every viewport under 1742px.
   const incidentColumns: Column<any>[] = [
-    { key: 'title', header: 'Title', sortable: true, className: 'font-medium' },
-    { key: 'incidentType', header: 'Type', sortable: true },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      className: 'font-medium',
+      render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
+    },
+    { key: 'incidentType', header: 'Type', sortable: true, priority: 'low', maxWidth: '9rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
+      priority: 'lowest',
       render: (i) => i.tripInstanceId && i.tripName ? (
-        <Link to={`/trips/${i.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/trips/${i.tripInstanceId}`}
+          title={i.tripName}
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${TAP_TRUNCATED_LINK}`}
+        >
           {i.tripName}
         </Link>
       ) : (i.tripName ?? '—'),
@@ -249,101 +279,133 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
+      priority: 'medium',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
-        <Link to={`/participants/${i.involvedParticipantId}`} className="text-[var(--color-primary)] hover:underline">
+        <Link
+          to={`/participants/${i.involvedParticipantId}`}
+          title={i.involvedParticipantName}
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${TAP_TRUNCATED_LINK}`}
+        >
           {i.involvedParticipantName}
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
-    { key: 'reportedByName', header: 'Reported By' },
+    { key: 'reportedByName', header: 'Reported By', priority: 'lowest', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
     {
       key: 'qscReportingStatus',
       header: 'QSC',
       render: (i) => i.qscReportingStatus === 'NotRequired' ? (
         <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
+      ) : i.isOverdue24h ? (
+        // Overdue is the one QSC state that must never be missed, so it always takes the solid
+        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
+        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
+        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
+        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
+        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
       ) : (
-        <StatusBadge
-          status={i.qscReportingStatus}
-          label={i.isOverdue24h ? 'OVERDUE' : formatQscLabel(i.qscReportingStatus)}
-          pulse={i.isOverdue24h}
-        />
+        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
       ),
     },
-    { key: 'actions', header: '', render: (i) => canWrite ? actionButtons(i) : null },
+    { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
   ]
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {canViewFlaggedNotes && (
-        <Tabs
-          tabs={[
-            { id: 'incidents', label: 'Incidents' },
-            { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
-          ]}
-          active={tab}
-          onChange={key => setTab(key as IncidentsTab)}
-          ariaLabel="Incidents sections"
-        />
-      )}
+  // Same condition the body uses to swap in the queue: a ?view=flagged-notes link from someone who
+  // can't see the tab still lands on the incidents list.
+  const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
+  // "1 incident requires", "2 incidents require": the verb agrees with the count.
+  const qscHeadline = overdueQsc.length === 1
+    ? '1 incident requires QSC reporting — 24-hour deadline exceeded'
+    : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
+  const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
+    <Button to="/incidents/new" size="md">
+      <Plus className="w-4 h-4" /> Report Incident
+    </Button>
+  )
 
-      {tab === 'flagged-notes' && canViewFlaggedNotes ? (
+  return (
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {/* The tabs share the H1 row (spec §3), and the H1 now renders on both tabs. PageHeader's title
+          row is `flex justify-between` without wrap, so this wrapper lets it wrap: on a phone the
+          tabs and button drop under the title instead of squeezing it. A plain wrapper also keeps
+          the title and filter rows in block flow, without the flex column's section gap between them. */}
+      <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
+        <PageHeader
+          title="Incident Reports"
+          subtitle={showFlaggedNotes ? undefined : `${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
+          action={(canViewFlaggedNotes || reportIncidentAction) && (
+            <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
+              {canViewFlaggedNotes && (
+                <Tabs
+                  tabs={[
+                    { id: 'incidents', label: 'Incidents' },
+                    { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
+                  ]}
+                  active={tab}
+                  onChange={key => setTab(key as IncidentsTab)}
+                  ariaLabel="Incidents sections"
+                  className="min-w-0"
+                />
+              )}
+              {reportIncidentAction && <div className="ml-auto">{reportIncidentAction}</div>}
+            </div>
+          )}
+        >
+          {!showFlaggedNotes && (
+            <>
+              {toggleButtons}
+              {!showArchived && (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Filter aria-hidden="true" className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                    <Dropdown
+                      variant="pill"
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      label="All Statuses"
+                      items={INCIDENT_STATUS_FILTER_ITEMS}
+                      colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+                    />
+                  </div>
+                  <div>
+                    <Dropdown
+                      variant="pill"
+                      value={severityFilter}
+                      onChange={setSeverityFilter}
+                      label="All Severities"
+                      items={INCIDENT_SEVERITY_FILTER_ITEMS}
+                      colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </PageHeader>
+      </div>
+
+      {showFlaggedNotes ? (
         <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} />
       ) : (
       <>
-      <PageHeader
-        title="Incident Reports"
-        subtitle={`${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
-        action={!showArchived && canCreateIncidents && (
-          <Link to="/incidents/new" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20">
-            <Plus className="w-4 h-4" /> Report Incident
-          </Link>
-        )}
-      >
-        {toggleButtons}
-        {!showArchived && (
-          <>
-            <div className="flex items-center gap-1.5">
-              <Filter aria-hidden="true" className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-              <Dropdown
-                variant="pill"
-                value={statusFilter}
-                onChange={setStatusFilter}
-                label="All Statuses"
-                items={INCIDENT_STATUS_FILTER_ITEMS}
-                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
-              />
-            </div>
-            <div>
-              <Dropdown
-                variant="pill"
-                value={severityFilter}
-                onChange={setSeverityFilter}
-                label="All Severities"
-                items={INCIDENT_SEVERITY_FILTER_ITEMS}
-                colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
-              />
-            </div>
-          </>
-        )}
-      </PageHeader>
-
-      {/* QSC Overdue Alert Banner */}
+      {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
+          the reason truncates (md+) before the link ever does. */}
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
-          className="flex items-center gap-3 p-4 rounded-xl bg-error-container border border-destructive/40 text-on-error-container"
+          className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-semibold text-sm">{overdueQsc.length} incident{overdueQsc.length !== 1 ? 's' : ''} require QSC reporting — 24-hour deadline exceeded</p>
-            <p className="text-xs mt-0.5 opacity-80">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</p>
-            <Link to="/incidents?qsc=overdue" className="inline-block mt-1 text-sm font-medium underline underline-offset-2">
-              View overdue incidents
-            </Link>
-          </div>
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm md:truncate">
+            <span className="font-semibold">{qscHeadline}</span>
+            <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
+          </p>
+          <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
+            View overdue incidents
+          </Link>
         </div>
       )}
 

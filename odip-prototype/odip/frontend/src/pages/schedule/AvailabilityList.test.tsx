@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AvailabilityList from './AvailabilityList'
 import type { ScheduleAvailabilityItemDto } from '@/api/types'
+import { TAP_AREA } from '@/components/tapArea'
 
 function makeItem(overrides: Partial<ScheduleAvailabilityItemDto> = {}): ScheduleAvailabilityItemDto {
   return {
@@ -106,5 +107,26 @@ describe('AvailabilityList — Legacy rows', () => {
   it('does not render notes text when absent', () => {
     renderList([makeItem({ notes: null })])
     expect(screen.queryByText('Back-to-back training block')).not.toBeInTheDocument()
+  })
+})
+
+// Density verdict, touch: the card-header link is 19.5px tall, so under `pointer: coarse` it carries the TAP_AREA
+// pad (a 44px hit area centred on it) instead of growing. The link inside the empty-state sentence is inline prose
+// and stays as it is.
+describe('AvailabilityList — 44px coarse-pointer hit area', () => {
+  const pad = TAP_AREA.split(' ')
+
+  it('pads the header "Manage on Leave page" link without touching its text size or colour', () => {
+    renderList([makeItem()])
+    const link = screen.getByRole('link', { name: /manage on leave page/i })
+    expect(link).toHaveClass(...pad, 'text-[13px]', 'text-[var(--color-primary)]', 'hover:underline')
+  })
+
+  it('leaves the inline link inside the empty-state sentence unpadded (a pad there would overlap the prose)', () => {
+    renderList([])
+    const [header, inline] = screen.getAllByRole('link', { name: /manage on leave page/i })
+    expect(header).toHaveClass(...pad)
+    expect(inline.className).not.toContain('before:')
+    expect(inline).not.toHaveClass('relative')
   })
 })

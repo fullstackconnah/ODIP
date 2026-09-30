@@ -114,24 +114,24 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[var(--color-primary)]/20">
+          <div className="w-16 h-16 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[var(--color-primary)]/20">
             <Map className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</h1>
           <p className="text-[var(--color-muted-foreground)] mt-2">NDIS Trip Management Platform</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+        <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
           <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
           {error && (
-            <div role="alert" className="mb-4 p-3 rounded-2xl bg-[var(--color-error-container)] text-[var(--color-on-error-container)] text-sm">
+            <div role="alert" className="mb-4 p-3 rounded-[var(--radius-lg)] bg-[var(--color-error-container)] text-[var(--color-on-error-container)] text-sm">
               {error}
             </div>
           )}
 
           {resetSent && (
-            <div className="mb-4 p-3 rounded-2xl bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm">
+            <div className="mb-4 p-3 rounded-[var(--radius-lg)] bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm">
               Password reset email sent. Check your inbox.
             </div>
           )}
@@ -144,7 +144,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                className="w-full px-4 py-2.5 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                 placeholder="Enter your email"
                 required
                 autoFocus
@@ -159,7 +159,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] pr-12 transition-all"
+                  className="w-full px-4 py-2.5 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] pr-12 transition-all"
                   placeholder="Enter your password"
                   required
                 />
@@ -179,7 +179,7 @@ export default function LoginPage() {
               id="login-submit"
               type="submit"
               disabled={login.isPending}
-              className="w-full py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
+              className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
             >
               {login.isPending ? 'Signing in...' : 'Sign In'}
             </button>
@@ -200,11 +200,11 @@ export default function LoginPage() {
         </form>
 
         {devAuthEnabled && (
-          <div className="mt-6 bg-white rounded-2xl p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+          <div className="mt-6 bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-px flex-1 bg-[#e5e2da]" />
+              <div className="h-px flex-1 bg-[var(--color-border)]" />
               <span className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wide">Developer sign-in</span>
-              <div className="h-px flex-1 bg-[#e5e2da]" />
+              <div className="h-px flex-1 bg-[var(--color-border)]" />
             </div>
 
             <div className="space-y-4">
@@ -215,7 +215,7 @@ export default function LoginPage() {
                     id="dev-login-user"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                    className="w-full px-4 py-2.5 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                   >
                     {devUsers.data.map(u => (
                       <option key={u.username} value={u.username}>
@@ -232,7 +232,7 @@ export default function LoginPage() {
                     type="text"
                     value={devUsername}
                     onChange={e => setDevUsernameOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                    className="w-full px-4 py-2.5 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] text-[var(--color-foreground)] focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
                     placeholder="admin"
                   />
                   {devUsers.isError ? (
@@ -249,12 +249,12 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleDevLogin}
                 disabled={devLogin.isPending}
-                className="w-full py-2.5 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
+                className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
               >
                 {devLogin.isPending ? 'Signing in...' : 'Sign in as selected user'}
               </button>
 
-              <p className="text-xs text-center text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)] rounded-2xl py-2 px-3">
+              <p className="text-xs text-center text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)] rounded-[var(--radius-lg)] py-2 px-3">
                 Development mode — authentication bypassed.
               </p>
             </div>

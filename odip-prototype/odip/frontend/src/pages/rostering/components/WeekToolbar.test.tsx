@@ -82,3 +82,35 @@ describe('WeekToolbar "Unfilled only" filter', () => {
     expect(onUnfilledOnlyChange).not.toHaveBeenCalled()
   })
 })
+
+describe('WeekToolbar week navigation', () => {
+  it('prev / this week / next are Button md (--control-h) controls wired to their handlers', async () => {
+    const user = userEvent.setup()
+    const { props } = renderToolbar()
+
+    const prev = screen.getByRole('button', { name: 'Previous week' })
+    const thisWeek = screen.getByRole('button', { name: 'This week' })
+    const next = screen.getByRole('button', { name: 'Next week' })
+    for (const button of [prev, thisWeek, next]) {
+      expect(button).toHaveClass('h-[var(--control-h)]')
+    }
+
+    await user.click(prev)
+    await user.click(thisWeek)
+    await user.click(next)
+    expect(props.onPrevWeek).toHaveBeenCalledTimes(1)
+    expect(props.onThisWeek).toHaveBeenCalledTimes(1)
+    expect(props.onNextWeek).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the week range beside the controls', () => {
+    renderToolbar()
+    expect(screen.getByRole('heading', { level: 2, name: '17 – 23 Aug 2026' })).toBeInTheDocument()
+  })
+
+  it('keeps the exceptions count and New shift buttons at --control-h too', () => {
+    renderToolbar({ exceptionsCount: 2 })
+    expect(screen.getByRole('button', { name: '2 exceptions' })).toHaveClass('h-[var(--control-h)]')
+    expect(screen.getByRole('button', { name: 'New shift' })).toHaveClass('h-[var(--control-h)]')
+  })
+})

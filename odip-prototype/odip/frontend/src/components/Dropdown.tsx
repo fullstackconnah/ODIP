@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
+import { TAP_AREA } from './tapArea'
 
 export type DropdownItem = {
   value: string
@@ -292,7 +293,7 @@ export function Dropdown({
       id={panelId}
       role="listbox"
       style={panelStyle}
-      className={`bg-white rounded-2xl shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
+      className={`bg-white rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
     >
       {searchable && (
         <div className="p-2">
@@ -330,7 +331,7 @@ export function Dropdown({
               onMouseDown={e => e.preventDefault()}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--color-foreground)] text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
                   ? 'opacity-40 cursor-not-allowed'
                   : focusedIndex === idx
@@ -342,7 +343,7 @@ export function Dropdown({
               <div className="min-w-0">
                 <p className={item.description ? 'font-semibold' : ''}>{item.label}</p>
                 {item.description && (
-                  <p className="text-[11px] text-[var(--color-muted-foreground)]">{item.description}</p>
+                  <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
                 )}
               </div>
             </div>
@@ -372,7 +373,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className={`text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
+          className={`${TAP_AREA} text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
         >
           {selectedLabel ?? label ?? '—'}
         </button>
@@ -403,7 +404,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className="w-full flex items-center justify-between h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_rgba(57,98,0,0.18)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}
@@ -430,6 +431,10 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
+          // No TAP_AREA on the icon trigger, on purpose. Its one consumer (a roster ShiftChip's "Actions" kebab)
+          // sits flush against the chip body and the drag handle, so a 44px pad would take the chip's own right
+          // edge under coarse — a pad must never overlap a neighbouring control. Pad it together with a gap
+          // when a consumer with room for one appears.
           className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors"
         >
           {icon}
@@ -457,7 +462,7 @@ export function Dropdown({
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
-        className="flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white rounded-full font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all"
+        className={`${TAP_AREA} flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white rounded-full font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all`}
       >
         {icon}
         {label}

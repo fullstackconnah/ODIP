@@ -56,7 +56,7 @@ export default function TenantsTab({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name or domain..."
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+            className="w-full pl-9 pr-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
         </div>
 
@@ -88,8 +88,8 @@ export default function TenantsTab({
               <span
                 className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   tenant.isActive
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                 }`}
               >
                 {tenant.isActive ? 'Active' : 'Inactive'}

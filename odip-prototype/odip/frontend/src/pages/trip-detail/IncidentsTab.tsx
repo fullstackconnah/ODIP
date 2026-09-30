@@ -13,7 +13,7 @@ export default function IncidentsTab({ incidents }: { incidents: IncidentListDto
   }
 
   return (
-    <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
+    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
       {incidents.map(incident => (
         <Link
           key={incident.id}

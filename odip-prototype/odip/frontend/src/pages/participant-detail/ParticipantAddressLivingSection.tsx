@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { AU_STATES, LIVING_ARRANGEMENTS } from '@/api/types/enums'
 import { LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
@@ -83,20 +85,20 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
     <SectionEditPanel title="Address & Living Arrangements" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <FormField label="Street">
+          <div className={formGrid}>
+            <FormField label="Street" className={span.medium}>
               <input value={draft.addressStreet} onChange={(e) => setDraft((d) => ({ ...d, addressStreet: e.target.value }))} />
             </FormField>
-            <FormField label="Suburb">
+            <FormField label="Suburb" className={span.medium}>
               <input value={draft.addressSuburb} onChange={(e) => setDraft((d) => ({ ...d, addressSuburb: e.target.value }))} />
             </FormField>
-            <FormField label="State">
+            <FormField label="State" className={span.short}>
               <select value={draft.addressState} onChange={(e) => setDraft((d) => ({ ...d, addressState: e.target.value }))}>
                 <option value="">Not specified</option>
                 {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </FormField>
-            <FormField label="Postcode">
+            <FormField label="Postcode" className={span.short}>
               <input value={draft.addressPostcode} onChange={(e) => setDraft((d) => ({ ...d, addressPostcode: e.target.value }))} inputMode="numeric" maxLength={4} />
             </FormField>
           </div>
@@ -157,50 +159,27 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Address</span>
-          <span>{[p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode, p.country].filter(Boolean).join(', ') || '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Living Arrangement</span>
-          <span>{p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : '—'}</span>
-          {p.livingArrangement === 'Family' && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Main Support Person</span>
-              <span>{p.mainSupportPersonName || '—'}{p.mainSupportPersonRelationship ? ` (${p.mainSupportPersonRelationship})` : ''}</span>
-              <span className="text-[var(--color-muted-foreground)]">Others Living in the Accommodation</span>
-              <span>{p.othersLivingInAccommodation || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Residential Information</span>
-              <span>{p.residentialInfo || '—'}</span>
-            </>
-          )}
-          {p.livingArrangement === 'Independent' && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Lives With Others</span>
-              <span>{p.livesWithOthers ? 'Yes' : 'No'}</span>
-              {p.livesWithOthers && (
-                <>
-                  <span className="text-[var(--color-muted-foreground)]">Who They Live With</span>
-                  <span>{p.whoLivesWith || '—'}</span>
-                </>
-              )}
-            </>
-          )}
-          {p.livingArrangement === 'SupportedAccommodation' && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">SIL Provider</span>
-              <span>{p.silProviderName || '—'}{p.silProviderContactPhone ? ` (${p.silProviderContactPhone})` : ''}</span>
-              <span className="text-[var(--color-muted-foreground)]">Accommodation Type</span>
-              <span>{p.accommodationType || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">On-Site Support Hours</span>
-              <span>{p.onSiteSupportHours || '—'}</span>
-            </>
-          )}
-          {p.livingArrangement && p.livingArrangementNotes && (
-            <>
-              <span className="text-[var(--color-muted-foreground)]">Living Arrangement Notes</span>
-              <span>{p.livingArrangementNotes}</span>
-            </>
-          )}
-        </div>
+        <FactList
+          items={[
+            { label: 'Address', value: [p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode, p.country].filter(Boolean).join(', ') || undefined },
+            { label: 'Living Arrangement', value: p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : undefined },
+            ...(p.livingArrangement === 'Family' ? [
+              { label: 'Main Support Person', value: p.mainSupportPersonName ? `${p.mainSupportPersonName}${p.mainSupportPersonRelationship ? ` (${p.mainSupportPersonRelationship})` : ''}` : undefined },
+              { label: 'Others Living in the Accommodation', value: p.othersLivingInAccommodation },
+              { label: 'Residential Information', value: p.residentialInfo },
+            ] : []),
+            ...(p.livingArrangement === 'Independent' ? [
+              { label: 'Lives With Others', value: p.livesWithOthers ? 'Yes' : 'No' },
+              ...(p.livesWithOthers ? [{ label: 'Who They Live With', value: p.whoLivesWith }] : []),
+            ] : []),
+            ...(p.livingArrangement === 'SupportedAccommodation' ? [
+              { label: 'SIL Provider', value: p.silProviderName ? `${p.silProviderName}${p.silProviderContactPhone ? ` (${p.silProviderContactPhone})` : ''}` : undefined },
+              { label: 'Accommodation Type', value: p.accommodationType },
+              { label: 'On-Site Support Hours', value: p.onSiteSupportHours },
+            ] : []),
+            ...(p.livingArrangement && p.livingArrangementNotes ? [{ label: 'Living Arrangement Notes', value: p.livingArrangementNotes }] : []),
+          ]}
+        />
       )}
     </SectionEditPanel>
   )

@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { FactList } from '@/components/FactList'
+import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
+
+const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
 /** PD-7: About Me card — CORE-02's `aboutMe` group, fully rendered (all 6 fields optional, no merge needed). */
 type AboutMeDraft = {
@@ -48,37 +52,39 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
   }
 
   return (
-    <SectionEditPanel title="About Me" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="About Me" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
-        <div className="space-y-4">
-          <FormField label="Goals">
+        <div className={formGrid}>
+          <FormField label="Goals" className={span.medium}>
             <textarea value={draft.goals} onChange={(e) => setDraft((d) => ({ ...d, goals: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Support Areas">
+          <FormField label="Support Areas" className={span.medium}>
             <textarea value={draft.supportAreas} onChange={(e) => setDraft((d) => ({ ...d, supportAreas: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Strengths / Fears">
+          <FormField label="Strengths / Fears" className={span.medium}>
             <textarea value={draft.strengthsFears} onChange={(e) => setDraft((d) => ({ ...d, strengthsFears: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Things to Know">
+          <FormField label="Things to Know" className={span.medium}>
             <textarea value={draft.thingsToKnow} onChange={(e) => setDraft((d) => ({ ...d, thingsToKnow: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Who/What Is Important">
+          <FormField label="Who/What Is Important" className={span.medium}>
             <textarea value={draft.whoIsImportant} onChange={(e) => setDraft((d) => ({ ...d, whoIsImportant: e.target.value }))} rows={2} />
           </FormField>
-          <FormField label="Likes & Dislikes">
+          <FormField label="Likes & Dislikes" className={span.medium}>
             <textarea value={draft.likesDislikes} onChange={(e) => setDraft((d) => ({ ...d, likesDislikes: e.target.value }))} rows={2} />
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          {p.goals && (<><span className="text-[var(--color-muted-foreground)]">Goals</span><span className="whitespace-pre-line">{p.goals}</span></>)}
-          {p.supportAreas && (<><span className="text-[var(--color-muted-foreground)]">Support Areas</span><span className="whitespace-pre-line">{p.supportAreas}</span></>)}
-          {p.strengthsFears && (<><span className="text-[var(--color-muted-foreground)]">Strengths / Fears</span><span className="whitespace-pre-line">{p.strengthsFears}</span></>)}
-          {p.thingsToKnow && (<><span className="text-[var(--color-muted-foreground)]">Things to Know</span><span className="whitespace-pre-line">{p.thingsToKnow}</span></>)}
-          {p.whoIsImportant && (<><span className="text-[var(--color-muted-foreground)]">Who/What Is Important</span><span className="whitespace-pre-line">{p.whoIsImportant}</span></>)}
-          {p.likesDislikes && (<><span className="text-[var(--color-muted-foreground)]">Likes &amp; Dislikes</span><span className="whitespace-pre-line">{p.likesDislikes}</span></>)}
-        </div>
+        <FactList
+          items={[
+            { label: 'Goals', value: pl(p.goals) },
+            { label: 'Support Areas', value: pl(p.supportAreas) },
+            { label: 'Strengths / Fears', value: pl(p.strengthsFears) },
+            { label: 'Things to Know', value: pl(p.thingsToKnow) },
+            { label: 'Who/What Is Important', value: pl(p.whoIsImportant) },
+            { label: 'Likes & Dislikes', value: pl(p.likesDislikes) },
+          ].filter((item) => item.value)}
+        />
       )}
     </SectionEditPanel>
   )

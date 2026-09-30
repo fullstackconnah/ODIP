@@ -30,7 +30,7 @@ export type WizardReviewStepProps<V> = {
  */
 export function WizardReviewStep<V>({ groups, steps, onEdit, renderRow = defaultRenderRow }: WizardReviewStepProps<V>) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="grid md:grid-cols-2 gap-[var(--section-gap)]">
       {groups.map((group) => {
         const label = steps.find((s) => s.key === group.stepKey)?.label ?? group.stepKey
         return (
@@ -42,7 +42,7 @@ export function WizardReviewStep<V>({ groups, steps, onEdit, renderRow = default
                 type="button"
                 onClick={() => onEdit(group.stepKey)}
                 aria-label={`Edit ${label}`}
-                className="min-h-[44px] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+                className="min-h-[var(--control-h)] px-2 -mr-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-[var(--radius-sm)]"
               >
                 Edit
               </button>

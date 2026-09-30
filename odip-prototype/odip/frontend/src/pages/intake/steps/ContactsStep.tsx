@@ -38,7 +38,7 @@ export function ContactsStep({
   const dateOfBirth = watch('dateOfBirth')
 
   return (
-    <div className="grid md:grid-cols-1 gap-6">
+    <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Contacts" className="space-y-3">
         <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
         <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -57,7 +57,7 @@ export function ContactsStep({
                 .filter((e): e is { rt: ContactRoleType; msg: string } => !!e.msg)
               const rowVisibleFields = unionRelevantFields(rowRoleTypes)
               return (
-                <div key={field.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-3">
+                <div key={field.id} className="p-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] space-y-3">
                   <div className="flex items-start gap-2">
                     <div className="flex-1 space-y-3">
                       <FormField label="Person" className="mb-0">
@@ -115,7 +115,7 @@ export function ContactsStep({
                       onClick={() => removeContactRole(index)}
                       aria-label={`Remove contact ${index + 1}`}
                       title="Remove contact"
-                      className="mt-6 p-1.5 min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+                      className="mt-6 p-1.5 min-w-[var(--control-h)] min-h-[var(--control-h)] rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -129,7 +129,7 @@ export function ContactsStep({
                         return (
                           <label
                             key={rt}
-                            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer min-h-[36px] transition-colors ${
+                            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer min-h-[var(--control-h-sm)] transition-colors ${
                               checked ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)]'
                             } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
@@ -176,7 +176,7 @@ export function ContactsStep({
         <button
           type="button"
           onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleTypes: [availableContactRoleTypes(CONTACT_ROLE_TYPES, planType, dateOfBirth)[0] ?? 'NextOfKin'], relationshipToParticipant: '', isPrimary: false, registeredProviderFlag: false })}
-          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
+          className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-[var(--radius-sm)]"
         >
           <Plus className="w-4 h-4" /> Add contact
         </button>
