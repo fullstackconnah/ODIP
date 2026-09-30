@@ -15,6 +15,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
+import { reservationCountsLabel } from './reservationCounts'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { ReservationDto } from '@/api/types/reservations'
@@ -215,20 +216,27 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     ? Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / (1000 * 60 * 60 * 24))
     : null
 
+  // Column budget (density §4): the Property cell (name, address, badges, comments) is the one column that holds free text of any
+  // length, and unwrapped it made the table 1275px wide with a one-line address and ~2000px with a two-sentence comment, pushing Ref and
+  // the row actions off-screen. It wraps (`wrap`, capped at 26rem) so it absorbs whatever room the other columns leave, with the address
+  // on one truncated line; Nights and Ref give way below 2xl (1536). Rows are taller than --row-h here, as they always were (stacked lines).
   const columns: Column<ReservationDto>[] = [
     {
       key: 'propertyName',
       header: 'Property',
+      wrap: true,
       render: (r) => {
         const prop = property(r)
         return (
-          <div className="min-w-0 py-0.5">
+          <div className="min-w-0 py-0.5 md:max-w-[26rem]">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{r.propertyName}</span>
               {r.hasOverlapConflict && <span className="badge-conflict text-xs px-2 py-0.5 rounded-full">Conflict</span>}
             </div>
             {prop?.location && (
-              <p className="text-xs text-[var(--color-muted-foreground)] truncate">
+              // w-0 + min-w-full: a truncated line still reports its whole text as the cell's minimum width, which pinned the Property
+              // column at its 26rem cap; this contributes nothing to the width and then fills whatever the column is given.
+              <p className="text-xs text-[var(--color-muted-foreground)] truncate md:w-0 md:min-w-full">
                 {[prop.location, prop.region, prop.address || prop.suburb ? [prop.address, prop.suburb, prop.state, prop.postcode].filter(Boolean).join(', ') : null].filter(Boolean).join(' · ')}
               </p>
             )}
@@ -247,7 +255,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     { key: 'reservationStatus', header: 'Status', render: (r) => <StatusBadge status={r.reservationStatus} /> },
     { key: 'checkInDate', header: 'Check-in', type: 'date' },
     { key: 'checkOutDate', header: 'Check-out', type: 'date' },
-    { key: 'nights', header: 'Nights', render: (r) => nightsOf(r) ?? '—' },
+    { key: 'nights', header: 'Nights', priority: 'low', render: (r) => nightsOf(r) ?? '—' },
     {
       key: 'cost',
       header: 'Cost',
@@ -260,15 +268,10 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     {
       key: 'bedroomsReserved',
       header: 'Bedrooms / Beds',
-      render: (r) => {
-        const prop = property(r)
-        const bedrooms = r.bedroomsReserved ?? prop?.bedroomCount
-        const beds = r.bedsReserved ?? prop?.bedCount
-        const maxCap = prop?.maxCapacity
-        return (bedrooms || beds) ? `${bedrooms ?? '—'} / ${beds ?? '—'}${maxCap ? ` (max ${maxCap})` : ''}` : '—'
-      },
+      // Reserved of the property's total ("2 of 4 / 4 of 8 (max 10)"), never the property's own counts standing in for what was reserved.
+      render: (r) => reservationCountsLabel(r, property(r)),
     },
-    { key: 'confirmationReference', header: 'Ref', render: (r) => r.confirmationReference || '—' },
+    { key: 'confirmationReference', header: 'Ref', priority: 'low', maxWidth: '8rem', render: (r) => r.confirmationReference || '—' },
     {
       key: 'actions',
       header: '',
@@ -284,7 +287,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <ExternalLink className="w-3.5 h-3.5" />
           </Button>
           {canWrite && (
-            <Button variant="ghost" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation" className="hover:text-[var(--color-destructive)]">
+            <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}

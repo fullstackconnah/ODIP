@@ -424,14 +424,16 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         {/* Page content */}
         {/*
           Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that
-          shorthand sets padding-bottom too, so an unprefixed pb-24 (clearing the fixed
+          shorthand sets padding-bottom too, so an unprefixed bottom padding (clearing the fixed
           mobile bottom nav below lg) got silently overridden by md:p-6's padding-bottom
           for the 768-1024px range, trapping the last roster row behind the nav with no way
-          to scroll it clear. Directional px and pt utilities leave pb-24 and lg:pb-8 as the
-          only thing ever setting padding-bottom, so it can't be clobbered by a later
-          breakpoint's shorthand again.
+          to scroll it clear. Directional px and pt utilities leave the pb-[...] and lg:pb-6 as
+          the only thing ever setting padding-bottom, so it can't be clobbered by a later
+          breakpoint's shorthand again. Below lg the padding is the nav's own height
+          (--mobile-nav-h, the same var the nav is sized with and the sticky wizard footer
+          sits above) plus 1.75rem of air: 96px on touch, exactly the old pb-24.
         */}
-        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-24 lg:pb-6">
+        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-[calc(var(--mobile-nav-h)+1.75rem)] lg:pb-6">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -444,8 +446,12 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           helper), so a restricted role never sees a link it doesn't have access to. There is no
           create shortcut here (or in the sidebar): creating a trip is the "New Trip" button in
           the Trips page header. The links share the row in equal-width cells (MOBILE_NAV_LINK),
-          so the row needs no spacer or justify rule whatever number of them a role sees. */}
-      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex items-center z-50">
+          so the row needs no spacer or justify rule whatever number of them a role sees.
+          The nav is exactly --mobile-nav-h tall (index.css: 66px on a mouse, 68px under `pointer:
+          coarse`, where the links reach the 44px tap floor): a fixed height rather than whatever
+          the content adds up to, so the sticky wizard footer (WizardNavFooter) can sit precisely
+          above it by offsetting with the same var. */}
+      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 flex items-center z-50">
         {permissions.canAccessPage('dashboard') && (
           <NavLink to="/" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>

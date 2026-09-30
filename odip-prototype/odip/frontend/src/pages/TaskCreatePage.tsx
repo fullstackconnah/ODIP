@@ -238,7 +238,7 @@ export default function TaskCreatePage() {
               />
             </FormField>
 
-            <FormField label="Due Date" className={span.short}>
+            <FormField label="Due Date" className={span.date}>
               <input type="date" {...register('dueDate')} />
             </FormField>
 
@@ -260,7 +260,7 @@ export default function TaskCreatePage() {
                   />
                 </FormField>
 
-                <FormField label="Completed Date" className={span.short}>
+                <FormField label="Completed Date" className={span.date}>
                   <input type="date" {...register('completedDate')} />
                 </FormField>
               </>

@@ -176,10 +176,10 @@ export default function VehicleCreatePage() {
         {/* Dates & Notes */}
         <Card title="Service & Notes">
           <div className={formGrid}>
-            <FormField label="Service Due Date" className={span.short}>
+            <FormField label="Service Due Date" className={span.date}>
               <input type="date" {...register('serviceDueDate')} />
             </FormField>
-            <FormField label="Registration Due Date" className={span.short}>
+            <FormField label="Registration Due Date" className={span.date}>
               <input type="date" {...register('registrationDueDate')} />
             </FormField>
 

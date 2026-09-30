@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { TAP_AREA } from './tapArea'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghost-danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export type ButtonProps = {
@@ -29,6 +29,11 @@ const VARIANT: Record<ButtonVariant, string> = {
   secondary: 'border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]',
   danger: 'bg-[var(--color-destructive)] text-white hover:opacity-90',
   ghost: 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]',
+  // A ghost button for a destructive action (Delete, Remove): destructive text at rest, an error-container wash on hover.
+  // It is a variant, not a ghost plus a colour className, because Button does not merge classNames: two text-colour
+  // utilities on one element are resolved by stylesheet order (alphabetical among arbitrary values), not attribute order,
+  // and ghost's muted / primary colours won, so those buttons lost their red. A variant carries ONE colour set.
+  'ghost-danger': 'text-[var(--color-destructive)] hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]',
 }
 
 // Heights come from the density tokens (h-[var(--control-h-sm)] = 24px / h-[var(--control-h)] =

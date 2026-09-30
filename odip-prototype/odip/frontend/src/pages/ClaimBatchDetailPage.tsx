@@ -154,13 +154,17 @@ export default function ClaimBatchDetailPage() {
             keyField="id"
             sortable
             className="overflow-x-auto"
+            // Column budget (density §4): uncapped, the participant link and the reference alone made this table need ~1500px against a
+            // ~1006px box at 1280, pushing Status off-screen. Both are capped (ellipsis, full text in the tooltip) and Day Type gives way
+            // below 2xl (1536).
             columns={[
               {
                 key: 'participantName',
                 header: 'Participant',
                 sortable: true,
                 render: (e: BillableEventDto) => (
-                  <Link to={`/participants/${e.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
+                  // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
+                  <Link to={`/participants/${e.participantId}`} title={e.participantName || undefined} className="block truncate font-medium hover:text-[var(--color-primary)] md:max-w-[10rem]">
                     {e.participantName || '—'}
                   </Link>
                 ),
@@ -171,7 +175,7 @@ export default function ClaimBatchDetailPage() {
                 sortable: true,
                 className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
               },
-              { key: 'dayType', header: 'Day Type', sortable: true },
+              { key: 'dayType', header: 'Day Type', sortable: true, priority: 'low' },
               {
                 key: 'supportsDeliveredFrom',
                 header: 'Dates',
@@ -206,6 +210,7 @@ export default function ClaimBatchDetailPage() {
               {
                 key: 'claimReference',
                 header: 'Reference',
+                maxWidth: '8rem',
                 className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
               },
             ]}

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
@@ -297,6 +299,26 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
       unmount()
       localStorage.clear()
     }
+  })
+
+  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and main clears it by the same var', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    const { container } = renderAt('/trips')
+    const nav = screen.getByRole('navigation', { name: 'Mobile' })
+    expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
+    expect(container.querySelector('main')).toHaveClass('pb-[calc(var(--mobile-nav-h)+1.75rem)]', 'lg:pb-6')
+  })
+
+  it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
+    // jsdom does no layout, so read the source of truth: index.css. The bottom nav's links are 42px of icon + label and take a
+    // --tap-min floor (0px on a mouse, 44px under `pointer: coarse`); the nav pads 12px above and below them. If the var and
+    // the content drift apart the sticky wizard footer either floats above a gap or slides under the nav (the bug this pins).
+    const css = readFileSync(resolve(__dirname, '../../index.css'), 'utf8')
+    const navH = [...css.matchAll(/--mobile-nav-h:\s*(\d+)px/g)].map(m => Number(m[1]))
+    const tapMin = [...css.matchAll(/--tap-min:\s*(\d+)px/g)].map(m => Number(m[1]))
+    expect(tapMin).toEqual([0, 44]) // fine pointer, then the coarse block
+    expect(navH).toHaveLength(2)
+    navH.forEach((h, i) => expect(h).toBe(12 + Math.max(42, tapMin[i]) + 12))
   })
 
   it('keeps the active colour on the padded links', () => {

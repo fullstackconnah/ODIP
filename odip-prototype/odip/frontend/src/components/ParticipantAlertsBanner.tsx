@@ -36,7 +36,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
         // so a participant with several non-critical alerts doesn't get talked over. The role
         // sits on this wrapper, not the <button> itself, so the row keeps its button semantics.
         const role = a.severity === 'Critical' ? 'alert' : 'status'
-        const rowClassName = `w-full flex items-center gap-2 text-left text-sm leading-5 px-3 py-1.5 rounded-[var(--radius-md)] ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
+        const rowClassName = `w-full flex items-start gap-2 text-left text-sm leading-5 px-3 py-1.5 rounded-[var(--radius-md)] ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
         return (
           <div key={`${a.type}:${a.message}`} role={role}>
             {a.linkTo ? (
@@ -45,11 +45,11 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
               // accessible name equal to the message even though the severity pill is also
               // rendered inside the link for visual parity with the tab-select row below.
               <Link to={a.linkTo} aria-label={a.message} className={rowClassName}>
-                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="flex-1 min-w-0 truncate" title={a.message} aria-hidden="true">{a.message}</span>
+                <Icon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span className="flex-1 min-w-0 break-words" aria-hidden="true">{a.message}</span>
                 {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-                <span className="text-xs font-bold uppercase tracking-wide shrink-0" aria-hidden="true">{style.label}</span>
+                <span className="text-xs font-bold uppercase tracking-wide shrink-0 mt-0.5" aria-hidden="true">{style.label}</span>
               </Link>
             ) : (
               <button
@@ -57,11 +57,11 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
                 onClick={() => onSelectTab?.(a.deepLinkTab)}
                 className={rowClassName}
               >
-                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="flex-1 min-w-0 truncate" title={a.message}>{a.message}</span>
+                <Icon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span className="flex-1 min-w-0 break-words">{a.message}</span>
                 {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
-                <span className="text-xs font-bold uppercase tracking-wide shrink-0">{style.label}</span>
+                <span className="text-xs font-bold uppercase tracking-wide shrink-0 mt-0.5">{style.label}</span>
               </button>
             )}
           </div>

@@ -45,7 +45,7 @@ export function ParticipantDetailsStep({ control, register, errors, livingArrang
             <input id="preferredName" {...register('preferredName')} placeholder="e.g. Johnny" />
           </FormField>
 
-          <FormField label="Date of Birth" className={span.short}>
+          <FormField label="Date of Birth" className={span.date}>
             <input id="dateOfBirth" type="date" {...register('dateOfBirth')} />
           </FormField>
 

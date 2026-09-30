@@ -76,6 +76,7 @@
   --field-gap-x: 16px;     /* form grid column gap */
   --gutter: 20px;          /* main content side padding */
   --tap-min: 0px;          /* touch-target floor (min-height/width) for content-sized controls — tabs, standalone action links; none on fine pointers */
+  --mobile-nav-h: 66px;    /* fixed bottom nav below lg (AppLayout): 12px + the 42px icon-over-label link + 12px. The nav is exactly this tall, so anything that has to sit above it (the wizard footer, main's bottom padding) offsets by this same var */
 
   /*
    * Type: the ONE display step, above the 20px headline. Opt-in and reserved for detail pages: the title of
@@ -102,6 +103,7 @@
     --field-gap-x: 16px;
     --gutter: 16px;
     --tap-min: 44px;
+    --mobile-nav-h: 68px;  /* the links reach the 44px --tap-min floor here: 12px + 44px + 12px */
   }
 }
 

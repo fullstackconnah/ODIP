@@ -37,10 +37,10 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Behaviour Summary (from Intake)">
         <div className={formGrid}>
-          <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} />
-          <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} />
-          <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} />
-          <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} />
+          <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} className={span.medium} />
+          <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} className={span.medium} />
+          <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} className={span.medium} />
+          <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} className={span.long} />
         </div>
       </Card>
 

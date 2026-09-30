@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, PillBottle } from 'lucide-react'
 import { useMedicationRegister } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
-import { DataTable, type Column } from '@/components/DataTable'
+import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
@@ -65,17 +65,20 @@ export default function RegisterTab() {
 
   const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
 
+  // Column budget (density §4): nine columns with an uncapped medication and dose need ~1300px against a ~1006px box at 1280, which
+  // pushed Status off-screen. The three text columns are capped (ellipsis, full text in the tooltip); Type and Support level give way
+  // below 2xl (1536) and Schedule below 1792. The compliance flags wrap in their own cell, so they never widen the table.
   const columns: Column<MedicationListDto>[] = useMemo(() => [
-    { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium' },
+    { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '9rem' },
     {
       key: 'name',
       header: 'Medication',
       sortable: true,
       render: m => (
-        <span>
+        <CellText className="md:max-w-[12rem]" title={m.strength ? `${m.name} ${m.strength}` : m.name}>
           {m.name}
           {m.strength && <span className="text-[var(--color-muted-foreground)]"> {m.strength}</span>}
-        </span>
+        </CellText>
       ),
     },
     {
@@ -83,9 +86,9 @@ export default function RegisterTab() {
       header: 'Dose',
       render: m => (
         <div>
-          <span>{m.doseDescription || '—'}</span>
+          <CellText className="md:max-w-[10rem]" title={m.doseDescription || undefined}>{m.doseDescription || '—'}</CellText>
           {m.packaging !== 'OriginalPackaging' && (
-            <div className="text-xs text-[var(--color-muted-foreground)]">{PACKAGING_LABELS[m.packaging]}</div>
+            <div className="text-xs text-[var(--color-muted-foreground)] md:max-w-[10rem] md:truncate">{PACKAGING_LABELS[m.packaging]}</div>
           )}
         </div>
       ),
@@ -93,6 +96,7 @@ export default function RegisterTab() {
     {
       key: 'type',
       header: 'Type',
+      priority: 'low',
       render: m => (
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
           {MEDICATION_TYPE_LABELS[m.type]}
@@ -102,11 +106,12 @@ export default function RegisterTab() {
     {
       key: 'drugSchedule',
       header: 'Schedule',
+      priority: 'lowest',
       render: m => (m.drugSchedule === 'Schedule4' || m.drugSchedule === 'Schedule8')
         ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
         : <span className="text-[var(--color-muted-foreground)]">—</span>,
     },
-    { key: 'supportLevel', header: 'Support level', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },
+    { key: 'supportLevel', header: 'Support level', priority: 'low', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },
     { key: 'complianceFlags', header: 'Flags', render: m => <ComplianceFlagChips flags={m.complianceFlags} /> },
     {
       key: 'nextReviewDue',

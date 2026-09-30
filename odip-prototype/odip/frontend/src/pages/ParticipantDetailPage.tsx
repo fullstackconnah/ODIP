@@ -524,10 +524,8 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
           {active ? 'Regenerate caregiver link' : 'Generate caregiver link'}
         </Button>
         {active && (
-          // The span carries the destructive colour itself: a ghost Button sets its own text colour, and two
-          // competing text-colour utilities on one element resolve by stylesheet order, not by intent.
-          <Button type="button" variant="ghost" size="md" onClick={() => setConfirmingRevoke(true)} disabled={revoke.isPending}>
-            <span className="text-[var(--color-destructive)]">Revoke</span>
+          <Button type="button" variant="ghost-danger" size="md" onClick={() => setConfirmingRevoke(true)} disabled={revoke.isPending}>
+            Revoke
           </Button>
         )}
       </div>

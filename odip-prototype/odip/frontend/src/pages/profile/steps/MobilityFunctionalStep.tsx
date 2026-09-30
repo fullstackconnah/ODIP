@@ -33,15 +33,15 @@ export function MobilityFunctionalStep({ control, register, participant }: {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Support Needs (from Intake)">
         <div className={formGrid}>
-          <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} />
-          <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} />
-          <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} />
-          <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} />
-          <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} />
-          <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} />
-          <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} />
-          <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} />
-          <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} />
+          <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} className={span.short} />
+          <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} className={span.medium} />
+          <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} className={span.short} />
+          <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} className={span.short} />
+          <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} className={span.short} />
+          <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} className={span.short} />
+          <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} className={span.short} />
+          <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} className={span.short} />
+          <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} className={span.short} />
         </div>
       </Card>
 

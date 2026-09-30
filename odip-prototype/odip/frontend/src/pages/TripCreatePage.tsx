@@ -134,7 +134,7 @@ export default function TripCreatePage() {
               <input {...register('destination')} placeholder="e.g. Gold Coast" />
             </FormField>
 
-            <FormField label="Start Date" required error={errors.startDate?.message} className={span.short}>
+            <FormField label="Start Date" required error={errors.startDate?.message} className={span.date}>
               <input type="date" {...register('startDate')} />
             </FormField>
 
@@ -142,7 +142,7 @@ export default function TripCreatePage() {
               <input type="number" min={1} {...register('durationDays')} />
             </FormField>
 
-            <FormField label="Booking Cutoff Date" className={span.short}>
+            <FormField label="Booking Cutoff Date" className={span.date}>
               <input type="date" {...register('bookingCutoffDate')} />
             </FormField>
 
