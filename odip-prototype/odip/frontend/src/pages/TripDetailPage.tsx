@@ -9,6 +9,7 @@ import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TRIP_STATUS_LABELS } from '@/components/tripStatusStyles'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
 import { glanceRatio, glanceState } from '@/components/glanceState'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
@@ -120,7 +121,7 @@ export default function TripDetailPage() {
         title={trip.tripName}
         subtitle={
           <PageHeaderMeta>
-            <StatusBadge status={trip.status} size="md" />
+            <StatusBadge status={trip.status} label={TRIP_STATUS_LABELS[trip.status] ?? trip.status} size="md" />
             {trip.destination}
             {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
             {formatDateRange(trip.startDate, trip.endDate)}

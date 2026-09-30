@@ -1,3 +1,5 @@
+import { TRIP_STATUS_COLORS } from './tripStatusStyles'
+
 export type StatusBadgeSize = 'sm' | 'md'
 
 export type StatusBadgeProps = {
@@ -69,6 +71,9 @@ const STATUS_COLORS: Record<string, string> = {
   blocked: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   // Stalled: in progress but not moving (no progress, still open). Muted warning, not an error.
   stalled: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+
+  // Trip statuses with no entry above (draft, confirmed, completed, cancelled and archived are already covered)
+  ...TRIP_STATUS_COLORS,
 
   // Service agreement drafts
   unapproveddraft: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
