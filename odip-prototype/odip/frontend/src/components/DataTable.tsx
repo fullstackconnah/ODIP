@@ -616,6 +616,8 @@ const ROW_ACTIONS_OVERLAY = [
  * DataTable puts on every body row, so outside a row it would stay hidden. Content should be
  * `Button size="sm"` / `iconOnly` (24px) so the row keeps its `--row-h` height. Keep an action
  * that must always be visible (a row's status pill, a queue's only call to action) out of it.
+ * Under `pointer: coarse` those buttons are 36px with a 44px hit area (TAP_AREA, 4px past each edge),
+ * so the gap opens from 6px to 8px: neighbouring hit areas touch and never overlap.
  *
  * `overlay` takes the cluster out of the flow on a mouse (see ROW_ACTIONS_OVERLAY): use it for a
  * cluster wide enough to matter, in a `relative` cell (`className: 'relative'` on the column) that
@@ -625,7 +627,7 @@ const ROW_ACTIONS_OVERLAY = [
 export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
   if (overlay && Children.toArray(children).length === 0) return null
   return (
-    <div className={`flex items-center justify-end gap-1.5 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
+    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
       {children}
     </div>
   )

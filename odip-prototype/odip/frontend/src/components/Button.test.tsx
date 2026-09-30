@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { Button } from './Button'
+import { TAP_AREA } from './tapArea'
 
 describe('Button', () => {
   it('renders the supplied text in a primary variant by default', () => {
@@ -125,5 +126,78 @@ describe('Button', () => {
     )
     expect(screen.getByRole('button', { name: 'Small' })).toHaveClass('h-[var(--control-h-sm)]')
     expect(screen.getByRole('button', { name: 'Medium' })).toHaveClass('h-[var(--control-h)]')
+  })
+})
+
+// Spec §1: `--control-h-sm` is 36px on a touch screen "(hit area padded to 44px)". `sm` and `iconOnly` are the only
+// Button shapes that stay under 44px there (md is 44, lg is 48), so they alone carry TAP_AREA — a transparent, centred
+// ::before sized max(100%, --tap-min). --tap-min is 0px on a mouse, so the desktop box, look and hit area are unchanged.
+describe('Button — 44px coarse-pointer hit area', () => {
+  const pad = TAP_AREA.split(' ')
+
+  it('pads size="sm" to a 44px hit area', () => {
+    render(<Button size="sm">Edit</Button>)
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass(...pad)
+  })
+
+  it('pads every iconOnly button, whatever size it was given', () => {
+    render(
+      <>
+        <Button iconOnly aria-label="default">x</Button>
+        <Button iconOnly size="sm" aria-label="small">x</Button>
+        <Button iconOnly size="md" aria-label="medium">x</Button>
+        <Button iconOnly size="lg" aria-label="large">x</Button>
+      </>,
+    )
+    for (const name of ['default', 'small', 'medium', 'large']) {
+      expect(screen.getByRole('button', { name })).toHaveClass(...pad)
+    }
+  })
+
+  it('pads the router-Link form of sm and iconOnly too (row actions that navigate)', () => {
+    render(
+      <MemoryRouter>
+        <Button to="/a" size="sm">Small link</Button>
+        <Button to="/b" iconOnly aria-label="Icon link">x</Button>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Small link' })).toHaveClass(...pad)
+    expect(screen.getByRole('link', { name: 'Icon link' })).toHaveClass(...pad)
+  })
+
+  it('leaves md and lg alone: they already reach 44px / 48px on a touch screen', () => {
+    render(
+      <>
+        <Button>Default</Button>
+        <Button size="md">Medium</Button>
+        <Button size="lg">Large</Button>
+      </>,
+    )
+    for (const name of ['Default', 'Medium', 'Large']) {
+      const btn = screen.getByRole('button', { name })
+      expect(btn).not.toHaveClass('relative')
+      expect(btn.className).not.toContain('before:')
+    }
+  })
+
+  it('does not change the box: the pad rides on a pseudo-element, so the size classes stay exactly the token heights', () => {
+    render(
+      <>
+        <Button size="sm">Small</Button>
+        <Button iconOnly aria-label="Icon">x</Button>
+      </>,
+    )
+    expect(screen.getByRole('button', { name: 'Small' })).toHaveClass('h-[var(--control-h-sm)]')
+    expect(screen.getByRole('button', { name: 'Icon' })).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]')
+    // No padding/margin/min-size utility was added to the button itself to fake a bigger target.
+    for (const name of ['Small', 'Icon']) {
+      const own = screen.getByRole('button', { name }).className.split(' ').filter(c => !c.includes(':'))
+      expect(own.filter(c => /^(?:min-[hw]|-?m[trblxy]?-)/.test(c))).toEqual([])
+    }
+  })
+
+  it('keeps a caller className working next to the pad', () => {
+    render(<Button size="sm" className="ml-2">Edit</Button>)
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass('ml-2', ...pad)
   })
 })

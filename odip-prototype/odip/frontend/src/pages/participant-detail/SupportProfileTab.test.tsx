@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SupportProfileTab from './SupportProfileTab'
 import type { ParticipantDetailDto, SupportProfileDto } from '@/api/types/participants'
+import { TAP_AREA } from '@/components/tapArea'
 
 const {
   mockUseParticipant, mockUseSupportProfile, mockPatchMutateAsync, mockUpdateSupportProfileMutateAsync,
@@ -288,6 +289,43 @@ describe('SupportProfileTab — read-only display', () => {
     render(<SupportProfileTab participantId="participant-1" onNavigateToTab={onNavigateToTab} />)
 
     expect(screen.getByText('Yes')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /view restrictive practices tab/i }))
+    expect(onNavigateToTab).toHaveBeenCalledWith('restrictive-practices')
+  })
+})
+
+// Density verdict, touch: both "View Restrictive Practices tab" links are 32px-and-under text buttons. Under
+// `pointer: coarse` they carry the TAP_AREA pad (a 44px hit area centred on the text) rather than growing.
+describe('SupportProfileTab — 44px coarse-pointer hit area', () => {
+  const pad = TAP_AREA.split(' ')
+
+  it('pads the link in the Support Needs fact list', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ hasRestrictivePracticeFlag: true }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const link = screen.getByRole('button', { name: /view restrictive practices tab/i })
+    expect(link).toHaveClass(...pad, 'text-xs', 'hover:underline')
+  })
+
+  it('pads the link beside the Restrictive Practice Details heading too', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockUseSupportProfile.mockReturnValue({
+      data: { id: 'sp-1', participantId: 'participant-1', communicationNotes: null, behaviourSupportNotes: null, restrictivePracticeDetails: 'Legacy PRN note.', manualHandlingNotes: null, medicationHealthSummary: null, emergencyConsiderations: null, travelSpecificNotes: null, reviewDate: null },
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const links = screen.getAllByRole('button', { name: /view restrictive practices tab/i })
+    // one in the Support Needs list, one beside the details heading
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveClass(...pad)
+  })
+
+  it('still navigates from the padded link', async () => {
+    const user = userEvent.setup()
+    const onNavigateToTab = vi.fn()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ hasRestrictivePracticeFlag: true }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" onNavigateToTab={onNavigateToTab} />)
+
     await user.click(screen.getByRole('button', { name: /view restrictive practices tab/i }))
     expect(onNavigateToTab).toHaveBeenCalledWith('restrictive-practices')
   })

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { CellText, DataTable, RowActions } from './DataTable'
 import type { Column } from './DataTable'
 import { Button } from './Button'
+import { TAP_AREA } from './tapArea'
 import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 
 type Row = { id: string; name: string; age: number }
@@ -682,6 +683,16 @@ describe('DataTable — RowActions (hover / focus reveal)', () => {
       '[&>div>:is(a,button)]:w-[var(--control-h-sm)]',
       '[&>div>:is(a,button)]:p-0',
     )
+  })
+
+  it('opens the gap between actions from 6px to 8px on a coarse pointer: 36px buttons with 44px hit areas touch, never overlap', () => {
+    render(<DataTable data={rows} columns={actionColumns} keyField="id" />)
+
+    const edit = screen.getByRole('button', { name: 'Edit Bianca' })
+    // A Button iconOnly reaches 4px past each edge under coarse (36 -> 44), so 2 x 4 = 8px is the least gap.
+    expect(edit).toHaveClass(...TAP_AREA.split(' '))
+    const cluster = edit.parentElement as HTMLElement
+    expect(cluster).toHaveClass('gap-1.5', 'pointer-coarse:gap-2')
   })
 })
 

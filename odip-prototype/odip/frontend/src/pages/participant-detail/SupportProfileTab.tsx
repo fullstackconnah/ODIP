@@ -7,6 +7,7 @@ import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { TAP_AREA } from '@/components/tapArea'
 import { SectionEditPanel } from './SectionEditPanel'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS,
@@ -154,7 +155,7 @@ function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePract
                   {p.hasRestrictivePracticeFlag
                     ? <span className="inline-flex items-center gap-1"><ShieldAlert className="w-4 h-4 text-[var(--color-warning)]" aria-hidden="true" /> Yes</span>
                     : 'No'}
-                  <button type="button" onClick={onViewRestrictivePractices} className="text-xs text-[var(--color-primary)] hover:underline">
+                  <button type="button" onClick={onViewRestrictivePractices} className={`${TAP_AREA} text-xs text-[var(--color-primary)] hover:underline`}>
                     View Restrictive Practices tab
                   </button>
                 </span>
@@ -676,7 +677,7 @@ function SupportProfileSection({ participantId, canEdit, onViewRestrictivePracti
             <div>
               <p className="font-medium text-[var(--color-muted-foreground)] mb-1 flex items-center gap-2">
                 Restrictive Practice Details
-                <button type="button" onClick={onViewRestrictivePractices} className="text-xs text-[var(--color-primary)] hover:underline font-normal">
+                <button type="button" onClick={onViewRestrictivePractices} className={`${TAP_AREA} text-xs text-[var(--color-primary)] hover:underline font-normal`}>
                   View Restrictive Practices tab
                 </button>
               </p>

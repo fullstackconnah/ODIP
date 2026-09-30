@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_AREA } from '@/components/tapArea'
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { formatEffectiveRange } from '../rostering/lib/roster'
 import type { ScheduleAvailabilityItemDto } from '@/api/types'
@@ -55,7 +56,7 @@ export default function AvailabilityList({ staffId, availability }: Availability
     <div className="pl-8 py-2">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-semibold text-[var(--color-muted-foreground)]">Availability</p>
-        <Link to={manageLink} className="text-[13px] text-[var(--color-primary)] hover:underline">
+        <Link to={manageLink} className={`${TAP_AREA} text-[13px] text-[var(--color-primary)] hover:underline`}>
           Manage on Leave page →
         </Link>
       </div>

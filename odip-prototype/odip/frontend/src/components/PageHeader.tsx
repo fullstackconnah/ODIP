@@ -45,7 +45,9 @@ export function PageHeader({ title, subtitle, action, children }: PageHeaderProp
         <div className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">{subtitle}</div>
       )}
       {children && (
-        <div className="flex flex-wrap items-center gap-2 mt-2">
+        // Filter row. `pointer-coarse:gap-y-3`: a 24px pill (Dropdown) that wraps onto a row of its own carries a 44px
+        // hit area, 10px past its box; 12px between wrapped rows keeps that pad off the control on the row above.
+        <div className="flex flex-wrap items-center gap-2 pointer-coarse:gap-y-3 mt-2">
           {children}
         </div>
       )}

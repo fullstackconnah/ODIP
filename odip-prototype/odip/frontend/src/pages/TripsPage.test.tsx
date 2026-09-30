@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import TripsPage from './TripsPage'
 import type { TripListDto } from '@/api/types'
+import { TAP_AREA } from '@/components/tapArea'
 
 const { mockUseTrips, mockUseTrip, mockPatchMutate } = vi.hoisted(() => ({
   mockUseTrips: vi.fn(),
@@ -259,5 +260,72 @@ describe('TripsPage — narrow-desktop table', () => {
     // 10.25rem = 164px. The pill is 10px left padding + 104.3px of 12px/500 text + 24px right padding
     // (room for the caret) = 138.3px, and the cell adds 2 x 12px: 162.3px. It fits with 1.7px to spare.
     expect(10.25 * 16).toBeGreaterThanOrEqual(10 + 104.3 + 24 + 2 * 12)
+  })
+})
+
+// Density verdict, touch: every control on this page reaches a 44px hit area under `pointer: coarse` (spec §1)
+// without changing its box. jsdom has no layout or media queries, so the tests pin the class contract; the mouse
+// classes are asserted too, because the desktop look must not move.
+describe('TripsPage — 44px hit areas on a touch screen', () => {
+  const pad = TAP_AREA.split(' ')
+
+  it('pads the "All Statuses" filter pill and every card status pill (24px pills, 44px targets)', () => {
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+
+    expect(screen.getByRole('button', { name: 'All Statuses' })).toHaveClass(...pad)
+    expect(screen.getByRole('button', { name: 'Confirmed' })).toHaveClass(...pad)
+  })
+
+  it('pads the status pill in the table view too', () => {
+    renderPage()
+
+    const row = screen.getByText('Beach Weekend').closest('tr') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Confirmed' })).toHaveClass(...pad)
+  })
+
+  it('pads the table edit pencil (Button iconOnly) so the 36px square is a 44px target', () => {
+    renderPage()
+
+    expect(screen.getByRole('button', { name: 'Edit Beach Weekend' })).toHaveClass(...pad)
+  })
+
+  it('shows the card pencil on a touch screen (no hover there) with a 44px hit area and room around it', () => {
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+
+    const pencil = screen.getByRole('button', { name: 'Edit trip' })
+    // 26px visual (p-1.5 + a 14px icon), padded to 44px by the pseudo-element.
+    expect(pencil).toHaveClass(...pad, 'p-1.5', 'pointer-coarse:opacity-100')
+    // Its wrapper stops collapsing and clipping under coarse: max-w-0 would hide it, overflow-hidden would cut the pad.
+    const wrapper = pencil.parentElement as HTMLElement
+    expect(wrapper).toHaveClass('pointer-coarse:max-w-none', 'pointer-coarse:overflow-visible')
+    // The gap to the status pill opens past the pencil's 9px reach so the pill keeps its own taps.
+    expect(wrapper.parentElement).toHaveClass('gap-1', 'pointer-coarse:gap-3')
+    // The pencil's width comes out of the footer: under coarse the footer wraps its two halves as units, so the
+    // participant info drops to its own line rather than a "1 waitlist" chip breaking in two.
+    expect(wrapper.parentElement?.parentElement).toHaveClass('flex', 'justify-between', 'pointer-coarse:flex-wrap', 'pointer-coarse:gap-y-2')
+  })
+
+  it('keeps the card pencil hover-revealed on a mouse: collapsed and transparent until the card is hovered or focused', () => {
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+
+    const pencil = screen.getByRole('button', { name: 'Edit trip' })
+    expect(pencil).toHaveClass('opacity-0', 'group-hover:opacity-100', 'focus-within:opacity-100')
+    const wrapper = pencil.parentElement as HTMLElement
+    expect(wrapper).toHaveClass('max-w-0', 'overflow-hidden', 'group-hover:max-w-[2rem]', 'focus-within:max-w-[2rem]')
+  })
+
+  it('still opens the edit modal from the card pencil', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('odip.trips.view', 'cards')
+    mockUseTrip.mockReturnValue({ data: { id: 't1' } })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Edit trip' }))
+
+    expect(screen.getByRole('dialog', { name: 'Edit trip' })).toBeInTheDocument()
+    expect(screen.queryByText('Trip detail page')).not.toBeInTheDocument()
   })
 })

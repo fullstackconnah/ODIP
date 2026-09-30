@@ -1,4 +1,5 @@
 import ItineraryTab from '@/components/ItineraryTab'
+import { TAP_AREA } from '@/components/tapArea'
 import { PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
@@ -65,7 +66,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[var(--color-foreground)]">The Team</h3>
-            <button className="text-[var(--color-primary)] text-xs font-bold hover:opacity-70 transition-opacity" onClick={() => onSwitchTab('bookings')}>
+            <button className={`${TAP_AREA} text-[var(--color-primary)] text-xs font-bold hover:opacity-70 transition-opacity`} onClick={() => onSwitchTab('bookings')}>
               Manage All
             </button>
           </div>
@@ -150,7 +151,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                         <p className="text-[13px] text-[var(--color-muted-foreground)] truncate leading-tight">{s.assignmentRole || (s.isDriver ? 'Driver' : 'Support Worker')}</p>
                       </div>
                     </div>
-                    <button className="w-6 h-6 shrink-0 rounded-full bg-[var(--color-card)] flex items-center justify-center hover:bg-[var(--color-accent)] transition-colors">
+                    <button className={`${TAP_AREA} w-6 h-6 shrink-0 rounded-full bg-[var(--color-card)] flex items-center justify-center hover:bg-[var(--color-accent)] transition-colors`}>
                       <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" style={{ fontSize: '14px' }}>call</span>
                     </button>
                   </div>

@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AppLayout from './AppLayout'
+import { TAP_AREA } from '@/components/tapArea'
 
 // AppLayout renders the portal nav's pending-witness-count badge and the Rostering nav's
 // pending-leave-count badge via TanStack Query hooks — stub just those exports (keeping the
@@ -233,5 +234,55 @@ describe('AppLayout — participant lifecycle navigation', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open menu' }))
+  })
+})
+
+// Density verdict, touch: the shell's compact controls reach a 44px target under `pointer: coarse` (spec §1) without
+// changing size. jsdom has no layout or media queries, so these pin the class contract; the token floors are 0px
+// on a mouse, so the desktop shell is unchanged.
+describe('AppLayout — 44px coarse-pointer hit areas', () => {
+  const pad = TAP_AREA.split(' ')
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('pads the header "Open menu" toggle (36px) and keeps the pad when it becomes "Close menu"', () => {
+    renderAt('/trips')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass(...pad, 'p-2', 'lg:hidden')
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
+  })
+
+  it('pads the header "Notifications" button (32px, disabled placeholder)', () => {
+    renderAt('/trips')
+    const bell = screen.getByRole('button', { name: 'Notifications' })
+    expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
+    expect(bell).toBeDisabled()
+  })
+
+  it('gives every mobile bottom-nav link a --tap-min floor each way, its content centred, so the 42px links are 44px', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderAt('/trips')
+    const nav = screen.getByRole('navigation', { name: 'Mobile' })
+    for (const name of [/Dashboard$/, /Trips$/, /People$/, /Settings$/]) {
+      const link = within(nav).getByRole('link', { name })
+      expect(link, String(name)).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'gap-1', 'min-h-[var(--tap-min)]', 'min-w-[var(--tap-min)]')
+    }
+  })
+
+  it('does not use the ::before pad on the bottom-nav links: a floor cannot overlap its neighbours in the justify-around row', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderAt('/')
+    const nav = screen.getByRole('navigation', { name: 'Mobile' })
+    for (const link of within(nav).getAllByRole('link')) expect(link.className).not.toContain('before:')
+  })
+
+  it('keeps the active colour on the padded links', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderAt('/trips')
+    const nav = screen.getByRole('navigation', { name: 'Mobile' })
+    expect(within(nav).getByRole('link', { name: /Trips$/ })).toHaveClass('text-[var(--color-primary)]')
+    expect(within(nav).getByRole('link', { name: /Settings$/ })).toHaveClass('text-[var(--color-secondary)]')
   })
 })

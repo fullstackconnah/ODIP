@@ -29,6 +29,7 @@ copying it.
 - [PageHeader](#pageheader)
 - [Tabs](#tabs)
 - [ActionButtons](#actionbuttons)
+- [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `--tap-min`)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -538,6 +539,24 @@ the first enabled tab rather than rendering a strip with nothing selected. Long 
 actions. Props: `editTo` (renders a `<Link>`), `onEdit`, `onDelete`, `onRestore`,
 `showArchived` (swaps Delete for Restore). Every button stops click propagation, so it's
 safe to drop into a `DataTable` row that also has `onRowClick`.
+
+---
+
+## Touch hit areas
+
+Spec §1: on a touch screen (`pointer: coarse`) a 36px control keeps its size and gets a hit area padded to 44px.
+`tapArea.ts` exports `TAP_AREA`, the one class list that does it: a transparent, centred `::before` sized
+`max(100%, var(--tap-min))`. `--tap-min` (index.css) is `0px` on a mouse — the pseudo-element is then exactly the
+control's own box, so nothing changes on desktop — and `44px` under coarse. A tap in the padding is a tap on the
+control (the pseudo-element belongs to it). Already applied to `Button` (`size="sm"` and `iconOnly`) and the
+`Dropdown` pill and menu triggers; add it to any other content-sized control shorter than 44px.
+
+Rules: `TAP_AREA` includes `relative`, so the control takes no other `position`; the pad reaches
+`(44 − visual size) / 2` past each edge, so neighbouring controls must sit at least that far apart under coarse
+(widen the gap with `pointer-coarse:gap-*`, as `RowActions` does: 6px → 8px); an `overflow-hidden` ancestor clips the
+pad. For controls that sit flush in a `justify-around` row (the mobile bottom nav) use a `min-h/min-w-[var(--tap-min)]`
+floor instead — it cannot overlap a neighbour. `Dropdown variant="icon"` is deliberately not padded (its one consumer
+is flush against a roster chip).
 
 ---
 

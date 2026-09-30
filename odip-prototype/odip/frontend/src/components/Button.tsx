@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { TAP_AREA } from './tapArea'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 export type ButtonSize = 'sm' | 'md' | 'lg'
@@ -13,6 +14,8 @@ export type ButtonProps = {
    * Renders an icon-style square button (for table-row actions). Always a `--control-h-sm`
    * square (24px on fine pointers, 36px on coarse) regardless of `size`, so a row of them lines
    * up with `size="sm"` buttons and status pills and never pushes a table row past `--row-h`.
+   * On coarse pointers it also carries a 44px hit area (TAP_AREA), so a cluster of them needs 8px
+   * between buttons there (RowActions does this).
    */
   iconOnly?: boolean
   className?: string
@@ -45,7 +48,12 @@ const ICON_ONLY = 'h-[var(--control-h-sm)] w-[var(--control-h-sm)] p-0 shrink-0'
 
 function classes(variant: ButtonVariant, size: ButtonSize, iconOnly: boolean, className?: string): string {
   const sizeClass = iconOnly ? ICON_ONLY : SIZE[size]
-  return `${BASE} ${VARIANT[variant]} ${sizeClass} ${className ?? ''}`
+  // `sm` and `iconOnly` are --control-h-sm: 24px on a mouse, 36px under `pointer: coarse` — the only
+  // Button shapes that stay below a 44px target on touch. Spec §1 pads their hit area to 44px; TAP_AREA
+  // does it without changing the size (a 0px floor on a mouse, so the desktop look is byte-for-byte
+  // what it was). `md` (32 / 44) and `lg` (36 / 48) already reach 44px there and need nothing.
+  const hitArea = iconOnly || size === 'sm' ? TAP_AREA : ''
+  return `${BASE} ${VARIANT[variant]} ${sizeClass} ${hitArea} ${className ?? ''}`
 }
 
 export function Button({

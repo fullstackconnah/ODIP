@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/Button'
+import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
@@ -96,6 +97,14 @@ function isRouteActive(to: string, pathname: string): boolean {
 }
 
 const allNavLeaves: NavLeaf[] = navItems.flatMap(item => ('children' in item ? item.children : [item]))
+
+/**
+ * Mobile bottom-nav link: icon over label, 42px tall and as wide as its label ("Trips" is 28px). Touch needs 44px each
+ * way, so the box gets a `--tap-min` floor (0px on a mouse, 44px under `pointer: coarse`) and centres its content.
+ * A floor, not TAP_AREA's pad: the links sit in a `justify-around` row where a pad wider than the gap would overlap the
+ * next link, and a floor cannot — the extra width is taken out of the row's free space. Nothing changes on a mouse.
+ */
+const MOBILE_NAV_LINK = 'flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
 
 /**
  * Whether a leaf's NavLink should require an exact path match (React Router's `end`) rather
@@ -343,7 +352,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
             <div className="flex items-center gap-4">
               <button
                 ref={menuButtonRef}
-                className="lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors"
+                className={`${TAP_AREA} lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors`}
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -373,7 +382,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                   rather than removed, so the control is honest about doing nothing right now
                   instead of silently absorbing clicks. */}
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed`}
                 aria-label="Notifications"
                 disabled
               >
@@ -434,13 +443,13 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           a create action it doesn't have access to. */}
       <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 py-3 flex justify-around items-center z-50">
         {permissions.canAccessPage('dashboard') && (
-          <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
+          <NavLink to="/" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
             <span className="text-xs font-medium">Dashboard</span>
           </NavLink>
         )}
         {permissions.canAccessPage('trips') && (
-          <NavLink to="/trips" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
+          <NavLink to="/trips" className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
             <span className="text-xs font-medium">Trips</span>
           </NavLink>
@@ -456,7 +465,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           // Match the desktop Participants entry's matchActive predicate: anything under
           // /participants/* plus the standalone /onboarding/:id checklist still light up the
           // mobile nav item, since the hub owns all three lifecycle stages.
-          <NavLink to="/participants" end className={({ isActive }) => `flex flex-col items-center gap-1 ${
+          <NavLink to="/participants" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${
             isActive
             || location.pathname.startsWith('/participants/')
             || location.pathname.startsWith('/onboarding/')
@@ -468,7 +477,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           </NavLink>
         )}
         {permissions.canAccessPage('settings') && (
-          <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
+          <NavLink to="/settings" className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
             <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
             <span className="text-xs font-medium">Settings</span>
           </NavLink>

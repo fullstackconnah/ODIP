@@ -119,3 +119,23 @@ describe('PageHeader — narrow-screen layout', () => {
     expect(meta.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
+
+// Touch: a 24px pill in the filter row (the Trips "All Statuses" Dropdown) carries a 44px hit area, 10px past its box.
+// When the row wraps and the pill lands on a line of its own, an 8px row gap would put that pad 2px over the control
+// on the line above (the toggle group), so the row gap opens to 12px under `pointer: coarse` only.
+describe('PageHeader — filter row on a touch screen', () => {
+  afterEach(cleanup)
+
+  it('opens the wrapped-row gap to 12px under coarse (a padded pill must stay off the row above) and leaves the mouse layout alone', () => {
+    render(
+      <PageHeader title="Trips">
+        <span data-testid="filters">Filters</span>
+      </PageHeader>,
+    )
+
+    const row = screen.getByTestId('filters').parentElement!
+    expect(row).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2', 'mt-2', 'pointer-coarse:gap-y-3')
+    // Row gap only: the column gap between neighbours on a line stays 8px, where the pill's pad is never horizontal.
+    expect(row.className).not.toMatch(/pointer-coarse:gap-(?:[0-9]|x)/)
+  })
+})

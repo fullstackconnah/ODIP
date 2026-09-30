@@ -10,6 +10,7 @@ import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
+import { TAP_AREA } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
@@ -390,15 +391,21 @@ export default function TripsPage() {
                   <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">calendar_today</span> {formatDateAu(t.startDate)} — {formatDateAu(t.endDate)} ({t.durationDays}d)</p>
                 </div>
               </Link>
-              {/* Footer: status (far left, edit slides in on hover) + participant info */}
-              <div className="mt-1 flex items-center justify-between pt-3">
-                <div className="flex items-center gap-1">
+              {/* Footer: status (far left, edit slides in on hover) + participant info. Touch has no hover
+                  to slide the pencil in, so under `pointer: coarse` it is always shown (spec §4: row actions
+                  are always visible on coarse pointers), its wrapper stops clipping so the 44px hit area
+                  (TAP_AREA reaches 9px past the 26px pencil) survives, and the gap to the status pill
+                  widens past that reach (9px) so the pill's taps stay the pill's. The pencil's 38px come out
+                  of the footer's width, so under coarse the participant info wraps as a unit onto its own
+                  line when it no longer fits (instead of a "1 waitlist" chip breaking in two). */}
+              <div className="mt-1 flex items-center justify-between pt-3 pointer-coarse:flex-wrap pointer-coarse:gap-y-2">
+                <div className="flex items-center gap-1 pointer-coarse:gap-3">
                   {canWrite && (
-                    <div className="max-w-0 overflow-hidden transition-all duration-200 focus-within:max-w-[2rem] group-hover:max-w-[2rem]">
+                    <div className="max-w-0 overflow-hidden transition-all duration-200 focus-within:max-w-[2rem] group-hover:max-w-[2rem] pointer-coarse:max-w-none pointer-coarse:overflow-visible">
                       <button
                         onClick={e => handleOpenEdit(t.id, e)}
                         title="Edit trip"
-                        className="rounded-full p-1.5 opacity-0 transition-opacity hover:bg-[var(--color-surface-container-low)] focus-within:opacity-100 group-hover:opacity-100"
+                        className={`${TAP_AREA} rounded-full p-1.5 opacity-0 transition-opacity hover:bg-[var(--color-surface-container-low)] focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100`}
                       >
                         <Pencil className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
                       </button>
