@@ -97,8 +97,10 @@ public static class ShiftCompletionMapper
     /// empty list rather than paying for the extra query.
     /// </param>
     public static async Task<ShiftCompletionDto> ToDtoAsync(
-        OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, int shiftReturnCount, CancellationToken ct, bool includeIncidents = false)
+        OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, int shiftReturnCount, CancellationToken ct,
+        bool includeIncidents = false, DateTime? nowUtc = null)
     {
+        var now = nowUtc ?? DateTime.UtcNow;
         var submittedBy = await db.Users.FirstOrDefaultAsync(u => u.Id == c.SubmittedByUserId, ct);
         User? reviewedBy = c.ReviewedByUserId.HasValue
             ? await db.Users.FirstOrDefaultAsync(u => u.Id == c.ReviewedByUserId.Value, ct)
@@ -114,6 +116,13 @@ public static class ShiftCompletionMapper
                 .ToListAsync(ct);
         }
 
+        // Breaks and net worked time (the shift package). A running break counts up to `now`.
+        var breaks = await db.ShiftBreaks
+            .Where(b => b.ShiftCompletionId == c.Id)
+            .OrderBy(b => b.StartedAt)
+            .ToListAsync(ct);
+        var (_, breakMinutes, netMinutes) = ShiftBreakRules.NetWorked(c.ActualStart, c.ActualEnd, now, breaks);
+
         return new ShiftCompletionDto(
             c.Id, c.ShiftId, c.ActualStart, c.ActualEnd, c.TimeZoneId, c.GeolocationDeclined, c.StartWasManual,
             c.SubmittedByUserId, submittedBy?.FullName ?? string.Empty,
@@ -121,6 +130,15 @@ public static class ShiftCompletionMapper
             c.ReviewedByUserId, reviewedBy?.FullName, c.ReviewedAt, c.ReviewOutcome, c.ReturnReason,
             c.VarianceMinutesStart, c.VarianceMinutesEnd,
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
-            varianceReviewMinutes, shiftReturnCount, incidents);
+            varianceReviewMinutes, shiftReturnCount, incidents,
+            breaks.Select(b => ToBreakDto(b, now)).ToList(), breakMinutes, netMinutes);
+    }
+
+    /// <summary>Maps a break; a running break's minutes are the time so far (up to <paramref name="nowUtc"/>).</summary>
+    public static ShiftBreakDto ToBreakDto(ShiftBreak b, DateTime nowUtc)
+    {
+        var end = b.EndedAt ?? nowUtc;
+        var minutes = end > b.StartedAt ? ShiftBreakRules.WholeMinutes(end - b.StartedAt) : 0;
+        return new ShiftBreakDto(b.Id, b.StartedAt, b.EndedAt, b.IsRunning, minutes, b.EditedAt, b.CreatedByUserId);
     }
 }

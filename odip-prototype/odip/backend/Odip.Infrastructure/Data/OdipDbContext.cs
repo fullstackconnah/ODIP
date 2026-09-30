@@ -108,6 +108,9 @@ public class OdipDbContext : DbContext
 
     /// <summary>Shift-completion state machine: see <see cref="Rostering.ShiftCompletion"/>'s type doc.</summary>
     public DbSet<ShiftCompletion> ShiftCompletions => Set<ShiftCompletion>();
+
+    /// <summary>Breaks taken during a shift, hung off the active <see cref="ShiftCompletion"/> — see <see cref="Rostering.ShiftBreak"/>'s type doc.</summary>
+    public DbSet<ShiftBreak> ShiftBreaks => Set<ShiftBreak>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
@@ -1245,6 +1248,27 @@ public class OdipDbContext : DbContext
                 .HasFilter("\"IsActive\"");
         });
 
+        // ── ShiftBreak (shift package) ────────────────────────────
+        modelBuilder.Entity<ShiftBreak>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict: same idiom as ShiftNote/ShiftCompletion -> Shift — a completion's break history must
+            // not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.ShiftCompletion)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftCompletionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftCompletionId });
+
+            // "At most one running break" per completion — mirrors ShiftCompletion's own partial unique index.
+            entity.HasIndex(e => e.ShiftCompletionId)
+                .IsUnique()
+                .HasDatabaseName(ShiftBreak.OneRunningIndexName)
+                .HasFilter("\"EndedAt\" IS NULL");
+        });
+
         // ── LeaveRequest ─────────────────────────────────────────
         modelBuilder.Entity<LeaveRequest>(entity =>
         {
@@ -1820,6 +1844,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ShiftCompletion>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftCompletion>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftBreak>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftBreak>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()

@@ -13,6 +13,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -51,18 +52,26 @@ public class PortalController : ControllerBase
     private readonly IConfiguration? _config;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
+    private readonly TimeProvider _clock;
+    private readonly ShiftBreakService _breaks;
 
     public PortalController(
         OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        TimeProvider? clock = null,
+        ShiftBreakService? breaks = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+        _clock = clock ?? TimeProvider.System;
+        _breaks = breaks ?? new ShiftBreakService(db, _clock);
     }
+
+    private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
 
     private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
 
@@ -161,6 +170,7 @@ public class PortalController : ControllerBase
             .Where(c => c.ShiftId == shift.Id && c.IsActive)
             .FirstOrDefaultAsync(ct);
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, shift.ReturnCount, ct);
+        var breakDtos = completionDto?.Breaks ?? Array.Empty<ShiftBreakDto>();
 
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
         // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
@@ -180,13 +190,14 @@ public class PortalController : ControllerBase
             medications.Select(ToMedicationSummaryDto).ToList(),
             completionDto,
             shift.ReturnCount,
-            lastReturnReason);
+            lastReturnReason,
+            breakDtos);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct) =>
-        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct);
+        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct, nowUtc: NowUtc);
 
     /// <summary>
     /// Resolves one of the caller's own shifts (Participant included, draft-excluded — same rule
@@ -426,6 +437,121 @@ public class PortalController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // BREAKS (shift package) - only while the shift is InProgress, on the caller's OWN shift
+    // ══════════════════════════════════════════════════════════════
+    //
+    // A break hangs off the shift's active ShiftCompletion. Rules (ShiftBreakRules/ShiftBreakService): at most one
+    // running; every break inside [actual start, now]; no overlaps; start/end stamp the SERVER clock, corrections
+    // go through PUT. Billing is unaffected (rostered hours); net worked minutes ride on the completion DTO.
+    // Every endpoint returns the refreshed shift detail so the client can replace its cache in one step.
+
+    /// <summary>Starts a break now. 409 SHIFT_BREAK_ALREADY_RUNNING if one is already running.</summary>
+    [HttpPost("shifts/{id:guid}/breaks/start")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartBreak(Guid id, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        var result = await _breaks.StartAsync(completion!, shift!.UserId!.Value, ct);
+        return await ToBreakResponseAsync(shift, result, ct);
+    }
+
+    /// <summary>Ends the running break now. Idempotent: ending an already-ended break is a no-op success.</summary>
+    [HttpPost("shifts/{id:guid}/breaks/{breakId:guid}/end")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> EndBreak(Guid id, Guid breakId, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        return await ToBreakResponseAsync(shift!, await _breaks.EndAsync(completion!, breakId, ct), ct);
+    }
+
+    /// <summary>Corrects a break's times (UTC) before Finish. `endedAt` null keeps a running break running.</summary>
+    [HttpPut("shifts/{id:guid}/breaks/{breakId:guid}")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> EditBreak(
+        Guid id, Guid breakId, [FromBody] EditShiftBreakDto dto, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        return await ToBreakResponseAsync(shift!, await _breaks.EditAsync(completion!, breakId, dto.StartedAt, dto.EndedAt, ct), ct);
+    }
+
+    /// <summary>Removes a break before Finish (the delete is audited).</summary>
+    [HttpDelete("shifts/{id:guid}/breaks/{breakId:guid}")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> DeleteBreak(Guid id, Guid breakId, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        return await ToBreakResponseAsync(shift!, await _breaks.DeleteAsync(completion!, breakId, ct), ct);
+    }
+
+    /// <summary>
+    /// The caller's own shift, required to be InProgress with an active completion (the state every package write
+    /// needs), or the 404/409 to short-circuit with. 404 for not-yours/not-found, same as every portal action; the
+    /// 409 codes are the ones Start already uses for the other states.
+    /// </summary>
+    private async Task<(Shift? Shift, ShiftCompletion? Completion, ActionResult<ApiResponse<PortalShiftDetailDto>>? Error)> ResolveInProgressShiftAsync(
+        Guid id, CancellationToken ct)
+    {
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return (null, null, error);
+
+        // ActionResult (a class), NOT ActionResult<T> (a struct): null must stay null, not be converted into a wrapped null.
+        ActionResult? conflict = shift!.Status switch
+        {
+            ShiftStatus.InProgress => null,
+            ShiftStatus.Published => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress)),
+            ShiftStatus.PendingReview => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished)),
+            ShiftStatus.Completed => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted)),
+            ShiftStatus.Cancelled => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled)),
+            _ => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
+        };
+        if (conflict is not null) return (null, null, conflict);
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+        if (completion is null)
+            return (null, null, Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress)));
+
+        return (shift, completion, null);
+    }
+
+    private async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> ToBreakResponseAsync(
+        Shift shift, ShiftBreakResult result, CancellationToken ct)
+    {
+        switch (result.Outcome)
+        {
+            case ShiftBreakOutcome.Ok:
+                return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+
+            case ShiftBreakOutcome.NotFound:
+                return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Break not found.", ShiftErrorCodes.ShiftBreakNotFound));
+
+            case ShiftBreakOutcome.AlreadyRunning:
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "A break is already running. End it before starting another.", ShiftErrorCodes.ShiftBreakAlreadyRunning));
+
+            default: // Invalid
+                var (message, code) = result.Violation switch
+                {
+                    ShiftBreakViolation.BeforeShiftStart => ("A break can't start before the shift started.", ShiftErrorCodes.ShiftBreakBeforeShiftStart),
+                    ShiftBreakViolation.InFuture => ("A break can't be in the future.", ShiftErrorCodes.ShiftBreakInFuture),
+                    ShiftBreakViolation.EndNotAfterStart => ("A break must end after it starts.", ShiftErrorCodes.ShiftBreakEndNotAfterStart),
+                    ShiftBreakViolation.EndRequired => ("A finished break needs an end time.", ShiftErrorCodes.ShiftBreakEndRequired),
+                    _ => ("This break overlaps another break.", ShiftErrorCodes.ShiftBreakOverlap),
+                };
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(message, code));
+        }
     }
 
     // ══════════════════════════════════════════════════════════════

@@ -118,7 +118,11 @@ public record PortalShiftDetailDto(
     List<PortalMedicationSummaryDto> Medications,
     ShiftCompletionDto? Completion,
     int ReturnCount,
-    string? LastReturnReason);
+    string? LastReturnReason,
+    /// <summary>Breaks taken in the shift's active completion, oldest first (empty before Start). The same list rides on
+    /// <c>completion.breaks</c>; it is repeated here so the package header can show a running break without reaching
+    /// into the completion.</summary>
+    IReadOnlyList<ShiftBreakDto> Breaks);
 
 /// <summary>
 /// A medication administration OR an incident report (IN-7) awaiting (or already given) the

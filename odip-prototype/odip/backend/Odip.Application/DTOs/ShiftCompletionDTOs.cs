@@ -29,6 +29,30 @@ public record FinishShiftDto
     public DateTime? ActualStart { get; init; }
 }
 
+/// <summary>
+/// One break inside a shift. <see cref="Minutes"/> is whole minutes: for an ended break the time between
+/// start and end, for a RUNNING break the time so far. Times are UTC instants.
+/// </summary>
+public record ShiftBreakDto(
+    Guid Id,
+    DateTime StartedAt,
+    DateTime? EndedAt,
+    bool IsRunning,
+    int Minutes,
+    DateTime? EditedAt,
+    Guid CreatedByUserId);
+
+/// <summary>
+/// PUT portal/shifts/{id}/breaks/{breakId} body: the corrected times, as UTC instants (ISO 8601 with a Z;
+/// an unsuffixed value is treated as UTC). <see cref="EndedAt"/> null keeps a RUNNING break running; an ended
+/// break must keep an end. Only allowed while the shift is in progress (before Finish).
+/// </summary>
+public record EditShiftBreakDto
+{
+    public DateTime StartedAt { get; init; }
+    public DateTime? EndedAt { get; init; }
+}
+
 public record ShiftCompletionDto(
     Guid Id,
     Guid ShiftId,
@@ -55,7 +79,14 @@ public record ShiftCompletionDto(
     // populated on the RosteringController.GetShiftCompletion DETAIL endpoint only; every other
     // caller of ShiftCompletionMapper.ToDtoAsync gets an empty list (see the mapper's
     // includeIncidents parameter).
-    IReadOnlyList<IncidentSummaryDto> Incidents);
+    IReadOnlyList<IncidentSummaryDto> Incidents,
+    // ── Shift package: breaks and net worked time. Billing stays on ROSTERED hours; these are a record. ──
+    /// <summary>Breaks taken during this completion, oldest first.</summary>
+    IReadOnlyList<ShiftBreakDto> Breaks,
+    /// <summary>Whole minutes spent on breaks (a running break counts up to now).</summary>
+    int BreakMinutes,
+    /// <summary>Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative.</summary>
+    int NetWorkedMinutes);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>

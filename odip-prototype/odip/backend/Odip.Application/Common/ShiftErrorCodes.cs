@@ -24,4 +24,13 @@ public static class ShiftErrorCodes
     public const string ShiftBatchSizeInvalid = "SHIFT_BATCH_SIZE_INVALID";
     public const string ShiftCompletionNotFound = "SHIFT_COMPLETION_NOT_FOUND";
     public const string ShiftAlreadyClaimed = "SHIFT_ALREADY_CLAIMED";
+
+    // ── Shift package (breaks) ──
+    public const string ShiftBreakAlreadyRunning = "SHIFT_BREAK_ALREADY_RUNNING";
+    public const string ShiftBreakNotFound = "SHIFT_BREAK_NOT_FOUND";
+    public const string ShiftBreakBeforeShiftStart = "SHIFT_BREAK_BEFORE_SHIFT_START";
+    public const string ShiftBreakInFuture = "SHIFT_BREAK_IN_FUTURE";
+    public const string ShiftBreakEndNotAfterStart = "SHIFT_BREAK_END_NOT_AFTER_START";
+    public const string ShiftBreakOverlap = "SHIFT_BREAK_OVERLAP";
+    public const string ShiftBreakEndRequired = "SHIFT_BREAK_END_REQUIRED";
 }

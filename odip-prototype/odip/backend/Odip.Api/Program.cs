@@ -181,6 +181,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItems
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationAdministrationRecorder>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBreakService>();
 
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
