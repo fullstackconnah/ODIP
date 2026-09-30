@@ -107,7 +107,7 @@ export default function VehiclesPage() {
         />
       ) : (
         /* Vehicle grid */
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] items-start gap-[var(--section-gap)]">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">
           {vehicles.map((v: VehicleListDto) => {
             const typeKey = (v.vehicleType as VehicleTypeKey) in vehicleTypeConfig
               ? (v.vehicleType as VehicleTypeKey)

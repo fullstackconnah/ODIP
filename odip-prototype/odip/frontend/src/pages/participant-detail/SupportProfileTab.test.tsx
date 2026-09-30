@@ -202,6 +202,84 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
   })
 })
 
+describe('SupportProfileTab — density layout (finish review)', () => {
+  function cardFor(heading: string): HTMLElement {
+    return screen.getByRole('heading', { name: heading }).closest('.rounded-md') as HTMLElement
+  }
+
+  it('lays the cards on the auto-fill, items-start section grid, with a min(…,100%) floor so it collapses to one column on a phone', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const { container } = render(<SupportProfileTab participantId="participant-1" />)
+
+    // jsdom has no layout, so the class is the only observable proof of the mobile fix: a bare
+    // minmax(26rem,1fr) floor (416px) overflows a 390px viewport and scrolls the page sideways.
+    const grid = container.firstElementChild as HTMLElement
+    expect(grid).toHaveClass('grid', 'items-start')
+    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
+  })
+
+  it('renders the read-only rows as a semantic fact list (label + value), not a 50/50 grid of spans', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ isHighSupport: true, ambulantStatus: 'NoAssist', overnightSupport: 'ActiveNight', overnightRatio: 'OneToOne' }),
+      isLoading: false,
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const highSupport = screen.getByText('High Support')
+    expect(highSupport.tagName).toBe('DT')
+    expect(highSupport.nextElementSibling).toHaveTextContent('Yes')
+    expect(screen.getByText('Ambulant Status').nextElementSibling).toHaveTextContent('No Assist')
+    expect(within(cardFor('Overnight Support')).getByText('Overnight Support', { selector: 'dt' }).nextElementSibling).toHaveTextContent('Active Night (1:1)')
+  })
+
+  it('collapses a card whose values are all empty to one "Not recorded" line instead of rows of dashes', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    // makeParticipant() records no mobility aids/support, no equipment and no Mobility & Functional data.
+    for (const heading of ['Mobility Aids & Support', 'Equipment', 'Mobility & Functional']) {
+      const card = cardFor(heading)
+      expect(within(card).getByText('Not recorded')).toBeInTheDocument()
+      expect(card.querySelector('dl')).toBeNull()
+    }
+    // Support Notes keeps its own, more specific wording.
+    expect(within(cardFor('Support Notes')).getByText('No support notes recorded')).toBeInTheDocument()
+  })
+
+  it('only gives a Support Notes / Mobility & Functional detail row to a note that actually has content', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ mobilityNotes: 'Prefers left-side approach.', orthotics: 'AFO both feet.' }),
+      isLoading: false,
+    })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    const notes = within(cardFor('Support Notes'))
+    expect(notes.getByText('Mobility Notes').nextElementSibling).toHaveTextContent('Prefers left-side approach.')
+    expect(notes.queryByText('Equipment Requirements')).not.toBeInTheDocument()
+    expect(notes.queryByText('Transport Requirements')).not.toBeInTheDocument()
+
+    const functional = within(cardFor('Mobility & Functional'))
+    expect(functional.getByText('Orthotics').nextElementSibling).toHaveTextContent('AFO both feet.')
+    expect(functional.queryByText('Skin Integrity')).not.toBeInTheDocument()
+    // The four core ratings still get a row, dashed when unrecorded.
+    expect(functional.getByText('Ambulant Status').nextElementSibling).toHaveTextContent('—')
+  })
+
+  it('shows "None" for no overnight support, and never prints "undefined" when the payload omits overnightSupport', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ overnightSupport: 'None' }), isLoading: false })
+    const { unmount } = render(<SupportProfileTab participantId="participant-1" />)
+    expect(within(cardFor('Overnight Support')).getByText('None')).toBeInTheDocument()
+    unmount()
+
+    // A DTO from an older API build / the mock API has no overnightSupport at all.
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ overnightSupport: undefined, overnightRatio: undefined }), isLoading: false })
+    render(<SupportProfileTab participantId="participant-1" />)
+    const card = cardFor('Overnight Support')
+    expect(card).not.toHaveTextContent(/undefined/)
+    expect(within(card).getByText('Not recorded')).toBeInTheDocument()
+  })
+})
+
 describe('SupportProfileTab — read-only display', () => {
   it('shows the derived Restrictive Practice flag with a link into the Restrictive Practices tab', async () => {
     const user = userEvent.setup()

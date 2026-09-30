@@ -118,6 +118,15 @@ describe('StaffDetailPage — header', () => {
     expect(screen.getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
   })
 
+  it('starts the meta row at the region, with no stray leading separator, when the staff member has no position', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ position: undefined }) }), isLoading: false })
+    renderAt('staff-1')
+
+    // The span holds just the region — not " · North".
+    expect(screen.getByText('North')).toBeInTheDocument()
+    expect(screen.queryByText(/^\s*·/)).not.toBeInTheDocument()
+  })
+
   it('shows Inactive status for an inactive staff member', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ isActive: false }) }), isLoading: false })
     renderAt('staff-1')
@@ -144,6 +153,16 @@ describe('StaffDetailPage — Availability tab (default)', () => {
     // AvailabilityList instead. It's ambiguous too (the header link plus the empty-state's own
     // repeated link), hence getAllByText rather than getByText.
     expect(screen.getAllByText(/manage on leave page/i).length).toBeGreaterThan(0)
+  })
+
+  it('flushes the list to the Card padding — AvailabilityList\'s own pl-8 indent (built for the Schedule accordion) read as a blank ~30px icon slot here', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+
+    // The list's own label sits under a wrapper carrying `[&>div]:p-0`, which zeroes the padding of
+    // the wrapper's direct child (AvailabilityList's root) — jsdom has no CSS, so the class is the proof.
+    const label = screen.getByText('Availability', { selector: 'p' })
+    expect(label.closest('[class~="[&>div]:p-0"]')).not.toBeNull()
   })
 })
 

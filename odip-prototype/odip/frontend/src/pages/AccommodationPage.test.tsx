@@ -66,6 +66,18 @@ describe('AccommodationPage — accessible names on action buttons (PP-69)', () 
   })
 })
 
+describe('AccommodationPage — card grid', () => {
+  it('collapses to one column on a phone through a min(22rem,100%) track floor', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    // jsdom has no layout, so the class is the only observable proof: a bare minmax(22rem,1fr)
+    // floor (352px) overflows a 320-360px phone viewport.
+    const grid = screen.getByRole('link', { name: 'Sunrise House' }).closest('.grid')!
+    expect(grid).toHaveClass('items-start', 'grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]')
+  })
+})
+
 describe('AccommodationPage — empty states (PP-94)', () => {
   it('shows a "no properties yet" empty state when the list is genuinely empty', () => {
     mockUseAccommodation.mockReturnValue({ data: [], isLoading: false })

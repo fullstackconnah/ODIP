@@ -50,7 +50,8 @@ export default function AccommodationDetailPage() {
         }
       />
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] items-start gap-[var(--section-gap)]">
+      {/* min(26rem,100%): a bare 26rem track floor (416px) overflows a 390px phone viewport. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
         {/* Details */}
         <Card title="Property Details">
           <FactList
@@ -65,8 +66,8 @@ export default function AccommodationDetailPage() {
           {(property.isWheelchairAccessible || property.isFullyModified || property.isSemiModified) && (
             <div className="flex flex-wrap gap-2 pt-2 mt-2 border-t border-[var(--color-border)]">
               {property.isWheelchairAccessible && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]">Wheelchair Accessible</span>}
-              {property.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Fully Modified</span>}
-              {property.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[#0d1c2e]">Semi Modified</span>}
+              {property.isFullyModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-foreground)]">Fully Modified</span>}
+              {property.isSemiModified && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-secondary-container)] text-[var(--color-foreground)]">Semi Modified</span>}
             </div>
           )}
         </Card>

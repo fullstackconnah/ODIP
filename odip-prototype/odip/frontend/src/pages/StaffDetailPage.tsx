@@ -101,6 +101,9 @@ export default function StaffDetailPage() {
   if (!overview) return <div className="text-center py-12">Staff member not found</div>
 
   const { staff } = overview
+  // Join only the parts that exist: an empty position used to leave the row starting with a
+  // stray " · " separator.
+  const positionAndRegion = [staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -109,7 +112,7 @@ export default function StaffDetailPage() {
         subtitle={
           <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
-            <span>{staff.position} · {staff.region || 'No region'}</span>
+            <span>{positionAndRegion}</span>
           </div>
         }
         action={
@@ -146,7 +149,13 @@ export default function StaffDetailPage() {
 
       {tab === 'availability' && (
         <Card>
-          <AvailabilityList staffId={id!} availability={overview.availability} />
+          {/* AvailabilityList's root carries `pl-8 py-2` — an indent for the Schedule page's
+              accordion rows. Inside this Card it read as a blank ~30px icon slot left of the
+              "Availability" label (no icon was ever meant to fill it), so flush it to the Card's
+              own padding from out here. */}
+          <div className="[&>div]:p-0">
+            <AvailabilityList staffId={id!} availability={overview.availability} />
+          </div>
         </Card>
       )}
 

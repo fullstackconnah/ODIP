@@ -195,53 +195,64 @@ export default function ParticipantDetailPage() {
         ariaLabel="Participant detail sections"
       />
 
-      {/* PDETAIL-01 — the Details tab's card order mirrors the original single-wizard's step-family
-          order (retired by PF-10.7; now split across the Intake/Profile wizards) end to end: Identity, Address & Living
-          Arrangements, NDIS & Funding, Key Identifiers, [Contacts has its own sibling tab,
-          matching CONTACT-01/02/03's own wizard step], Cultural & Consent, [Support Needs &
-          Mobility moved to the Support Profile tab under PD-6], Medical, Behaviour &
-          Communication, Community Access, Daily Living, Risks & Hazards.
-          PD-7 — every card below is now a `SectionEditPanel`-backed component under
+      {/* PDETAIL-01 — the short cards keep the original single-wizard's step-family order among
+          themselves (retired by PF-10.7; now split across the Intake/Profile wizards): Identity,
+          Address & Living Arrangements, NDIS & Funding, Key Identifiers, [Contacts has its own
+          sibling tab, matching CONTACT-01/02/03's own wizard step], Cultural & Consent, [Support
+          Needs & Mobility moved to the Support Profile tab under PD-6], Medical, Behaviour &
+          Communication, Community Access, Meals & Diet (Daily Living), About Me, Risks & Hazards.
+          Density review — the nested-CRUD sections (Consents, Health Conditions, ADLs, Risk
+          entries) span the whole row, so they come AFTER every short card: interleaved, a
+          full-width section strands the short card beside it in a row-wide void. The short cards
+          therefore pack into the auto-fill columns first (align-items:start, no stretched
+          siblings) and the full-width sections stack underneath.
+          The `min(26rem,100%)` track floor lets the grid collapse to one column on a phone: a bare
+          26rem (416px) minimum would overflow a 390px viewport and scroll the page sideways.
+          PD-7 — every short card is a `SectionEditPanel`-backed component under
           `pages/participant-detail/`, gated on `canWriteParticipantDetails` (SPEC-03's PD-7):
           see this branch's report for the section → CORE-02 patch-group mapping and how each
           section avoids nulling fields it doesn't render. */}
       {tab === 'details' && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] items-start gap-[var(--section-gap)]">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
           <ParticipantIdentitySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantAddressLivingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantNdisFundingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantKeyIdentifiersSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
           <ParticipantCulturalBackgroundSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <Card className="col-span-full">
-            <ParticipantConsentsSection participantId={id} />
-          </Card>
           {/* PD-6 — the "Support Needs & Mobility" card that used to live here has moved to the
               Support Profile tab (SupportProfileTab.tsx), merged with the `/support-profile`
               sub-resource fields and made editable there. See SPEC-03's PD-6: having the same
               fields editable/displayed in two places would repeat the dual-write-path
               inconsistency discovery already flagged for consents/health/ADL. */}
           <ParticipantMedicalSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          <ParticipantBehaviourCommunicationSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          <ParticipantCommunityAccessSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          <ParticipantMealsDietSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          <ParticipantAboutMeSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          <ParticipantRisksHazardsSummarySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+
+          {/* ── Full-width sections ── */}
+          <Card className="col-span-full">
+            <ParticipantConsentsSection participantId={id} />
+          </Card>
           {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5),
               always rendered (unlike the whole-card-conditional cards above): GetForParticipant
               always returns all ten HealthConditionType entries, so there is no genuinely-empty
               state to hide behind a condition — DataTable's own emptyMessage handles a
-              still-loading/zero-row edge case instead. */}
-          <Card className="col-span-full">
+              still-loading/zero-row edge case instead. A bare wrapper, not a Card: the DataTable
+              already draws its own border, and a Card around it made two nested borders. */}
+          <div className="col-span-full">
             <ParticipantHealthConditionsSection participantId={id} />
-          </Card>
-          <ParticipantBehaviourCommunicationSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantCommunityAccessSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          </div>
           {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
-              rendered (unlike the whole-card-conditional cards below): GetForParticipant always
+              rendered (unlike the whole-card-conditional cards above): GetForParticipant always
               returns all twenty AdlType entries, so there is no genuinely-empty state to hide
               behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
-              edge case instead. Same convention as ParticipantHealthConditionsSection above. */}
-          <Card className="col-span-full">
+              edge case instead. Same convention (and same bare wrapper) as
+              ParticipantHealthConditionsSection above. */}
+          <div className="col-span-full">
             <ParticipantAdlAssessmentsSection participantId={id} />
-          </Card>
-          <ParticipantMealsDietSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantAboutMeSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantRisksHazardsSummarySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          </div>
           {/* INTAKE-09 — a compact section rather than its own tab; see RiskEntriesSection's
               module doc for the tab-count call. */}
           <Card className="col-span-full">

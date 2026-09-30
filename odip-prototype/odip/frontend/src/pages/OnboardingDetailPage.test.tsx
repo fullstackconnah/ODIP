@@ -66,6 +66,16 @@ describe('OnboardingDetailPage', () => {
     expect(within(recommendation).getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/participants/p-1/profile')
   })
 
+  it('collapses the stage / next-action grid to one column on a phone through a min(26rem,100%) track floor, with no max-md override left to maintain', () => {
+    renderDetail()
+
+    // jsdom has no layout, so the class is the only observable proof: a bare minmax(26rem,1fr)
+    // floor (416px) overflows a 390px viewport.
+    const grid = screen.getByText('Onboarding in progress').closest('.rounded-md')!.parentElement!
+    expect(grid).toHaveClass('grid', 'items-start', 'grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
+    expect(grid).not.toHaveClass('max-md:grid-cols-1')
+  })
+
   it('renders complete, needs-attention and blocked gates via StatusBadge without fabricating reason associations', () => {
     renderDetail()
 

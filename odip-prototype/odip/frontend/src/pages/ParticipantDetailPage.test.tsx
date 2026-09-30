@@ -349,6 +349,69 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByTestId('adl-assessments-section')).toBeInTheDocument()
     expect(screen.getByTestId('risk-entries-section')).toBeInTheDocument()
   })
+
+  it('packs every short card first and stacks the full-width sections (Consents, Health, ADLs, Risk entries) after them, so none is stranded beside a row-wide void', () => {
+    mockUseParticipant.mockReturnValue({
+      // Same one-trigger-per-conditional-card data as the wizard-order test above.
+      data: makeParticipant({
+        medicareNumber: 'MED123', isCald: true, primaryDiagnosis: 'Autism', memory: 'Fair',
+        serviceStreams: 'CommunityAccessDailyLiving', favouriteBreakfast: 'Toast',
+        behaviourRiskSummary: 'Escalates when routine changes.',
+      }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    const expectedOrder = [
+      ...['Identity', 'Address & Living Arrangements', 'NDIS & Funding', 'Key Identifiers', 'Cultural Background',
+        'Medical', 'Behaviour & Communication', 'Community Access', 'Meals & Diet', 'Risks & Hazards Summary']
+        .map((name) => screen.getByRole('heading', { name })),
+      ...['consents-section', 'health-conditions-section', 'adl-assessments-section', 'risk-entries-section']
+        .map((testId) => screen.getByTestId(testId)),
+    ]
+    const inDocumentOrder = [...expectedOrder].sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+    expect(inDocumentOrder).toEqual(expectedOrder)
+  })
+
+  it('uses the auto-fill items-start section grid with a min(26rem,100%) floor, and gives the table-based Health/ADL sections a bare wrapper instead of a second bordered Card', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    // jsdom has no layout, so the class is the only observable proof of the mobile fix: a bare
+    // minmax(26rem,1fr) floor (416px) overflows a 390px viewport and scrolls the page sideways.
+    const health = screen.getByTestId('health-conditions-section').parentElement as HTMLElement
+    const grid = health.parentElement as HTMLElement
+    expect(grid).toHaveClass('grid', 'items-start')
+    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
+
+    // DataTable draws its own border — a Card around it nested a second one (one border, not two).
+    for (const testId of ['health-conditions-section', 'adl-assessments-section']) {
+      const wrapper = screen.getByTestId(testId).parentElement as HTMLElement
+      expect(wrapper).toHaveClass('col-span-full')
+      expect(wrapper).not.toHaveClass('border')
+      expect(wrapper).not.toHaveClass('rounded-md')
+    }
+  })
+})
+
+describe('ParticipantDetailPage — header meta row', () => {
+  it('ends the meta row at the last real fact: no trailing "—" when the participant has no service streams', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'None' }), isLoading: false })
+    renderAt('participant-1')
+
+    const meta = screen.getByText(/Support Ratio:/).parentElement as HTMLElement
+    expect(within(meta).queryByText('—')).not.toBeInTheDocument()
+    expect(meta.lastElementChild).toHaveTextContent(/Support Ratio:/)
+  })
+
+  it('still shows a chip per service stream at the end of the meta row', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'STA,InHomeSupport' }), isLoading: false })
+    renderAt('participant-1')
+
+    const meta = screen.getByText(/Support Ratio:/).parentElement as HTMLElement
+    expect(within(meta).getByText('STA')).toBeInTheDocument()
+    expect(within(meta).getByText('In-Home Support')).toBeInTheDocument()
+  })
 })
 
 // DOC-01 — header Documents buttons (Intake Form PDF / Participant Profile PDF). Both hooks are

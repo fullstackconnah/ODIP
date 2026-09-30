@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/permissions'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
+import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { SectionEditPanel } from './SectionEditPanel'
 import {
@@ -20,6 +21,15 @@ function Tag({ label }: { label: string }) {
   return (
     <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
       {label}
+    </span>
+  )
+}
+
+/** A FactList value made of Tag chips — min-h-6 centres the chips in the list's 24px row pitch. */
+function TagList({ labels }: { labels: string[] }) {
+  return (
+    <span className="flex min-h-6 flex-wrap items-center gap-1">
+      {labels.map((label) => <Tag key={label} label={label} />)}
     </span>
   )
 }
@@ -130,22 +140,28 @@ function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePract
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">High Support</span><span>{p.isHighSupport ? 'Yes' : 'No'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Intensive Support</span><span>{p.isIntensiveSupport ? 'Yes' : 'No'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Support Ratio</span><span>{OVERNIGHT_RATIO_LABELS[p.supportRatio]}</span>
-          {/* Derived (DTOs.cs: "intentionally NOT here — it is derived") — never editable here;
-              the Restrictive Practices register is its source of truth. */}
-          <span className="text-[var(--color-muted-foreground)]">Restrictive Practice</span>
-          <span className="flex items-center gap-2">
-            {p.hasRestrictivePracticeFlag
-              ? <span className="inline-flex items-center gap-1"><ShieldAlert className="w-4 h-4 text-amber-500" aria-hidden="true" /> Yes</span>
-              : 'No'}
-            <button type="button" onClick={onViewRestrictivePractices} className="text-xs text-[var(--color-primary)] hover:underline">
-              View Restrictive Practices tab
-            </button>
-          </span>
-        </div>
+        <FactList
+          items={[
+            { label: 'High Support', value: p.isHighSupport ? 'Yes' : 'No' },
+            { label: 'Intensive Support', value: p.isIntensiveSupport ? 'Yes' : 'No' },
+            { label: 'Support Ratio', value: OVERNIGHT_RATIO_LABELS[p.supportRatio] },
+            // Derived (DTOs.cs: "intentionally NOT here — it is derived") — never editable here;
+            // the Restrictive Practices register is its source of truth.
+            {
+              label: 'Restrictive Practice',
+              value: (
+                <span className="flex flex-wrap items-center gap-x-2">
+                  {p.hasRestrictivePracticeFlag
+                    ? <span className="inline-flex items-center gap-1"><ShieldAlert className="w-4 h-4 text-[var(--color-warning)]" aria-hidden="true" /> Yes</span>
+                    : 'No'}
+                  <button type="button" onClick={onViewRestrictivePractices} className="text-xs text-[var(--color-primary)] hover:underline">
+                    View Restrictive Practices tab
+                  </button>
+                </span>
+              ),
+            },
+          ]}
+        />
       )}
     </SectionEditPanel>
   )
@@ -222,12 +238,12 @@ function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) 
           </fieldset>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Mobility Aids</span>
-          <span className="flex flex-wrap gap-1">{readMobilityAidBadges.length ? readMobilityAidBadges.map((b) => <Tag key={b} label={b} />) : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Mobility Support</span>
-          <span className="flex flex-wrap gap-1">{p.mobilitySupportOptions?.length ? p.mobilitySupportOptions.map((o) => <Tag key={o} label={o} />) : '—'}</span>
-        </div>
+        <FactList
+          items={[
+            { label: 'Mobility Aids', value: readMobilityAidBadges.length ? <TagList labels={readMobilityAidBadges} /> : undefined },
+            { label: 'Mobility Support', value: p.mobilitySupportOptions?.length ? <TagList labels={p.mobilitySupportOptions} /> : undefined },
+          ]}
+        />
       )}
     </SectionEditPanel>
   )
@@ -239,6 +255,22 @@ type OvernightDraft = { overnightSupport: OvernightSupportType; overnightRatio: 
 
 function readOvernight(p: ParticipantDetailDto): OvernightDraft {
   return { overnightSupport: p.overnightSupport, overnightRatio: p.overnightRatio }
+}
+
+/**
+ * Read-only text for the Overnight Support fact: "None", or "<type> (<ratio>)" once overnight
+ * support applies. `overnightSupport` is typed non-optional, but a payload that omits it (an older
+ * API build, the mock API) used to print "undefined (undefined)". Now a missing type yields no
+ * value (FactList collapses the card to "Not recorded") and a missing ratio drops the parenthetical.
+ */
+function overnightSupportText(p: ParticipantDetailDto): string | undefined {
+  const type = p.overnightSupport as OvernightSupportType | null | undefined
+  if (!type) return undefined
+  if (type === 'None') return 'None'
+  const typeLabel = OVERNIGHT_SUPPORT_LABELS[type]
+  const ratio = p.overnightRatio as SupportRatio | null | undefined
+  const ratioLabel = ratio ? OVERNIGHT_RATIO_LABELS[ratio] : undefined
+  return ratioLabel ? `${typeLabel} (${ratioLabel})` : typeLabel
 }
 
 function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionProps) {
@@ -282,10 +314,7 @@ function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionPro
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Overnight Support</span>
-          <span>{p.overnightSupport !== 'None' ? `${OVERNIGHT_SUPPORT_LABELS[p.overnightSupport]} (${OVERNIGHT_RATIO_LABELS[p.overnightRatio]})` : 'None'}</span>
-        </div>
+        <FactList items={[{ label: 'Overnight Support', value: overnightSupportText(p) }]} />
       )}
     </SectionEditPanel>
   )
@@ -344,10 +373,7 @@ function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
           ))}
         </fieldset>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Equipment</span>
-          <span className="flex flex-wrap gap-1">{equipmentBadges.length ? equipmentBadges.map((b) => <Tag key={b} label={b} />) : '—'}</span>
-        </div>
+        <FactList items={[{ label: 'Equipment', value: equipmentBadges.length ? <TagList labels={equipmentBadges} /> : undefined }]} />
       )}
     </SectionEditPanel>
   )
@@ -387,6 +413,15 @@ function SupportNotesSection({ p, participantId, canEdit }: CommonSectionProps) 
     }
   }
 
+  // Only the notes that exist get a row; none at all collapses to the card's own line below.
+  const noteItems = [
+    { label: 'Mobility Notes', text: p.mobilityNotes },
+    { label: 'Equipment Requirements', text: p.equipmentRequirements },
+    { label: 'Transport Requirements', text: p.transportRequirements },
+  ]
+    .filter((n) => n.text)
+    .map((n) => ({ label: n.label, value: <span className="whitespace-pre-line">{n.text}</span> }))
+
   return (
     <SectionEditPanel title="Support Notes" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
@@ -402,12 +437,7 @@ function SupportNotesSection({ p, participantId, canEdit }: CommonSectionProps) 
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          {p.mobilityNotes && (<><span className="text-[var(--color-muted-foreground)]">Mobility Notes</span><span className="whitespace-pre-line">{p.mobilityNotes}</span></>)}
-          {p.equipmentRequirements && (<><span className="text-[var(--color-muted-foreground)]">Equipment Requirements</span><span className="whitespace-pre-line">{p.equipmentRequirements}</span></>)}
-          {p.transportRequirements && (<><span className="text-[var(--color-muted-foreground)]">Transport Requirements</span><span className="whitespace-pre-line">{p.transportRequirements}</span></>)}
-          {!p.mobilityNotes && !p.equipmentRequirements && !p.transportRequirements && <span className="text-[var(--color-muted-foreground)] sm:col-span-2">No support notes recorded</span>}
-        </div>
+        <FactList items={noteItems} emptyMessage="No support notes recorded" />
       )}
     </SectionEditPanel>
   )
@@ -471,8 +501,20 @@ function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionP
     }
   }
 
+  // The four core ratings always get a row ('—' when unrecorded); the free-text detail rows only
+  // appear once they have content. With every value empty, FactList collapses to "Not recorded".
+  const detailItems = [
+    { label: 'Orthotics', text: p.orthotics },
+    { label: 'Continence Support', text: p.continenceSupportDetail },
+    { label: 'Colostomy / Catheter / Enema / Suppository', text: p.bowelCareDetail },
+    { label: 'Menstruation Support', text: p.menstruationSupport },
+    { label: 'Skin Integrity', text: p.skinIntegrity },
+  ]
+    .filter((d) => d.text)
+    .map((d) => ({ label: d.label, value: <span className="whitespace-pre-line">{d.text}</span> }))
+
   return (
-    <SectionEditPanel title="Mobility & Functional" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Mobility & Functional" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
@@ -521,17 +563,15 @@ function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionP
           </FormField>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
-          <span className="text-[var(--color-muted-foreground)]">Ambulant Status</span><span>{p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Falls Risk Rating</span><span>{p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Uneven Ground</span><span>{p.unevenGroundFlag === true ? 'Yes' : p.unevenGroundFlag === false ? 'No' : '—'}</span>
-          <span className="text-[var(--color-muted-foreground)]">Level of Personal Care</span><span>{p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : '—'}</span>
-          {p.orthotics && (<><span className="text-[var(--color-muted-foreground)]">Orthotics</span><span className="whitespace-pre-line">{p.orthotics}</span></>)}
-          {p.continenceSupportDetail && (<><span className="text-[var(--color-muted-foreground)]">Continence Support</span><span className="whitespace-pre-line">{p.continenceSupportDetail}</span></>)}
-          {p.bowelCareDetail && (<><span className="text-[var(--color-muted-foreground)]">Colostomy / Catheter / Enema / Suppository</span><span className="whitespace-pre-line">{p.bowelCareDetail}</span></>)}
-          {p.menstruationSupport && (<><span className="text-[var(--color-muted-foreground)]">Menstruation Support</span><span className="whitespace-pre-line">{p.menstruationSupport}</span></>)}
-          {p.skinIntegrity && (<><span className="text-[var(--color-muted-foreground)]">Skin Integrity</span><span className="whitespace-pre-line">{p.skinIntegrity}</span></>)}
-        </div>
+        <FactList
+          items={[
+            { label: 'Ambulant Status', value: p.ambulantStatus ? AMBULANT_STATUS_LABELS[p.ambulantStatus] : undefined },
+            { label: 'Falls Risk Rating', value: p.fallsRiskRating ? RISK_RATING_LEVEL_LABELS[p.fallsRiskRating] : undefined },
+            { label: 'Uneven Ground', value: p.unevenGroundFlag === true ? 'Yes' : p.unevenGroundFlag === false ? 'No' : undefined },
+            { label: 'Level of Personal Care', value: p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : undefined },
+            ...detailItems,
+          ]}
+        />
       )}
     </SectionEditPanel>
   )
@@ -597,7 +637,7 @@ function SupportProfileSection({ participantId, canEdit, onViewRestrictivePracti
   ]
 
   return (
-    <SectionEditPanel title="Support Profile" className="md:col-span-2" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Support Profile" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing) => editing ? (
         <div className="space-y-4">
           {/* RestrictivePracticeDetails is server-side read-only-by-design (UpdateSupportProfileDto
@@ -680,8 +720,13 @@ export default function SupportProfileTab({ participantId, onNavigateToTab }: { 
     onNavigateToTab?.('restrictive-practices')
   }
 
+  // Same section grid as the participant Details tab (density spec §5): auto-fill columns with
+  // `align-items:start`, so a short card never stretches to a tall neighbour's height, and a
+  // `min(26rem,100%)` track floor so it collapses to one column on a phone instead of overflowing.
+  // Every card is a plain grid cell — the two long ones (Mobility & Functional, Support Profile)
+  // no longer span the row, so a fact list isn't stretched across 1600px.
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
       <SupportNeedsSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} onViewRestrictivePractices={viewRestrictivePractices} />
       <MobilityAidsSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
       <OvernightSupportSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />

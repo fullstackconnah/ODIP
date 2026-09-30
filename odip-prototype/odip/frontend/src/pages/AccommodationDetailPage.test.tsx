@@ -54,3 +54,18 @@ describe('AccommodationDetailPage — fetch failure vs. not-found (PP-66)', () =
     expect(screen.getByText(/property not found/i)).toBeInTheDocument()
   })
 })
+
+describe('AccommodationDetailPage — section grid', () => {
+  it('collapses to one column on a phone through a min(26rem,100%) track floor, with short cards aligned to the top', () => {
+    mockUseAccommodationDetail.mockReturnValue({
+      data: { id: 'acc-1', propertyName: 'Sunrise House', isActive: true, location: 'Gold Coast', maxCapacity: 4 },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    // jsdom has no layout, so the class is the only observable proof: a bare minmax(26rem,1fr)
+    // floor (416px) overflows a 390px viewport.
+    const grid = screen.getByRole('heading', { name: 'Property Details' }).closest('.rounded-md')!.parentElement!
+    expect(grid).toHaveClass('grid', 'items-start', 'grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
+  })
+})

@@ -120,7 +120,9 @@ export default function OnboardingDetailPage() {
           </Button>
         }
       />
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] items-start gap-[var(--section-gap)] max-md:grid-cols-1">
+      {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
+          overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
         <Card title="Current stage">
           <p className="font-semibold">{d.isReady ? 'Complete' : 'Onboarding in progress'}</p>
           <p className="mt-1 text-sm tabular-nums">Progress: {completedGateCount} of {gates.length} gates complete</p>

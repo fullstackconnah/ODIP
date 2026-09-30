@@ -65,7 +65,7 @@ export default function AccommodationPage() {
           action={properties.length === 0 && !showArchived && canWrite ? { label: 'Add your first property', to: '/accommodation/new' } : undefined}
         />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] items-start gap-[var(--section-gap)]">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">
           {filtered.map((a: any) => (
             <div key={a.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] hover:border-[var(--color-primary)]/30 transition-colors">
               <div className="flex items-start justify-between mb-2">
