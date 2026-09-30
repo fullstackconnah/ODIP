@@ -12,7 +12,7 @@ import type { FundingSourceDto, ServiceBookingListDto, BillableEventDto } from '
 import { PageHeader } from '@/components/PageHeader'
 import { Tabs } from '@/components/Tabs'
 import { DataTable, type Column } from '@/components/DataTable'
-import { EmptyState } from '@/components/EmptyState'
+import { EmptyState, type EmptyStateProps } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -70,6 +70,28 @@ function toUpdateFundingSourcePayload(fs: FundingSourceDto, isActive: boolean) {
 }
 
 const filterSelectWrapClass = 'w-44'
+
+/**
+ * An EmptyState whose call to action is a real `<Button size="md">`. EmptyState's own `action` slot draws a
+ * hand-rolled `min-h-[44px] rounded-lg` text button that ignores the density tokens (44px on a mouse); this
+ * leaves that slot unset and puts the Button directly under the empty state instead — 32px on a fine
+ * pointer, 44px on a coarse one, both from the tokens — at the spacing the slot used (gap-3 + mt-2 = 20px).
+ * `secondary`, because every tab's toolbar above already carries the primary "New …" button. Delete this
+ * once EmptyState's action renders through Button.
+ */
+function EmptyStateWithAction({ action, ...emptyState }: Omit<EmptyStateProps, 'action'> & { action?: { label: string; onClick: () => void } }) {
+  return (
+    <div className="flex flex-col items-center gap-5 pb-10">
+      {/* pb-0!: the wrapper carries the 40px bottom padding EmptyState's py-10 would otherwise put under the description. */}
+      <EmptyState {...emptyState} className="pb-0!" />
+      {action && (
+        <Button variant="secondary" size="md" onClick={action.onClick}>
+          {action.label}
+        </Button>
+      )}
+    </div>
+  )
+}
 
 export default function BillingPage() {
   const { canWrite } = usePermissions()
@@ -231,14 +253,14 @@ function FundingSourcesTab() {
         <TableSkeleton columns={8} />
       ) : fundingSources.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Wallet}
             title="No funding sources match your filters"
             description="Try a different participant or route type, or clear your filters to see all funding sources."
             action={{ label: 'Clear filters', onClick: () => { setParticipantFilter(''); setRouteTypeFilter('') } }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Wallet}
             title="No funding sources yet"
             description="A funding source is a pool of money attached to a participant — an NDIS plan budget category, a private payer, or a B2B customer. Add one to start billing against it."
@@ -355,14 +377,14 @@ function ServiceBookingsTab() {
         <TableSkeleton columns={7} />
       ) : serviceBookings.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Receipt}
             title="No service bookings match your filters"
             description="Try a different participant, or turn off the active-only toggle to include expired bookings."
             action={{ label: 'Clear filters', onClick: () => { setParticipantFilter(''); setActiveOnly(false) } }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={Receipt}
             title="No service bookings yet"
             description="A service booking mirrors a PRODA service booking for agency-managed funding, with lines that track exactly how much of each support item is left to claim. This is what prevents the #1 cause of claim rejections — claiming more than the remaining balance."
@@ -534,14 +556,14 @@ function BillableEventsTab() {
         <TableSkeleton columns={9} />
       ) : events.length === 0 ? (
         hasFilters ? (
-          <EmptyState
+          <EmptyStateWithAction
             icon={ClipboardList}
             title="No billable events match your filters"
             description="Try a different participant, status, stream, or date range, or clear your filters to see all billable events."
             action={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (
-          <EmptyState
+          <EmptyStateWithAction
             icon={ClipboardList}
             title="No billable events yet"
             description="A billable event is the universal billing unit — every income stream (trips, shifts, STA nights, training) produces these, and the router turns them into claim lines or invoice lines. Add one to get started."

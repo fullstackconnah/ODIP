@@ -190,6 +190,12 @@ export default function SchedulePage() {
               style={{ '--trips': tripCount } as React.CSSProperties}
             >
               <colgroup>
+                {/* Resources column: 176px on a phone (name/role stack above the chips), 320px (20rem) from md up. The 320 is
+                    arithmetic, not taste: 2 x 12px cell padding + 20px chevron and gap + a name + 6px gap + 8px gap + the
+                    94px qualification strip (3 icons + "+N") leaves 168px for the name, so "Marcus Papadopoulos" (147px at
+                    14px/600, the longest staff name in the fixtures) fits whole with about 20px of role beside it. The
+                    vehicle rows need less (indent 20 + "Hire WAV (Coastline Rentals)" 193). Any narrower and that staff name
+                    truncates; the width is the same at 1366 and 1920, only the trip columns flex. */}
                 <col className="w-44 md:w-80" />
                 {trips.map((trip: ScheduleTripDto) => <col key={trip.id} />)}
               </colgroup>
@@ -275,8 +281,12 @@ export default function SchedulePage() {
                                 ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-muted-foreground)]" />
                                 : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-muted-foreground)]" />
                               }
-                              <span className="min-w-0 truncate text-sm font-semibold">{s.fullName}</span>
-                              <span className="min-w-0 shrink-[3] truncate text-[13px] text-[var(--color-muted-foreground)]">{roleText}</span>
+                              {/* Name beats role: the role is flex-1 (flex-basis 0), so it only ever gets what the
+                                  name leaves over. With an auto basis it competed for space by shrink ratio and took
+                                  18px off "Callum Radford" (84px of 102). The name only truncates, with this title,
+                                  once the whole cell is narrower than the name itself. */}
+                              <span className="min-w-0 truncate text-sm font-semibold" title={s.fullName}>{s.fullName}</span>
+                              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-muted-foreground)]" title={roleText || undefined}>{roleText}</span>
                             </button>
                             <QualBadgeList
                               className="max-md:pl-5"
@@ -356,36 +366,42 @@ export default function SchedulePage() {
                   </td>
                 </tr>
 
-                {sectionVehicles && vehicles?.map((v: ScheduleVehicleDto) => (
-                  <tr key={v.id} className={ROW}>
-                    <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
-                      {/* pl-5 lines the name up with staff names, which sit after a 14px chevron + gap */}
-                      <div className="flex min-w-0 flex-col pl-5 md:flex-row md:items-center md:gap-2">
-                        <span className="min-w-0 truncate text-sm font-semibold">{v.vehicleName}</span>
-                        <span className="min-w-0 shrink-[3] truncate text-[13px] text-[var(--color-muted-foreground)]">
-                          {v.registration || '—'} · {v.vehicleType?.replace(/([A-Z])/g, ' $1').trim()} · {v.totalSeats} seats
-                          {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined align-middle text-[14px] leading-none">accessible</span></>}
-                        </span>
-                      </div>
-                    </td>
-                    {v.tripStatuses?.map((ts: ScheduleVehicleTripStatusDto, idx: number) => {
-                      const trip = trips[idx]
-                      const isAvailable = ts.status === 'Available'
-                      return (
-                        <td key={ts.tripId} className={TRIP_CELL}>
-                          <div className="flex w-full items-center gap-1">
-                            <ScheduleAssignmentCell
-                              status={ts.status}
-                              clickable={isAvailable && canWrite}
-                              onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}
-                              assignLabel={`Assign ${v.vehicleName} to ${trip.tripName}`}
-                            />
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
+                {sectionVehicles && vehicles?.map((v: ScheduleVehicleDto) => {
+                  const vehicleType = v.vehicleType?.replace(/([A-Z])/g, ' $1').trim() ?? ''
+                  // Plain-text twin of the meta line below, for its title: the wheelchair count is an icon there.
+                  const metaText = `${v.registration || '—'} · ${vehicleType} · ${v.totalSeats} seats${v.wheelchairPositions > 0 ? ` · ${v.wheelchairPositions} wheelchair` : ''}`
+                  return (
+                    <tr key={v.id} className={ROW}>
+                      <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
+                        {/* pl-5 lines the name up with staff names, which sit after a 14px chevron + gap. Same priority as a
+                            staff row: the meta line is flex-1 (basis 0) from md up, so it yields to the name, not the reverse. */}
+                        <div className="flex min-w-0 flex-col pl-5 md:flex-row md:items-center md:gap-2">
+                          <span className="min-w-0 truncate text-sm font-semibold" title={v.vehicleName}>{v.vehicleName}</span>
+                          <span className="min-w-0 truncate text-[13px] text-[var(--color-muted-foreground)] md:flex-1" title={metaText}>
+                            {v.registration || '—'} · {vehicleType} · {v.totalSeats} seats
+                            {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined align-middle text-[14px] leading-none">accessible</span></>}
+                          </span>
+                        </div>
+                      </td>
+                      {v.tripStatuses?.map((ts: ScheduleVehicleTripStatusDto, idx: number) => {
+                        const trip = trips[idx]
+                        const isAvailable = ts.status === 'Available'
+                        return (
+                          <td key={ts.tripId} className={TRIP_CELL}>
+                            <div className="flex w-full items-center gap-1">
+                              <ScheduleAssignmentCell
+                                status={ts.status}
+                                clickable={isAvailable && canWrite}
+                                onClick={isAvailable && canWrite ? () => setAssignModal({ type: 'vehicle', resource: v, trip }) : undefined}
+                                assignLabel={`Assign ${v.vehicleName} to ${trip.tripName}`}
+                              />
+                            </div>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

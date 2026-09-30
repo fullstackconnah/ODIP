@@ -47,8 +47,9 @@ export default function ScheduleSummary({
           <CheckCircle className="h-4 w-4 text-[var(--color-primary)]" aria-hidden="true" />
         </Segment>
         <Segment label="Conflicts">
+          {/* A plain count: the old zero-padded "00"/"01" read as a code, not a number of conflicts. */}
           <span className={conflicts > 0 ? 'text-[var(--color-conflict)]' : undefined}>
-            {String(conflicts).padStart(2, '0')}
+            {conflicts}
           </span>
           {conflicts > 0
             ? <AlertTriangle className="h-4 w-4 text-[var(--color-conflict)]" aria-hidden="true" />

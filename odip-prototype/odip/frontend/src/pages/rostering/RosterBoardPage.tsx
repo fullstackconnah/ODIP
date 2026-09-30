@@ -207,12 +207,20 @@ export default function RosterBoardPage() {
       {isLoading && <RosterGridSkeleton days={days} />}
 
       {isError && (
-        <EmptyState
-          icon={CalendarClock}
-          title="Couldn't load the roster board"
-          description="Something went wrong fetching this week. Try again."
-          action={{ label: 'Retry', onClick: () => refetch() }}
-        />
+        // Retry is a real <Button size="md"> under the EmptyState, not EmptyState's own `action` slot, which
+        // draws a hand-rolled min-h-[44px] text button that ignores the density tokens (44px on a mouse).
+        // gap-5 + pb-10 reproduce the slot's spacing (gap-3 + mt-2 above it, py-10 around it), hence pb-0!.
+        <div className="flex flex-col items-center gap-5 pb-10">
+          <EmptyState
+            icon={CalendarClock}
+            title="Couldn't load the roster board"
+            description="Something went wrong fetching this week. Try again."
+            className="pb-0!"
+          />
+          <Button variant="secondary" size="md" onClick={() => refetch()}>
+            Retry
+          </Button>
+        </div>
       )}
 
       {/* The grid always renders, even for a week with zero shifts — that empty grid is the

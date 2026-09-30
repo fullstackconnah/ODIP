@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, type RenderResult } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { RosterGrid } from './RosterGrid'
-import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift } from '../test-fixtures'
+import { RosterGrid, RosterGridSkeleton } from './RosterGrid'
+import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift, WEEK_DAYS } from '../test-fixtures'
 
 function noop() {}
 
@@ -183,5 +183,21 @@ describe('RosterGrid — density', () => {
     expect(frame).toHaveClass('overflow-auto')
     expect(frame.className).toMatch(/md:max-h-/)
     expect(screen.getByText('Mon').parentElement).toHaveClass('sticky', 'top-0')
+  })
+
+  it('widens the sticky first column to 264px from a 1480px viewport through a CSS variable; below that it keeps the 195px column', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
+
+    // Only the wide-screen class sets the variable; the grid template and the scroll padding read it with the
+    // 195px lib width as the var() fallback, so a narrower window gets exactly the board it always had (195 +
+    // the week strip's 921px fits from 1390px) and a wide one gets the room a one-line participant header needs.
+    expect(container.firstElementChild).toHaveClass('min-[1480px]:[--roster-sticky-col:264px]')
+  })
+
+  it('gives the loading skeleton the same frame, so the column does not jump when the real board arrives', () => {
+    const { container } = render(<RosterGridSkeleton days={WEEK_DAYS} />)
+
+    expect(container.firstElementChild).toHaveClass('min-[1480px]:[--roster-sticky-col:264px]', 'overflow-auto')
   })
 })

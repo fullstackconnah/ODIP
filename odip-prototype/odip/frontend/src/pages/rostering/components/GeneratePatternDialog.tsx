@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { useGeneratePattern } from '@/api/hooks'
@@ -55,13 +56,9 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
           </>
         }
         footer={
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-          >
+          <Button size="md" onClick={handleClose}>
             Done
-          </button>
+          </Button>
         }
       />
     )
@@ -97,21 +94,12 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
       }
       footer={
         <>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-accent"
-          >
+          <Button variant="secondary" size="md" onClick={handleClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!rangeValid || generatePattern.isPending}
-            onClick={handleGenerate}
-            className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
+          </Button>
+          <Button size="md" disabled={!rangeValid || generatePattern.isPending} onClick={handleGenerate}>
             {generatePattern.isPending ? 'Generating…' : 'Generate'}
-          </button>
+          </Button>
         </>
       }
     />

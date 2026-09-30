@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Truck, X } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckVehicleAssignment, getRosterFindings } from '@/api/hooks'
@@ -84,9 +85,9 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
             </div>
             <h3 className="font-display font-bold text-base">Assign Vehicle</h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-[var(--color-surface-container)] transition-colors">
+          <Button variant="ghost" size="sm" iconOnly onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-[var(--section-gap)]">
           <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
@@ -137,14 +138,12 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
           )}
 
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-high)] transition-colors">
+            <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
               Cancel
-            </button>
-            <button type="submit" disabled={isBusy || gate.isBlocked}
-              className="flex-1 px-4 py-2.5 rounded-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-container)] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+            </Button>
+            <Button type="submit" size="md" disabled={isBusy || gate.isBlocked} className="flex-1">
               {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

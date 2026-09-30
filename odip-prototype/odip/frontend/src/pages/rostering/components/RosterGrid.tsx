@@ -2,7 +2,7 @@ import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
 import { ParticipantRow } from './ParticipantRow'
-import { formatDayHeader, isToday, ROSTER_GRID_TEMPLATE_COLUMNS, ROSTER_STICKY_COL_WIDTH, rosterDayColumnsTemplate } from '../lib/roster'
+import { formatDayHeader, isToday, ROSTER_DAY_COL_MIN_WIDTH, ROSTER_STICKY_COL_WIDTH, rosterDayColumnsTemplate } from '../lib/roster'
 
 export type RosterGridProps = {
   board: RosterBoardDto
@@ -18,18 +18,40 @@ export type RosterGridProps = {
   onAddStaffShift: (staffId: string, day: string) => void
 }
 
-const GRID_TEMPLATE = { gridTemplateColumns: ROSTER_GRID_TEMPLATE_COLUMNS }
+/**
+ * The sticky first column's width is a CSS variable set on the frame (BOARD_FRAME), not a constant, so
+ * it can be wider where the screen has the room. Below 1480px it is lib/roster's ROSTER_STICKY_COL_WIDTH
+ * (195px) — the fallback in the var(), i.e. exactly what the board had before, at every width it fits.
+ * From 1480px it is 264px.
+ *
+ * Why 264: a participant row header is one line — name, ratio chip, coverage badge — and the badge only
+ * stays unabridged ("6 days uncovered": 98px of 12px text + 12px padding = 110px) if the content box
+ * fits name + 8 + chip 28 + 8 + badge 110. Content box = column - 1px rule - 16px padding, and the
+ * ParticipantRow container query flips to the unabridged wording at 15rem = 240px of content, i.e. a
+ * 257px column at least. 264px is the first round width past that: 247px of content leaves ~9px spare
+ * beside the shortest fixture name ("Liam Okafor", 83px) — the 240px column first suggested cannot hold
+ * it (223px of content). Longer names truncate, with a title.
+ *
+ * Why 1480: a week strip needs its 7 x 127px tracks plus 24px of gaps and 8px of padding = 921px, so the
+ * board's true minimum is column + 921 + 2px frame border (264 -> 1187px). The board gets the viewport
+ * less the 232px sidebar and 2 x 20px gutters (272px): 1459px, plus ~17px for a classic scrollbar, is
+ * 1476 — hence 1480. Below that the 195px column (1116px, fits from 1390px) stays and the row header
+ * uses its compact badge. At 1920 the day columns end up 193px wide, 10px less than with 195px.
+ */
+const STICKY_COL = `var(--roster-sticky-col, ${ROSTER_STICKY_COL_WIDTH}px)`
+const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))` }
 
 /**
  * The board's scroll frame. From md up it is height-capped so the board scrolls INSIDE it and the day
  * header row genuinely stays pinned: a sticky header only sticks to its nearest scroller, and this
  * wrapper used to be one with no height limit, so `top-0` never engaged. The sticky first column pins
  * horizontally in the same frame. 11.5rem is the page chrome above the board (app bar, header, toolbar)
- * plus the bottom gutter; the 20rem floor keeps a short window usable.
+ * plus the bottom gutter; the 20rem floor keeps a short window usable. `min-[1480px]:[--roster-sticky-col:264px]`
+ * is the wide-screen column width (see STICKY_COL).
  */
-const BOARD_FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]'
+const BOARD_FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1480px]:[--roster-sticky-col:264px] md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]'
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
-const BOARD_FRAME_STYLE = { scrollPaddingLeft: ROSTER_STICKY_COL_WIDTH }
+const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
 
 // Opaque tints on purpose: the header row is sticky, so anything scrolling underneath must not show
 // through it. (`bg-primary/5` alone is translucent, and stacked with bg-surface-container-low the two

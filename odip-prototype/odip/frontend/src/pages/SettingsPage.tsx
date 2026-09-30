@@ -2,7 +2,7 @@ import { useEventTemplates, useActivities, useSettings, useUpdateSettings, usePr
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import { LayoutTemplate, Pencil } from 'lucide-react'
+import { LayoutTemplate, Pencil, X } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -71,13 +71,9 @@ function QualificationSettingsTab() {
           label="Select warning window"
         />
       </div>
-      <button
-        onClick={handleSave}
-        disabled={updateSettings.isPending}
-        className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
-      >
+      <Button size="md" onClick={handleSave} disabled={updateSettings.isPending}>
         {updateSettings.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -160,13 +156,22 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {templatesEmpty ? (
             // The "+ New Template" action lives inside the empty state (not also in the toolbar)
-            // so there is exactly one control for it, right where the eye lands.
-            <EmptyState
-              icon={LayoutTemplate}
-              title="No event templates yet"
-              description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
-              action={{ label: '+ New Template', onClick: openNewTemplate }}
-            />
+            // so there is exactly one control for it, right where the eye lands. It is a real
+            // <Button size="md"> under the EmptyState rather than EmptyState's own `action` slot, which
+            // draws a hand-rolled min-h-[44px] text button that ignores the density tokens (44px on a
+            // mouse; this one is 32px, and 44px on a coarse pointer). gap-5 + pb-10 reproduce the slot's
+            // spacing (gap-3 + mt-2 above it, py-10 around it), hence the pb-0! on the EmptyState.
+            <div className="flex flex-col items-center gap-5 pb-10">
+              <EmptyState
+                icon={LayoutTemplate}
+                title="No event templates yet"
+                description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
+                className="pb-0!"
+              />
+              <Button onClick={openNewTemplate} size="md">
+                + New Template
+              </Button>
+            </div>
           ) : (
             <>
               <div className="flex justify-end">
@@ -382,9 +387,9 @@ function ProviderSettingsTab() {
         </div>
       )}
       {canEditProviderSettings && (
-        <button onClick={handleSave} disabled={upsert.isPending} className="px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-full font-semibold text-sm hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50">
+        <Button size="md" onClick={handleSave} disabled={upsert.isPending}>
           {upsert.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -460,9 +465,9 @@ function SupportCatalogueTab() {
           <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
         </div>
-        <button onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all">
+        <Button size="md" onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }}>
           Import Catalogue
-        </button>
+        </Button>
       </div>
 
       <DataTable
@@ -501,7 +506,9 @@ function SupportCatalogueTab() {
           <div className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-[var(--card-pad)] max-w-lg w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[var(--color-foreground)]">Import NDIS Support Catalogue</h3>
-              <button onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">✕</button>
+              <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }}>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
 
             {importError && (
@@ -538,10 +545,10 @@ function SupportCatalogueTab() {
                   <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setPreviewStep('upload')} className="px-4 h-[var(--control-h)] rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Back</button>
-                  <button onClick={handleConfirm} disabled={confirming} className="px-4 h-[var(--control-h)] rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">
+                  <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
+                  <Button size="md" onClick={handleConfirm} disabled={confirming}>
                     {confirming ? 'Importing...' : 'Confirm Import'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -619,9 +626,9 @@ function PublicHolidaysTab() {
             items={states.map(s => ({ value: s, label: s }))}
             label="Select state"
           />
-          <button onClick={() => setAdding(true)} className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all">
+          <Button size="md" onClick={() => setAdding(true)}>
             + Add Holiday
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -638,8 +645,8 @@ function PublicHolidaysTab() {
               label="Select state"
             />
             <div className="flex gap-2">
-              <button onClick={handleAdd} disabled={createHoliday.isPending} className="px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50">Save</button>
-              <button onClick={() => setAdding(false)} className="px-3 h-[var(--control-h-sm)] rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)]">Cancel</button>
+              <Button size="sm" onClick={handleAdd} disabled={createHoliday.isPending}>Save</Button>
+              <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
             </div>
           </div>
         </div>
@@ -677,13 +684,9 @@ function PublicHolidaysTab() {
       {/* Holiday Sync */}
       <div className="pt-4">
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleSync}
-            disabled={syncHolidays.isPending}
-            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button size="md" onClick={handleSync} disabled={syncHolidays.isPending}>
             {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setShowSyncAdvanced(v => !v)}

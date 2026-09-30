@@ -104,7 +104,8 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(value('Active Trips')).toBe('2')
     expect(value('Staff')).toBe('1/2')
     expect(value('Vehicles')).toBe('1/1')
-    expect(value('Conflicts')).toBe('01')
+    // A plain count: the old zero-padded "01" read as a code, not a number.
+    expect(value('Conflicts')).toBe('1')
     expect(value('Utilization')).toBe('67%')
 
     // The old hero tile / card headings are gone, and the strip is one line, not a tall block.
@@ -117,7 +118,17 @@ describe('SchedulePage — density (spec §7)', () => {
     renderPage()
 
     const strip = screen.getByRole('group', { name: 'Resource health' })
-    expect(within(strip).getByText('01')).toHaveClass('text-[var(--color-conflict)]')
+    expect(within(strip).getByText('1')).toHaveClass('text-[var(--color-conflict)]')
+  })
+
+  it('renders no conflicts as a plain "0", not "00"', () => {
+    renderPage()
+
+    const strip = screen.getByRole('group', { name: 'Resource health' })
+    expect(within(strip).getByText('Conflicts').nextElementSibling?.textContent).toBe('0')
+    expect(within(strip).queryByText('00')).not.toBeInTheDocument()
+    // Zero is not tinted: only a real conflict earns the conflict colour.
+    expect(within(strip).getByText('0')).not.toHaveClass('text-[var(--color-conflict)]')
   })
 
   it('puts the subtitle inline with the heading via PageHeader instead of on its own line', () => {
@@ -169,6 +180,50 @@ describe('SchedulePage — density (spec §7)', () => {
     )
     // One flex line on md+, not the old stacked block.
     expect(row.firstElementChild).toHaveClass('md:flex-row')
+  })
+
+  it('keeps every staff name whole: the role takes only the width the name leaves over, and both carry a title', () => {
+    currentOverview = richOverview
+    renderPage()
+
+    const cell = screen.getByRole('button', { name: /^Alex Rivera/ }).closest('td') as HTMLElement
+    const name = within(cell).getByText('Alex Rivera')
+    const role = within(cell).getByText('Support Worker')
+
+    // Name beats role. The role is flex-1 (flex-basis 0), so its own text never sizes it and it never
+    // takes width off the name — as an auto-basis item with a shrink factor of 3 it took 18px off
+    // "Callum Radford" (84px shown of 102). The name only truncates if the whole cell is narrower than it.
+    expect(role).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(role.className).not.toMatch(/shrink-\[/)
+    expect(name).toHaveClass('min-w-0', 'truncate')
+    expect(name).not.toHaveClass('flex-1')
+    // Whatever does truncate says what it is.
+    expect(name).toHaveAttribute('title', 'Alex Rivera')
+    expect(role).toHaveAttribute('title', 'Support Worker')
+  })
+
+  it('gives a vehicle the same priority: the name stays whole, and the meta line yields and carries a title', () => {
+    currentOverview = richOverview
+    renderPage()
+
+    const name = screen.getByText('Toyota HiAce')
+    const meta = screen.getByText(/ABC123/)
+
+    expect(name).toHaveAttribute('title', 'Toyota HiAce')
+    expect(name).toHaveClass('min-w-0', 'truncate')
+    expect(name).not.toHaveClass('md:flex-1')
+    expect(meta).toHaveClass('min-w-0', 'truncate', 'md:flex-1')
+    expect(meta.className).not.toMatch(/shrink-\[/)
+    // The wheelchair count is an icon on screen; the title spells it out.
+    expect(meta).toHaveAttribute('title', 'ABC123 · Mini Bus · 12 seats · 2 wheelchair')
+  })
+
+  it('sizes the Resources column at 20rem from md up, the width the longest staff name needs beside the chip strip', () => {
+    const { container } = renderPage()
+
+    // 2 x 12px padding + 20px chevron and gap + 6px + 8px gaps + the 94px chip strip leave 168px for a name,
+    // so "Marcus Papadopoulos" (147px at 14px/600) fits whole. Narrower and it truncates.
+    expect(container.querySelector('colgroup col')).toHaveClass('w-44', 'md:w-80')
   })
 
   it('renders the assignment chip at row-h less 6px (28px) with 14px text', () => {

@@ -3,6 +3,7 @@ import { act } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 
 const { mockUsePermissions, mockUseEventTemplates, settingsData } = vi.hoisted(() => ({
@@ -30,6 +31,16 @@ function renderSettingsPage() {
     { initialEntries: ['/settings'] },
   )
   return { router, ...render(<RouterProvider router={router} />) }
+}
+
+// The Support Catalogue tab invalidates queries after an import, so it needs a QueryClient the other tabs don't.
+function renderSettingsPageWithQueryClient() {
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
 }
 
 vi.mock('@/api/hooks', () => ({
@@ -118,6 +129,70 @@ describe('SettingsPage — Event Templates tab', () => {
     renderSettingsPage()
 
     expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
+  })
+
+  it('draws the empty-state "+ New Template" as a Button at --control-h (32px, 44px on a coarse pointer), not a hand-rolled 44px link', () => {
+    const { container } = renderSettingsPage()
+
+    const action = screen.getByRole('button', { name: '+ New Template' })
+    expect(action).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+    // EmptyState's own action slot is the only place that min-h-[44px] link-button is drawn; it is left unused here.
+    expect(container.querySelector('.min-h-\\[44px\\]')).toBeNull()
+  })
+})
+
+describe('SettingsPage — buttons are the Button primitive', () => {
+  it('draws Save Settings as a Button at --control-h, not a hand-rolled rounded-full pill', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
+
+    const save = screen.getByRole('button', { name: 'Save Settings' })
+    expect(save).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+    expect(save.className).not.toMatch(/rounded-full|py-2\.5/)
+  })
+
+  it('draws the Public Holidays actions as Buttons: + Add Holiday and Sync Holidays at --control-h, the add-row Save and Cancel at --control-h-sm', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    for (const name of ['+ Add Holiday', 'Sync Holidays']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-full/)
+    }
+
+    await user.click(screen.getByRole('button', { name: '+ Add Holiday' }))
+    for (const name of ['Save', 'Cancel']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveClass('h-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-(lg|full)/)
+    }
+
+    // Cancel still closes the add row.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByPlaceholderText('Holiday name')).not.toBeInTheDocument()
+  })
+
+  it('opens the catalogue import from a Button, and closes it from a labelled iconOnly Close button (the bare ✕ glyph had no name)', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+
+    await user.click(open)
+    expect(screen.getByText('Import NDIS Support Catalogue')).toBeInTheDocument()
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(close).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]')
+
+    await user.click(close)
+    expect(screen.queryByText('Import NDIS Support Catalogue')).not.toBeInTheDocument()
   })
 })
 

@@ -94,6 +94,23 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
     }
   }
 
+  // The person this chip's one-line label names (see `context`), as plain text for the accessible name below.
+  const labelText = context === 'participant' ? (isFilled ? shift.staffName : 'Unfilled') : subjectLabel
+  const timeRange = formatShiftTimeRange(shift.startTime, shift.endTime)
+  // The open control's accessible name, spelled out once. Everything the chip can't afford to draw at 28px
+  // — the next-day note, the ratio, the override, the on-leave state — is announced from here (and from the
+  // hover titles) instead of from visually-hidden spans: those are 1px clip boxes with text wider than
+  // themselves, which is exactly what a "clipped without an ellipsis" audit reports. Same reading order the
+  // spans gave: severity first, then time, person, ratio, override, leave.
+  const openName = [
+    hasFindings ? findingsSeverityLabel(shift.findings) : null,
+    `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
+    labelText,
+    showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
+    shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null,
+    onApprovedLeave ? 'On leave' : null,
+  ].filter(Boolean).join(', ')
+
   // A link to the person's own page, or plain "Unfilled" text in a participant row when nobody covers
   // the shift (a staff-row chip is never unfilled: it exists because that staff member holds it).
   // stopPropagation keeps a name click from also bubbling up to the open-shift div.
@@ -158,6 +175,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       <div
         role="button"
         tabIndex={0}
+        aria-label={openName}
         onClick={() => onOpen(shift)}
         onKeyDown={handleOpenKeyDown}
         // relative, no overflow-hidden here: the severity marker below needs to sit over the top edge
@@ -170,8 +188,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           pointer-events-none so it never intercepts the click. It's a safety signal, not decoration,
           so it stays, but as a plain flex child it would cost the time ~16px it can't spare. It's a
           sibling of the content wrapper (not inside it) so the wrapper's overflow-hidden doesn't clip
-          it. Still a DOM descendant of this control, so it still concatenates into the accessible name;
-          kept first in JSX so the safety information comes before time/person.
+          it. It keeps its own role="img" label (and hover title), and the same severity text leads this
+          control's aria-label (openName) so the safety information is announced before time/person.
         */}
         {hasFindings && (
           <span
@@ -201,34 +219,29 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
         <span className="flex min-w-0 flex-1 items-center overflow-hidden rounded-sm px-0.5">
           <span
             className="shrink-0 font-medium tabular-nums text-foreground"
-            title={shift.endsNextDay ? `${formatShiftTimeRange(shift.startTime, shift.endTime)} — ends the next day` : undefined}
+            title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
           >
-            {formatShiftTimeRange(shift.startTime, shift.endTime)}
+            {timeRange}
             {/*
               No visible "+1"/next-day glyph, deliberately: an overnight shift is self-evident from its own
               times — "10pm–6am" has an end earlier than its start, which can only mean the next day. The
               suffix restated what the range already says, so dropping it is redundancy removed, not
               information lost — do not "restore" it. It's still spelled out in full on hover (the title
-              above) and for assistive tech (below).
+              above) and for assistive tech (the control's aria-label).
             */}
-            {shift.endsNextDay && <span className="sr-only"> (ends the next day)</span>}
           </span>
-          {/* Visual separator between time and name; spoken as a comma instead of "middle dot". */}
+          {/* Visual separator between time and name; the accessible name (aria-label above) uses a comma. */}
           <span className="shrink-0 px-0.5 text-muted-foreground" aria-hidden="true">·</span>
-          <span className="sr-only">, </span>
           {label}
           {/*
             Priority on a chip, narrowest-first: time > name > ratio > everything else. Time is what a
             coordinator scans for and must never clip; the name yields (truncate, above); the ratio badge
             yields *entirely* — it drops from the visible layout rather than squeezing time or name, since
-            a day column is never wide enough to show all three. It stays discoverable: sr-only here so it
-            still contributes to this control's accessible name, visible in the slide-over, and (the case
-            that actually matters operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL
-            finding, which the severity marker already makes visible.
+            a day column is never wide enough to show all three. It stays discoverable: it is part of this
+            control's aria-label, visible in the slide-over, and (the case that actually matters
+            operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
+            marker already makes visible.
           */}
-          {showRatio && (
-            <span className="sr-only">, {RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio</span>
-          )}
           {shift.overrideReason && (
             <span
               className="ml-1 shrink-0 text-muted-foreground"
@@ -241,19 +254,25 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           )}
           {/* On-leave marker — a filled chip whose assignee's leave got approved after the fact. The
               dashed border makes the hole visible at a glance; this names why. Icon at rest, with the
-              words appearing once the chip is wide enough (container query on the chip) — the text is
-              always in the DOM for assistive tech. */}
+              words shown only once the chip is wide enough (container query on the chip): below that they
+              are display:none, never a clipped or half-drawn word. Assistive tech and the hover title get
+              "On leave" / the full explanation from the control's aria-label and the chip's title. */}
           {onApprovedLeave && (
             <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground" title={onLeaveTitle}>
               <CalendarOff className="h-3 w-3" aria-hidden="true" />
-              <span className="sr-only @[15rem]:not-sr-only" title={onLeaveTitle}>On leave</span>
+              <span className="hidden @[15rem]:inline" title={onLeaveTitle}>On leave</span>
             </span>
           )}
         </span>
       </div>
 
       {canWrite && (
-        <span className="flex shrink-0 items-center pr-0.5">
+        // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px
+        // square, radius 8px) and takes no className or custom trigger. This wrapper gives that one button the
+        // geometry of `<Button iconOnly>` — a --control-h-sm square (24px, 36px under a coarse pointer) at
+        // --radius-sm, centred icon — from outside. Delete these overrides once Dropdown's icon trigger renders
+        // through Button itself.
+        <span className="flex shrink-0 items-center pr-0.5 [&_button]:inline-flex [&_button]:h-[var(--control-h-sm)] [&_button]:w-[var(--control-h-sm)] [&_button]:items-center [&_button]:justify-center [&_button]:rounded-[var(--radius-sm)] [&_button]:p-0">
           <Dropdown
             variant="icon"
             icon={<MoreVertical className="h-3.5 w-3.5" />}

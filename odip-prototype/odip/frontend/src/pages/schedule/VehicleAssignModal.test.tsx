@@ -101,3 +101,34 @@ describe('VehicleAssignModal — live conflict check (trip-side parity with Staf
     expect(screen.getByRole('button', { name: /assign vehicle/i })).not.toBeDisabled()
   })
 })
+
+describe('VehicleAssignModal — buttons are the Button primitive', () => {
+  it('closes from a labelled iconOnly Close button (a --control-h-sm square at --radius-sm) and from Cancel', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    const onClose = vi.fn()
+    render(<VehicleAssignModal vehicle={vehicle} trip={trip} staff={[]} onClose={onClose} onAssign={vi.fn()} isLoading={false} />)
+
+    // The old icon-only button had no accessible name at all, and was a p-1.5 rounded-full 28px circle.
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(close).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
+    await user.click(close)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('draws Cancel and the submit button at --control-h, side by side', () => {
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    render(<VehicleAssignModal vehicle={vehicle} trip={trip} staff={[]} onClose={vi.fn()} onAssign={vi.fn()} isLoading={false} />)
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const submit = screen.getByRole('button', { name: /assign vehicle/i })
+    for (const button of [cancel, submit]) {
+      expect(button).toHaveClass('h-[var(--control-h)]', 'flex-1', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-full|py-2\.5/)
+    }
+    expect(submit).toHaveAttribute('type', 'submit')
+    expect(cancel).toHaveAttribute('type', 'button')
+  })
+})

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
@@ -104,17 +105,12 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
         closeOnBackdrop={false}
         footer={
           <>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" size="md" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button size="md" onClick={submit} disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Save'}
-            </button>
+            </Button>
           </>
         }
       >

@@ -253,3 +253,80 @@ describe('ShiftChip one-line label', () => {
     expect(container.firstElementChild).toHaveClass('h-[calc(var(--row-h)_-_6px)]')
   })
 })
+
+describe('ShiftChip sub-text is announced, never clipped', () => {
+  it('spells the next-day note, ratio, override and on-leave state out in the open control\'s accessible name, severity first', () => {
+    const shift = makeShift({
+      participantName: 'Grace Palmer-Hughes',
+      staffId: 'staff-9',
+      staffName: 'Mei Zhang',
+      startTime: '19:00:00',
+      endTime: '07:00:00',
+      endsNextDay: true,
+      ratio: 'TwoToOne',
+      overrideReason: 'Only cover available',
+      assigneeOnApprovedLeave: true,
+      findings: [makeFinding({ severity: 'Blocking' })],
+    })
+    renderChip(<ShiftChip shift={shift} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByRole('button', { name: /^1 blocking issue, 7pm–7am/ })).toHaveAccessibleName(
+      '1 blocking issue, 7pm–7am (ends the next day), Mei Zhang, 2:1 ratio, Assigned with an override: Only cover available, On leave',
+    )
+  })
+
+  it('names "Unfilled" in a participant row and the participant in a staff row, in the accessible name too', () => {
+    const unfilled = makeShift({ participantName: 'Grace Palmer', staffId: null, staffName: null })
+    const { unmount } = renderChip(<ShiftChip shift={unfilled} canWrite dashed context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(getOpenButton(unfilled)).toHaveAccessibleName('9am–5pm, Unfilled')
+    unmount()
+
+    const staffRow = makeShift({ participantName: 'Grace Palmer' })
+    renderChip(<ShiftChip shift={staffRow} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(getOpenButton(staffRow)).toHaveAccessibleName('9am–5pm, Grace Palmer')
+  })
+
+  it('draws no visually-hidden text: an sr-only span is a 1px clip box whose text overflows it, i.e. clipped without an ellipsis', () => {
+    const shift = makeShift({
+      staffId: 'staff-9',
+      staffName: 'Mei Zhang',
+      startTime: '19:00:00',
+      endTime: '07:00:00',
+      endsNextDay: true,
+      ratio: 'OneToTwo',
+      assigneeOnApprovedLeave: true,
+    })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(container.querySelector('.sr-only')).toBeNull()
+    // The next-day note still reaches sighted users on hover.
+    expect(screen.getByText('7pm–7am')).toHaveAttribute('title', '7pm–7am — ends the next day')
+  })
+
+  it('shows "On leave" in words only once the chip is 15rem wide; below that the words are display:none, not a clipped fragment', () => {
+    const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const words = screen.getByText('On leave')
+    expect(words).toHaveClass('hidden', '@[15rem]:inline')
+    expect(words).not.toHaveClass('sr-only')
+    // The icon beside it carries the same explanation on hover, and the whole chip does too.
+    expect(words.parentElement).toHaveAttribute('title', expect.stringContaining('approved leave'))
+    expect(words.closest('[class*="@container"]')).toHaveAttribute('title', expect.stringContaining('approved leave'))
+  })
+
+  it('keeps the actions trigger a --control-h-sm square at --radius-sm (Button iconOnly geometry), not Dropdown\'s 26px rounded-lg', () => {
+    renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const trigger = screen.getByRole('button', { name: /actions for/i })
+    // Dropdown's icon variant hard-codes p-1.5 rounded-lg and takes no className, so the geometry is applied to
+    // the trigger by the wrapper around it. Both class lists are asserted so the override can't silently rot.
+    const wrapper = trigger.parentElement?.parentElement as HTMLElement
+    for (const cls of [
+      '[&_button]:h-[var(--control-h-sm)]',
+      '[&_button]:w-[var(--control-h-sm)]',
+      '[&_button]:p-0',
+      '[&_button]:rounded-[var(--radius-sm)]',
+    ]) expect(wrapper).toHaveClass(cls)
+  })
+})

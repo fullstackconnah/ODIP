@@ -105,3 +105,20 @@ describe('AvailabilityRecordFormModal', () => {
     })
   })
 })
+
+describe('AvailabilityRecordFormModal footer buttons', () => {
+  it('draws Cancel and Save as Buttons at --control-h, not hand-rolled rounded-lg buttons', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    renderModal({ open: true, onClose, onSubmit: vi.fn(), submitting: false, staffOptions })
+
+    for (const name of ['Cancel', 'Save']) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
+      expect(button.className).not.toMatch(/rounded-lg|py-2/)
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})

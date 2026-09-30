@@ -20,7 +20,7 @@ describe('QualBadgeList', () => {
   })
 
   it('collapses the overflow into a "+N" chip carrying the FULL list in its title', () => {
-    render(<QualBadgeList items={ALL} />)
+    const { container } = render(<QualBadgeList items={ALL} />)
 
     // Four slots: three chips plus "+2".
     expect(screen.getByTitle('Driver Eligible')).toBeInTheDocument()
@@ -31,8 +31,10 @@ describe('QualBadgeList', () => {
 
     const more = screen.getByText('+2')
     expect(more.closest('[title]')).toHaveAttribute('title', 'Driver Eligible, First Aid, Medication, Manual Handling, Overnight')
-    // Screen readers get the same list, not just a bare number.
-    expect(more.closest('[title]')).toHaveTextContent('more qualifications: Driver Eligible, First Aid, Medication, Manual Handling, Overnight')
+    // Screen readers get the same list, not just a bare number — from the chip's label, not a visually-hidden
+    // span (a 1px clip box whose text overflows it reads as "clipped without an ellipsis").
+    expect(more.closest('[title]')).toHaveAccessibleName('+2 more qualifications: Driver Eligible, First Aid, Medication, Manual Handling, Overnight')
+    expect(container.querySelector('.sr-only')).toBeNull()
   })
 
   it('skips inactive qualifications when counting', () => {

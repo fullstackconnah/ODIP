@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Check, ShieldAlert } from 'lucide-react'
 import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
@@ -27,21 +27,34 @@ export type ParticipantRowProps = {
 export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
+  const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
+  const uncoveredLabel = `${row.daysWithoutCover} day${row.daysWithoutCover === 1 ? '' : 's'} uncovered`
 
   return (
     <>
       {/*
-        Row header: two tight lines inside one --row-h row. Line 1: the participant (a link) and, when it
-        applies, the restrictive-practice marker — kept on the name line so it survives a crowded second
-        line. Line 2: support ratio on the left (it truncates first), coverage on the right — the visible
-        signal for the gap this row-per-participant layout exists to surface. A trip bar rendered below
-        can explain an otherwise-empty week without this reading as a failure.
+        Row header: ONE line inside the --row-h row — name, then the support ratio as a chip, then the
+        coverage state, in that order. The name group (participant link + the restrictive-practice marker,
+        which is a safety signal and must survive) takes whatever width is left and truncates with a title;
+        the ratio chip and the coverage badge are shrink-0, so neither is ever squeezed or cut, and `gap-2`
+        keeps the name from touching them. Coverage is the visible signal for the gap this row-per-participant
+        layout exists to surface. A trip bar rendered below can explain an otherwise-empty week without this
+        reading as a failure.
+
+        The cell is a size container. At the wide sticky-column width (RosterGrid: 264px, 247px of content
+        inside the rule and padding) the coverage state reads in full — "6 days uncovered", "Fully covered" —
+        and, with the 28px ratio chip and two 8px gaps, still leaves 92px for the name, so a name up to that
+        length shows whole; a longer one truncates with its title. Below 15rem (240px) of content — the 195px
+        column used under 1480px viewports — the coverage state collapses to a warning icon + the count, or
+        a check, so the row still fits one line; the full wording stays on the badge's title and aria-label.
+        None of it uses visually-hidden (sr-only) text: those 1px clip boxes are what a "clipped without an
+        ellipsis" audit reports, and role="img" + aria-label announces the same thing.
       */}
-      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
+      <div className="@container sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to={`/participants/${row.participantId}`}
-            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-5 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >
             {row.fullName}
@@ -53,14 +66,30 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
           )}
         </div>
 
-        <div className="flex min-w-0 items-center justify-between gap-2 text-[13px] leading-4 text-muted-foreground">
-          <span className="min-w-0 truncate">{RATIO_LABELS[row.supportRatio] ?? row.supportRatio} support</span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span
+            role="img"
+            aria-label={`${ratioLabel} support`}
+            title={`${ratioLabel} support`}
+            className="inline-flex h-5 items-center rounded-sm bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
+          >
+            {ratioLabel}
+          </span>
           {hideCoverageBadge ? null : covered ? (
-            <span className="shrink-0">Fully covered</span>
+            <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-[13px] text-muted-foreground">
+              <Check className="h-3.5 w-3.5 @[15rem]:hidden" aria-hidden="true" />
+              <span className="hidden @[15rem]:inline">Fully covered</span>
+            </span>
           ) : (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 font-medium text-[var(--color-on-warning-container)]">
-              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              {row.daysWithoutCover} day{row.daysWithoutCover === 1 ? '' : 's'} uncovered
+            <span
+              role="img"
+              aria-label={uncoveredLabel}
+              title={uncoveredLabel}
+              className="inline-flex h-5 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+            >
+              <AlertTriangle className="h-3 w-3 @[15rem]:hidden" aria-hidden="true" />
+              <span className="tabular-nums @[15rem]:hidden">{row.daysWithoutCover}</span>
+              <span className="hidden @[15rem]:inline">{uncoveredLabel}</span>
             </span>
           )}
         </div>

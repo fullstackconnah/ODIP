@@ -37,13 +37,16 @@ export function QualBadgeList({ items, className }: { items: Qualification[]; cl
       {shown.map(q => (
         <QualBadge key={q.title} active icon={q.icon} title={q.title} />
       ))}
+      {/* The full list is on the hover title and, for assistive tech, this label — not a visually-hidden span
+          (a 1px clip box whose text overflows it, which reads as "clipped without an ellipsis"). */}
       {hiddenCount > 0 && (
         <span
+          role="img"
+          aria-label={`+${hiddenCount} more qualifications: ${fullList}`}
           title={fullList}
           className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-container)] px-1 text-xs font-semibold text-[var(--color-muted-foreground)]"
         >
           +{hiddenCount}
-          <span className="sr-only"> more qualifications: {fullList}</span>
         </span>
       )}
     </span>
