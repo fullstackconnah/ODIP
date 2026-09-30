@@ -698,24 +698,550 @@ function portalParticipantSummary(participantId) {
   }
 }
 
-/** Builds a PortalShiftDetailDto for one fixture shift, optionally overriding `status` and the
- * active `completion` (used by the start/finish POST handlers below to hand back a plausible
- * post-action shape without mutating portalShiftBase/shiftCompletions). */
+// ── Shift package (PortalShiftDetailDto + the package endpoints) ────────────────────────────
+// Everything the shift package needs beyond the original portal shape: need-to-know "at a
+// glance" facts, emergency contacts, doses due in the window (Due / Overdue / Recorded) and PRN,
+// server-matched routines, the previous worker's handover + custody trail, breaks, net worked
+// minutes, the Finish checklist and the Medication Competency flag. See PortalDTOs.cs.
+//
+// UNLIKE the rest of this file, the package state is STICKY within one server process so the
+// shift-package UI can be built against it: Start/Finish flip the shift's status, breaks can be
+// started/ended/edited/deleted, doses can be recorded, the handover can be acknowledged. Restart
+// the mock to reset. Error paths answer with the real status codes and codes:
+//   409 SHIFT_BREAK_ALREADY_RUNNING / SHIFT_NOT_IN_PROGRESS / ADMINISTRATION_ALREADY_RECORDED,
+//   400 SHIFT_BREAK_* and validation, 403 MEDICATION_COMPETENCY_*, 404, 422 SHIFT_FINISH_BLOCKED /
+//   DOSE_SLOT_NOT_DUE.
+// MOCK_COMPETENCY=expired|missing makes the signed-in worker lack a current Medication Competency
+// (canRecordDoses false + reason; recording a dose 403s). Default: current.
+//
+// Fixtures: shift-0003 (Sienna, Published, 09:00-15:00) is the worked example - anaphylaxis, doses
+// with one OVERDUE once started, a high-risk (witnessed) dose, a PRN, routines, emergency contacts
+// and an UNREAD handover. shift-0002 (Grace, overnight 19:00-07:00, PendingReview) has after-
+// midnight doses and routines, breaks and a handover. shift-0001 (Liam, Completed) has mostly
+// "Not recorded" (null) facts, to exercise the missing-data states.
+
+const PACKAGE_TZ = 'Australia/Brisbane'
+const MOCK_COMPETENCY = (process.env.MOCK_COMPETENCY || 'current').toLowerCase()
+const MOCK_WORKER_NAME = "Jack O'Sullivan"
+
+const competencyView = () => {
+  if (MOCK_COMPETENCY === 'expired') {
+    return {
+      canRecordDoses: false,
+      canRecordDosesReason: 'Your Medication Competency expired on 12 Sep 2026. Ask your coordinator to update your qualifications before you record medication doses.',
+      canRecordDosesReasonCode: 'MEDICATION_COMPETENCY_EXPIRED',
+    }
+  }
+  if (MOCK_COMPETENCY === 'missing') {
+    return {
+      canRecordDoses: false,
+      canRecordDosesReason: 'You need a current Medication Competency credential to record medication doses. Ask your coordinator to add it to your qualifications.',
+      canRecordDosesReasonCode: 'MEDICATION_COMPETENCY_MISSING',
+    }
+  }
+  return { canRecordDoses: true, canRecordDosesReason: null, canRecordDosesReasonCode: null }
+}
+
+const emptyAtAGlance = () => ({
+  allergies: { detail: null, isAnaphylaxisRisk: null, managementNotes: null },
+  diet: { chokingRiskDetail: null, pegRegimeDetail: null, modifiedDietDetail: null, mealAssistanceDetail: null, medicationTricks: null },
+  communication: { expressiveSkills: null, receptiveSkills: null, readingAbility: null, aids: null },
+  behaviour: { triggers: null, earlyWarningSigns: null, deEscalationStrategies: null, whatNotToDo: null, whatHelpsMeCalmDown: null },
+  hidpa: { epilepsy: false, enteralFeeding: false, dysphagia: false },
+  address: { street: null, suburb: null, state: null, postcode: null },
+})
+
+// participantId -> need-to-know package data. Missing values are explicit nulls ("Not recorded").
+const packageParticipants = {
+  'p-0002': {
+    atAGlance: {
+      allergies: {
+        detail: 'Tree nuts (almond, cashew) and kiwi fruit.', isAnaphylaxisRisk: true,
+        managementNotes: 'EpiPen Jr in the red bag on the back of the chair. Call 000 first, then use the EpiPen.',
+      },
+      diet: {
+        chokingRiskDetail: 'High risk. Supervise every meal; sit upright for 30 minutes after eating.',
+        pegRegimeDetail: null, modifiedDietDetail: 'Soft, bite-sized pieces. No whole nuts, grapes or popcorn.',
+        mealAssistanceDetail: 'Needs the plate set up and food cut up; eats independently once started.',
+        medicationTricks: 'Takes tablets crushed in apple puree.',
+      },
+      communication: {
+        expressiveSkills: 'Speaks in short phrases. Says "no" clearly; may not say when in pain.',
+        receptiveSkills: 'Understands simple one-step instructions.', readingAbility: 'Reads picture cards, not text.',
+        aids: 'Picture schedule and a PECS book (in the wheelchair bag).',
+      },
+      behaviour: {
+        triggers: 'Loud sudden noises; unexpected changes to the routine.', earlyWarningSigns: 'Humming louder, rocking, covering her ears.',
+        deEscalationStrategies: 'Move to a quiet room, lower your voice, offer the weighted blanket.',
+        whatNotToDo: 'Do not touch her without telling her first. Do not rush transfers.',
+        whatHelpsMeCalmDown: 'Weighted blanket, her favourite playlist, a slow drink.',
+      },
+      hidpa: { epilepsy: true, enteralFeeding: false, dysphagia: true },
+      address: { street: '14 Banksia Court', suburb: 'Robina', state: 'QLD', postcode: '4226' },
+    },
+    emergencyContacts: [
+      { id: 'ec-0001', name: 'Priya Whitfield', relationship: 'Mother', phone: '07 5555 0142', mobile: '0400 555 142', isPrimary: true, priorityOrder: 1 },
+      { id: 'ec-0002', name: 'Daniel Whitfield', relationship: 'Brother', phone: null, mobile: '0411 222 908', isPrimary: false, priorityOrder: 2 },
+    ],
+    handover: {
+      completionId: 'sc-prev-0002', text: 'Sienna slept badly and was tired from 10am. Left heel looks a bit red - keep an eye on it and tell Priya at pick-up. New EpiPen is in the red bag.',
+      nothingToHandOver: false, authorUserId: 's-0005', authorName: 'Tom Beattie', shiftDate: '2026-09-12', submittedAt: '2026-09-12T05:10:00Z',
+    },
+    handoverTrail: [
+      { completionId: 'sc-prev-0002', workerName: 'Tom Beattie', shiftDate: '2026-09-12' },
+      { completionId: 'sc-prev-0001', workerName: 'Mei Zhang', shiftDate: '2026-09-11' },
+      { completionId: 'sc-prev-0000', workerName: 'Tom Beattie', shiftDate: '2026-09-10' },
+    ],
+  },
+  'p-0004': {
+    atAGlance: {
+      ...emptyAtAGlance(),
+      allergies: { detail: 'Penicillin (rash).', isAnaphylaxisRisk: false, managementNotes: null },
+      communication: { expressiveSkills: 'Uses full sentences.', receptiveSkills: null, readingAbility: null, aids: 'Hearing aid (left ear) - check it is in and charged.' },
+      behaviour: {
+        triggers: 'Being woken suddenly; strangers in her room.', earlyWarningSigns: 'Pacing, tearfulness.',
+        deEscalationStrategies: 'Quiet voice, dim the light, sit with her.', whatNotToDo: 'Do not restrain. Do not enter the room without knocking.',
+        whatHelpsMeCalmDown: 'A cup of tea and the radio on low.',
+      },
+      hidpa: { epilepsy: true, enteralFeeding: false, dysphagia: false },
+      address: { street: '3/22 Jacaranda Avenue', suburb: 'Chermside', state: 'QLD', postcode: '4032' },
+    },
+    emergencyContacts: [
+      { id: 'ec-0003', name: 'Helen Palmer', relationship: 'Mother', phone: '07 5555 0177', mobile: null, isPrimary: true, priorityOrder: 1 },
+    ],
+    handover: {
+      completionId: 'sc-prev-0004', text: 'Grace was unsettled at bedtime last night; settled by 11pm. Hearing aid battery was replaced.',
+      nothingToHandOver: false, authorUserId: 's-0004', authorName: 'Mei Zhang', shiftDate: '2026-09-09', submittedAt: '2026-09-09T21:00:00Z',
+    },
+    handoverTrail: [
+      { completionId: 'sc-prev-0004', workerName: 'Mei Zhang', shiftDate: '2026-09-09' },
+      { completionId: 'sc-prev-0003', workerName: 'Jack O\'Sullivan', shiftDate: '2026-09-08' },
+    ],
+  },
+  'p-0001': {
+    atAGlance: emptyAtAGlance(),
+    emergencyContacts: [],
+    handover: null,
+    handoverTrail: [],
+  },
+}
+
+const DOSE_COMMON = { form: 'Tablet', route: 'Oral', supportLevel: 'Administer', isHighRisk: false, directions: null }
+
+// shiftId -> scheduled doses (provider-local wall-clock `at`, "overdue" = how it reads once the
+// shift is InProgress and nothing is recorded) and PRN medications. `recorded` prefills history.
+const packageDoses = {
+  'shift-0003': {
+    slots: [
+      { ...DOSE_COMMON, medicationId: 'med-0301', name: 'Levetiracetam', strength: '500mg', dose: '1 tablet', at: '2026-09-13T09:00:00', overdue: true, directions: 'With food' },
+      { ...DOSE_COMMON, medicationId: 'med-0302', name: 'Ferrous sulfate', strength: '105mg', dose: '1 tablet', at: '2026-09-13T12:30:00' },
+      { ...DOSE_COMMON, medicationId: 'med-0303', name: 'Insulin glargine', strength: '100 units/mL', dose: '18 units', form: 'Injection', route: 'Subcutaneous', isHighRisk: true, at: '2026-09-13T13:00:00', directions: 'Rotate the injection site' },
+    ],
+    prn: [
+      { ...DOSE_COMMON, medicationId: 'med-0304', name: 'Paracetamol', strength: '500mg', dose: '2 tablets', indication: 'Mild pain or fever', maxDosesPer24h: 4, minIntervalMinutes: 240, baseDoses: 1, baseLastDoseAt: '2026-09-12T23:40:00Z', pendingOutcomeId: 'adm-prn-0304' },
+    ],
+  },
+  'shift-0002': {
+    slots: [
+      { ...DOSE_COMMON, medicationId: 'med-0201', name: 'Levetiracetam', strength: '500mg', dose: '1 tablet', at: '2026-09-10T20:00:00',
+        recorded: { status: 'Administered', recordedByName: 'Mei Zhang', doseGiven: '1 tablet', administeredAt: '2026-09-10T10:04:00Z' } },
+      { ...DOSE_COMMON, medicationId: 'med-0202', name: 'Melatonin', strength: '3mg', dose: '1 tablet', at: '2026-09-10T22:00:00',
+        recorded: { status: 'Refused', recordedByName: 'Mei Zhang', reason: 'Declined - said she was not tired yet.' } },
+      { ...DOSE_COMMON, medicationId: 'med-0203', name: 'Clonidine', strength: '25mcg', dose: '1 tablet', at: '2026-09-11T02:00:00',
+        recorded: { status: 'Missed', recordedByName: 'Mei Zhang', reason: 'Asleep - not given this shift; left for the morning worker.' } },
+    ],
+    prn: [],
+  },
+  'shift-0001': { slots: [], prn: [] },
+}
+
+// shiftId -> routines matched to the shift window (server-side; overnight handled).
+const packageRoutines = {
+  'shift-0003': [
+    { id: 'rt-0301', title: 'Allergy check before any food', description: 'Read the label and check against the allergy list before offering any food or drink.', category: 'Meals', isCritical: true, startTime: null, endTime: null, occursAt: null, afterMidnight: false },
+    { id: 'rt-0302', title: 'Lunch', description: 'Set up the plate, cut food small, stay seated with her.', category: 'Meals', isCritical: true, startTime: '12:00:00', endTime: '13:00:00', occursAt: '2026-09-13T12:00:00', afterMidnight: false },
+    { id: 'rt-0303', title: 'Afternoon walk', description: 'Short walk along the path, back before 2:30.', category: 'Activity', isCritical: false, startTime: '13:30:00', endTime: '14:30:00', occursAt: '2026-09-13T13:30:00', afterMidnight: false },
+  ],
+  'shift-0002': [
+    { id: 'rt-0201', title: 'Evening wind-down', description: 'Dim lights, radio on low, tea.', category: 'Sleep', isCritical: false, startTime: '21:00:00', endTime: '22:00:00', occursAt: '2026-09-10T21:00:00', afterMidnight: false },
+    { id: 'rt-0202', title: 'Night check', description: 'Quietly check on her and her hearing aid case.', category: 'Sleep', isCritical: true, startTime: '02:00:00', endTime: '02:30:00', occursAt: '2026-09-11T02:00:00', afterMidnight: true },
+    { id: 'rt-0203', title: 'Wake-up', description: 'Knock first. Hearing aid in before any conversation.', category: 'PersonalCare', isCritical: false, startTime: '06:00:00', endTime: '07:00:00', occursAt: '2026-09-11T06:00:00', afterMidnight: true },
+  ],
+  'shift-0001': [],
+}
+
+// shiftId -> history (completed/pending shifts): breaks already on the completion.
+const packageHistoryBreaks = {
+  'shift-0001': [
+    { id: 'brk-0001', startedAt: '2026-09-08T13:00:00Z', endedAt: '2026-09-08T13:30:00Z', editedAt: null, createdByUserId: 's-0003' },
+  ],
+  'shift-0002': [
+    { id: 'brk-0002', startedAt: '2026-09-10T22:00:00Z', endedAt: '2026-09-10T22:20:00Z', editedAt: '2026-09-10T22:40:00Z', createdByUserId: 's-0004' },
+  ],
+}
+
+const SKEW_MS = 5 * 60 * 1000
+const wholeMinutes = (ms) => Math.round(ms / 60000)
+
+/** Per-shift sticky package state (status/completion overrides, breaks, dose records, ack). */
+const shiftPackageState = {}
+function pkgState(shiftId) {
+  if (!shiftPackageState[shiftId]) {
+    shiftPackageState[shiftId] = {
+      status: null, completion: null, breaks: null, administrations: {}, keys: {}, prnGiven: [], handoverReadAt: null, n: 0,
+    }
+  }
+  return shiftPackageState[shiftId]
+}
+
+function currentStatus(shiftId) {
+  const base = portalShiftBase[shiftId] || portalShiftBase['shift-0003']
+  return pkgState(base.id).status ?? base.status
+}
+
+function breaksFor(shiftId) {
+  const st = pkgState(shiftId)
+  if (st.breaks) return st.breaks
+  // Fixture history until the shift is (re)started in this session.
+  return (packageHistoryBreaks[shiftId] || []).map((b) => ({ ...b }))
+}
+
+function breakDto(b, nowMs) {
+  const end = b.endedAt ? Date.parse(b.endedAt) : nowMs
+  return {
+    id: b.id, startedAt: b.startedAt, endedAt: b.endedAt, isRunning: !b.endedAt,
+    minutes: Math.max(0, wholeMinutes(end - Date.parse(b.startedAt))), editedAt: b.editedAt, createdByUserId: b.createdByUserId,
+  }
+}
+
+/** Adds breaks / net minutes / handover confirmations to a completion fixture. */
+function withPackageFields(shiftId, completion) {
+  const nowMs = Date.now()
+  const breaks = breaksFor(shiftId).sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  const startMs = Date.parse(completion.actualStart)
+  const endMs = completion.actualEnd ? Date.parse(completion.actualEnd) : nowMs
+  const gross = Math.max(0, wholeMinutes(endMs - startMs))
+  const breakMinutes = breaks.reduce((sum, b) => {
+    const from = Math.max(Date.parse(b.startedAt), startMs)
+    const to = Math.min(b.endedAt ? Date.parse(b.endedAt) : endMs, endMs)
+    return sum + Math.max(0, to - from)
+  }, 0)
+  const breakMins = wholeMinutes(breakMinutes)
+  return {
+    handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false, ...completion,
+    breaks: breaks.map((b) => breakDto(b, nowMs)), breakMinutes: breakMins, netWorkedMinutes: Math.max(0, gross - breakMins),
+  }
+}
+
+function doseSlotDto(shiftId, def) {
+  const st = pkgState(shiftId)
+  const status = currentStatus(shiftId)
+  const rec = st.administrations[`${def.medicationId}|${def.at}`] || (def.recorded ? prefilledAdministration(shiftId, def) : null)
+  const state = rec ? 'Recorded' : (status === 'InProgress' && def.overdue ? 'Overdue' : 'Due')
+  return {
+    medicationId: def.medicationId, medicationName: def.name, strength: def.strength, doseDescription: def.dose, form: def.form,
+    route: def.route, directions: def.directions, supportLevel: def.supportLevel, isHighRisk: def.isHighRisk,
+    scheduledAt: def.at, scheduledTime: def.at.slice(11, 16), state, isOverdue: state === 'Overdue',
+    outcome: rec ? {
+      administrationId: rec.id, status: rec.status, recordedByName: rec.recordedByName, administeredAt: rec.administeredAt ?? null,
+      administeredAtTimeZone: rec.administeredAtTimeZone ?? null, recordedAt: rec.createdAt, reason: rec.reason ?? null,
+      doseGiven: rec.doseGiven ?? null, notes: rec.notes ?? null,
+    } : null,
+    witness: {
+      required: def.isHighRisk, status: rec ? rec.witnessStatus : null, witnessName: rec ? rec.witnessName : null,
+      requestedAt: rec ? rec.witnessRequestedAt : null, respondedAt: rec ? rec.witnessRespondedAt : null,
+    },
+  }
+}
+
+function prefilledAdministration(shiftId, def) {
+  const p = portalShiftBase[shiftId]
+  const r = def.recorded
+  return {
+    id: `adm-${def.medicationId}`, participantMedicationId: def.medicationId, participantId: p.participantId,
+    scheduledAt: def.at, administeredAt: r.administeredAt ?? null, administeredAtTimeZone: r.administeredAt ? PACKAGE_TZ : null,
+    status: r.status, doseGiven: r.doseGiven ?? null, recordedByName: r.recordedByName, recordedByUserId: null,
+    witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
+    reason: r.reason ?? null, prnReason: null, prnOutcome: null, prnOutcomeAt: null, limitBreachAcknowledged: false, notes: null,
+    createdAt: def.at, incidentId: null,
+  }
+}
+
+function prnDto(shiftId, def) {
+  const st = pkgState(shiftId)
+  const given = st.prnGiven.filter((g) => g.participantMedicationId === def.medicationId)
+  const doses = def.baseDoses + given.length
+  const lastDoseAt = given.length ? given[given.length - 1].administeredAt : def.baseLastDoseAt
+  const nextMs = lastDoseAt && def.minIntervalMinutes ? Date.parse(lastDoseAt) + def.minIntervalMinutes * 60000 : null
+  return {
+    medicationId: def.medicationId, medicationName: def.name, strength: def.strength, doseDescription: def.dose, form: def.form,
+    route: def.route, directions: def.directions, supportLevel: def.supportLevel, isHighRisk: def.isHighRisk, indication: def.indication,
+    maxDosesPer24h: def.maxDosesPer24h, minIntervalMinutes: def.minIntervalMinutes, dosesInLast24h: doses, lastDoseAt,
+    maxDosesReached: def.maxDosesPer24h != null && doses >= def.maxDosesPer24h,
+    nextAvailableAt: nextMs && nextMs > Date.now() ? new Date(nextMs).toISOString() : null,
+    outcomePendingAdministrationId: given.length ? given[given.length - 1].id : def.pendingOutcomeId ?? null,
+  }
+}
+
+function finishBlockersFor(shiftId) {
+  if (currentStatus(shiftId) !== 'InProgress') return []
+  const blockers = []
+  if (breaksFor(shiftId).some((b) => !b.endedAt)) {
+    blockers.push({ code: 'BREAK_RUNNING', message: 'A break is still running. End it before you finish the shift.', medicationId: null, medicationName: null, scheduledAt: null })
+  }
+  for (const def of (packageDoses[shiftId]?.slots || [])) {
+    if (doseSlotDto(shiftId, def).outcome) continue
+    const label = def.strength ? `${def.name} ${def.strength}` : def.name
+    blockers.push({
+      code: 'DOSE_OUTCOME_MISSING', medicationId: def.medicationId, medicationName: def.name, scheduledAt: def.at,
+      message: `${label} at ${def.at.slice(11, 16)} has no outcome. Record it, or mark it not given this shift with a reason.`,
+    })
+  }
+  return blockers
+}
+
+function packageFor(shiftId, participantId) {
+  const pp = packageParticipants[participantId] || packageParticipants['p-0001']
+  const st = pkgState(shiftId)
+  const doses = packageDoses[shiftId] || { slots: [], prn: [] }
+  const handover = pp.handover ? {
+    completionId: pp.handover.completionId, text: pp.handover.text, nothingToHandOver: pp.handover.nothingToHandOver,
+    authorUserId: pp.handover.authorUserId, authorName: pp.handover.authorName, shiftDate: pp.handover.shiftDate,
+    submittedAt: pp.handover.submittedAt, requiresAcknowledgement: !!pp.handover.text,
+    isRead: !!st.handoverReadAt, readAt: st.handoverReadAt,
+  } : null
+  return {
+    breaks: breaksFor(shiftId).sort((a, b) => a.startedAt.localeCompare(b.startedAt)).map((b) => breakDto(b, Date.now())),
+    handover, handoverTrail: pp.handoverTrail, finishBlockers: finishBlockersFor(shiftId),
+    timeZoneId: PACKAGE_TZ, atAGlance: pp.atAGlance, emergencyContacts: pp.emergencyContacts,
+    medicationsDue: doses.slots.map((def) => doseSlotDto(shiftId, def)), prn: doses.prn.map((def) => prnDto(shiftId, def)),
+    shiftRoutines: packageRoutines[shiftId] || [], ...competencyView(),
+  }
+}
+
+// ── package endpoint helpers ─────────────────────────────────
+
+const HTTP = Symbol('http-status')
+/** Lets a route answer with a non-200 status (the dispatcher below honours it). */
+const respond = (status, body) => ({ [HTTP]: status, body })
+const failEnvelope = (data, errors, code) => ({ success: false, data, message: null, errors, code })
+
+const NOT_IN_PROGRESS = {
+  Published: ["This shift hasn't been started.", 'SHIFT_NOT_IN_PROGRESS'],
+  PendingReview: ['This shift has already been finished and is waiting for review.', 'SHIFT_ALREADY_FINISHED'],
+  Completed: ['This shift has already been reviewed and completed.', 'SHIFT_ALREADY_COMPLETED'],
+  Cancelled: ['This shift has been cancelled.', 'SHIFT_CANCELLED'],
+  Draft: ["This shift hasn't been published yet.", 'SHIFT_NOT_PUBLISHED'],
+}
+
+/** A 409 response when the shift is not InProgress, else null. */
+function notInProgress(shiftId) {
+  const status = currentStatus(shiftId)
+  if (status === 'InProgress') return null
+  const [message, code] = NOT_IN_PROGRESS[status] || NOT_IN_PROGRESS.Draft
+  return respond(409, failEnvelope(null, [message], code))
+}
+
+function administrationFromBody(shiftId, med, body, slotAt) {
+  const p = portalShiftBase[shiftId]
+  const now = new Date().toISOString()
+  const participant = participants.find((x) => x.id === p.participantId) || participants[0]
+  const witnessed = med.isHighRisk && body.status === 'Administered' && (body.witnessStaffId || body.witnessName)
+  return {
+    id: `adm-mock-${Date.now()}-${++pkgState(shiftId).n}`, participantMedicationId: med.medicationId, participantId: p.participantId,
+    participantName: participant.fullName, medicationName: med.name, doseDescription: med.dose, tripInstanceId: null,
+    scheduledAt: slotAt ?? null, administeredAt: body.status === 'Administered' ? (body.administeredAt ?? now) : (body.administeredAt ?? null),
+    administeredAtTimeZone: body.administeredAtTimeZone ?? null, status: body.status, doseGiven: body.doseGiven ?? null,
+    recordedByName: MOCK_WORKER_NAME, recordedByUserId: CURRENT_STAFF_ID,
+    witnessName: body.witnessName ?? (body.witnessStaffId ? 'Mei Zhang' : null), witnessStaffId: body.witnessStaffId ?? null,
+    witnessStatus: witnessed && body.witnessStaffId ? 'Pending' : 'NotRequired', witnessRequestedAt: witnessed && body.witnessStaffId ? now : null,
+    witnessRespondedAt: null, reason: body.reason ?? null, prnReason: body.prnReason ?? null, prnOutcome: null, prnOutcomeAt: null,
+    limitBreachAcknowledged: !!body.acknowledgeLimitBreach, notes: body.notes ?? null, createdAt: now, incidentId: null,
+  }
+}
+
+const packageRoutesPost = [
+  ['portal/shifts/:id/breaks/start', (id) => {
+    const guard = notInProgress(id)
+    if (guard) return guard
+    const st = pkgState(id)
+    st.breaks = breaksFor(id)
+    if (st.breaks.some((b) => !b.endedAt)) {
+      return respond(409, failEnvelope(null, ['A break is already running. End it before starting another.'], 'SHIFT_BREAK_ALREADY_RUNNING'))
+    }
+    st.breaks.push({ id: `brk-mock-${Date.now()}-${++st.n}`, startedAt: new Date().toISOString(), endedAt: null, editedAt: null, createdByUserId: CURRENT_STAFF_ID })
+    return buildPortalShiftDetail(id)
+  }],
+  ['portal/shifts/:id/breaks/:id/end', (id, breakId) => {
+    const guard = notInProgress(id)
+    if (guard) return guard
+    const st = pkgState(id)
+    st.breaks = breaksFor(id)
+    const b = st.breaks.find((x) => x.id === breakId)
+    if (!b) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
+    if (!b.endedAt) b.endedAt = new Date().toISOString()   // idempotent: ending an ended break is a no-op
+    return buildPortalShiftDetail(id)
+  }],
+  ['portal/shifts/:id/handover/ack', (id, body) => {
+    const base = portalShiftBase[id] || portalShiftBase['shift-0003']
+    const st = pkgState(base.id)
+    const status = currentStatus(base.id)
+    if (status !== 'Published' && status !== 'InProgress') {
+      const [message, code] = NOT_IN_PROGRESS[status] || NOT_IN_PROGRESS.Draft
+      return respond(409, failEnvelope(null, [message], code))
+    }
+    const h = (packageParticipants[base.participantId] || {}).handover
+    if (!h) return respond(404, failEnvelope(null, ["There's no handover to mark as read."], 'SHIFT_HANDOVER_NOT_FOUND'))
+    if (body?.completionId && body.completionId !== h.completionId) {
+      return respond(409, failEnvelope(buildPortalShiftDetail(base.id), ['There is a newer handover. Read it before marking it as read.'], 'SHIFT_HANDOVER_CHANGED'))
+    }
+    if (!st.handoverReadAt) st.handoverReadAt = new Date().toISOString()
+    return buildPortalShiftDetail(base.id)
+  }],
+  ['portal/shifts/:id/medications/:id/administrations', (shiftId, medicationId, body) => {
+    const guard = notInProgress(shiftId)
+    if (guard) return guard
+    const st = pkgState(shiftId)
+    const defs = packageDoses[shiftId] || { slots: [], prn: [] }
+    const competency = competencyView()
+    if (!competency.canRecordDoses) return respond(403, failEnvelope(null, [competency.canRecordDosesReason], competency.canRecordDosesReasonCode))
+
+    const slotDef = defs.slots.find((d) => d.medicationId === medicationId)
+    const prnDef = defs.prn.find((d) => d.medicationId === medicationId)
+    const med = slotDef || prnDef
+    if (!med) return respond(404, failEnvelope(null, ['Medication not found'], null))
+    if (body?.idempotencyKey && st.keys[body.idempotencyKey]) return st.keys[body.idempotencyKey]   // a double tap returns the first record (200)
+
+    if (body?.status !== 'Administered' && !String(body?.reason || '').trim()) {
+      return respond(400, failEnvelope(null, ['A reason is required when a dose is refused, withheld, missed or the wrong medication was given.'], null))
+    }
+    if (prnDef) {
+      if (body.scheduledAt) return respond(422, failEnvelope(null, ['An as-needed (PRN) dose has no scheduled time.'], 'DOSE_SLOT_NOT_DUE'))
+      if (body.status === 'Administered' && !String(body.prnReason || '').trim()) {
+        return respond(400, failEnvelope(null, ['A PRN reason is required when recording an administered PRN dose.'], null))
+      }
+      const prn = prnDto(shiftId, prnDef)
+      if (body.status === 'Administered' && (prn.maxDosesReached || prn.nextAvailableAt) && !body.acknowledgeLimitBreach) {
+        return respond(400, failEnvelope(null, [prn.maxDosesReached ? `Maximum ${prnDef.maxDosesPer24h} doses in 24 hours reached` : `Minimum interval of ${prnDef.minIntervalMinutes} minutes not yet elapsed`], null))
+      }
+      const record = administrationFromBody(shiftId, prnDef, body, null)
+      if (record.status === 'Administered') st.prnGiven.push(record)
+      if (body.idempotencyKey) st.keys[body.idempotencyKey] = record
+      return record
+    }
+
+    const slotAt = body?.scheduledAt ? String(body.scheduledAt).slice(0, 19) : null
+    if (!slotAt || slotAt !== slotDef.at) {
+      return respond(422, failEnvelope(null, ["This isn't a dose due in this shift. Choose one of the doses listed for the shift."], 'DOSE_SLOT_NOT_DUE'))
+    }
+    const key = `${medicationId}|${slotDef.at}`
+    const existing = st.administrations[key] || (slotDef.recorded ? prefilledAdministration(shiftId, slotDef) : null)
+    if (existing) return respond(409, failEnvelope(existing, ['This dose has already been recorded.'], 'ADMINISTRATION_ALREADY_RECORDED'))
+    if (slotDef.isHighRisk && body.status === 'Administered' && !body.witnessStaffId && !body.witnessName) {
+      return respond(400, failEnvelope(null, ['A witness is required for high-risk medication administration.'], null))
+    }
+    const record = administrationFromBody(shiftId, slotDef, body, slotDef.at)
+    st.administrations[key] = record
+    if (body.idempotencyKey) st.keys[body.idempotencyKey] = record
+    return record
+  }],
+]
+
+const packageRoutesPut = [
+  ['portal/shifts/:id/breaks/:id', (id, breakId, body) => {
+    const guard = notInProgress(id)
+    if (guard) return guard
+    const st = pkgState(id)
+    st.breaks = breaksFor(id)
+    const b = st.breaks.find((x) => x.id === breakId)
+    if (!b) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
+    const completion = st.completion ? st.completion : null
+    const start = Date.parse(body?.startedAt)
+    const end = body?.endedAt ? Date.parse(body.endedAt) : null
+    const bad = (message, code) => respond(400, failEnvelope(null, [message], code))
+    if (Number.isNaN(start)) return bad('A break needs a start time.', 'SHIFT_BREAK_END_NOT_AFTER_START')
+    if (b.endedAt && end == null) return bad('A finished break needs an end time.', 'SHIFT_BREAK_END_REQUIRED')
+    if (completion && start < Date.parse(completion.actualStart)) return bad("A break can't start before the shift started.", 'SHIFT_BREAK_BEFORE_SHIFT_START')
+    if (start > Date.now() + SKEW_MS || (end != null && end > Date.now() + SKEW_MS)) return bad("A break can't be in the future.", 'SHIFT_BREAK_IN_FUTURE')
+    if (end != null && end <= start) return bad('A break must end after it starts.', 'SHIFT_BREAK_END_NOT_AFTER_START')
+    const overlaps = st.breaks.some((o) => o.id !== b.id && start < (o.endedAt ? Date.parse(o.endedAt) : Infinity) && Date.parse(o.startedAt) < (end ?? Infinity))
+    if (overlaps) return bad('This break overlaps another break.', 'SHIFT_BREAK_OVERLAP')
+    b.startedAt = new Date(start).toISOString()
+    b.endedAt = end == null ? null : new Date(end).toISOString()
+    b.editedAt = new Date().toISOString()
+    return buildPortalShiftDetail(id)
+  }],
+]
+
+const packageRoutesDelete = [
+  ['portal/shifts/:id/breaks/:id', (id, breakId) => {
+    const guard = notInProgress(id)
+    if (guard) return guard
+    const st = pkgState(id)
+    st.breaks = breaksFor(id)
+    if (!st.breaks.some((x) => x.id === breakId)) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
+    st.breaks = st.breaks.filter((x) => x.id !== breakId)
+    return buildPortalShiftDetail(id)
+  }],
+]
+
+/** GET rostering/shifts/:id/completion/review - the coordinator's one-call review (ShiftCompletionReviewDto). */
+function buildCompletionReview(shiftId) {
+  const base = portalShiftBase[shiftId] || portalShiftBase['shift-0002']
+  const completion = withPackageFields(base.id, pkgState(base.id).completion || shiftCompletions.find((c) => c.shiftId === base.id) || shiftCompletions[0])
+  const participant = participants.find((x) => x.id === base.participantId) || participants[0]
+  const doses = packageDoses[base.id] || { slots: [], prn: [] }
+  return {
+    completion, participantName: participant.fullName, staffName: completion.submittedByName, serviceDate: base.serviceDate,
+    timeZoneId: PACKAGE_TZ, doses: doses.slots.map((def) => doseSlotDto(base.id, def)),
+    prnDoses: pkgState(base.id).prnGiven.map((g) => ({
+      medicationId: g.participantMedicationId, medicationName: g.medicationName, strength: null, doseDescription: g.doseDescription,
+      outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes },
+    })),
+    notes: shiftNotesByShiftId[base.id] || [],
+  }
+}
+
+/** Builds a PortalShiftDetailDto for one fixture shift. Status/completion come from the sticky
+ * package state (Start/Finish flip them for this process), falling back to the fixture. */
 function buildPortalShiftDetail(shiftId, overrides = {}) {
   const base = portalShiftBase[shiftId] || portalShiftBase['shift-0003']
-  const status = overrides.status ?? base.status
-  const completion = Object.prototype.hasOwnProperty.call(overrides, 'completion')
+  const st = pkgState(base.id)
+  const status = overrides.status ?? st.status ?? base.status
+  const rawCompletion = Object.prototype.hasOwnProperty.call(overrides, 'completion')
     ? overrides.completion
-    : shiftCompletions.find((c) => c.shiftId === base.id) || null
+    : st.completion || shiftCompletions.find((c) => c.shiftId === base.id) || null
+  const completion = rawCompletion ? withPackageFields(base.id, rawCompletion) : null
+  const pkg = packageFor(base.id, base.participantId)
+  const doses = packageDoses[base.id] || { slots: [], prn: [] }
+  // Every active routine (the unfiltered list the original page still filters client-side) and the medication summary,
+  // both derived from the package fixtures so they can't drift from shiftRoutines / medicationsDue.
+  const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  const routines = (packageRoutines[base.id] || []).map((r) => ({
+    id: r.id, participantId: base.participantId, title: r.title, description: r.description, category: r.category, days: ALL_DAYS,
+    startTime: r.startTime, endTime: r.endTime, isCritical: r.isCritical, isActive: true,
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  }))
+  const medications = [
+    ...doses.slots.map((d) => ({
+      id: d.medicationId, name: d.name, strength: d.strength, doseDescription: d.dose, type: 'Regular', timesOfDay: d.at.slice(11, 16),
+      isHighRisk: d.isHighRisk, isPsychotropic: false, isChemicalRestraint: false, drugSchedule: 'Unscheduled', supportLevel: d.supportLevel, prnIndication: null,
+    })),
+    ...doses.prn.map((d) => ({
+      id: d.medicationId, name: d.name, strength: d.strength, doseDescription: d.dose, type: 'Prn', timesOfDay: null,
+      isHighRisk: d.isHighRisk, isPsychotropic: false, isChemicalRestraint: false, drugSchedule: 'Unscheduled', supportLevel: d.supportLevel, prnIndication: d.indication,
+    })),
+  ]
   return {
     id: base.id, serviceDate: base.serviceDate, startTime: base.startTime, endTime: base.endTime,
     endsNextDay: base.endsNextDay, durationHours: base.durationHours, ratio: base.ratio, nightType: base.nightType,
     status, notes: base.notes,
     participant: portalParticipantSummary(base.participantId),
-    routines: [], riskEntries: [], medications: [],
+    routines, riskEntries: [], medications,
     completion,
     returnCount: completion ? completion.shiftReturnCount : 0,
     lastReturnReason: null,
+    ...pkg,
   }
 }
 
@@ -1572,7 +2098,10 @@ const routes = [
   // pageSize aren't applied — paged() below just returns every fixture row as one full page.
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
   ['rostering/completions', () => paged(completionQueueItems)],
-  ['rostering/shifts/:id/completion', (id) => shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0]],
+  ['rostering/shifts/:id/completion', (id) => withPackageFields(id, pkgState(id).completion || shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0])],
+  // The coordinator's one-call review of a submitted shift (ShiftCompletionReviewDto): completion with breaks / net
+  // minutes / handover, every dose in the window with its outcome, PRN doses, notes.
+  ['rostering/shifts/:id/completion/review', (id) => buildCompletionReview(id)],
 
   // Notifications (design spec §6) — GET admin/notifications joins this plain table (query
   // string ignored, same caveat noted on notificationOutbox above); GET notifications/preferences
@@ -1586,6 +2115,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...packageRoutesPost,
   ['staff-assignments/check', () => []],
 
   ['leave/:id/approve', (id) => ({
@@ -1617,9 +2147,17 @@ const postRoutes = [
   // post-action shape without persisting it back into portalShiftBase/shiftCompletions, so a
   // second GET for the same shift still reflects the original fixture, not this call's result.
   ['portal/shifts/:id/start', (id, body) => {
+    const base = portalShiftBase[id] || portalShiftBase['shift-0003']
+    const st = pkgState(base.id)
+    const current = currentStatus(base.id)
+    if (current === 'InProgress') return buildPortalShiftDetail(base.id)   // idempotent replay, like the real Start
+    if (current !== 'Published') {
+      const [message, code] = NOT_IN_PROGRESS[current] || NOT_IN_PROGRESS.Draft
+      return respond(409, failEnvelope(null, [message], code))
+    }
     const now = new Date().toISOString()
-    const completion = {
-      id: `sc-mock-${id}`, shiftId: id, actualStart: now, actualEnd: null,
+    st.completion = {
+      id: `sc-mock-${base.id}`, shiftId: base.id, actualStart: now, actualEnd: null,
       timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: false,
       submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
       startedAt: now, submittedAt: null,
@@ -1627,27 +2165,44 @@ const postRoutes = [
       varianceMinutesStart: 0, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15,
       shiftReturnCount: 0, incidents: [],
     }
-    return buildPortalShiftDetail(id, { status: 'InProgress', completion })
+    st.status = 'InProgress'
+    st.breaks = []
+    return buildPortalShiftDetail(base.id)
   }],
   ['portal/shifts/:id/finish', (id, body) => {
-    const now = new Date().toISOString()
-    const completion = {
-      id: `sc-mock-${id}`, shiftId: id, actualStart: body?.actualStart ?? now, actualEnd: now,
-      timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: !!body?.actualStart,
-      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan",
-      startedAt: now, submittedAt: now,
-      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
-      varianceMinutesStart: 3, varianceMinutesEnd: -2, isOutlierVariance: false, varianceReviewMinutes: 15,
-      shiftReturnCount: 0, incidents: [],
+    const base = portalShiftBase[id] || portalShiftBase['shift-0003']
+    const st = pkgState(base.id)
+    if (currentStatus(base.id) === 'PendingReview') return buildPortalShiftDetail(base.id)   // idempotent replay
+    const handoverText = String(body?.handoverText || '').trim() || null
+    if (body?.nothingToHandOver && handoverText) {
+      return respond(400, failEnvelope(null, ['Write a handover or confirm there is nothing to hand over, not both.'], 'SHIFT_HANDOVER_CONFLICT'))
     }
-    return buildPortalShiftDetail(id, { status: 'PendingReview', completion })
+    const blockers = finishBlockersFor(base.id)
+    if (blockers.length > 0) {
+      const detail = buildPortalShiftDetail(base.id)
+      return respond(422, failEnvelope(detail, blockers.map((x) => x.message), 'SHIFT_FINISH_BLOCKED'))
+    }
+    const now = new Date().toISOString()
+    const started = st.completion || {
+      id: `sc-mock-${base.id}`, shiftId: base.id, actualStart: body?.actualStart ?? now, timeZoneId: 'Australia/Brisbane',
+      geolocationDeclined: !!body?.geolocationDeclined, startWasManual: !!body?.actualStart,
+      submittedByUserId: CURRENT_STAFF_ID, submittedByName: "Jack O'Sullivan", startedAt: now,
+      reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
+      varianceMinutesStart: 3, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15, shiftReturnCount: 0, incidents: [],
+    }
+    st.completion = {
+      ...started, actualEnd: now, submittedAt: now, varianceMinutesEnd: -2,
+      handoverText, nothingToHandOver: !!body?.nothingToHandOver, nothingToNoteConfirmed: !!body?.nothingToNote,
+    }
+    st.status = 'PendingReview'
+    return buildPortalShiftDetail(base.id)
   }],
   ['rostering/shifts/:id/completion/approve', (id) => {
-    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
     return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
   }],
   ['rostering/shifts/:id/completion/return', (id, body) => {
-    const c = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
     return {
       ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(),
       reviewOutcome: 'Returned', returnReason: body?.reason ?? '', shiftReturnCount: c.shiftReturnCount + 1,
@@ -1685,6 +2240,7 @@ const postRoutes = [
 // PUT /staff-availability/:id deliberately has no entry here — it falls through to the generic
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
+  ...packageRoutesPut,
   ['leave/:id', (id, body) => ({
     leave: { ...(leaveRequests.find((r) => r.id === id) || leaveRequests[0]), ...body },
     overlaps: [sampleOverlapFinding],
@@ -1738,6 +2294,15 @@ function send(res, status, body) {
   res.end(json)
 }
 
+/** Sends a route's result: a respond(status, body) result keeps its status and raw body, anything else is a 200 ok() envelope. */
+function sendResult(res, result) {
+  if (result && typeof result === 'object' && result[HTTP]) {
+    send(res, result[HTTP], result.body)
+    return
+  }
+  send(res, 200, ok(result))
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
   const path = url.pathname.replace(/\/+$/, '') || '/'
@@ -1765,7 +2330,7 @@ const server = http.createServer((req, res) => {
         // argument (every other route here ignores it, same as before; only the `incidents`
         // handler above declares it) so GET /incidents?involvedUserId= can actually filter,
         // without touching every other route's signature.
-        send(res, 200, ok(handler(...params, url.searchParams)))
+        sendResult(res, handler(...params, url.searchParams))
         return
       }
     }
@@ -1790,7 +2355,7 @@ const server = http.createServer((req, res) => {
       for (const [pattern, handler] of postRoutes) {
         const params = matchRoute(pattern, segments)
         if (params) {
-          send(res, 200, ok(handler(...params, body)))
+          sendResult(res, handler(...params, body))
           return
         }
       }
@@ -1802,7 +2367,7 @@ const server = http.createServer((req, res) => {
       for (const [pattern, handler] of putRoutes) {
         const params = matchRoute(pattern, segments)
         if (params) {
-          send(res, 200, ok(handler(...params, body)))
+          sendResult(res, handler(...params, body))
           return
         }
       }
@@ -1823,6 +2388,13 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
+      for (const [pattern, handler] of packageRoutesDelete) {
+        const params = matchRoute(pattern, segments)
+        if (params) {
+          sendResult(res, handler(...params, body))
+          return
+        }
+      }
       send(res, 200, ok(true))
       return
     }

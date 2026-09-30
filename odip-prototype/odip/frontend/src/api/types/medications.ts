@@ -270,6 +270,13 @@ export interface CreateAdministrationDto {
   notes?: string
   tripInstanceId?: string
   acknowledgeLimitBreach: boolean
+  /**
+   * Optional idempotency key — generate one UUID when the record-dose sheet opens (see newCompletionRequestId) and send
+   * the same one on every retry / double tap: a second submit with the same key returns the FIRST record with 200 instead
+   * of creating another. Independent of the one-record-per-scheduled-slot rule, which also answers 409
+   * ADMINISTRATION_ALREADY_RECORDED (with the existing record as `data`) for a different key.
+   */
+  idempotencyKey?: string
 }
 
 export interface UpdateAdministrationDto {

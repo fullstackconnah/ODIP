@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
 import type { CompletionQueueItemDto, ShiftCompletionDto, PagedResult, StaffListDto } from '@/api/types'
+import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
@@ -89,6 +90,7 @@ function makeCompletionDetail(overrides: Partial<ShiftCompletionDto> = {}): Shif
     varianceReviewMinutes: 15,
     shiftReturnCount: 0,
     incidents: [],
+    ...emptyCompletionPackage(),
     ...overrides,
   }
 }

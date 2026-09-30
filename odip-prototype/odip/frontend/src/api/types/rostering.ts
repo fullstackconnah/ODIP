@@ -1,3 +1,8 @@
+import type {
+  ShiftBreakDto,
+  PortalDoseSlotDto,
+  PortalDoseOutcomeDto,
+} from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
@@ -131,6 +136,48 @@ export interface ShiftCompletionDto {
     status: IncidentStatus
     incidentDateTime: string
   }[]
+  // ── Shift package ──
+  /** Breaks taken during this completion, oldest first. */
+  breaks: ShiftBreakDto[]
+  /** Whole minutes spent on breaks (a running break counts up to now). */
+  breakMinutes: number
+  /** Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative. Billing stays on
+   * ROSTERED hours — this is a record, not a billing input. */
+  netWorkedMinutes: number
+  /** The handover note the worker left for the next worker at Finish; null when none was written. */
+  handoverText: string | null
+  /** The worker confirmed "nothing to hand over". */
+  nothingToHandOver: boolean
+  /** The worker confirmed "nothing to note" instead of writing a shift note. */
+  nothingToNoteConfirmed: boolean
+}
+
+/**
+ * GET rostering/shifts/{id}/completion/review — everything a coordinator needs to review one submitted shift in a single
+ * call: the completion (times, variance, breaks, net minutes, handover, incidents), every scheduled dose due in the rostered
+ * window with its outcome, PRN doses given during the shift, and the shift notes. Approve / Return are unchanged.
+ */
+export interface ShiftCompletionReviewDto {
+  completion: ShiftCompletionDto
+  participantName: string
+  staffName: string
+  /** YYYY-MM-DD */
+  serviceDate: string
+  /** The provider's IANA zone; scheduled dose times are wall-clock values in it. */
+  timeZoneId: string
+  /** Scheduled doses in the rostered window, time order. `outcome: null` means nothing was recorded. */
+  doses: PortalDoseSlotDto[]
+  /** "As needed" doses administered between the actual start and end. */
+  prnDoses: ReviewPrnDoseDto[]
+  notes: ShiftNoteDto[]
+}
+
+export interface ReviewPrnDoseDto {
+  medicationId: string
+  medicationName: string
+  strength: string | null
+  doseDescription: string
+  outcome: PortalDoseOutcomeDto
 }
 
 // ── Shift Completion review queue (design spec §2/§4) ────

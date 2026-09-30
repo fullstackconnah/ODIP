@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPostRaw, apiPut } from '../client'
-import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto } from '../types'
+import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
+import type {
+  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto,
+  EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
+} from '../types'
 
 export function useMyShifts(from?: string, to?: string) {
   return useQuery({
@@ -48,6 +51,77 @@ export function useFinishShift() {
       qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
       qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
       qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+    },
+  })
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHIFT PACKAGE (PR 1 contract) — breaks, handover acknowledgement, recording a dose from the shift.
+// Every write that returns the shift detail replaces the cached detail in one step (setQueryData) and
+// then refetches, so the page never shows a stale break timer or dose state. Error handling: a failed
+// call rejects with the axios error; see lib/shiftPackageErrors.ts for reading `code` and `data`.
+// ══════════════════════════════════════════════════════════════
+
+function useShiftDetailWrite<TVars extends { id: string }>(mutationFn: (vars: TVars) => Promise<PortalShiftDetailDto>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: (detail, vars) => {
+      qc.setQueryData(['portal-shift-detail', vars.id], detail)
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+    },
+  })
+}
+
+/** POST portal/shifts/{id}/breaks/start — 409 SHIFT_BREAK_ALREADY_RUNNING if a break is already running. */
+export function useStartBreak() {
+  return useShiftDetailWrite(({ id }: { id: string }) => apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/start`))
+}
+
+/** POST portal/shifts/{id}/breaks/{breakId}/end — idempotent. */
+export function useEndBreak() {
+  return useShiftDetailWrite(({ id, breakId }: { id: string; breakId: string }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}/end`))
+}
+
+/** PUT portal/shifts/{id}/breaks/{breakId} — correct a break's times (UTC) before Finish. */
+export function useEditBreak() {
+  return useShiftDetailWrite(({ id, breakId, data }: { id: string; breakId: string; data: EditShiftBreakDto }) =>
+    apiPut<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`, data))
+}
+
+/** DELETE portal/shifts/{id}/breaks/{breakId} — remove a break before Finish (audited). */
+export function useDeleteBreak() {
+  return useShiftDetailWrite(async ({ id, breakId }: { id: string; breakId: string }) => {
+    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`)
+    return response.data as PortalShiftDetailDto
+  })
+}
+
+/**
+ * POST portal/shifts/{id}/handover/ack — the next worker marks the latest handover read (who and when are recorded). Pass the
+ * `completionId` of the handover on screen so a newer one arriving meanwhile is 409 SHIFT_HANDOVER_CHANGED, not a silent ack.
+ */
+export function useAcknowledgeHandover() {
+  return useShiftDetailWrite(({ id, data }: { id: string; data?: AcknowledgeHandoverDto }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/handover/ack`, data ?? {}))
+}
+
+/**
+ * POST portal/shifts/{id}/medications/{medicationId}/administrations — record a dose from the package. The caller's OWN shift,
+ * InProgress; `scheduledAt` (the slot's wall-clock `scheduledAt`, unchanged) for a scheduled dose, omitted for PRN. "Not given this
+ * shift" is `status: 'Missed'` with a `reason`. Send an `idempotencyKey`. 403 = no Medication Competency; 409
+ * ADMINISTRATION_ALREADY_RECORDED carries the existing record as `data`. Refreshes the shift detail and the medication caches.
+ */
+export function useRecordShiftDose() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, medicationId, data }: { shiftId: string; medicationId: string; data: CreateAdministrationDto }) =>
+      apiPost<AdministrationDto>(`/portal/shifts/${shiftId}/medications/${medicationId}/administrations`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['mar'] })
+      qc.invalidateQueries({ queryKey: ['participant-administrations'] })
     },
   })
 }
