@@ -59,6 +59,16 @@ describe('WizardNavFooter', () => {
     expect(footer).toHaveClass('pb-[max(0.75rem,env(safe-area-inset-bottom))]')
   })
 
+  it('sticks above the fixed mobile bottom nav below lg and to the viewport edge from lg', () => {
+    // jsdom cannot see that the footer clears the nav (the measured Playwright check does); this pins the mechanism.
+    // Pinned at `bottom-0` the footer sits under the z-50 bottom nav on a phone or portrait tablet, so Next is neither
+    // visible nor tappable until the very end of the page. The offset is the nav's own height var, so the two cannot drift.
+    renderFooter({ showBack: true })
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+    expect(footer).toHaveClass('sticky', 'bottom-[var(--mobile-nav-h)]', 'lg:bottom-0')
+    expect(footer).not.toHaveClass('bottom-0')
+  })
+
   it('keeps the primary action keyboard-operable in the responsive footer', async () => {
     const user = userEvent.setup()
     const onNext = vi.fn()

@@ -19,6 +19,12 @@ export type WizardNavFooterProps = {
 /**
  * CORE-01 — extracted verbatim (markup/classes unchanged) from `the retired single-step wizard`'s
  * pre-shell inline nav footer (Back / secondary actions / Next / Cancel+Submit).
+ *
+ * Sticky, so a long step keeps Back / Next on screen. Below `lg` the app shell's fixed bottom nav
+ * (AppLayout, z-50, `--mobile-nav-h` tall) occupies the bottom edge of the viewport, so the footer
+ * sticks just ABOVE it (`bottom-[var(--mobile-nav-h)]`); pinned at `bottom-0` it sat underneath the
+ * nav and Next could be neither seen nor tapped until the very end of the page. From `lg` there is
+ * no bottom nav and it sticks to the viewport edge.
  */
 export function WizardNavFooter({
   showBack,
@@ -31,7 +37,7 @@ export function WizardNavFooter({
   isSubmitting,
 }: WizardNavFooterProps) {
   return (
-    <div className="sticky bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {showBack && (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
