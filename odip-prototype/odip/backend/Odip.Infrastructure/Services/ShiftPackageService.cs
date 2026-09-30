@@ -42,33 +42,37 @@ public sealed class ShiftPackageService
     /// </summary>
     public async Task<List<PortalFinishBlockerDto>> GetFinishBlockersAsync(Shift shift, ShiftCompletion? completion, CancellationToken ct)
     {
-        var blockers = new List<PortalFinishBlockerDto>();
+        var breakRunning = completion is not null
+            && await _db.ShiftBreaks.AnyAsync(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null, ct);
 
-        if (completion is not null
-            && await _db.ShiftBreaks.AnyAsync(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null, ct))
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var doses = await GetDosesAsync(shift, provider, includePrn: false, ct);
+        return BuildFinishBlockers(doses.Slots, breakRunning);
+    }
+
+    /// <summary>
+    /// The pure half of the End checklist: a running break first, then every dose slot with no outcome in scheduled-time order. Shared by
+    /// <see cref="GetFinishBlockersAsync"/> (the Finish pre-check) and the shift detail (which already holds the dose slots, so it never
+    /// queries them twice).
+    /// </summary>
+    public static List<PortalFinishBlockerDto> BuildFinishBlockers(IEnumerable<PortalDoseSlotDto> slots, bool breakRunning)
+    {
+        var blockers = new List<PortalFinishBlockerDto>();
+        if (breakRunning)
         {
             blockers.Add(new PortalFinishBlockerDto(
                 ShiftFinishBlockerCodes.BreakRunning, "A break is still running. End it before you finish the shift.",
                 null, null, null));
         }
 
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
-        var (windowStart, windowEnd) = ProviderLocalTime.RosteredWindowLocal(shift);
-        var window = await _slots.GetWindowAsync(windowStart, windowEnd, shift.ParticipantId, provider.Zone, includePrn: false, ct);
-
-        var unrecorded = window.Slots
-            .Where(s => s.Administration is null)
-            .OrderBy(s => s.ScheduledAt).ThenBy(s => s.Medication.Name, StringComparer.Ordinal)
-            .DistinctBy(s => (s.Medication.Id, s.ScheduledAt));
-        foreach (var slot in unrecorded)
+        foreach (var slot in slots.Where(s => s.Outcome is null).OrderBy(s => s.ScheduledAt).ThenBy(s => s.MedicationName, StringComparer.Ordinal))
         {
-            var m = slot.Medication;
-            var label = string.IsNullOrWhiteSpace(m.Strength) ? m.Name : $"{m.Name} {m.Strength}";
+            var label = string.IsNullOrWhiteSpace(slot.Strength) ? slot.MedicationName : $"{slot.MedicationName} {slot.Strength}";
             blockers.Add(new PortalFinishBlockerDto(
                 ShiftFinishBlockerCodes.DoseOutcomeMissing,
                 $"{label} at {slot.ScheduledAt.ToString("HH:mm", CultureInfo.InvariantCulture)} has no outcome. "
                 + "Record it, or mark it not given this shift with a reason.",
-                m.Id, m.Name, slot.ScheduledAt));
+                slot.MedicationId, slot.MedicationName, slot.ScheduledAt));
         }
 
         return blockers;
@@ -76,11 +80,11 @@ public sealed class ShiftPackageService
 
     // ═════════════════════════ Doses ═════════════════════════
 
-    /// <summary>The scheduled doses due in the shift's rostered window and the PRN medications, as DTOs.</summary>
-    public async Task<ShiftDoses> GetDosesAsync(Shift shift, ProviderTimeZone provider, CancellationToken ct)
+    /// <summary>The scheduled doses due in the shift's rostered window and, when <paramref name="includePrn"/>, the PRN medications, as DTOs.</summary>
+    public async Task<ShiftDoses> GetDosesAsync(Shift shift, ProviderTimeZone provider, bool includePrn, CancellationToken ct)
     {
         var (windowStart, windowEnd) = ProviderLocalTime.RosteredWindowLocal(shift);
-        var window = await _slots.GetWindowAsync(windowStart, windowEnd, shift.ParticipantId, provider.Zone, includePrn: true, ct);
+        var window = await _slots.GetWindowAsync(windowStart, windowEnd, shift.ParticipantId, provider.Zone, includePrn, ct);
         var nowUtc = _slots.UtcNow;
 
         var slots = window.Slots
@@ -198,7 +202,7 @@ public sealed class ShiftPackageService
         Shift shift, ShiftCompletion completion, ShiftCompletionDto completionDto, CancellationToken ct)
     {
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
-        var doses = await GetDosesAsync(shift, provider, ct);
+        var doses = await GetDosesAsync(shift, provider, includePrn: false, ct);
 
         var end = completion.ActualEnd ?? _slots.UtcNow;
         var prnDoses = await _db.MedicationAdministrations

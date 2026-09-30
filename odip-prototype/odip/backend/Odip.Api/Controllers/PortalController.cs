@@ -186,19 +186,20 @@ public class PortalController : ControllerBase
         // own read state, and the last 3 holders. The caller is the shift's own worker (ownership was established).
         var handoverView = await _handover.GetAsync(shift, shift.UserId!.Value, ct);
 
-        // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress).
-        var finishBlockers = shift.Status == ShiftStatus.InProgress
-            ? await _package.GetFinishBlockersAsync(shift, activeCompletion, ct)
-            : new List<PortalFinishBlockerDto>();
-
         // Need-to-know package data: the provider's zone, the critical care facts, emergency contacts, doses due in the
         // rostered window (overdue in provider-local time), routines matched to the window, and whether the caller may
         // record doses (Medication Competency).
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(NowUtc, provider.Zone));
         var contacts = await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct);
-        var doses = await _package.GetDosesAsync(shift, provider, ct);
+        var doses = await _package.GetDosesAsync(shift, provider, includePrn: true, ct);
         var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
+
+        // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress). Derived from the dose
+        // slots already fetched above, so the detail never queries them twice.
+        var finishBlockers = shift.Status == ShiftStatus.InProgress
+            ? ShiftPackageService.BuildFinishBlockers(doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning))
+            : new List<PortalFinishBlockerDto>();
         var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
 
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
