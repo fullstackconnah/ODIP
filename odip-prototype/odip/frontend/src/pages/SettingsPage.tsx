@@ -304,6 +304,9 @@ function ProviderSettingsTab() {
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
   const inputClass = 'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  // A textarea must not take inputClass's fixed height: an explicit height beats `rows`, so the invoice footer notes were one line
+  // tall (and resize-none kept them that way). min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height.
+  const textareaClass = 'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
@@ -378,7 +381,7 @@ function ProviderSettingsTab() {
       </div>
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
-        <textarea {...f('invoiceFooterNotes')} rows={3} className={inputClass + ' resize-none'} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
+        <textarea {...f('invoiceFooterNotes')} rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
         <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">

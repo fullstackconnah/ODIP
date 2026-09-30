@@ -235,6 +235,21 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
 
     expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
   })
+
+  // The single-line inputs take a fixed `--control-h` height. A textarea that reuses that class ignores `rows` (an explicit
+  // height beats it) and, with `resize-none`, could not be enlarged either: Invoice Footer Notes was stuck at one line.
+  it('Invoice Footer Notes keeps its 3 rows and can be resized vertically', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
+    const notes = screen.getByPlaceholderText(/NDIS Code of Conduct/i)
+
+    expect(notes).toHaveAttribute('rows', '3')
+    expect(notes.className).not.toMatch(/(^|\s)h-\[var\(--control-h\)\]/)
+    expect(notes).toHaveClass('h-auto', 'min-h-[var(--control-h)]', 'resize-y')
+    expect(notes).not.toHaveClass('resize-none')
+  })
 })
 
 describe('SettingsPage — Notifications tabs', () => {

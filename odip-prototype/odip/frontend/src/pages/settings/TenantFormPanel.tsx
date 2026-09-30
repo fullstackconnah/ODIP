@@ -201,6 +201,10 @@ export default function TenantFormPanel({
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  // A textarea must not take inputClass's fixed height: an explicit height beats `rows`, collapsing the invoice footer notes to one
+  // line. min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height; resize-y lets the user grow it.
+  const textareaClass =
+    'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
@@ -406,7 +410,7 @@ export default function TenantFormPanel({
                       value={invoiceFooterNotes}
                       onChange={e => setInvoiceFooterNotes(e.target.value)}
                       rows={2}
-                      className={inputClass}
+                      className={textareaClass}
                     />
                   </div>
                 </div>
