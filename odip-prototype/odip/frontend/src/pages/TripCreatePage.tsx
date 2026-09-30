@@ -4,12 +4,14 @@ import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateTrip, useStaff, useEventTemplates } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const tripSchema = z.object({
   tripName: z.string().min(1, 'Trip name is required'),
@@ -78,162 +80,150 @@ export default function TripCreatePage() {
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {unsavedChangesDialog}
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to="/trips" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">Create New Trip</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/trips" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Trips</Link>
       </div>
+      <PageHeader title="Create New Trip" />
 
       {createTrip.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractErrorMessage(createTrip.error, 'Failed to create trip. Please check your input and try again.')}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
-        {/* Trip Details */}
-        <Card title="Trip Details" className="space-y-4">
-          <FormField label="Trip Name" required error={errors.tripName?.message}>
-            <input {...register('tripName')} placeholder="e.g. Beach Getaway 2026" autoFocus />
-          </FormField>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        {/* Trip + Dates */}
+        <Card title="Trip">
+          <div className={formGrid}>
+            <FormField label="Trip Name" required error={errors.tripName?.message} className={span.medium}>
+              <input {...register('tripName')} placeholder="e.g. Beach Getaway 2026" autoFocus />
+            </FormField>
 
-          <FormField label="Trip Code">
-            <input {...register('tripCode')} placeholder="e.g. BG-2026-01" />
-          </FormField>
+            <FormField label="Trip Code" className={span.short}>
+              <input {...register('tripCode')} placeholder="e.g. BG-2026-01" />
+            </FormField>
 
-          <FormField label="Event Template">
-            <Controller
-              control={control}
-              name="eventTemplateId"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value ?? ''}
-                  onChange={val => { field.onChange(val); onTemplateChange(val) }}
-                  onBlur={field.onBlur}
-                  label="None"
-                  items={[
-                    { value: '', label: 'None' },
-                    ...templates.map((t: any) => ({ value: String(t.id), label: t.eventName })),
-                  ]}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Region" className={span.short}>
+              <input {...register('region')} placeholder="e.g. QLD" />
+            </FormField>
 
-          <FormField label="Destination">
-            <input {...register('destination')} placeholder="e.g. Gold Coast" />
-          </FormField>
+            <FormField label="Event Template" className={span.medium}>
+              <Controller
+                control={control}
+                name="eventTemplateId"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value ?? ''}
+                    onChange={val => { field.onChange(val); onTemplateChange(val) }}
+                    onBlur={field.onBlur}
+                    label="None"
+                    items={[
+                      { value: '', label: 'None' },
+                      ...templates.map((t: any) => ({ value: String(t.id), label: t.eventName })),
+                    ]}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Region">
-            <input {...register('region')} placeholder="e.g. QLD" />
-          </FormField>
-        </Card>
+            <FormField label="Destination" className={span.medium}>
+              <input {...register('destination')} placeholder="e.g. Gold Coast" />
+            </FormField>
 
-        {/* Dates */}
-        <Card title="Dates" className="space-y-4">
-          <FormField label="Start Date" required error={errors.startDate?.message}>
-            <input type="date" {...register('startDate')} />
-          </FormField>
+            <FormField label="Start Date" required error={errors.startDate?.message} className={span.short}>
+              <input type="date" {...register('startDate')} />
+            </FormField>
 
-          <FormField label="Duration (Days)" required error={errors.durationDays?.message}>
-            <input type="number" min={1} {...register('durationDays')} />
-          </FormField>
+            <FormField label="Duration (Days)" required error={errors.durationDays?.message} className={span.short}>
+              <input type="number" min={1} {...register('durationDays')} />
+            </FormField>
 
-          <FormField label="Booking Cutoff Date">
-            <input type="date" {...register('bookingCutoffDate')} />
-          </FormField>
+            <FormField label="Booking Cutoff Date" className={span.short}>
+              <input type="date" {...register('bookingCutoffDate')} />
+            </FormField>
 
-          <FormField label="Status">
-            <Controller
-              control={control}
-              name="status"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={[
-                    { value: 'Draft', label: 'Draft' },
-                    { value: 'Planning', label: 'Planning' },
-                    { value: 'OpenForBookings', label: 'Open For Bookings' },
-                  ]}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Status" className={span.short}>
+              <Controller
+                control={control}
+                name="status"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={[
+                      { value: 'Draft', label: 'Draft' },
+                      { value: 'Planning', label: 'Planning' },
+                      { value: 'OpenForBookings', label: 'Open For Bookings' },
+                    ]}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Lead Coordinator">
-            <Controller
-              control={control}
-              name="leadCoordinatorId"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  label="None"
-                  items={[
-                    { value: '', label: 'None' },
-                    ...staffList.map((s: any) => ({ value: String(s.id), label: s.fullName })),
-                  ]}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Lead Coordinator" className={span.medium}>
+              <Controller
+                control={control}
+                name="leadCoordinatorId"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    label="None"
+                    items={[
+                      { value: '', label: 'None' },
+                      ...staffList.map((s: any) => ({ value: String(s.id), label: s.fullName })),
+                    ]}
+                  />
+                )}
+              />
+            </FormField>
+          </div>
         </Card>
 
         {/* Capacity & Requirements */}
-        <Card title="Capacity & Requirements" className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Min Participants" hint="Smallest group size this trip needs to go ahead.">
+        <Card title="Capacity & Requirements">
+          <div className={formGrid}>
+            <FormField label="Min Participants" hint="Smallest group size this trip needs to go ahead." className={span.short}>
               <input type="number" min={0} {...register('minParticipants')} />
             </FormField>
-            <FormField label="Max Participants" hint="Booking capacity before further bookings go to a waitlist.">
+            <FormField label="Max Participants" hint="Booking capacity before further bookings go to a waitlist." className={span.short}>
               <input type="number" min={0} {...register('maxParticipants')} />
             </FormField>
-          </div>
-
-          <FormField label="Wheelchair Capacity" hint="Wheelchair-accessible spots this trip's vehicles/accommodation must provide.">
-            <input type="number" min={0} {...register('requiredWheelchairCapacity')} />
-          </FormField>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Required Beds" hint="Total beds needed across all accommodation for this trip.">
+            <FormField label="Wheelchair Capacity" hint="Wheelchair-accessible spots this trip's vehicles/accommodation must provide." className={span.short}>
+              <input type="number" min={0} {...register('requiredWheelchairCapacity')} />
+            </FormField>
+            <FormField label="Required Beds" hint="Total beds needed across all accommodation for this trip." className={span.short}>
               <input type="number" min={0} {...register('requiredBeds')} />
             </FormField>
-            <FormField label="Required Bedrooms" hint="Total bedrooms needed, e.g. for privacy or support needs.">
+            <FormField label="Required Bedrooms" hint="Total bedrooms needed, e.g. for privacy or support needs." className={span.short}>
               <input type="number" min={0} {...register('requiredBedrooms')} />
             </FormField>
+            <FormField label="Min Staff Required" hint="Minimum staff that must be assigned before the trip can proceed." className={span.short}>
+              <input type="number" min={0} {...register('minStaffRequired')} />
+            </FormField>
           </div>
-
-          <FormField label="Min Staff Required" hint="Minimum staff that must be assigned before the trip can proceed.">
-            <input type="number" min={0} {...register('minStaffRequired')} />
-          </FormField>
         </Card>
 
         {/* Notes */}
-        <Card title="Notes" className="space-y-4">
+        <Card title="Notes">
           <FormField label="Notes">
-            <textarea {...register('notes')} rows={6} placeholder="Any additional notes..." />
+            <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
           </FormField>
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to="/trips" className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={createTrip.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" to="/trips">Cancel</Button>
+          <Button type="submit" disabled={createTrip.isPending}>
             {createTrip.isPending ? 'Creating...' : 'Create Trip'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

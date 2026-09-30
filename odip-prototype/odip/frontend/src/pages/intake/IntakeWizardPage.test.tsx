@@ -113,7 +113,7 @@ describe('IntakeWizardPage', () => {
     renderPage()
     expect(screen.getByText('Step 1 of 9')).toBeVisible()
     expect(stepNav()).toHaveClass('[contain:inline-size]')
-    const wizardBody = stepNav().closest('.space-y-6')
+    const wizardBody = stepNav().closest('.w-full.min-w-0.max-w-full')
     expect(wizardBody).toBeTruthy()
     expect(wizardBody).toHaveClass('w-full', 'min-w-0', 'max-w-full')
     // The [&_input]:scroll-* utilities used to live on this outer div in the old layout; the

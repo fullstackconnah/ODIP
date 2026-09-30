@@ -22,6 +22,7 @@ import { HOLIDAY_STA_CONSENT_TYPES } from '@/lib/participantPatchGroups'
 import type { ConsentType } from '@/api/types/enums'
 import { ReadOnlyField } from '../profileHelpers'
 import { yesNoUnknown } from '../profileFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const GRANTED_OPTIONS = [
   { value: 'true', label: 'Granted' },
@@ -39,9 +40,9 @@ export function CulturalDepthConsentsStep({ control, register, participant, cons
   const consents = useWatch({ control, name: 'consents' }) ?? []
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="space-y-6">
-        <Card title="Cultural Background (from Intake)" className="space-y-3">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Cultural Background (from Intake)">
+        <div className={formGrid}>
           <ReadOnlyField field="isCald" label="CALD" value={yesNoUnknown(participant.isCald === null ? '' : String(participant.isCald))} />
           <ReadOnlyField field="isLgbtqi" label="LGBTIQA+" value={yesNoUnknown(participant.isLgbtqi === null ? '' : String(participant.isLgbtqi))} />
           <ReadOnlyField field="isFamilyCommunity" label="Family / Community" value={yesNoUnknown(participant.isFamilyCommunity === null ? '' : String(participant.isFamilyCommunity))} />
@@ -50,21 +51,25 @@ export function CulturalDepthConsentsStep({ control, register, participant, cons
             label="Aboriginal and/or Torres Strait Islander"
             value={yesNoUnknown(participant.isAboriginalOrTorresStraitIslander === null ? '' : String(participant.isAboriginalOrTorresStraitIslander))}
           />
-        </Card>
+        </div>
+      </Card>
 
-        <Card title="Information Received (from Intake)" className="space-y-3">
+      <Card title="Information Received (from Intake)">
+        <div className={formGrid}>
           <ReadOnlyField field="receivedRightsAndResponsibilitiesInfo" label="Received: Rights and Responsibilities" value={yesNoUnknown(participant.receivedRightsAndResponsibilitiesInfo === null ? '' : String(participant.receivedRightsAndResponsibilitiesInfo))} />
           <ReadOnlyField field="receivedPrivacyAndConfidentialityInfo" label="Received: Privacy and Confidentiality" value={yesNoUnknown(participant.receivedPrivacyAndConfidentialityInfo === null ? '' : String(participant.receivedPrivacyAndConfidentialityInfo))} />
           <ReadOnlyField field="receivedFeedbackInfo" label="Received: Feedback Information and Form" value={yesNoUnknown(participant.receivedFeedbackInfo === null ? '' : String(participant.receivedFeedbackInfo))} />
           <ReadOnlyField field="receivedBeingSafeInfo" label="Received: Being Safe Information" value={yesNoUnknown(participant.receivedBeingSafeInfo === null ? '' : String(participant.receivedBeingSafeInfo))} />
           <ReadOnlyField field="receivedAdvocacyInfo" label="Received: Advocacy Information" value={yesNoUnknown(participant.receivedAdvocacyInfo === null ? '' : String(participant.receivedAdvocacyInfo))} />
-        </Card>
+        </div>
+      </Card>
 
-        <Card title="Cultural Depth" className="space-y-4">
-          <TextAreaField label="Personal Interests" id="personalInterests" rows={3} {...register('personalInterests')} />
-          <TextAreaField label="Choice & Control Notes" id="choiceControlNotes" rows={3} {...register('choiceControlNotes')} />
-        </Card>
-      </div>
+      <Card title="Cultural Depth">
+        <div className={formGrid}>
+          <TextAreaField label="Personal Interests" id="personalInterests" rows={3} {...register('personalInterests')} className={span.long} />
+          <TextAreaField label="Choice & Control Notes" id="choiceControlNotes" rows={3} {...register('choiceControlNotes')} className={span.long} />
+        </div>
+      </Card>
 
       <Card title="Consent & Terms" className="space-y-0">
         {consentsFieldArray.fields.map((field, index) => {

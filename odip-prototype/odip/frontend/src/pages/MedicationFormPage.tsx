@@ -16,6 +16,9 @@ import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
 import { formatDateAu } from '@/lib/utils'
+import { formGrid, span } from '@/lib/formGrid'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/Button'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -286,37 +289,37 @@ export default function MedicationFormPage() {
   const backTo = isEdit ? `/participants/${existing?.participantId}?tab=medications` : `/participants/${participantIdParam}?tab=medications`
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {unsavedChangesDialog}
       <div className="flex items-center gap-4">
-        <Link to={backTo} className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
+        <Link to={backTo} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Medication' : 'New Medication'}</h1>
-          {participant && <p className="text-sm text-[var(--color-muted-foreground)]">{participant.fullName}</p>}
+        <div className="flex-1">
+          <PageHeader title={isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
         </div>
       </div>
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractMedicationErrorMessage(mutation.error, isEdit)}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Medication */}
-        <Card title="Medication" className="space-y-4 md:col-span-2">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <FormField label="Name" required error={errors.name?.message}>
+        <Card title="Medication">
+          <div className={formGrid}>
+          <div className="contents">
+            <FormField label="Name" required error={errors.name?.message} className={span.medium}>
               <input {...register('name')} placeholder="e.g. Paracetamol" autoFocus />
             </FormField>
-            <FormField label="Strength">
+            <FormField label="Strength" className={span.short}>
               <input {...register('strength')} placeholder="e.g. 500mg" />
             </FormField>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
+          <div className="contents">
+            <div className={span.short}>
               <FormField label="Form" required error={errors.form?.message}>
                 <Controller
                   control={control}
@@ -336,7 +339,7 @@ export default function MedicationFormPage() {
                 <p className="text-xs text-[var(--color-on-warning-container)] mt-1.5">Unusual form for this route — check the prescription</p>
               )}
             </div>
-            <FormField label="Route" required error={errors.route?.message}>
+            <FormField label="Route" required error={errors.route?.message} className={span.short}>
               <Controller
                 control={control}
                 name="route"
@@ -352,7 +355,7 @@ export default function MedicationFormPage() {
               />
             </FormField>
           </div>
-          <FormField label="Packaging" required error={errors.packaging?.message}>
+          <FormField label="Packaging" required error={errors.packaging?.message} className={span.short}>
             <Controller
               control={control}
               name="packaging"
@@ -367,17 +370,19 @@ export default function MedicationFormPage() {
               )}
             />
           </FormField>
-          <FormField label="Dose Description" required error={errors.doseDescription?.message}>
+          <FormField label="Dose Description" required error={errors.doseDescription?.message} className={span.medium}>
             <input {...register('doseDescription')} placeholder="e.g. 1 tablet" />
           </FormField>
-          <FormField label="Directions">
-            <textarea {...register('directions')} rows={2} placeholder="e.g. Take with food" />
+          <FormField label="Directions" className={span.long}>
+            <textarea {...register('directions')} rows={3} placeholder="e.g. Take with food" />
           </FormField>
+        </div>
         </Card>
 
         {/* Schedule */}
-        <Card title="Schedule" className="space-y-4">
-          <FormField label="Type" required>
+        <Card title="Schedule">
+          <div className={formGrid}>
+          <FormField label="Type" required className={span.medium}>
             <Controller
               control={control}
               name="type"
@@ -399,7 +404,7 @@ export default function MedicationFormPage() {
               render={({ field }) => {
                 const times: string[] = field.value ?? []
                 return (
-                  <div>
+                  <div className={span.medium}>
                     <span className={labelClass}>Times of day</span>
                     <div className="flex flex-wrap gap-2 mb-2">
                       {times.map(t => (
@@ -418,13 +423,13 @@ export default function MedicationFormPage() {
                       {times.length === 0 && <span className="text-sm text-[var(--color-muted-foreground)]">No times added yet</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+                      <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 h-[var(--control-h)] rounded-[var(--radius-md)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
                       <button
                         type="button"
                         onClick={() => {
                           if (newTime && !times.includes(newTime)) field.onChange([...times, newTime].sort())
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors"
                       >
                         <Plus className="w-4 h-4" /> Add
                       </button>
@@ -434,7 +439,7 @@ export default function MedicationFormPage() {
               }}
             />
 
-            <FormField label="Frequency" required>
+            <FormField label="Frequency" required className={span.long}>
               <Controller
                 control={control}
                 name="frequency"
@@ -455,7 +460,7 @@ export default function MedicationFormPage() {
                 render={({ field }) => {
                   const selected: string[] = field.value ?? []
                   return (
-                    <FormField label="Days of week" required error={errors.daysOfWeek?.message}>
+                    <FormField label="Days of week" required error={errors.daysOfWeek?.message} className={span.long}>
                       <div className="flex flex-wrap gap-2">
                         {WEEKDAYS.map(day => {
                           const active = selected.includes(day)
@@ -465,7 +470,7 @@ export default function MedicationFormPage() {
                               type="button"
                               onClick={() => field.onChange(active ? selected.filter(d => d !== day) : [...selected, day])}
                               aria-pressed={active}
-                              className={`min-h-[44px] min-w-[44px] flex items-center justify-center px-3 py-2 rounded-lg text-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ${
+                              className={`h-[var(--control-h)] min-w-[var(--control-h)] flex items-center justify-center px-3 rounded-[var(--radius-md)] text-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ${
                                 active
                                   ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                   : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
@@ -483,17 +488,17 @@ export default function MedicationFormPage() {
             )}
 
             {frequencyValue === 'EveryNDays' && (
-              <div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField label="Every N days" required error={errors.intervalDays?.message}>
+              <div className={`${span.long} ${formGrid}`}>
+                <div className="contents">
+                  <FormField label="Every N days" required error={errors.intervalDays?.message} className={span.short}>
                     <input type="number" min="1" step="1" {...register('intervalDays')} placeholder="e.g. 2" />
                   </FormField>
-                  <FormField label="Starting from" required error={errors.anchorDate?.message}>
+                  <FormField label="Starting from" required error={errors.anchorDate?.message} className={span.short}>
                     <input type="date" {...register('anchorDate')} />
                   </FormField>
                 </div>
                 {intervalDaysValue && Number(intervalDaysValue) > 0 && anchorDateValue && (
-                  <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
+                  <p className="text-xs text-[var(--color-muted-foreground)] md:col-span-2 xl:col-span-12">
                     Due every {intervalDaysValue} day{Number(intervalDaysValue) === 1 ? '' : 's'}, starting {formatDateAu(anchorDateValue)}.
                   </p>
                 )}
@@ -502,41 +507,43 @@ export default function MedicationFormPage() {
             </>
           ) : (
             <>
-              <FormField label="PRN Indication" required error={errors.prnIndication?.message} hint={!errors.prnIndication ? 'What symptom or situation should prompt this dose?' : undefined}>
-                <textarea {...register('prnIndication')} rows={2} placeholder="e.g. Pain rated above 5/10" />
+              <FormField label="PRN Indication" required error={errors.prnIndication?.message} hint={!errors.prnIndication ? 'What symptom or situation should prompt this dose?' : undefined} className={span.long}>
+                <textarea {...register('prnIndication')} rows={3} placeholder="e.g. Pain rated above 5/10" />
               </FormField>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Max doses / 24h">
+              <div className="contents">
+                <FormField label="Max doses / 24h" className={span.short}>
                   <input type="number" min="0" {...register('prnMaxDosesPer24h')} placeholder="e.g. 4" />
                 </FormField>
-                <FormField label="Min interval (minutes)">
+                <FormField label="Min interval (minutes)" className={span.short}>
                   <input type="number" min="0" {...register('prnMinIntervalMinutes')} placeholder="e.g. 240" />
                 </FormField>
               </div>
             </>
           )}
+        </div>
         </Card>
 
         {/* Clinical & compliance */}
-        <Card title="Clinical & compliance" className="space-y-4">
-          <FormField label="Purpose">
-            <textarea {...register('purpose')} rows={2} placeholder="What this medication is for" />
+        <Card title="Clinical & compliance">
+          <div className={formGrid}>
+          <FormField label="Purpose" className={span.long}>
+            <textarea {...register('purpose')} rows={3} placeholder="What this medication is for" />
           </FormField>
 
-          <FormField label="High Risk" layout="checkbox" hint="Requires a witness for every administered dose">
+          <FormField label="High Risk" layout="checkbox" hint="Requires a witness for every administered dose" className={span.medium}>
             <input type="checkbox" {...register('isHighRisk')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
-          <FormField label="High Intensity Support" layout="checkbox" hint="Administering this medication is an NDIS High Intensity support — staff must hold the relevant training.">
+          <FormField label="High Intensity Support" layout="checkbox" hint="Administering this medication is an NDIS High Intensity support — staff must hold the relevant training." className={span.medium}>
             <input type="checkbox" {...register('isHighIntensitySupport')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
-          <FormField label="Psychotropic" layout="checkbox">
+          <FormField label="Psychotropic" layout="checkbox" className={span.medium}>
             <input type="checkbox" {...register('isPsychotropic')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
           {isPsychotropic && (
-            <div className="rounded-lg border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/40 px-3 py-2 space-y-3">
+            <div className={`${span.long} rounded-[var(--radius-md)] border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/40 px-3 py-2 space-y-3`}>
               <FormField label="Chemical Restraint" layout="checkbox">
                 <input type="checkbox" {...register('isChemicalRestraint')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
@@ -558,8 +565,8 @@ export default function MedicationFormPage() {
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <FormField label="Drug Schedule" required>
+          <div className="contents">
+            <FormField label="Drug Schedule" required className={span.short}>
               <Controller
                 control={control}
                 name="drugSchedule"
@@ -574,7 +581,7 @@ export default function MedicationFormPage() {
                 )}
               />
             </FormField>
-            <FormField label="Support Level" required>
+            <FormField label="Support Level" required className={span.short}>
               <Controller
                 control={control}
                 name="supportLevel"
@@ -592,7 +599,7 @@ export default function MedicationFormPage() {
           </div>
 
           {isEdit && (
-            <FormField label="Status">
+            <FormField label="Status" className={span.short}>
               <Controller
                 control={control}
                 name="status"
@@ -612,70 +619,74 @@ export default function MedicationFormPage() {
               />
             </FormField>
           )}
+        </div>
         </Card>
 
         {/* Prescriber & supply */}
-        <Card title="Prescriber & supply" className="space-y-4">
-          <div className="grid sm:grid-cols-3 gap-4">
-            <FormField label="Prescriber Name">
+        <Card title="Prescriber & supply">
+          <div className={formGrid}>
+          <div className="contents">
+            <FormField label="Prescriber Name" className={span.medium}>
               <input {...register('prescriberName')} placeholder="e.g. Dr Smith" />
             </FormField>
-            <FormField label="Pharmacy Name">
+            <FormField label="Pharmacy Name" className={span.medium}>
               <input {...register('pharmacyName')} placeholder="e.g. Chemist Warehouse" />
             </FormField>
-            <FormField label="Pharmacy Phone" hint="Shown as a tap-to-call number in the missed-medication guidance.">
+            <FormField label="Pharmacy Phone" hint="Shown as a tap-to-call number in the missed-medication guidance." className={span.medium}>
               <input type="tel" {...register('pharmacyPhone')} placeholder="e.g. 03 9123 4567" />
             </FormField>
           </div>
-          <FormField label="Storage Requirements">
+          <FormField label="Storage Requirements" className={span.medium}>
             <input {...register('storageRequirements')} placeholder="e.g. Refrigerate" />
           </FormField>
-          <div className="grid sm:grid-cols-3 gap-4">
-            <FormField label="Start Date">
+          <div className="contents">
+            <FormField label="Start Date" className={span.short}>
               <input type="date" {...register('startDate')} />
             </FormField>
-            <FormField label="End Date">
+            <FormField label="End Date" className={span.short}>
               <input type="date" {...register('endDate')} />
             </FormField>
-            <FormField label="Next Review Due">
+            <FormField label="Next Review Due" className={span.short}>
               <input type="date" {...register('nextReviewDue')} />
             </FormField>
           </div>
+        </div>
         </Card>
 
         {/* Consent */}
-        <Card title="Consent" className="space-y-4">
-          <FormField label="Consent Obtained" layout="checkbox">
+        <Card title="Consent">
+          <div className={formGrid}>
+          <FormField label="Consent Obtained" layout="checkbox" className={span.long}>
             <input type="checkbox" {...register('consentObtained')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
           {consentObtained && (
-            <div className="grid sm:grid-cols-2 gap-4">
-              <FormField label="Consent Given By" required error={errors.consentGivenBy?.message}>
+            <div className="contents">
+              <FormField label="Consent Given By" required error={errors.consentGivenBy?.message} className={span.medium}>
                 <input {...register('consentGivenBy')} placeholder="e.g. Participant / Guardian name" />
               </FormField>
-              <FormField label="Consent Date" required error={errors.consentDate?.message}>
+              <FormField label="Consent Date" required error={errors.consentDate?.message} className={span.short}>
                 <input type="date" {...register('consentDate')} />
               </FormField>
             </div>
           )}
+        </div>
         </Card>
 
         {/* Notes */}
-        <Card title="Notes" className="space-y-4 md:col-span-2">
-          <FormField label="Notes">
+        <Card title="Notes">
+          <div className={formGrid}>
+          <FormField label="Notes" className={span.long}>
             <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
           </FormField>
+        </div>
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to={backTo} className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-2">
+          <Button to={backTo} variant="secondary">Cancel</Button>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Medication')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

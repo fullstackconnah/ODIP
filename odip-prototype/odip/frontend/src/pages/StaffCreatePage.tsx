@@ -4,14 +4,16 @@ import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { formGrid, span } from '@/lib/formGrid'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -170,13 +172,11 @@ export default function StaffCreatePage() {
 
   if (isTargetSuperAdmin) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center gap-4">
-          <Link to="/staff" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h1 className="text-xl md:text-2xl font-bold">Edit Staff Member</h1>
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+        <div className="text-sm text-[var(--color-muted-foreground)]">
+          <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
         </div>
+        <PageHeader title="Edit Staff Member" />
         <Card className="space-y-2">
           <p role="alert" className="text-sm font-medium text-[var(--color-destructive)]">
             SuperAdmin accounts can't be edited here.
@@ -184,7 +184,7 @@ export default function StaffCreatePage() {
           <p className="text-sm text-[var(--color-muted-foreground)]">
             SuperAdmin accounts are managed in Settings › Users. Contact a SuperAdmin if this account's role or profile needs to change.
           </p>
-          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
+          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
             Back to Staff
           </Link>
         </Card>
@@ -193,107 +193,112 @@ export default function StaffCreatePage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {unsavedChangesDialog}
-      <div className="flex items-center gap-4">
-        <Link to="/staff" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Staff Member' : 'New Staff Member'}</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
       </div>
+      <PageHeader title={isEdit ? 'Edit Staff Member' : 'New Staff Member'} />
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} staff member. Please check your input and try again.`)}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Personal Information */}
-        <Card title="Personal Information" className="space-y-4">
-          <FormField label="First Name" required error={errors.firstName?.message}>
-            <input {...register('firstName')} placeholder="e.g. Sarah" autoFocus />
-          </FormField>
+        <Card title="Personal Information">
+          <div className={formGrid}>
+            <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
+              <input {...register('firstName')} placeholder="e.g. Sarah" autoFocus />
+            </FormField>
 
-          <FormField label="Last Name" required error={errors.lastName?.message}>
-            <input {...register('lastName')} placeholder="e.g. Mitchell" />
-          </FormField>
+            <FormField label="Last Name" required error={errors.lastName?.message} className={span.medium}>
+              <input {...register('lastName')} placeholder="e.g. Mitchell" />
+            </FormField>
 
-          <FormField label="Position" required error={errors.position?.message}>
-            <Controller
-              control={control}
-              name="position"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={POSITION_ITEMS}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Position" required error={errors.position?.message} className={span.medium}>
+              <Controller
+                control={control}
+                name="position"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={POSITION_ITEMS}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Region">
-            <input {...register('region')} placeholder="e.g. South East QLD" />
-          </FormField>
+            <FormField label="Region" className={span.short}>
+              <input {...register('region')} placeholder="e.g. South East QLD" />
+            </FormField>
+          </div>
         </Card>
 
         {/* Account */}
-        <Card title="Account" className="space-y-4">
-          {isEdit && existing?.username && (
-            <FormField label="Username" hint="Generated automatically from the staff member's name and cannot be changed here.">
-              <input value={existing.username} disabled readOnly />
+        <Card title="Account">
+          <div className={formGrid}>
+            {isEdit && existing?.username && (
+              <FormField label="Username" hint="Generated automatically from the staff member's name and cannot be changed here." className={span.medium}>
+                <input value={existing.username} disabled readOnly />
+              </FormField>
+            )}
+
+            <FormField label="Email" required error={errors.email?.message} hint={!errors.email ? 'Used to sign in to the app.' : undefined} className={span.medium}>
+              <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
             </FormField>
-          )}
 
-          <FormField label="Email" required error={errors.email?.message} hint={!errors.email ? 'Used to sign in to the app.' : undefined}>
-            <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
-          </FormField>
-
-          <FormField
-            label="Account Role"
-            required
-            error={errors.role?.message}
-            hint={
-              isRoleLocked
-                ? 'Only an Admin can change this role.'
-                : (!errors.role ? 'Controls what this person can access and edit in the app.' : undefined)
-            }
-          >
-            <Controller
-              control={control}
-              name="role"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={roleSelectOptions}
-                  disabled={isRoleLocked}
-                />
-              )}
-            />
-          </FormField>
+            <FormField
+              label="Account Role"
+              required
+              error={errors.role?.message}
+              hint={
+                isRoleLocked
+                  ? 'Only an Admin can change this role.'
+                  : (!errors.role ? 'Controls what this person can access and edit in the app.' : undefined)
+              }
+              className={span.medium}
+            >
+              <Controller
+                control={control}
+                name="role"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={roleSelectOptions}
+                    disabled={isRoleLocked}
+                  />
+                )}
+              />
+            </FormField>
+          </div>
         </Card>
 
         {/* Contact */}
-        <Card title="Contact" className="space-y-4">
-          <FormField label="Mobile">
-            <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
-          </FormField>
+        <Card title="Contact">
+          <div className={formGrid}>
+            <FormField label="Mobile" className={span.medium}>
+              <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
+            </FormField>
 
-          <FormField label="Notes">
-            <textarea {...register('notes')} rows={4} placeholder="Any additional notes..." />
-          </FormField>
+            <FormField label="Notes" className={span.long}>
+              <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
+            </FormField>
+          </div>
         </Card>
 
         {/* Qualifications */}
-        <Card title="Qualifications & Eligibility" className="space-y-4 md:col-span-2">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
+        <Card title="Qualifications & Eligibility">
+          <div className={formGrid}>
+            <div className={`${span.medium} space-y-1`}>
               <FormField label="First Aid Qualified" layout="checkbox">
                 <input type="checkbox" {...register('isFirstAidQualified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
@@ -304,7 +309,7 @@ export default function StaffCreatePage() {
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className={`${span.medium} space-y-1`}>
               <FormField label="Driver Eligible" layout="checkbox">
                 <input type="checkbox" {...register('isDriverEligible')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
@@ -315,7 +320,7 @@ export default function StaffCreatePage() {
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className={`${span.medium} space-y-1`}>
               <FormField label="Manual Handling Competent" layout="checkbox">
                 <input type="checkbox" {...register('isManualHandlingCompetent')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
@@ -326,7 +331,7 @@ export default function StaffCreatePage() {
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className={`${span.medium} space-y-1`}>
               <FormField label="Medication Competent" layout="checkbox">
                 <input type="checkbox" {...register('isMedicationCompetent')} className="w-4 h-4 rounded border-[var(--color-border)]" />
               </FormField>
@@ -337,11 +342,11 @@ export default function StaffCreatePage() {
               </div>
             </div>
 
-            <FormField label="Overnight Eligible" layout="checkbox">
+            <FormField label="Overnight Eligible" layout="checkbox" className={span.short}>
               <input type="checkbox" {...register('isOvernightEligible')} className="w-4 h-4 rounded border-[var(--color-border)]" />
             </FormField>
 
-            <div className="space-y-1">
+            <div className={`${span.medium} space-y-1`}>
               <FormField label="Worker screening number">
                 <input {...register('workerScreeningNumber')} placeholder="e.g. WWC1234567" />
               </FormField>
@@ -353,14 +358,11 @@ export default function StaffCreatePage() {
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to="/staff" className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" to="/staff">Cancel</Button>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Staff Member')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

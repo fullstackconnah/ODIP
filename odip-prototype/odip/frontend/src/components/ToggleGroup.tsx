@@ -68,7 +68,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel }: 
             tabIndex={isTabStop ? 0 : -1}
             onClick={() => onChange(opt.key)}
             onKeyDown={e => handleKeyDown(e, index)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
+            className={`h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
               checked
                 ? 'bg-[var(--color-primary)] text-white'
                 : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]'

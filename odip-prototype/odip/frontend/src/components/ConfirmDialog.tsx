@@ -39,7 +39,7 @@ export function ConfirmDialog({
           <>
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
             >
               {cancelLabel}
             </button>
@@ -47,7 +47,7 @@ export function ConfirmDialog({
               onClick={onConfirm}
               disabled={loading}
               aria-label={confirmAriaLabel ?? confirmLabel}
-              className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 ${
+              className={`inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] text-white disabled:opacity-50 ${
                 variant === 'danger'
                   ? 'bg-[var(--color-destructive)] hover:opacity-90'
                   : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90'

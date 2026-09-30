@@ -1,3 +1,4 @@
+import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -180,7 +181,7 @@ export default function TemplateFormPanel({
   }
 
   const inputClass =
-    'w-full px-3 py-2 rounded-xl bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+    'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const isBusy =
@@ -203,7 +204,7 @@ export default function TemplateFormPanel({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+            className="p-1 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors"
           >
             <X className="w-5 h-5 text-[var(--color-muted-foreground)]" />
           </button>
@@ -212,7 +213,7 @@ export default function TemplateFormPanel({
         {/* Scrollable form body */}
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="flex-1 overflow-y-auto px-6 py-5 space-y-4"
+          className={`flex-1 overflow-y-auto px-[var(--card-pad)] py-[var(--card-pad)] content-start ${modalGrid}`}
         >
           {/* Fill from trip — create mode only */}
           {!isEdit && (
@@ -233,7 +234,7 @@ export default function TemplateFormPanel({
           )}
 
           {/* Event Name */}
-          <div>
+          <div className={modalSpan.full}>
             <label htmlFor="eventName" className={labelClass}>Event Name *</label>
             <input
               id="eventName"
@@ -242,12 +243,12 @@ export default function TemplateFormPanel({
               placeholder="e.g. Gold Coast Beach Break"
             />
             {errors.eventName && (
-              <p className="text-xs text-red-500 mt-1">{errors.eventName.message}</p>
+              <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventName.message}</p>
             )}
           </div>
 
           {/* Event Code */}
-          <div>
+          <div className={modalSpan.half}>
             <label htmlFor="eventCode" className={labelClass}>Event Code *</label>
             <input
               id="eventCode"
@@ -256,12 +257,12 @@ export default function TemplateFormPanel({
               placeholder="e.g. GOLD-01"
             />
             {errors.eventCode && (
-              <p className="text-xs text-red-500 mt-1">{errors.eventCode.message}</p>
+              <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventCode.message}</p>
             )}
           </div>
 
           {/* Destination + Region */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="contents">
             <div>
               <label htmlFor="defaultDestination" className={labelClass}>Default Destination</label>
               <input
@@ -283,7 +284,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Duration + Preferred Time */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="contents">
             <div>
               <label htmlFor="standardDurationDays" className={labelClass}>Duration (days)</label>
               <input
@@ -307,7 +308,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Typical Activities */}
-          <div>
+          <div className={modalSpan.full}>
             <label htmlFor="typicalActivities" className={labelClass}>Typical Activities</label>
             <textarea
               id="typicalActivities"
@@ -319,7 +320,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Accessibility Notes */}
-          <div>
+          <div className={modalSpan.full}>
             <label htmlFor="accessibilityNotes" className={labelClass}>Accessibility Notes</label>
             <textarea
               id="accessibilityNotes"
@@ -331,7 +332,7 @@ export default function TemplateFormPanel({
           </div>
 
           {/* Collapsible accommodation notes */}
-          <div>
+          <div className={modalSpan.full}>
             <button
               type="button"
               onClick={() => setAccessibilityExpanded(p => !p)}
@@ -346,13 +347,13 @@ export default function TemplateFormPanel({
             </button>
 
             {accessibilityExpanded && (
-              <div className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
+              <div className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
                 <div>
                   <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully Modified Accommodation</label>
                   <textarea
                     id="fullyModifiedAccommodationNotes"
                     {...register('fullyModifiedAccommodationNotes')}
-                    rows={2}
+                    rows={3}
                     className={inputClass}
                   />
                 </div>
@@ -361,7 +362,7 @@ export default function TemplateFormPanel({
                   <textarea
                     id="semiModifiedAccommodationNotes"
                     {...register('semiModifiedAccommodationNotes')}
-                    rows={2}
+                    rows={3}
                     className={inputClass}
                   />
                 </div>
@@ -370,7 +371,7 @@ export default function TemplateFormPanel({
                   <textarea
                     id="wheelchairAccessNotes"
                     {...register('wheelchairAccessNotes')}
-                    rows={2}
+                    rows={3}
                     className={inputClass}
                   />
                 </div>
@@ -380,21 +381,21 @@ export default function TemplateFormPanel({
 
           {/* Success message */}
           {successMessage && (
-            <div className="bg-[#bff285] border border-[#8fc950] rounded-xl px-4 py-3 text-sm text-[#294800] font-medium">
+            <div className="sm:col-span-2 bg-[var(--color-primary-fixed)] border border-[var(--color-primary-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
               {successMessage}
             </div>
           )}
 
           {/* Error message */}
           {error && (
-            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-700">
+            <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
               {error}
             </div>
           )}
         </form>
 
         {/* Footer — sticky at bottom, outside scroll area */}
-        <div className="px-6 py-4 border-t border-[var(--color-border)] space-y-3 shrink-0">
+        <div className="px-[var(--card-pad)] py-3 border-t border-[var(--color-border)] space-y-3 shrink-0">
           {/* Deactivate (edit mode only) */}
           {isEdit && (
             <div>
@@ -407,7 +408,7 @@ export default function TemplateFormPanel({
                     type="button"
                     onClick={handleDeactivate}
                     disabled={deactivateMutation.isPending}
-                    className="text-red-600 font-medium hover:underline disabled:opacity-50"
+                    className="text-[var(--color-destructive)] font-medium hover:underline disabled:opacity-50"
                   >
                     {deactivateMutation.isPending ? 'Deactivating…' : 'Confirm'}
                   </button>
@@ -423,7 +424,7 @@ export default function TemplateFormPanel({
                 <button
                   type="button"
                   onClick={() => setShowDeactivateConfirm(true)}
-                  className="text-sm text-red-500 hover:text-red-700 hover:underline transition-colors"
+                  className="text-sm text-[var(--color-destructive)] hover:opacity-80 hover:underline transition-colors"
                 >
                   Deactivate template
                 </button>
@@ -444,7 +445,7 @@ export default function TemplateFormPanel({
               type="button"
               onClick={handleSubmit(onSubmit)}
               disabled={isBusy}
-              className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
             >
               {isBusy ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
             </button>

@@ -10,6 +10,7 @@ import { previewRpAuthorisation, buildRpIncidentDescriptionSkeleton } from '@/li
 import { formatDateAu } from '@/lib/utils'
 import type { IncidentFormData } from '../incidentFormSchema'
 import type { IncidentDetailDto } from '@/api/types'
+import { formGrid, span } from '@/lib/formGrid'
 
 export type RestrictivePracticeStepProps = {
   getValues: UseFormGetValues<IncidentFormData>
@@ -100,15 +101,17 @@ export function RestrictivePracticeStep({
 
   return (
     <Card title="Restrictive Practice Details" className="space-y-4">
-      <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message}>
-        <Dropdown
-          variant="form"
-          value={restrictivePracticeType ?? ''}
-          onChange={(v) => setValue('restrictivePracticeType', v, { shouldDirty: true, shouldValidate: true })}
-          label="Select restrictive practice type..."
-          items={RESTRICTIVE_PRACTICE_TYPES.map((t) => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
-        />
-      </FormField>
+      <div className={formGrid}>
+        <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message} className={span.medium}>
+          <Dropdown
+            variant="form"
+            value={restrictivePracticeType ?? ''}
+            onChange={(v) => setValue('restrictivePracticeType', v, { shouldDirty: true, shouldValidate: true })}
+            label="Select restrictive practice type..."
+            items={RESTRICTIVE_PRACTICE_TYPES.map((t) => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
+          />
+        </FormField>
+      </div>
 
       {restrictivePracticeType && (
         <fieldset className="space-y-3">
@@ -134,7 +137,7 @@ export function RestrictivePracticeStep({
             {matchingActivePractices.map((p) => (
               <label
                 key={p.id}
-                className="flex items-start gap-3 p-3 rounded-lg border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-accent)]"
+                className="flex items-start gap-3 p-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-accent)]"
               >
                 <input
                   type="radio"
@@ -152,7 +155,7 @@ export function RestrictivePracticeStep({
               </label>
             ))}
 
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-accent)]">
+            <label className="flex items-start gap-3 p-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-accent)]">
               <input
                 type="radio"
                 name="linkedRestrictivePractice"
@@ -195,7 +198,7 @@ export function RestrictivePracticeStep({
                 <p className="text-sm text-[var(--color-muted-foreground)]">No inactive practices of this type on file.</p>
               ) : (
                 matchingInactivePractices.map((p) => (
-                  <div key={p.id} className="p-3 rounded-lg border border-dashed border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)]">
+                  <div key={p.id} className="p-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)]">
                     <span className="block">{p.description}</span>
                     <span className="block text-xs">Retired — not selectable as the practice used.</span>
                   </div>
@@ -214,7 +217,7 @@ export function RestrictivePracticeStep({
         existingIncident && existingIncident.isRestrictivePracticeAuthorised !== null ? (
           <div
             role="status"
-            className={`flex items-start gap-3 p-3 rounded-lg text-sm border ${
+            className={`flex items-start gap-3 p-3 rounded-[var(--radius-sm)] text-sm border ${
               existingIncident.isRestrictivePracticeAuthorised
                 ? 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/20'
                 : 'bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] border-[var(--color-destructive)]/20'
@@ -242,7 +245,7 @@ export function RestrictivePracticeStep({
         <div
           role="status"
           aria-live="polite"
-          className={`flex items-start gap-3 p-3 rounded-lg text-sm border ${
+          className={`flex items-start gap-3 p-3 rounded-[var(--radius-sm)] text-sm border ${
             rpAuthorisationPreview === 'authorised'
               ? 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/20'
               : rpAuthorisationPreview === 'unauthorised'

@@ -14,6 +14,7 @@ import { FUNDING_SOURCES, SERVICE_STREAMS } from '@/api/types/enums'
 import { FUNDING_SOURCE_LABELS, SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { PlanTypeComplianceBanner } from '../intakeHelpers'
+import { formGrid, span } from '@/lib/formGrid'
 
 /**
  * NOTE — scope simplification vs. the retired single-step wizard: that wizard guards a fundingSource
@@ -32,8 +33,8 @@ export function NdisFundingStep({
 }) {
   const showNdisFields = fundingSourceValue !== 'Other'
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Service Streams" className="space-y-4">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Service Streams">
         <fieldset className="m-0 p-0 border-0">
           <legend className="sr-only">Service Streams</legend>
           <Controller
@@ -45,7 +46,7 @@ export function NdisFundingStep({
                   const selected = field.value ?? []
                   const checked = selected.includes(stream)
                   return (
-                    <label key={stream} className="flex items-center gap-3 py-1 min-h-[44px]">
+                    <label key={stream} className="flex items-center gap-3 py-1 min-h-[var(--control-h)]">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -68,74 +69,78 @@ export function NdisFundingStep({
         </fieldset>
       </Card>
 
-      <Card title="NDIS & Funding" className="space-y-4">
-        <FormField label="Funding Source" required error={errors.fundingSource?.message}>
-          <Controller
-            control={control}
-            name="fundingSource"
-            render={({ field }) => (
-              <Dropdown
-                id="fundingSource"
-                variant="form"
-                value={field.value ?? ''}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                items={FUNDING_SOURCES.map((s) => ({ value: s, label: FUNDING_SOURCE_LABELS[s] }))}
-              />
-            )}
-          />
-        </FormField>
-
-        {showNdisFields && (
-          <>
-            <FormField label="NDIS Number">
-              <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
-            </FormField>
-
-            <FormField label="Plan Start Date">
-              <input id="planStartDate" type="date" {...register('planStartDate')} />
-            </FormField>
-
-            <FormField label="Plan End Date">
-              <input id="planEndDate" type="date" {...register('planEndDate')} />
-            </FormField>
-
-            <FormField label="Plan Type" required error={errors.planType?.message}>
-              <Controller
-                control={control}
-                name="planType"
-                render={({ field }) => (
-                  <Dropdown
-                    id="planType"
-                    variant="form"
-                    value={field.value ?? ''}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    items={[
-                      { value: 'SelfManaged', label: 'Self Managed' },
-                      { value: 'PlanManaged', label: 'Plan Managed' },
-                      { value: 'AgencyManaged', label: 'Agency Managed' },
-                    ]}
-                  />
-                )}
-              />
-            </FormField>
-
-            <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
-          </>
-        )}
-
-        <FormField label="Region">
-          <input id="region" {...register('region')} placeholder="e.g. QLD" />
-        </FormField>
-
-        {!showNdisFields && (
-          <FormField label="Funding Organisation" required error={errors.fundingOrganisation?.message}>
-            <input id="fundingOrganisation" {...register('fundingOrganisation')} placeholder="e.g. Plan Partners" />
+      <Card title="NDIS & Funding">
+        <div className={formGrid}>
+          <FormField label="Funding Source" required error={errors.fundingSource?.message} className={span.medium}>
+            <Controller
+              control={control}
+              name="fundingSource"
+              render={({ field }) => (
+                <Dropdown
+                  id="fundingSource"
+                  variant="form"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  items={FUNDING_SOURCES.map((s) => ({ value: s, label: FUNDING_SOURCE_LABELS[s] }))}
+                />
+              )}
+            />
           </FormField>
-        )}
 
-        <CheckboxField label="Repeat Client" id="isRepeatClient" {...register('isRepeatClient')} />
+          {showNdisFields && (
+            <>
+              <FormField label="NDIS Number" className={span.short}>
+                <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
+              </FormField>
+
+              <FormField label="Plan Start Date" className={span.short}>
+                <input id="planStartDate" type="date" {...register('planStartDate')} />
+              </FormField>
+
+              <FormField label="Plan End Date" className={span.short}>
+                <input id="planEndDate" type="date" {...register('planEndDate')} />
+              </FormField>
+
+              <FormField label="Plan Type" required error={errors.planType?.message} className={span.short}>
+                <Controller
+                  control={control}
+                  name="planType"
+                  render={({ field }) => (
+                    <Dropdown
+                      id="planType"
+                      variant="form"
+                      value={field.value ?? ''}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      items={[
+                        { value: 'SelfManaged', label: 'Self Managed' },
+                        { value: 'PlanManaged', label: 'Plan Managed' },
+                        { value: 'AgencyManaged', label: 'Agency Managed' },
+                      ]}
+                    />
+                  )}
+                />
+              </FormField>
+
+              <div className={span.long}>
+                <PlanTypeComplianceBanner message={planTypeComplianceWarningValue} />
+              </div>
+            </>
+          )}
+
+          <FormField label="Region" className={span.short}>
+            <input id="region" {...register('region')} placeholder="e.g. QLD" />
+          </FormField>
+
+          {!showNdisFields && (
+            <FormField label="Funding Organisation" required error={errors.fundingOrganisation?.message} className={span.medium}>
+              <input id="fundingOrganisation" {...register('fundingOrganisation')} placeholder="e.g. Plan Partners" />
+            </FormField>
+          )}
+
+          <CheckboxField label="Repeat Client" id="isRepeatClient" {...register('isRepeatClient')} className={span.short} />
+        </div>
       </Card>
     </div>
   )

@@ -54,14 +54,14 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
         <>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-full text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
+            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={updateLineItem.isPending}
-            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all disabled:opacity-50"
+            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
           >
             {updateLineItem.isPending ? 'Saving…' : 'Confirm'}
           </button>
@@ -70,7 +70,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
     >
       <div className="space-y-1.5">
         <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
-          Reason <span className="text-red-500">*</span>
+          Reason <span className="text-[var(--color-destructive)]">*</span>
         </label>
         <Dropdown
           variant="form"
@@ -79,7 +79,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
           onChange={v => { setReason(v); setError('') }}
           label="Select a reason"
         />
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-[var(--color-destructive)]">{error}</p>}
       </div>
     </Modal>
   )

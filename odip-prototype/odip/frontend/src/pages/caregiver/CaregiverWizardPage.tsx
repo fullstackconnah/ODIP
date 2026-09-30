@@ -168,7 +168,7 @@ export default function CaregiverWizardPage() {
     <PublicShell>
       {unsavedChangesDialog}
       {form.data.rejectionNote && (
-        <div role="status" className="mb-4 p-3 rounded-lg bg-[var(--color-warning-container,var(--color-accent))] text-sm">
+        <div role="status" className="mb-4 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container,var(--color-accent))] text-sm">
           <strong>Your previous submission was sent back with a note:</strong> {form.data.rejectionNote}
         </div>
       )}
@@ -231,7 +231,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
       <div className="max-w-3xl mx-auto p-4 sm:p-8">
-        <h1 className="text-2xl font-bold mb-1">Participant profile</h1>
+        <h1 className="text-xl font-bold mb-1">Participant profile</h1>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
         {children}
       </div>
@@ -242,7 +242,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
 function InvalidLinkPage() {
   return (
     <PublicShell>
-      <div role="status" className="p-4 rounded-lg border border-[var(--color-border)]">
+      <div role="status" className="p-4 rounded-[var(--radius-sm)] border border-[var(--color-border)]">
         <p className="font-medium">This link is no longer valid.</p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-1">If you were expecting to complete a form, please contact the person who sent it to you.</p>
       </div>
@@ -253,7 +253,7 @@ function InvalidLinkPage() {
 function SubmittedPage({ caregiverName }: { caregiverName: string | null }) {
   return (
     <PublicShell>
-      <div role="status" className="p-4 rounded-lg bg-[var(--color-accent)]">
+      <div role="status" className="p-4 rounded-[var(--radius-sm)] bg-[var(--color-accent)]">
         <p className="font-medium">Thank you{caregiverName ? `, ${caregiverName}` : ''} — your form has been submitted.</p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-1">It is now awaiting review. You&apos;ll be contacted if anything needs to be checked.</p>
       </div>

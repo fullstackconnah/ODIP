@@ -246,7 +246,7 @@ export function SearchableSelect({
       role="listbox"
       id={listboxId}
       style={panelStyle}
-      className="bg-white rounded-2xl shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] py-1"
+      className="bg-[var(--color-card)] rounded-[var(--radius-md)] shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] py-1"
     >
       {showLoadingRow ? (
         <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] flex items-center gap-2">
@@ -272,7 +272,7 @@ export function SearchableSelect({
             onMouseDown={e => e.preventDefault()}
             onClick={() => handleSelect(item)}
             onMouseEnter={() => !item.disabled && setActiveIndex(idx)}
-            className={`min-h-[44px] flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-foreground)] text-left transition-colors cursor-pointer ${
+            className={`min-h-[var(--control-h)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors cursor-pointer ${
               item.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : activeIndex === idx
@@ -317,7 +317,7 @@ export function SearchableSelect({
         onClick={handleClick}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        className={`${inputClass} min-h-[44px] pr-9 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`${inputClass} min-h-[var(--control-h)] pr-9 disabled:opacity-60 disabled:cursor-not-allowed`}
       />
       <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
         {loading ? (

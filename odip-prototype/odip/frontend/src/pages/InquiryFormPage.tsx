@@ -9,6 +9,7 @@ import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquirySource } from '@/api/types/inquiries'
+import { formGrid, span } from '@/lib/formGrid'
 
 const blank = (): CreateParticipantInquiryDto => ({ firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '' })
 
@@ -26,7 +27,7 @@ export default function InquiryFormPage() {
   const existing = editId ? inquiries.find(row => row.id === editId) : undefined
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-4">
         <Button
           variant="ghost"
@@ -108,9 +109,10 @@ function InquiryFormBody({
   const ctaLabel = editId ? 'Save enquiry' : 'Capture enquiry'
 
   return (
-    <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={handleSubmit} aria-label={editId ? 'Edit enquiry' : 'New enquiry'}>
+    <form className={formGrid} onSubmit={handleSubmit} aria-label={editId ? 'Edit enquiry' : 'New enquiry'}>
       <TextField
         id="inquiry-first-name"
+        className={span.medium}
         label="First name"
         required
         autoComplete="given-name"
@@ -119,6 +121,7 @@ function InquiryFormBody({
       />
       <TextField
         id="inquiry-last-name"
+        className={span.medium}
         label="Last name"
         required
         autoComplete="family-name"
@@ -127,6 +130,7 @@ function InquiryFormBody({
       />
       <TextField
         id="inquiry-phone"
+        className={span.medium}
         label="Phone"
         type="tel"
         autoComplete="tel"
@@ -135,6 +139,7 @@ function InquiryFormBody({
       />
       <TextField
         id="inquiry-email"
+        className={span.medium}
         label="Email"
         type="email"
         autoComplete="email"
@@ -143,17 +148,18 @@ function InquiryFormBody({
       />
       <SelectField
         id="inquiry-source"
+        className={span.short}
         label="Source"
         value={form.source}
         onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
         options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
       />
       {error && (
-        <div className="md:col-span-2">
+        <div className={span.long}>
           <Callout tone="error">{error}</Callout>
         </div>
       )}
-      <div className="flex gap-2 md:col-span-2">
+      <div className={`flex gap-2 ${span.long}`}>
         <Button type="submit" disabled={isSaving}>{ctaLabel}</Button>
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
       </div>

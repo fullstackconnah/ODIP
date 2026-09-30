@@ -8,6 +8,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_TYPES, INCIDEN
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import type { TripListDto, StaffListDto } from '@/api/types'
 import type { IncidentFormData } from '../incidentFormSchema'
+import { formGrid, span } from '@/lib/formGrid'
 
 export type BasicsStepProps = {
   register: UseFormRegister<IncidentFormData>
@@ -43,89 +44,93 @@ export function BasicsStep({
   trips, staff, incidentServiceTypes,
 }: BasicsStepProps) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Who" className="space-y-4">
-        <FormField label="Involved Participant">
-          <ParticipantPicker
-            allowNone
-            noneLabel="None"
-            value={involvedParticipantId ?? ''}
-            onChange={(v) => setValue('involvedParticipantId', v, { shouldDirty: true })}
-          />
-        </FormField>
-
-        <FormField label="Title" required error={errors.title?.message}>
-          <input {...register('title')} placeholder="Brief incident summary" autoFocus />
-        </FormField>
-
-        <FormField label="Reported By" required error={errors.reportedByStaffId?.message}>
-          <SearchableSelect
-            value={reportedByStaffId ?? ''}
-            onChange={(v) => setValue('reportedByStaffId', v, { shouldDirty: true, shouldValidate: true })}
-            placeholder="Select staff member..."
-            items={staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName }))}
-          />
-        </FormField>
-
-        <FormField label="Involved Staff Member">
-          <SearchableSelect
-            value={involvedStaffId ?? ''}
-            onChange={(v) => setValue('involvedStaffId', v, { shouldDirty: true })}
-            items={[
-              { value: '', label: 'None' },
-              ...staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName })),
-            ]}
-          />
-        </FormField>
-      </Card>
-
-      <Card title="What" className="space-y-4">
-        <FormField label="Service Type" required>
-          <Dropdown
-            variant="form"
-            value={serviceType ?? 'None'}
-            onChange={(v) => setValue('serviceType', v as IncidentFormData['serviceType'], { shouldDirty: true })}
-            items={incidentServiceTypes.map((s) => ({
-              value: s,
-              label: s === 'None' ? 'None / not applicable' : (SERVICE_STREAM_LABELS[s as keyof typeof SERVICE_STREAM_LABELS] ?? s),
-            }))}
-          />
-        </FormField>
-
-        {serviceType === 'Trip' && (
-          <FormField label="Trip" required error={errors.tripInstanceId?.message}>
-            <SearchableSelect
-              value={tripInstanceId ?? ''}
-              onChange={(v) => setValue('tripInstanceId', v, { shouldDirty: true, shouldValidate: true })}
-              placeholder="Select a trip..."
-              items={trips.map((t: TripListDto) => ({ value: t.id, label: t.tripName }))}
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Who">
+        <div className={formGrid}>
+          <FormField label="Involved Participant" className={span.medium}>
+            <ParticipantPicker
+              allowNone
+              noneLabel="None"
+              value={involvedParticipantId ?? ''}
+              onChange={(v) => setValue('involvedParticipantId', v, { shouldDirty: true })}
             />
           </FormField>
-        )}
 
-        <FormField label="Incident Type" required>
-          <Dropdown
-            variant="form"
-            value={incidentType ?? ''}
-            onChange={(v) => setValue('incidentType', v as IncidentFormData['incidentType'], { shouldDirty: true, shouldValidate: true })}
-            items={INCIDENT_TYPES.map((t) => ({ value: t, label: INCIDENT_TYPE_LABELS[t] }))}
-          />
-        </FormField>
-
-        {incidentType === 'Other' && (
-          <FormField label="Specify Incident Type" required error={errors.otherTypeSpecify?.message}>
-            <input {...register('otherTypeSpecify')} placeholder="Describe the incident type" />
+          <FormField label="Title" required error={errors.title?.message} className={span.medium}>
+            <input {...register('title')} placeholder="Brief incident summary" autoFocus />
           </FormField>
-        )}
 
-        <FormField label="Severity" required>
-          <Dropdown
-            variant="form"
-            value={severity ?? ''}
-            onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true })}
-            items={INCIDENT_SEVERITIES.map((s) => ({ value: s, label: INCIDENT_SEVERITY_LABELS[s] }))}
-          />
-        </FormField>
+          <FormField label="Reported By" required error={errors.reportedByStaffId?.message} className={span.medium}>
+            <SearchableSelect
+              value={reportedByStaffId ?? ''}
+              onChange={(v) => setValue('reportedByStaffId', v, { shouldDirty: true, shouldValidate: true })}
+              placeholder="Select staff member..."
+              items={staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName }))}
+            />
+          </FormField>
+
+          <FormField label="Involved Staff Member" className={span.medium}>
+            <SearchableSelect
+              value={involvedStaffId ?? ''}
+              onChange={(v) => setValue('involvedStaffId', v, { shouldDirty: true })}
+              items={[
+                { value: '', label: 'None' },
+                ...staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName })),
+              ]}
+            />
+          </FormField>
+        </div>
+      </Card>
+
+      <Card title="What">
+        <div className={formGrid}>
+          <FormField label="Service Type" required className={span.medium}>
+            <Dropdown
+              variant="form"
+              value={serviceType ?? 'None'}
+              onChange={(v) => setValue('serviceType', v as IncidentFormData['serviceType'], { shouldDirty: true })}
+              items={incidentServiceTypes.map((s) => ({
+                value: s,
+                label: s === 'None' ? 'None / not applicable' : (SERVICE_STREAM_LABELS[s as keyof typeof SERVICE_STREAM_LABELS] ?? s),
+              }))}
+            />
+          </FormField>
+
+          {serviceType === 'Trip' && (
+            <FormField label="Trip" required error={errors.tripInstanceId?.message} className={span.medium}>
+              <SearchableSelect
+                value={tripInstanceId ?? ''}
+                onChange={(v) => setValue('tripInstanceId', v, { shouldDirty: true, shouldValidate: true })}
+                placeholder="Select a trip..."
+                items={trips.map((t: TripListDto) => ({ value: t.id, label: t.tripName }))}
+              />
+            </FormField>
+          )}
+
+          <FormField label="Incident Type" required className={span.medium}>
+            <Dropdown
+              variant="form"
+              value={incidentType ?? ''}
+              onChange={(v) => setValue('incidentType', v as IncidentFormData['incidentType'], { shouldDirty: true, shouldValidate: true })}
+              items={INCIDENT_TYPES.map((t) => ({ value: t, label: INCIDENT_TYPE_LABELS[t] }))}
+            />
+          </FormField>
+
+          {incidentType === 'Other' && (
+            <FormField label="Specify Incident Type" required error={errors.otherTypeSpecify?.message} className={span.medium}>
+              <input {...register('otherTypeSpecify')} placeholder="Describe the incident type" />
+            </FormField>
+          )}
+
+          <FormField label="Severity" required className={span.short}>
+            <Dropdown
+              variant="form"
+              value={severity ?? ''}
+              onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true })}
+              items={INCIDENT_SEVERITIES.map((s) => ({ value: s, label: INCIDENT_SEVERITY_LABELS[s] }))}
+            />
+          </FormField>
+        </div>
       </Card>
     </div>
   )

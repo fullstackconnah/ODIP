@@ -4,13 +4,15 @@ import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateTask, useUpdateTask, useTask, useTrips, useStaff } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { formGrid, span } from '@/lib/formGrid'
 
 const TASK_TYPE_ITEMS: DropdownItem[] = [
   { value: 'AccommodationRequest', label: 'Accommodation Request' },
@@ -133,14 +135,12 @@ export default function TaskCreatePage() {
   // back to rendering the create-mode form with blank defaults.
   if (isEdit && isTaskError) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center gap-4">
-          <Link to="/tasks" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h1 className="text-xl md:text-2xl font-bold">Edit Task</h1>
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+        <div className="text-sm text-[var(--color-muted-foreground)]">
+          <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>
         </div>
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <PageHeader title="Edit Task" />
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
         </div>
       </div>
@@ -148,141 +148,135 @@ export default function TaskCreatePage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {unsavedChangesDialog}
-      <div className="flex items-center gap-4">
-        <Link to="/tasks" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Task' : 'New Task'}</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>
       </div>
+      <PageHeader title={isEdit ? 'Edit Task' : 'New Task'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           Failed to {isEdit ? 'update' : 'create'} task. Please check your input and try again.
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Task Details */}
-        <Card title="Task Details" className="space-y-4">
-          <FormField label="Title" required error={errors.title?.message}>
-            <input {...register('title')} placeholder="e.g. Confirm accommodation booking" autoFocus />
-          </FormField>
+        <Card title="Task Details">
+          <div className={formGrid}>
+            <FormField label="Title" required error={errors.title?.message} className={span.medium}>
+              <input {...register('title')} placeholder="e.g. Confirm accommodation booking" autoFocus />
+            </FormField>
 
-          <FormField label="Trip" required error={errors.tripInstanceId?.message}>
-            <Controller
-              control={control}
-              name="tripInstanceId"
-              render={({ field }) => (
-                <SearchableSelect
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  placeholder="Select a trip..."
-                  items={trips.map((t: any) => ({ value: t.id, label: t.tripName }))}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Trip" required error={errors.tripInstanceId?.message} className={span.medium}>
+              <Controller
+                control={control}
+                name="tripInstanceId"
+                render={({ field }) => (
+                  <SearchableSelect
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    placeholder="Select a trip..."
+                    items={trips.map((t: any) => ({ value: t.id, label: t.tripName }))}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Task Type" required>
-            <Controller
-              control={control}
-              name="taskType"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={TASK_TYPE_ITEMS}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Task Type" required className={span.medium}>
+              <Controller
+                control={control}
+                name="taskType"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={TASK_TYPE_ITEMS}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Notes">
-            <textarea {...register('notes')} rows={3} placeholder="Any additional details..." />
-          </FormField>
-        </Card>
+            {/* UX-01: staff-scale list — SearchableSelect, not a bounded native select. */}
+            <FormField label="Owner" className={span.medium}>
+              <Controller
+                control={control}
+                name="ownerId"
+                render={({ field }) => (
+                  <SearchableSelect
+                    id="ownerId"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={[
+                      { value: '', label: 'Unassigned' },
+                      ...staff.map((s: any) => ({ value: s.id, label: s.fullName })),
+                    ]}
+                  />
+                )}
+              />
+            </FormField>
 
-        {/* Assignment & Priority */}
-        <Card title="Assignment & Priority" className="space-y-4">
-          {/* UX-01: staff-scale list — SearchableSelect, not a bounded native select. */}
-          <FormField label="Owner">
-            <Controller
-              control={control}
-              name="ownerId"
-              render={({ field }) => (
-                <SearchableSelect
-                  id="ownerId"
-                  value={field.value ?? ''}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={[
-                    { value: '', label: 'Unassigned' },
-                    ...staff.map((s: any) => ({ value: s.id, label: s.fullName })),
-                  ]}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Priority" required className={span.short}>
+              <Controller
+                control={control}
+                name="priority"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={TASK_PRIORITY_ITEMS}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Priority" required>
-            <Controller
-              control={control}
-              name="priority"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={TASK_PRIORITY_ITEMS}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Due Date" className={span.short}>
+              <input type="date" {...register('dueDate')} />
+            </FormField>
 
-          <FormField label="Due Date">
-            <input type="date" {...register('dueDate')} />
-          </FormField>
+            {isEdit && (
+              <>
+                <FormField label="Status" className={span.short}>
+                  <Controller
+                    control={control}
+                    name="status"
+                    render={({ field }) => (
+                      <Dropdown
+                        variant="form"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        items={TASK_STATUS_EDIT_ITEMS}
+                      />
+                    )}
+                  />
+                </FormField>
 
-          {isEdit && (
-            <>
-              <FormField label="Status">
-                <Controller
-                  control={control}
-                  name="status"
-                  render={({ field }) => (
-                    <Dropdown
-                      variant="form"
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      items={TASK_STATUS_EDIT_ITEMS}
-                    />
-                  )}
-                />
-              </FormField>
+                <FormField label="Completed Date" className={span.short}>
+                  <input type="date" {...register('completedDate')} />
+                </FormField>
+              </>
+            )}
 
-              <FormField label="Completed Date">
-                <input type="date" {...register('completedDate')} />
-              </FormField>
-            </>
-          )}
+            <FormField label="Notes" className={span.long}>
+              <textarea {...register('notes')} rows={3} placeholder="Any additional details..." />
+            </FormField>
+          </div>
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to="/tasks" className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" to="/tasks">Cancel</Button>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Task')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

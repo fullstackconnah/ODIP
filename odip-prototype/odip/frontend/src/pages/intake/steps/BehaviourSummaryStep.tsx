@@ -15,13 +15,13 @@ export function BehaviourSummaryStep({ control, register }: {
   register: UseFormRegister<ParticipantFormData>
 }) {
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Card title="Behaviours of Concern" className="space-y-4">
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      <Card title="Behaviours of Concern" className="space-y-[var(--field-gap-y)]">
         <YesNoToggleField control={control} name="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" />
         <YesNoToggleField control={control} name="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" />
       </Card>
 
-      <Card title="Communication" className="space-y-4">
+      <Card title="Communication">
         <TextAreaField label="Expressive Skills" id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." />
       </Card>
     </div>

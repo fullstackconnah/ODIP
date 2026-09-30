@@ -6,6 +6,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { INCIDENT_STATUSES, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUSES, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
 import type { StaffListDto } from '@/api/types'
 import type { IncidentFormData } from '../incidentFormSchema'
+import { formGrid, span } from '@/lib/formGrid'
 
 export type ComplianceStepProps = {
   register: UseFormRegister<IncidentFormData>
@@ -33,9 +34,9 @@ export function ComplianceStep({
   staff,
 }: ComplianceStepProps) {
   return (
-    <Card title="Review & Compliance" className="space-y-4">
-      <div className="grid md:grid-cols-2 gap-4">
-        <FormField label="Status">
+    <Card title="Review & Compliance">
+      <div className={formGrid}>
+        <FormField label="Status" className={span.short}>
           <Dropdown
             variant="form"
             value={status ?? 'Draft'}
@@ -44,7 +45,7 @@ export function ComplianceStep({
           />
         </FormField>
 
-        <FormField label="QSC Reporting Status">
+        <FormField label="QSC Reporting Status" className={span.short}>
           <Dropdown
             variant="form"
             value={qscReportingStatus ?? 'NotRequired'}
@@ -53,15 +54,15 @@ export function ComplianceStep({
           />
         </FormField>
 
-        <FormField label="QSC Reference Number">
+        <FormField label="QSC Reference Number" className={span.short}>
           <input {...register('qscReferenceNumber')} placeholder="QSC reference #" />
         </FormField>
 
-        <FormField label="QSC Reported At">
+        <FormField label="QSC Reported At" className={span.short}>
           <input type="datetime-local" {...register('qscReportedAt')} />
         </FormField>
 
-        <FormField label="Reviewed By">
+        <FormField label="Reviewed By" className={span.medium}>
           <SearchableSelect
             value={reviewedByStaffId ?? ''}
             onChange={(v) => setValue('reviewedByStaffId', v, { shouldDirty: true })}
@@ -71,18 +72,16 @@ export function ComplianceStep({
             ]}
           />
         </FormField>
-      </div>
 
-      <FormField label="Review Notes">
-        <textarea {...register('reviewNotes')} rows={3} placeholder="Notes from the reviewer..." />
-      </FormField>
+        <FormField label="Review Notes" className={span.long}>
+          <textarea {...register('reviewNotes')} rows={3} placeholder="Notes from the reviewer..." />
+        </FormField>
 
-      <FormField label="Corrective Actions">
-        <textarea {...register('correctiveActions')} rows={3} placeholder="Actions to prevent recurrence..." />
-      </FormField>
+        <FormField label="Corrective Actions" className={span.long}>
+          <textarea {...register('correctiveActions')} rows={3} placeholder="Actions to prevent recurrence..." />
+        </FormField>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="space-y-3">
+        <div className={`${span.medium} space-y-1`}>
           <FormField label="Family Notified" layout="checkbox">
             <input type="checkbox" {...register('familyNotified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
@@ -93,7 +92,7 @@ export function ComplianceStep({
           )}
         </div>
 
-        <div className="space-y-3">
+        <div className={`${span.medium} space-y-1`}>
           <FormField label="Support Coordinator Notified" layout="checkbox">
             <input type="checkbox" {...register('supportCoordinatorNotified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>

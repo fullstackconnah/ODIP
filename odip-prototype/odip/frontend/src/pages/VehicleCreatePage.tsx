@@ -4,13 +4,15 @@ import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateVehicle, useUpdateVehicle, useVehicleDetail } from '@/api/hooks'
-import { ArrowLeft } from 'lucide-react'
 import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
+import { PageHeader } from '@/components/PageHeader'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
+import { formGrid, span } from '@/lib/formGrid'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -103,98 +105,95 @@ export default function VehicleCreatePage() {
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {unsavedChangesDialog}
-      <div className="flex items-center gap-4">
-        <Link to="/vehicles" className="p-2 rounded-lg hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold">{isEdit ? 'Edit Vehicle' : 'New Vehicle'}</h1>
+      <div className="text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/vehicles" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Vehicles</Link>
       </div>
+      <PageHeader title={isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} vehicle. Please check your input and try again.`)}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Vehicle Information */}
-        <Card title="Vehicle Information" className="space-y-4">
-          <FormField label="Vehicle Name" required error={errors.vehicleName?.message}>
-            <input {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
-          </FormField>
+        <Card title="Vehicle Information">
+          <div className={formGrid}>
+            <FormField label="Vehicle Name" required error={errors.vehicleName?.message} className={span.medium}>
+              <input {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
+            </FormField>
 
-          <FormField label="Registration">
-            <input {...register('registration')} placeholder="e.g. ABC-123" />
-          </FormField>
+            <FormField label="Registration" className={span.short}>
+              <input {...register('registration')} placeholder="e.g. ABC-123" />
+            </FormField>
 
-          <FormField label="Vehicle Type" required>
-            <Controller
-              control={control}
-              name="vehicleType"
-              render={({ field }) => (
-                <Dropdown
-                  variant="form"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  items={VEHICLE_TYPE_ITEMS}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Vehicle Type" required className={span.medium}>
+              <Controller
+                control={control}
+                name="vehicleType"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={VEHICLE_TYPE_ITEMS}
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField label="Internal Vehicle" layout="checkbox">
-            <input type="checkbox" {...register('isInternal')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-          </FormField>
+            <FormField label="Internal Vehicle" layout="checkbox" className={span.short}>
+              <input type="checkbox" {...register('isInternal')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            </FormField>
+          </div>
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility" className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Total Seats" required error={errors.totalSeats?.message}>
+        <Card title="Capacity & Accessibility">
+          <div className={formGrid}>
+            <FormField label="Total Seats" required error={errors.totalSeats?.message} className={span.short}>
               <input type="number" min="0" {...register('totalSeats')} />
             </FormField>
-            <FormField label="Wheelchair Positions">
+            <FormField label="Wheelchair Positions" className={span.short}>
               <input type="number" min="0" {...register('wheelchairPositions')} />
             </FormField>
+
+            <FormField label="Ramp / Hoist Details" className={span.long}>
+              <textarea {...register('rampHoistDetails')} rows={2} placeholder="Ramp or hoist specifications..." />
+            </FormField>
+
+            <FormField label="Driver Requirements" className={span.long}>
+              <textarea {...register('driverRequirements')} rows={2} placeholder="e.g. LR licence required" />
+            </FormField>
           </div>
-
-          <FormField label="Ramp / Hoist Details">
-            <textarea {...register('rampHoistDetails')} rows={2} placeholder="Ramp or hoist specifications..." />
-          </FormField>
-
-          <FormField label="Driver Requirements">
-            <textarea {...register('driverRequirements')} rows={2} placeholder="e.g. LR licence required" />
-          </FormField>
         </Card>
 
         {/* Dates & Notes */}
-        <Card title="Service & Notes" className="space-y-4 md:col-span-2">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <FormField label="Service Due Date">
+        <Card title="Service & Notes">
+          <div className={formGrid}>
+            <FormField label="Service Due Date" className={span.short}>
               <input type="date" {...register('serviceDueDate')} />
             </FormField>
-            <FormField label="Registration Due Date">
+            <FormField label="Registration Due Date" className={span.short}>
               <input type="date" {...register('registrationDueDate')} />
             </FormField>
-          </div>
 
-          <FormField label="Notes">
-            <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
-          </FormField>
+            <FormField label="Notes" className={span.long}>
+              <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
+            </FormField>
+          </div>
         </Card>
 
         {/* Submit */}
-        <div className="md:col-span-2 flex justify-end gap-3">
-          <Link to="/vehicles" className="px-6 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors">
-            Cancel
-          </Link>
-          <button type="submit" disabled={mutation.isPending}
-            className="px-6 py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" to="/vehicles">Cancel</Button>
+          <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Vehicle')}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

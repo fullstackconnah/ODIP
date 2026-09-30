@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Button } from '@/components/Button'
 import type { WizardSecondaryAction } from './types'
 
 export type WizardNavFooterProps = {
@@ -31,51 +31,31 @@ export function WizardNavFooter({
   isSubmitting,
 }: WizardNavFooterProps) {
   return (
-    <div className="md:col-span-2 mt-6 flex w-full min-w-0 flex-col gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:pb-3">
+    <div className="sticky bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {showBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            Back
-          </button>
+          <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
         )}
         {secondaryActions.map((action) => (
-          <button
+          <Button
             key={action.key}
             type="button"
+            variant="secondary"
             onClick={action.onClick}
             disabled={action.disabled}
-            className="px-6 py-2.5 min-h-[44px] rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
           >
             {action.label}
-          </button>
+          </Button>
         ))}
       </div>
       <div className="flex min-w-0 flex-wrap justify-end gap-3">
         {!isReviewStep && (
-          <button
-            type="button"
-            onClick={onNext}
-            className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            Next
-          </button>
+          <Button type="button" onClick={onNext}>Next</Button>
         )}
         {isReviewStep && (
           <>
-            <Link to={cancelTo} className="px-6 py-2.5 min-h-[44px] flex items-center rounded-lg border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 min-h-[44px] rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all shadow-md shadow-[var(--color-primary)]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            >
-              {submitLabel}
-            </button>
+            <Button variant="secondary" to={cancelTo}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
           </>
         )}
       </div>

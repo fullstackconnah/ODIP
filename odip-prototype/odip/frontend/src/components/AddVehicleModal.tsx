@@ -4,6 +4,7 @@ import {
   useVehicles, useCreateVehicleAssignment, useCreateVehicle,
   useCheckVehicleAssignment, getRosterFindings,
 } from '@/api/hooks'
+import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { Modal } from '@/components/Modal'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
@@ -150,26 +151,26 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
       footer={
         activeTab === 'existing' ? (
           <>
-            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
               Cancel
             </button>
             <button
               onClick={handleAssignExisting}
               disabled={!tab1CanSubmit}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {createAssignment.isPending ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
             </button>
           </>
         ) : (
           <>
-            <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
               Cancel
             </button>
             <button
               onClick={handleCreateAndAssign}
               disabled={!tab2CanSubmit}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {createVehicle.isPending || createAssignment.isPending ? 'Saving...' : 'Create Vehicle & Assign'}
             </button>
@@ -214,7 +215,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 placeholder="Search by name or rego..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
             </div>
 
@@ -230,7 +231,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 <button
                   key={v.id}
                   onClick={() => setSelectedVehicleId(v.id)}
-                  className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
+                  className={`w-full text-left px-4 py-3 rounded-[var(--radius-md)] border transition-colors ${
                     selectedVehicleId === v.id
                       ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
                       : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/40'
@@ -260,8 +261,8 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
 
         {/* Tab 2 — Add New Vehicle */}
         {activeTab === 'new' && (
-          <div className="space-y-4">
-            <div>
+          <div className={modalGrid}>
+            <div className={modalSpan.full}>
               <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
                 Vehicle name <span className="text-[var(--color-destructive)]">*</span>
               </label>
@@ -270,22 +271,22 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 value={vehicleName}
                 onChange={e => setVehicleName(e.target.value)}
                 placeholder="e.g. Toyota HiAce"
-                className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
+            <div className="contents">
+              <div className={modalSpan.half}>
                 <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Registration</label>
                 <input
                   type="text"
                   value={registration}
                   onChange={e => setRegistration(e.target.value)}
                   placeholder="ABC-123"
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
-              <div>
+              <div className={modalSpan.half}>
                 <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
                   Type <span className="text-[var(--color-destructive)]">*</span>
                 </label>
@@ -297,7 +298,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   label="Select type"
                 />
               </div>
-              <div>
+              <div className={modalSpan.half}>
                 <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
                   Total seats <span className="text-[var(--color-destructive)]">*</span>
                 </label>
@@ -306,22 +307,22 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   min={0}
                   value={totalSeats}
                   onChange={e => setTotalSeats(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
-              <div>
+              <div className={modalSpan.half}>
                 <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Wheelchair positions</label>
                 <input
                   type="number"
                   min={0}
                   value={wheelchairPositions}
                   onChange={e => setWheelchairPositions(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
             </div>
 
-            <div className="flex gap-5">
+            <div className={`flex gap-5 ${modalSpan.full}`}>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} className="rounded" />
                 Internal fleet
@@ -333,10 +334,10 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             </div>
 
             {createVehicle.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">Failed to create vehicle. Please try again.</p>
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Failed to create vehicle. Please try again.</p>
             )}
             {(createAssignment.isError || noIdReturned) && !createVehicle.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>
                 Vehicle was created but could not be assigned. Find it in the Vehicles list and assign it manually.
               </p>
             )}
