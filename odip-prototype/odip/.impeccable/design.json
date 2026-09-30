@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-28T15:20:00Z",
+  "generatedAt": "2026-09-30T11:00:45Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -96,124 +96,257 @@
       }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Page-level statements. Rare." },
-      "headline": { "displayName": "Page Title", "purpose": "The single <h1> per screen, from PageHeader." },
-      "title": { "displayName": "Section Title", "purpose": "Card and section headings." },
-      "body": { "displayName": "Body", "purpose": "Default. Table cells and descriptive copy." },
-      "label": { "displayName": "Label", "purpose": "Form labels, badges, navigation." }
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page title, 20px, one per screen."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and section headings, 14px semibold."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Table cells, copy, input text, 14px."
+      },
+      "body-secondary": {
+        "displayName": "Body secondary",
+        "purpose": "Table secondary text, subtitles, fact labels, 13px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Form labels, 13px medium."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Helper/error text, column headers, small buttons; the 12px floor."
+      }
     },
     "shadows": [
       {
         "name": "tinted-button-halo",
         "value": "0 4px 6px -1px rgb(57 98 0 / 0.2), 0 2px 4px -2px rgb(57 98 0 / 0.2)",
-        "purpose": "Primary buttons only. The system's one ambient lift."
+        "purpose": "Primary buttons."
+      },
+      {
+        "name": "floating-panel",
+        "value": "0 24px 40px -12px rgba(27,28,26,0.14)",
+        "purpose": "Dropdown and searchable-select panels."
+      },
+      {
+        "name": "header-hairline",
+        "value": "0 24px 32px -12px rgba(27,28,26,0.04)",
+        "purpose": "Sticky 48px header ambient lift."
       }
     ],
     "motion": [
-      { "name": "state-transition", "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Colour/opacity change on hover and focus." }
+      {
+        "name": "state-transition",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Colour/opacity change on hover and focus."
+      }
     ],
     "breakpoints": [
-      { "name": "md", "value": "768px" },
-      { "name": "lg", "value": "1024px" },
-      { "name": "xl", "value": "1280px" }
-    ]
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ],
+    "density": {
+      "note": "Plain :root custom properties in index.css; flip under @media (pointer: coarse).",
+      "tokens": [
+        {
+          "name": "--control-h",
+          "fine": "32px",
+          "coarse": "44px"
+        },
+        {
+          "name": "--control-h-sm",
+          "fine": "24px",
+          "coarse": "36px"
+        },
+        {
+          "name": "--row-h",
+          "fine": "34px",
+          "coarse": "48px"
+        },
+        {
+          "name": "--table-head-h",
+          "fine": "32px",
+          "coarse": "40px"
+        },
+        {
+          "name": "--cell-px",
+          "fine": "12px",
+          "coarse": "12px"
+        },
+        {
+          "name": "--card-pad",
+          "fine": "12px",
+          "coarse": "16px"
+        },
+        {
+          "name": "--section-gap",
+          "fine": "16px",
+          "coarse": "20px"
+        },
+        {
+          "name": "--field-gap-y",
+          "fine": "12px",
+          "coarse": "16px"
+        },
+        {
+          "name": "--field-gap-x",
+          "fine": "16px",
+          "coarse": "16px"
+        },
+        {
+          "name": "--gutter",
+          "fine": "20px",
+          "coarse": "16px"
+        },
+        {
+          "name": "--tap-min",
+          "fine": "0px",
+          "coarse": "44px"
+        }
+      ]
+    }
   },
   "components": [
     {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one 'go' action per surface. Ledger Olive with a faint tinted halo.",
-      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.5rem 1rem; border:none; border-radius:0.5rem; background:var(--color-primary); color:#fff; font-family:var(--font-sans); font-size:0.875rem; font-weight:500; cursor:pointer; box-shadow:0 4px 6px -1px rgb(57 98 0 / 0.2), 0 2px 4px -2px rgb(57 98 0 / 0.2); transition:background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background:color-mix(in srgb, var(--color-primary) 90%, transparent); } .ds-btn-primary:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-ring); } .ds-btn-primary:disabled { opacity:0.5; cursor:not-allowed; }"
+      "description": "The one acting element on a screen; 32px on a mouse, 44px on touch.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save trip</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 16px;border-radius:0.375rem;font-size:14px;font-weight:500;cursor:pointer;transition:background-color 150ms,opacity 150ms;border:0}.ds-btn:focus-visible{outline:none;box-shadow:0 0 0 2px #396200}.ds-btn-primary{background:var(--color-primary,#396200);color:#fff;box-shadow:0 4px 6px -1px rgb(57 98 0/.2)}.ds-btn-primary:hover{opacity:.9}"
     },
     {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "The companion action. White card fill with a ruled border.",
-      "html": "<button class=\"ds-btn-secondary\">Edit enquiry</button>",
-      "css": ".ds-btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.5rem 1rem; border:1px solid var(--color-border); border-radius:0.5rem; background:var(--color-card); color:var(--color-foreground); font-family:var(--font-sans); font-size:0.875rem; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-secondary:hover { background:var(--color-accent); } .ds-btn-secondary:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-ring); } .ds-btn-secondary:disabled { opacity:0.5; cursor:not-allowed; }"
+      "description": "White fill with ruled border.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 16px;border-radius:0.375rem;font-size:14px;font-weight:500;cursor:pointer;transition:background-color 150ms,opacity 150ms;border:0}.ds-btn:focus-visible{outline:none;box-shadow:0 0 0 2px #396200}.ds-btn-secondary{background:#fff;color:#1b1c1a;border:1px solid #c3c9b5}.ds-btn-secondary:hover{background:#efeeea}"
     },
     {
       "name": "Danger Button",
       "kind": "button",
       "refersTo": "button-danger",
-      "description": "Destructive or irreversible actions only.",
-      "html": "<button class=\"ds-btn-danger\">Delete participant</button>",
-      "css": ".ds-btn-danger { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.5rem 1rem; border:none; border-radius:0.5rem; background:var(--color-destructive); color:#fff; font-family:var(--font-sans); font-size:0.875rem; font-weight:500; cursor:pointer; transition:opacity 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-danger:hover { opacity:0.9; } .ds-btn-danger:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-ring); } .ds-btn-danger:disabled { opacity:0.5; cursor:not-allowed; }"
+      "description": "Destructive actions.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Archive</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 16px;border-radius:0.375rem;font-size:14px;font-weight:500;cursor:pointer;transition:background-color 150ms,opacity 150ms;border:0}.ds-btn:focus-visible{outline:none;box-shadow:0 0 0 2px #396200}.ds-btn-danger{background:#ba1a1a;color:#fff}.ds-btn-danger:hover{opacity:.9}"
     },
     {
-      "name": "Ghost Button",
+      "name": "Row Action",
       "kind": "button",
-      "refersTo": "button-ghost",
-      "description": "Tertiary actions; text only, turning olive on hover.",
-      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
-      "css": ".ds-btn-ghost { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.5rem 1rem; border:none; border-radius:0.5rem; background:transparent; color:var(--color-muted-foreground); font-family:var(--font-sans); font-size:0.875rem; font-weight:500; cursor:pointer; transition:color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-ghost:hover { background:var(--color-accent); color:var(--color-primary); } .ds-btn-ghost:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-ring); }"
+      "refersTo": "button-row-action",
+      "description": "24px icon-only square, revealed by row hover or focus (always visible on touch).",
+      "html": "<button class=\"ds-row-action\" aria-label=\"Edit\">&#9998;</button>",
+      "css": ".ds-row-action{width:24px;height:24px;padding:0;border:0;border-radius:0.375rem;background:transparent;color:#43493a;cursor:pointer;font-size:14px}.ds-row-action:hover{background:#efeeea;color:#396200}.ds-row-action:focus-visible{outline:none;box-shadow:0 0 0 2px #396200}"
     },
     {
       "name": "Text Field",
       "kind": "input",
       "refersTo": "input-field",
-      "description": "Field Grey fill with a ruled border; focus is a ring, not a border change.",
-      "html": "<label class=\"ds-field-label\">First name<input class=\"ds-field\" /></label>",
-      "css": ".ds-field-label { display:flex; flex-direction:column; gap:0.375rem; font-family:var(--font-sans); font-size:0.875rem; font-weight:500; color:var(--color-foreground); } .ds-field { width:100%; min-height:44px; padding:0.625rem 1rem; border:1px solid var(--color-border); border-radius:0.5rem; background:var(--color-input); color:var(--color-foreground); font-family:var(--font-sans); font-size:0.875rem; } .ds-field:focus { outline:none; border-color:transparent; box-shadow:0 0 0 2px var(--color-ring); } .ds-field:disabled { opacity:0.5; }"
+      "description": "Field Grey fill, 32px, ring-only focus; 13px label above, 12px helper below.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">Trip name</span><input class=\"ds-input\" value=\"Blue Mountains\"><span class=\"ds-help\">As shown on the itinerary.</span></label>",
+      "css": ".ds-field{display:block;width:240px}.ds-label{display:block;font-size:13px;font-weight:500;margin-bottom:4px;color:#43493a}.ds-input{width:100%;box-sizing:border-box;height:32px;padding:0 12px;border-radius:0.375rem;background:#e4e2de;border:1px solid #c3c9b5;color:#1b1c1a;font-size:14px}.ds-input:focus{outline:none;box-shadow:0 0 0 2px #396200}.ds-help{display:block;font-size:12px;margin-top:4px;color:#43493a}"
     },
     {
       "name": "Card",
       "kind": "card",
       "refersTo": "card-surface",
-      "description": "White panel on warm paper; flat, ruled border, 1rem radius.",
-      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Onboarding gate</h3><p>Body copy sits directly on the card surface.</p></div>",
-      "css": ".ds-card { background:var(--color-card); border:1px solid var(--color-border); border-radius:1rem; padding:1.25rem; color:var(--color-foreground); font-family:var(--font-sans); } .ds-card-title { margin:0 0 1rem; font-family:var(--font-display); font-size:1rem; font-weight:600; color:var(--color-foreground); }"
+      "description": "Flat white surface, 8px radius, 12px padding, ruled border, no shadow.",
+      "html": "<div class=\"ds-card\"><h3>Trip details</h3><p>Coordinator and dates.</p></div>",
+      "css": ".ds-card{background:#fff;border:1px solid #c3c9b5;border-radius:0.5rem;padding:12px;width:260px}.ds-card h3{margin:0 0 8px;font-size:14px;font-weight:600}.ds-card p{margin:0;font-size:14px;color:#1b1c1a}"
     },
     {
-      "name": "Sidebar Navigation",
+      "name": "Fact List",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "Read-only label/value pairs; 10rem label column, 24px pitch.",
+      "html": "<dl class=\"ds-facts\"><dt>Region</dt><dd>NSW</dd><dt>Coordinator</dt><dd>A. Nguyen</dd></dl>",
+      "css": ".ds-facts{display:grid;grid-template-columns:10rem 1fr;column-gap:16px;margin:0}.ds-facts dt{font-size:13px;line-height:24px;color:#43493a}.ds-facts dd{margin:0;font-size:14px;line-height:24px;color:#1b1c1a}"
+    },
+    {
+      "name": "Table Row",
+      "kind": "custom",
+      "refersTo": "table-row",
+      "description": "34px body row, 12px cell padding, 14px tabular text, 32px 12px-caption header.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Trip</th><th>Status</th></tr></thead><tbody><tr><td>Blue Mountains</td><td><span class=\"ds-badge\">Confirmed</span></td></tr></tbody></table>",
+      "css": ".ds-table{border-collapse:collapse;width:320px;background:#fff;font-variant-numeric:tabular-nums}.ds-table th{height:32px;padding:0 12px;text-align:left;font-size:12px;font-weight:500;color:#43493a;border-bottom:1px solid #c3c9b5}.ds-table td{height:34px;padding:0 12px;font-size:14px;border-bottom:1px solid #c3c9b5}.ds-table tr:hover td{background:#efeeea}.ds-badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:12px;font-weight:500;background:#bbf37c;color:#0f2000}"
+    },
+    {
+      "name": "Sidebar Navigation Item",
       "kind": "nav",
-      "description": "Warm off-white rail; the active item is a Pale Sprout pill with near-black bold text.",
-      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item\" href=\"#\">Dashboard</a><a class=\"ds-nav-item is-active\" href=\"#\">Participants</a></nav>",
-      "css": ".ds-nav { display:flex; flex-direction:column; gap:0.25rem; padding:1rem; background:var(--color-sidebar); font-family:var(--font-sans); } .ds-nav-item { display:flex; align-items:center; gap:0.75rem; padding:0.625rem 1.5rem; border-radius:9999px; font-size:0.875rem; font-weight:500; color:var(--color-secondary); text-decoration:none; } .ds-nav-item:hover { background:var(--color-sidebar-accent); } .ds-nav-item.is-active { background:var(--color-primary-fixed); color:var(--color-on-primary-fixed); font-weight:700; } .ds-nav-item:focus-visible { outline:none; box-shadow:0 0 0 2px var(--color-ring); }"
-    },
-    {
-      "name": "Status Badge",
-      "kind": "chip",
-      "description": "Status as colour-plus-text, never colour alone.",
-      "html": "<span class=\"ds-badge ds-badge-warning\">Due in 2 days</span>",
-      "css": ".ds-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.125rem 0.5rem; border-radius:9999px; font-family:var(--font-sans); font-size:0.75rem; font-weight:700; } .ds-badge-warning { background:var(--color-warning-container); color:var(--color-on-warning-container); } .ds-badge-error { background:var(--color-error-container); color:var(--color-on-error-container); } .ds-badge-access { background:var(--color-accessible-container); color:var(--color-on-accessible-container); }"
+      "refersTo": "nav-item-active",
+      "description": "32px, rounded-md (not a pill); active is Pale Sprout with bold near-black text.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-active\" href=\"#\">Trips</a><a class=\"ds-nav-item\" href=\"#\">Participants</a></nav>",
+      "css": ".ds-nav{width:208px;background:#f5f3ef;padding:12px;display:flex;flex-direction:column;gap:2px}.ds-nav-item{display:flex;align-items:center;height:32px;padding:0 12px;border-radius:0.5rem;font-size:14px;font-weight:500;color:#515f74;text-decoration:none}.ds-nav-item:hover{background:#eae8e4}.ds-nav-item.ds-active{background:#bbf37c;color:#0f2000;font-weight:700}"
     }
   ],
   "narrative": {
     "northStar": "The Operational Ledger",
-    "overview": "ODIP is a working record before it is a product. It is used by office coordinators running the operational day of Australian NDIS disability services. Someone sits in this system for hours. The design's job is to make a long day of dense, consequential work feel calm and legible rather than clinical or flattering. The palette is earthy and deliberately un-glossy: a deep olive primary on a warm off-white background, never pure white as the page, never pure black as text. Surfaces separate by warm-grey tonal stepping rather than by shadow. Density is a feature. Compliance is core behaviour, not an add-on.",
+    "overview": "ODIP is a working record before it is a product. It is used by office coordinators running the operational day of Australian NDIS disability services — participant bookings, staff and vehicle rostering, accommodation, compliance countdowns. Someone sits in this system for hours. The design's job is to make a long day of dense, consequential work feel calm and legible rather than clinical or flattering. Everything here is in service of reading a lot of state quickly and trusting that what is on screen is what is true.\n\nThe palette is earthy and deliberately un-glossy (the Organic Ledger character): a deep olive primary on a warm off-white background, never pure white as the page, never pure black as text. Surfaces separate by warm-grey tonal stepping rather than by shadow. Density is a feature, and it is now tokenised: 32px controls and 34px rows on a mouse, the same screens opened up to 44px controls and 48px rows the moment the pointer is coarse. Density is a property of the pointer, not of the page, so no page chooses its own. The interface should feel like good stationery: plain, durable, already in use.\n\nCompliance is core behaviour, not an add-on. Timers, alerts and audit state are given the same visual weight as ordinary data, because in this domain they are ordinary data. Nothing in the system may read as a warning unless it genuinely is one.",
     "keyCharacteristics": [
       "Warm, earthy, low-gloss; depth by tonal stepping, not by shadow",
-      "High information density with a strict, repeated row-and-column rhythm",
-      "Colour used semantically and sparingly — a ledger's colours mean something",
+      "Density comes from one token block that flips under `pointer: coarse`; components point at the tokens",
+      "Colour used semantically and sparingly; a ledger's colours mean something",
       "Compliance state (alerts, countdowns, audit) is first-class, never decorative",
-      "44px minimum touch targets throughout; built for shared kiosks and long sessions"
+      "Fine pointer: compact (32px controls). Coarse pointer: 44px targets, row actions always visible",
+      "Text floor of 12px; 13px for secondary and label text; 14px for data"
     ],
     "rules": [
-      { "name": "The Semantic Colour Rule", "body": "A colour never carries meaning twice. If a screen is reaching for a colour that isn't on the semantic list, it is reaching for the wrong thing.", "section": "colors" },
-      { "name": "The Warm Base Rule", "body": "The page is never #ffffff and text is never #000000. Warm off-white and near-black are what separate ODIP from a generic Material dashboard.", "section": "colors" },
-      { "name": "The One Heading Rule", "body": "Exactly one <h1> per screen, and it comes from PageHeader. A screen that needs two titles is two screens.", "section": "typography" },
-      { "name": "The Density Rule", "body": "Never add vertical padding to a table row to make it breathe. If a table is too tall, the answer is fewer columns, not more air.", "section": "layout" },
-      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. If a panel needs a drop shadow to be visible, its background is wrong.", "section": "elevation" }
+      {
+        "name": "The Semantic Colour Rule",
+        "body": "A colour never carries meaning twice. `primary` is \"go / selected / success\", `secondary` is \"information\", `destructive` is \"destructive\", `warning` is \"time-bound compliance\", `accessible-container` is \"accessibility\". If a screen is reaching for a colour that isn't on this list, it is reaching for the wrong thing.",
+        "section": "colors"
+      },
+      {
+        "name": "The Warm Base Rule",
+        "body": "The page is never `#ffffff` and text is never `#000000`. Warm off-white and near-black are what separate ODIP from a generic Material dashboard.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Heading Rule",
+        "body": "Exactly one `<h1>` per screen, and it comes from `PageHeader`. Tabbed pages render the tab body, not a second heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The 12px Floor Rule",
+        "body": "Type is not set below 12px. Space is recovered by cutting columns and padding, never by shrinking type. Inputs are forced to 16px below 768px so iOS does not zoom on focus.",
+        "section": "typography"
+      },
+      {
+        "name": "The Density Rule",
+        "body": "Row height comes from `--row-h`, never from added padding. If a table is too tall, the answer is fewer columns, not more air.",
+        "section": "layout"
+      },
+      {
+        "name": "The Row Action Reveal Rule",
+        "body": "Row actions are `Button size=\"sm\"` / `iconOnly` (24px) and are revealed by opacity alone (row hover, row focus-within, or control focus), so they stay in the tab order and the accessibility tree. On a mouse the cluster may overlay the row's trailing cells so it costs no column width. Under a coarse pointer there is no hover, so they are always shown and stay in the flow.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest. If a panel in the page flow needs a drop shadow to be visible, its background is wrong. Floating layers may carry one.",
+        "section": "elevation"
+      }
     ],
-    "dos": [
-      "Do express depth with warm tonal surfaces and reserve shadows for primary buttons",
-      "Do keep 44px minimum touch targets on every actionable element",
-      "Do render one <h1> per screen via PageHeader",
-      "Do use Button for every action rather than hand-rolled button classes",
-      "Do keep compliance state, alerts and countdowns visually equal to ordinary data",
-      "Do cap long free-text cells (Provenance) and lead rows with the primary action"
-    ],
-    "donts": [
-      "Don't hardcode hex, rgb() or any literal colour — always var(--color-*) or a Button variant",
-      "Don't use pure #ffffff as a page background or pure #000000 as text",
-      "Don't invent a colour outside the semantic list to express a new state",
-      "Don't hand-roll button styling; the shared Button owns padding, radius and focus",
-      "Don't add a second page heading, or shrink table text to save width",
-      "Don't restyle a single module more heavily than any other"
-    ]
+    "dos": [],
+    "donts": []
   }
 }
