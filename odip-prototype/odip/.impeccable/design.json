@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T11:00:45Z",
+  "generatedAt": "2026-09-30T11:00:57Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -346,7 +346,26 @@
         "section": "elevation"
       }
     ],
-    "dos": [],
-    "donts": []
+    "dos": [
+      "**Do** size every control, row, card and gap from the density tokens (`h-[var(--control-h)]`, `--row-h`, `--card-pad`, `--section-gap`, `--gutter`) so the coarse-pointer flip is automatic",
+      "**Do** reach 44px on touch by token (`--control-h`, `--tap-min`) or with `TAP_AREA`, never by inflating the desktop size",
+      "**Do** lay forms out with `formGrid` and `span.short | medium | long` by the width of the content",
+      "**Do** put row actions in `RowActions` (opacity reveal, always visible on coarse) and keep an action that must always be seen (a status pill, a queue's only call to action) outside it",
+      "**Do** show read-only detail with `FactList` / `FactBar`",
+      "**Do** render one `<h1>` per screen via `PageHeader`",
+      "**Do** use `Button` for every action; it owns height, radius and focus",
+      "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",
+      "**Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels and the header hairline"
+    ],
+    "donts": [
+      "**Don't** hardcode hex, `rgb()` or any literal colour in feature code; use `var(--color-*)` or a `Button` variant",
+      "**Don't** restate a pixel size for control, row or card padding inside a component; point at the token",
+      "**Don't** add padding to a table row to make it breathe, or set text below 12px to save width",
+      "**Don't** hide row actions with `display: none`, `visibility: hidden` or `pointer-events: none`; hide by opacity so focus, screen readers and voice control still reach them",
+      "**Don't** use pure `#ffffff` as a page background or pure `#000000` as text",
+      "**Don't** invent a colour outside the semantic list to express a new state",
+      "**Don't** add a second page heading",
+      "**Don't** restyle a single module more heavily than any other; design effort is uniform by commitment"
+    ]
   }
 }
