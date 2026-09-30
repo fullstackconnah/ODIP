@@ -564,6 +564,54 @@ export const PROFILE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
 }
 
 /**
+ * The fields captured at Intake (PF-10.1's "shared" fields, `sharedFieldsDisplayedOnProfile()`) that the
+ * Profile wizard now lets staff CORRECT, by step. They are deliberately NOT in the PROFILE_STEP_*_FIELDS
+ * arrays above: those partition `fieldsForEntry('profile')` exactly (a drift guard asserts no Intake field
+ * is in them) and are what the public Caregiver wizard reads, which keeps these read-only. The one addition
+ * that is not itself a displayed shared field is `fundingOrganisation`: the funding source's required
+ * companion when the source is "Other" (fundingSourceRefine), so it is validated with it. `contactRoles`
+ * (the fifteenth Key Identifiers item) is not a form field: contacts are edited in place through their own
+ * endpoints (see KeyIdentifiersStep).
+ */
+export const PROFILE_STEP_SHARED_FIELDS = {
+  keyIdentifiers: [
+    'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'phone', 'email',
+    'addressStreet', 'addressSuburb', 'addressState', 'addressPostcode',
+    'ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'fundingSource', 'fundingOrganisation',
+  ],
+  culturalDepth: [
+    'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
+    'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
+    'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
+  ],
+  medical: ['medicalSummary'],
+  mobility: [
+    'mobilityAidWheelchair', 'overnightSupport', 'overnightRatio', 'supportRatio',
+    'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
+  ],
+  behaviourCognition: ['behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'expressiveSkills', 'behaviourRiskSummary'],
+} as const satisfies Record<string, readonly (keyof ParticipantFormData)[]>
+
+/**
+ * PROFILE_STEP_SCHEMAS_BY_KEY plus the shared fields the Profile wizard makes editable, with the same
+ * cross-field refines the Intake wizard runs on them (required names, phone/email format, 4-digit
+ * postcode, funding source <-> plan type / funding organisation). Used ONLY by ProfileWizardPage: the
+ * Caregiver wizard keeps PROFILE_STEP_SCHEMAS_BY_KEY, since it never edits these fields.
+ */
+export const PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
+  ...PROFILE_STEP_SCHEMAS_BY_KEY,
+  keyIdentifiers: baseParticipantSchema
+    .pick({ ...pickShape(PROFILE_STEP_KEY_IDENTIFIERS_FIELDS), ...pickShape(PROFILE_STEP_SHARED_FIELDS.keyIdentifiers) })
+    .superRefine(weightHeightRefine).superRefine(contactMethodRefine).superRefine(addressPostcodeRefine).superRefine(fundingSourceRefine),
+  culturalDepth: baseParticipantSchema.pick({ ...pickShape(PROFILE_STEP_CULTURAL_DEPTH_FIELDS), ...pickShape(PROFILE_STEP_SHARED_FIELDS.culturalDepth) }),
+  medical: baseParticipantSchema
+    .pick({ ...pickShape(PROFILE_STEP_MEDICAL_FIELDS), primaryDiagnosisOther: true, ...pickShape(PROFILE_STEP_SHARED_FIELDS.medical) })
+    .superRefine(diagnosisOtherRefine),
+  mobility: baseParticipantSchema.pick({ ...pickShape(PROFILE_STEP_MOBILITY_FIELDS), ...pickShape(PROFILE_STEP_SHARED_FIELDS.mobility) }),
+  behaviourCognition: baseParticipantSchema.pick({ ...pickShape(PROFILE_STEP_BEHAVIOUR_FIELDS), ...pickShape(PROFILE_STEP_SHARED_FIELDS.behaviourCognition) }),
+}
+
+/**
  * SPEC-05's PF-10.4 generic conditional-section shape — `{ key, label, fields, isVisible }` — used
  * for BOTH of the Profile wizard's independently-gated regions, not two special cases:
  *  - `communityAccess`: gates whether the whole Community Access STEP appears in the wizard's step

@@ -1,12 +1,13 @@
 /**
  * PF-10.4 — Profile wizard, "Mobility & Functional Detail" step. The base mobility/equipment
- * checkboxes and overnight-support fields are Shared/Intake-owned (read-only); the richer
+ * checkboxes and overnight-support fields are Shared/Intake-owned (editable when
+ * `sharedFieldsEditable`, the Profile wizard; read-only for the caregiver wizard); the richer
  * functional-assessment fields (ambulant status, falls risk, personal care level, etc.) are
  * Profile-owned. mobilityAidWalker is Intake-owned but NOT shared ("Intake, No" per PF-10.1's
  * table — intake-only equipment checklist item) so it is deliberately absent here entirely.
  */
 import { Controller } from 'react-hook-form'
-import type { Control, UseFormRegister } from 'react-hook-form'
+import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
 import { TextAreaField } from '@/components/TextAreaField'
@@ -16,6 +17,7 @@ import { MOBILITY_SUPPORT_OPTIONS, AMBULANT_STATUS_LABELS, RISK_RATING_LEVEL_LAB
 import { AMBULANT_STATUSES, RISK_RATING_LEVELS, PERSONAL_CARE_LEVELS } from '@/api/types/enums'
 import { ReadOnlyField } from '../profileHelpers'
 import { yesNoUnknown } from '../profileFormat'
+import { FromIntakeNote, SupportNeedsFields } from '../sharedFieldControls'
 import { formGrid, span } from '@/lib/formGrid'
 
 const TRI_OPTIONS = [
@@ -24,26 +26,28 @@ const TRI_OPTIONS = [
   { value: '', label: 'Not recorded' },
 ]
 
-export function MobilityFunctionalStep({ control, register, participant }: {
+export function MobilityFunctionalStep({ control, register, participant, errors, sharedFieldsEditable = false }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   participant: ParticipantDetailDto
+  /** Validation errors, for the editable Support Ratio control. Only read when `sharedFieldsEditable`. */
+  errors?: FieldErrors<ParticipantFormData>
+  /** Render the fields captured at Intake as editable controls (the Profile wizard) instead of
+   * read-only ones (the caregiver wizard, the default). */
+  sharedFieldsEditable?: boolean
 }) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <Card title="Support Needs (from Intake)">
-        <div className={formGrid}>
-          <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} className={span.short} />
-          <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} className={span.medium} />
-          <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} className={span.short} />
-          <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} className={span.short} />
-          <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} className={span.short} />
-          <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} className={span.short} />
-          <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} className={span.short} />
-          <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} className={span.short} />
-          <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} className={span.short} />
-        </div>
-      </Card>
+      {sharedFieldsEditable ? (
+        <Card title="Support Needs (from Intake)">
+          <FromIntakeNote />
+          <div className={formGrid}>
+            <SupportNeedsFields control={control} register={register} errors={errors ?? {}} />
+          </div>
+        </Card>
+      ) : (
+        <ReadOnlySupportNeedsCard participant={participant} />
+      )}
 
       <Card title="Mobility Support">
         <div className={formGrid}>
@@ -118,5 +122,24 @@ export function MobilityFunctionalStep({ control, register, participant }: {
         </div>
       </Card>
     </div>
+  )
+}
+
+/** The caregiver wizard's version of the support-needs card: the same values, read-only. */
+function ReadOnlySupportNeedsCard({ participant }: { participant: ParticipantDetailDto }) {
+  return (
+    <Card title="Support Needs (from Intake)">
+      <div className={formGrid}>
+        <ReadOnlyField field="mobilityAidWheelchair" label="Wheelchair" value={yesNoUnknown(String(participant.mobilityAidWheelchair))} className={span.short} />
+        <ReadOnlyField field="overnightSupport" label="Overnight Support" value={participant.overnightSupport} className={span.medium} />
+        <ReadOnlyField field="overnightRatio" label="Overnight Ratio" value={participant.overnightRatio} className={span.short} />
+        <ReadOnlyField field="supportRatio" label="Support Ratio" value={participant.supportRatio} className={span.short} />
+        <ReadOnlyField field="requiresHiLoBed" label="Hi-Lo Bed" value={yesNoUnknown(String(participant.requiresHiLoBed))} className={span.short} />
+        <ReadOnlyField field="requiresHoist" label="Hoist" value={yesNoUnknown(String(participant.requiresHoist))} className={span.short} />
+        <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} className={span.short} />
+        <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} className={span.short} />
+        <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} className={span.short} />
+      </div>
+    </Card>
   )
 }

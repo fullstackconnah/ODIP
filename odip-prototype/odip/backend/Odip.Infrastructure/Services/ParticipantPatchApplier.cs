@@ -116,6 +116,11 @@ public static class ParticipantPatchApplier
             if (diagnosesError != null) return diagnosesError;
         }
 
+        // The fields ParticipantInquiriesController.ProfileMissing validates for the onboarding
+        // "profile essentials" gate. Snapshotted so a PATCH that actually changes one of them can
+        // drop the stale attestation below, exactly as a full PUT and SaveIntake already do.
+        var canonicalBefore = CanonicalProfileFields(p);
+
         // ── Apply — plain property assignment, scoped to present group(s) only. Literally the
         // same statements Update already has above, just gated on group presence.
         if (dto.PersonalDetails is { } pd)
@@ -269,6 +274,17 @@ public static class ParticipantPatchApplier
 
         p.UpdatedAt = DateTime.UtcNow;
 
+        // The Profile wizard lets staff correct identity, DOB, gender, NDIS number and funding
+        // source after intake, one step at a time via this endpoint. A prior onboarding
+        // "profile validated" attestation must not survive a change to any of them: staff re-run
+        // the separate server-side validation afterwards. Tenant-matched, and only when a value
+        // really changed, so re-saving an unchanged step (the wizard echoes every field) is inert.
+        if (canonicalBefore != CanonicalProfileFields(p))
+        {
+            var onboarding = await db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
+            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
+        }
+
         // Task 6d: only sync the compatibility matrix when PreferredStaff was actually touched AND
         // actually changed — see PatchPreferredStaffDto's doc for why this group is isolated.
         if (preferredStaffChanged)
@@ -293,6 +309,14 @@ public static class ParticipantPatchApplier
         await db.SaveChangesAsync(ct);
         return null;
     }
+
+    /// <summary>
+    /// Value snapshot of the canonical fields the onboarding profile-essentials gate reads
+    /// (identity, DOB, gender, NDIS number and the funding source that makes it mandatory).
+    /// Names/NDIS number are compared trimmed, like SaveIntake's identityChanged.
+    /// </summary>
+    private static (string, string, DateOnly?, Gender?, string?, ParticipantFundingSource) CanonicalProfileFields(Participant p) =>
+        (p.FirstName?.Trim() ?? string.Empty, p.LastName?.Trim() ?? string.Empty, p.DateOfBirth, p.Gender, p.NdisNumber?.Trim(), p.FundingSource);
 
     // ── Shared helpers (also called by ParticipantsController.Create/Update) ──────────────
 

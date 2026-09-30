@@ -166,6 +166,27 @@ public class ParticipantsController : ControllerBase
     // Odip.Infrastructure.Services.ParticipantPatchApplier (see that class's type doc) — call
     // sites below now read ParticipantPatchApplier.ApplyLivingArrangementFields(...).
 
+    /// <summary>
+    /// A blank onboarding record for <paramref name="participant"/>, in the participant's own
+    /// tenant. Same shape ParticipantInquiriesController.Convert creates. A brand-new participant's
+    /// TenantId is still default here and is stamped, with the participant's, by
+    /// OdipDbContext.SaveChangesAsync.
+    /// </summary>
+    private static ParticipantOnboarding NewOnboarding(Participant participant) =>
+        new() { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id };
+
+    /// <summary>
+    /// Idempotent "ensure the onboarding row exists" for an existing participant, the same
+    /// AnyAsync-then-Add pattern ParticipantInquiriesController.Convert uses, scoped to the
+    /// participant's tenant. Tracked only — the caller's single SaveChangesAsync persists it, so
+    /// completion, its immutable snapshot and the worklist row commit together or not at all.
+    /// </summary>
+    private async Task EnsureOnboardingAsync(Participant participant, CancellationToken ct)
+    {
+        if (await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id && x.TenantId == participant.TenantId, ct)) return;
+        _db.ParticipantOnboardings.Add(NewOnboarding(participant));
+    }
+
     /// <summary>List participants with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantListDto>>>> GetAll(
@@ -476,6 +497,11 @@ public class ParticipantsController : ControllerBase
             var snapshot = await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
             // Completion metadata and its immutable evidence share one server-issued UTC instant.
             participant.IntakeCompletedAt = snapshot.CompletedAtUtc;
+            // Completing intake is what puts a participant on the onboarding worklist. A brand-new
+            // participant cannot have an onboarding row yet, so no existence check is needed; the
+            // row lands in the same SaveChangesAsync as the participant (and its tenant is stamped
+            // with the participant's, by OdipDbContext.SaveChangesAsync).
+            _db.ParticipantOnboardings.Add(NewOnboarding(participant));
         }
         await _db.SaveChangesAsync(ct);
         // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
@@ -654,6 +680,10 @@ public class ParticipantsController : ControllerBase
             // Preserve the first completion stamp but create a separate immutable revision for an
             // intentional later completion with a new idempotency key.
             p.IntakeCompletedAt ??= intakeSnapshot.CompletedAtUtc;
+            // Same worklist rule as Create: completing intake (first time or a deliberate later
+            // revision) guarantees exactly one onboarding row, created in this same save. Repeats
+            // find the existing row and add nothing.
+            await EnsureOnboardingAsync(p, ct);
         }
 
         // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete

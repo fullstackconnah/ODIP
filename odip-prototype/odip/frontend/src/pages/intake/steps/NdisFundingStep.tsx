@@ -10,11 +10,12 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
-import { FUNDING_SOURCES, SERVICE_STREAMS } from '@/api/types/enums'
-import { FUNDING_SOURCE_LABELS, SERVICE_STREAM_LABELS } from '@/api/types/participants'
+import { SERVICE_STREAMS } from '@/api/types/enums'
+import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { PlanTypeComplianceBanner } from '../intakeHelpers'
 import { formGrid, span } from '@/lib/formGrid'
+import { FUNDING_SOURCE_ITEMS, PLAN_TYPE_ITEMS } from '../intakeOptions'
 
 /**
  * NOTE — scope simplification vs. the retired single-step wizard: that wizard guards a fundingSource
@@ -82,7 +83,7 @@ export function NdisFundingStep({
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
-                  items={FUNDING_SOURCES.map((s) => ({ value: s, label: FUNDING_SOURCE_LABELS[s] }))}
+                  items={FUNDING_SOURCE_ITEMS}
                 />
               )}
             />
@@ -113,11 +114,7 @@ export function NdisFundingStep({
                       value={field.value ?? ''}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
-                      items={[
-                        { value: 'SelfManaged', label: 'Self Managed' },
-                        { value: 'PlanManaged', label: 'Plan Managed' },
-                        { value: 'AgencyManaged', label: 'Agency Managed' },
-                      ]}
+                      items={PLAN_TYPE_ITEMS}
                     />
                   )}
                 />

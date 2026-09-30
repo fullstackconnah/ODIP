@@ -38,12 +38,14 @@ export function ConfirmDialog({
         footer ?? (
           <>
             <button
+              type="button"
               onClick={onCancel}
               className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
             >
               {cancelLabel}
             </button>
             <button
+              type="button"
               onClick={onConfirm}
               disabled={loading}
               aria-label={confirmAriaLabel ?? confirmLabel}

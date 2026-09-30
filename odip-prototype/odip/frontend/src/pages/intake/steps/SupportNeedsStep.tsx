@@ -14,11 +14,9 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS } from '@/api/types/enums'
-import { OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
-import type { SupportRatio } from '@/api/types/enums'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { formGrid, span } from '@/lib/formGrid'
+import { OVERNIGHT_RATIO_ITEMS, OVERNIGHT_SUPPORT_ITEMS, SUPPORT_RATIO_ITEMS } from '../intakeOptions'
 
 export function SupportNeedsStep({ control, register, errors, overnightSupportValue }: {
   control: Control<ParticipantFormData>
@@ -45,13 +43,7 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
-                  items={[
-                    { value: 'SharedSupport', label: 'Shared Support' },
-                    { value: 'OneToOne', label: '1:1' },
-                    { value: 'OneToTwo', label: '1:2' },
-                    { value: 'TwoToOne', label: '2:1' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
+                  items={SUPPORT_RATIO_ITEMS}
                 />
               )}
             />
@@ -80,7 +72,7 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
-                  items={OVERNIGHT_SUPPORT_TYPES.map((type) => ({ value: type, label: OVERNIGHT_SUPPORT_LABELS[type] }))}
+                  items={OVERNIGHT_SUPPORT_ITEMS}
                 />
               )}
             />
@@ -98,7 +90,7 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
                     value={field.value ?? ''}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
-                    items={SUPPORT_RATIOS.map((ratio) => ({ value: ratio, label: OVERNIGHT_RATIO_LABELS[ratio as SupportRatio] }))}
+                    items={OVERNIGHT_RATIO_ITEMS}
                   />
                 )}
               />

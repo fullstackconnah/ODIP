@@ -25,6 +25,12 @@ import { MobilityFunctionalStep } from './steps/MobilityFunctionalStep'
 import { DailyLivingStep } from './steps/DailyLivingStep'
 import { CommunityAccessStep } from './steps/CommunityAccessStep'
 
+// The editable Profile steps embed the Contacts editor and read the participant's contacts (plan-type banner).
+vi.mock('@/api/hooks', () => ({
+  useParticipantContactRoles: () => ({ data: [], isLoading: false }),
+  useDeleteContactRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
 const { mockUsePublicCaregiverForm } = vi.hoisted(() => ({ mockUsePublicCaregiverForm: vi.fn() }))
 vi.mock('@/api/hooks/caregiver', () => ({
   usePublicCaregiverForm: mockUsePublicCaregiverForm,
@@ -107,7 +113,7 @@ describe('ReadOnlyField and ReadOnlyGroupField', () => {
 type StepName = 'keyIdentifiers' | 'behaviourCognition' | 'culturalDepth' | 'medical' | 'mobility' | 'dailyLiving' | 'communityAccess'
 
 /** Renders one Profile step against a real react-hook-form instance, the way ProfileWizardPage does. */
-function StepHarness({ step }: { step: StepName }) {
+function StepHarness({ step, editable = false }: { step: StepName; editable?: boolean }) {
   const { control, register, formState: { errors } } = useForm<ParticipantFormData>({
     defaultValues: { consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [] },
   })
@@ -120,15 +126,15 @@ function StepHarness({ step }: { step: StepName }) {
   const participant = { firstName: 'Alexandra', lastName: 'Citizen-Smith', overnightSupport: 'Sleepover', overnightRatio: '1:1', supportRatio: '1:2' } as unknown as ParticipantDetailDto
   switch (step) {
     case 'keyIdentifiers':
-      return <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} />
+      return <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable={editable} />
     case 'behaviourCognition':
-      return <BehaviourCognitionStep control={control} register={register} participant={participant} />
+      return <BehaviourCognitionStep control={control} register={register} participant={participant} sharedFieldsEditable={editable} />
     case 'culturalDepth':
-      return <CulturalDepthConsentsStep control={control} register={register} participant={participant} consentsFieldArray={consents} staVisible />
+      return <CulturalDepthConsentsStep control={control} register={register} participant={participant} consentsFieldArray={consents} staVisible sharedFieldsEditable={editable} />
     case 'medical':
-      return <MedicalDetailStep control={control} register={register} errors={errors} participant={participant} healthConditionFieldArray={healthConditions} watchedValues={watched} />
+      return <MedicalDetailStep control={control} register={register} errors={errors} participant={participant} healthConditionFieldArray={healthConditions} watchedValues={watched} sharedFieldsEditable={editable} />
     case 'mobility':
-      return <MobilityFunctionalStep control={control} register={register} participant={participant} />
+      return <MobilityFunctionalStep control={control} register={register} participant={participant} errors={errors} sharedFieldsEditable={editable} />
     case 'dailyLiving':
       return <DailyLivingStep control={control} register={register} adlFieldArray={adl} watchedValues={watched} caVisible />
     case 'communityAccess':
@@ -163,6 +169,35 @@ describe('every Profile step: each direct child of a formGrid container carries 
     expect(spanOf('addressPostcode')).toHaveClass('xl:col-span-3')
     expect(spanOf('addressStreet')).toHaveClass('xl:col-span-12')
     expect(spanOf('contactRoles')).toHaveClass('xl:col-span-12')
+  })
+})
+
+// ── the Profile wizard: the same steps with the intake fields editable ────────────────────────────────────────────────
+
+describe('every Profile step in editable mode: no read-only field is left, and each formGrid child is still spanned', () => {
+  const EDITABLE_STEPS: { step: StepName; grids: boolean }[] = [
+    { step: 'keyIdentifiers', grids: true },
+    { step: 'behaviourCognition', grids: true },
+    { step: 'culturalDepth', grids: true },
+    { step: 'medical', grids: true }, // the medical summary now sits in a formGrid too
+    { step: 'mobility', grids: true },
+  ]
+
+  it.each(EDITABLE_STEPS)('$step', ({ step, grids }) => {
+    const { container } = render(<StepHarness step={step} editable />)
+    if (grids) expect(formGridContainers(container).length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[aria-readonly="true"]')).toHaveLength(0)
+    expect(container.querySelectorAll('input[disabled][readonly]')).toHaveLength(0)
+    expect(unspannedChildren(container)).toEqual([])
+  })
+
+  it('gives the editable identity fields the spans their content needs: names medium, dates a date span, street and notes full row', () => {
+    const { container } = render(<StepHarness step="keyIdentifiers" editable />)
+    const spanOf = (id: string) => container.querySelector(`#${id}`)!.closest('[class*="col-span"]')!
+    expect(spanOf('firstName')).toHaveClass('xl:col-span-6')
+    expect(spanOf('dateOfBirth')).toHaveClass('xl:col-span-6')
+    expect(spanOf('addressPostcode')).toHaveClass('xl:col-span-3')
+    expect(spanOf('addressStreet')).toHaveClass('xl:col-span-12')
   })
 })
 

@@ -18,10 +18,11 @@ import { FormField } from '@/components/FormField'
 import { TextAreaField } from '@/components/TextAreaField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
-import { AU_STATES, LIVING_ARRANGEMENTS } from '@/api/types/enums'
+import { LIVING_ARRANGEMENTS } from '@/api/types/enums'
 import { LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { formGrid, span } from '@/lib/formGrid'
+import { ADDRESS_STATE_ITEMS } from '../intakeOptions'
 
 export function ParticipantDetailsStep({ control, register, errors, livingArrangementValue }: {
   control: Control<ParticipantFormData>
@@ -80,10 +81,7 @@ export function ParticipantDetailsStep({ control, register, errors, livingArrang
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
-                  items={[
-                    { value: '', label: 'Not specified' },
-                    ...AU_STATES.map((s) => ({ value: s, label: s })),
-                  ]}
+                  items={ADDRESS_STATE_ITEMS}
                 />
               )}
             />
