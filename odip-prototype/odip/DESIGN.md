@@ -44,7 +44,10 @@ colors:
 typography:
   display:
     fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
-    fontWeight: 600
+    fontWeight: 800
+    fontSize: "1.75rem"
+    lineHeight: 1.2
+    letterSpacing: "-0.015em"
   headline:
     fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
     fontWeight: 700
@@ -136,12 +139,27 @@ components:
     textColor: "{colors.foreground}"
     height: "34px"
     padding: "0 12px"
+  glance-cell:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.md}"
+    padding: "12px 16px"
+  glance-cell-warning:
+    backgroundColor: "{colors.warning-container}"
+    textColor: "{colors.on-warning-container}"
+  glance-cell-error:
+    backgroundColor: "{colors.error-container}"
+    textColor: "{colors.on-error-container}"
 ---
 
 # Design System: ODIP
 
 > Recorded from the shipped density-redesign build (2026-09), not from the plan. Where the build and
 > `docs/specs/density-redesign-2026-09.md` differ, the build is recorded and the difference is noted.
+>
+> Added 2026-09-30 from the trip-detail build: the one **display type step** and the **detail header pattern**
+> (display title, meta row, glance strip with attention tint). It is opt-in and only the trip detail page ships it so far;
+> the other detail pages adopt it next. Everything else on this page is unchanged.
 
 ## Overview
 
@@ -220,7 +238,10 @@ warmer, more even rhythm for body and data. Calm rather than authoritative; the 
 the layout, not the type.
 
 ### Hierarchy
-The ramp is short and flat because the density comes from layout. Measured at 1920: h1 20px, table cells 14px.
+The ramp is short and flat because the density comes from layout. Measured at 1920: h1 20px (28px on a detail page), table cells 14px.
+- **Display** (800, 1.75rem / 28px, 1.2 leading, -0.015em tracking, the `text-display` utility): the ONE step above the
+  headline, in Plus Jakarta Sans. Only the title of a detail page (`PageHeader variant="detail"`) and the figures of its glance
+  strip (`FactBar variant="glance"`, tabular figures). Its four `--text-display*` tokens sit in the density token block.
 - **Headline** (700, 1.25rem / `text-xl`): the page title in `PageHeader`, one per screen. StatCard values
   use the same size in display bold.
 - **Title** (600, 0.875rem / `text-sm`): card and section headings.
@@ -238,6 +259,11 @@ pages render the tab body, not a second heading.
 
 **The 12px Floor Rule.** Type is not set below 12px. Space is recovered by cutting columns and padding,
 never by shrinking type. Inputs are forced to 16px below 768px so iOS does not zoom on focus.
+
+**The One Display Step Rule.** The system has exactly one type step above the 20px headline: `--text-display` (28px, 800),
+consumed as `text-display`. It belongs to a detail page's title and its glance figures and to nothing else. A list page, a
+card title, a modal or a stat card never takes it, and no second display size is added. The title is still the page's single
+`<h1>`, from `PageHeader`, so The One Heading Rule holds.
 
 ## Layout
 
@@ -263,6 +289,9 @@ syntax (`h-[var(--control-h)]`) and never restate the pixel value.
 | `--field-gap-y` / `--field-gap-x` | 12px / 16px | 16px / 16px |
 | `--gutter` | 20px | 16px |
 | `--tap-min` | 0px | 44px |
+
+The same block carries the one type token, `--text-display` with `-lh`, `-weight` and `-tracking` (28px, 1.2, 800, -0.015em),
+used through the `text-display` utility. It is not a density token: it does not flip with the pointer.
 
 `lg` buttons are `--control-h` + 4px (36px / 48px). Mobile bottom-nav links, Tabs, sidebar and drawer items and
 standalone action links carry a `--tap-min` floor.
@@ -375,6 +404,8 @@ The read-only counterpart to the form. `FactList` is a `<dl>` with a fixed 10rem
 and a flowing value column (14px), 24px row pitch; empty values render an em dash. `FactBar` is a single
 bordered strip of label/value segments (12px label, 14px medium value) separated by 1px rules, at least
 44px tall, with a 16px icon slot. Use them on detail pages instead of a card of disabled inputs.
+`FactBar` also has an opt-in `variant="glance"` (big figures, attention tint); it is part of the Detail header
+pattern below and the default bar is untouched by it.
 
 ### Tables
 
@@ -416,13 +447,42 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 
 ### Page header
 
-One `h1` (20px bold) with the 13px muted subtitle inline after it on desktop, actions on the right.
+One `h1` (20px bold) with the 13px muted subtitle inline after it on desktop, actions on the right. A record's own
+page can opt into `variant="detail"` (below); every other page keeps this header exactly.
+
+### Detail header pattern
+
+The header of a record's own page, built from three opt-in parts. Each defaults to today's behaviour, so a page that does not
+ask for them renders pixel-for-pixel as before (checked by comparing element rects before and after on participant, staff, claim
+and accommodation detail, the lists, the dashboard and the schedule, at 1920, 1280, 800 and 390 touch). **Only the trip detail
+page opts in today; the participant, staff, claim and accommodation detail pages adopt it next**, each mapping its own facts to tones.
+It stops at the header: the tab strip and every panel below stay the ordinary dense page, which is what makes the header read as the peak.
+
+- **Title.** `PageHeader variant="detail"`: the display step (28px, Plus Jakarta Sans 800, balanced wrap), still the page's one
+  `h1`. The title and its meta row are ONE block, so `--section-gap` opens below the pair rather than between them. The
+  actions stay on the right and wrap under the title below 768px exactly as the default header does.
+- **Meta row.** `PageHeaderMeta` in the subtitle slot. The status leads as `StatusBadge size="md"` (13px semibold, 24px tall); the
+  quiet facts follow in 13px muted, joined by middots: "Confirmed · Caloundra QLD · SCB-2608 · 14–17 Aug 2026 · 4 days". A missing
+  fact is dropped before the separators are placed, so there is never a dangling dot; a separator belongs to the item before it, so a
+  wrapped line can end with one but never begins with one. Date ranges come from `formatDateRange` and always keep the year.
+- **Glance strip.** `FactBar variant="glance"`: equal cells in one ruled `--radius-md` strip. Each cell is a display-step tabular figure
+  with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Outstanding
+  Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
+  of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`.
+
+**The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
+`warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
+the cell (figure, label, icon) takes the matching on-container colour, so secondary text is tinted from the hue, never grey, and the chip becomes a
+card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One
+tone decides both chip and fill (`glanceState`), so they cannot disagree, and no colour outside the two containers is ever used. Colour is never the only cue:
+the chip text says the same thing. If most segments end up tinted the strip has stopped saying anything, so review the tones, not the tint.
 
 ### Status Badges & Alerts
 
 Status is colour-plus-text, never colour alone. Confirmed/active use Pale Sprout, draft/none use Field
 Grey, cancelled/overdue/conflict use the error container, pending uses the warning container, info the
-Pale Slate. Critical, Warning and Info counts render as tinted badges with icon and numeral.
+Pale Slate. Critical, Warning and Info counts render as tinted badges with icon and numeral. `StatusBadge` is the 12px pill
+everywhere; `size="md"` (13px semibold, 24px tall) is the one opt-in step up, for the status that leads a detail header's meta row.
 
 ### Modals
 
@@ -440,6 +500,8 @@ Pale Slate. Critical, Warning and Info counts render as tinted badges with icon 
   that must always be seen (a status pill, a queue's only call to action) outside it
 - **Do** show read-only detail with `FactList` / `FactBar`
 - **Do** render one `<h1>` per screen via `PageHeader`
+- **Do** give a record's own page the detail header pattern by opting in (`variant="detail"`, `variant="glance"`), never by restyling the default header or bar
+- **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** use `Button` for every action; it owns height, radius and focus
 - **Do** keep compliance state, alerts and countdowns visually equal to ordinary data
 - **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels
@@ -455,4 +517,6 @@ Pale Slate. Critical, Warning and Info counts render as tinted badges with icon 
 - **Don't** use pure `#ffffff` as a page background or pure `#000000` as text
 - **Don't** invent a colour outside the semantic list to express a new state
 - **Don't** add a second page heading
+- **Don't** use the display step (`text-display`) anywhere but a detail page's title and its glance figures, or add a second display size
+- **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment
