@@ -80,7 +80,7 @@ export default function TripCreatePage() {
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/trips" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Trips</Link>
@@ -211,8 +211,9 @@ export default function TripCreatePage() {
           </div>
         </Card>
 
-        {/* Notes */}
-        <Card title="Notes">
+        {/* Notes — the field label is the section's only "Notes" heading (a Card title on top of it
+            said the same word twice). */}
+        <Card>
           <FormField label="Notes">
             <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
           </FormField>

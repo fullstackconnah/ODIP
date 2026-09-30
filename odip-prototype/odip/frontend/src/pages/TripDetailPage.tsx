@@ -25,6 +25,10 @@ function FactChip({ tone, children }: { tone: 'positive' | 'warning' | 'negative
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
 }
 
+/** Material Symbols category glyph for a fact-bar segment — the same icons the pre-density stat
+ * tiles carried (people, checklist, wheelchair, shield). FactBar pins the size and colour. */
+const factIcon = (glyph: string) => <span className="material-symbols-outlined">{glyph}</span>
+
 type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
 
 const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
@@ -89,6 +93,7 @@ export default function TripDetailPage() {
   const factBarSegments: FactBarSegment[] = [
     {
       label: 'Participants / Staff',
+      icon: factIcon('groups'),
       value: `${trip.currentParticipantCount} / ${trip.staffAssignedCount}`,
       badge: (trip.waitlistCount ?? 0) > 0
         ? <FactChip tone="warning">Waitlist</FactChip>
@@ -96,6 +101,7 @@ export default function TripDetailPage() {
     },
     {
       label: 'Outstanding Tasks',
+      icon: factIcon('checklist'),
       value: trip.outstandingTaskCount ?? 0,
       badge: (trip.outstandingTaskCount ?? 0) > 0
         ? <FactChip tone="negative">Action Needed</FactChip>
@@ -103,11 +109,13 @@ export default function TripDetailPage() {
     },
     {
       label: 'High Support / Overnight',
+      icon: factIcon('accessible'),
       value: `${trip.highSupportCount ?? 0} / ${trip.overnightSupportCount ?? 0}`,
       badge: <FactChip tone="neutral">{trip.wheelchairCount ?? 0} WC</FactChip>,
     },
     {
       label: 'Insurance',
+      icon: factIcon('health_and_safety'),
       value: `${trip.insuranceConfirmedCount ?? 0}/${(trip.insuranceConfirmedCount ?? 0) + (trip.insuranceOutstandingCount ?? 0)}`,
       badge: (trip.insuranceOutstandingCount ?? 0) > 0
         ? <FactChip tone="negative">Outstanding</FactChip>

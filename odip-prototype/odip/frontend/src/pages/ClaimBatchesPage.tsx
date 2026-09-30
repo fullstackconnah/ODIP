@@ -20,10 +20,6 @@ export default function ClaimBatchesPage() {
   const { canWrite } = usePermissions()
   const { data: batches = [], isLoading, isError } = useClaimBatches()
 
-  if (isError) return (
-    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load claim batches. Please refresh the page.</div>
-  )
-
   const columns: Column<ClaimBatchListDto>[] = [
     {
       key: 'fileName',
@@ -61,9 +57,12 @@ export default function ClaimBatchesPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {/* The header (H1 + actions) renders in every state, including a failed fetch. The count is
+          left off on error: `batches` is only the [] default there, and "0 claim batches" would
+          read as a real empty list rather than a failure. */}
       <PageHeader
         title="Claim Batches"
-        subtitle={`${batches.length} claim batch${batches.length !== 1 ? 'es' : ''}`}
+        subtitle={isError ? undefined : `${batches.length} claim batch${batches.length !== 1 ? 'es' : ''}`}
         action={canWrite && (
           <Button to="/billing/claim-batches/new" size="md">
             <Layers className="w-4 h-4" /> Build claim batch
@@ -71,7 +70,9 @@ export default function ClaimBatchesPage() {
         )}
       />
 
-      {!isLoading && batches.length === 0 ? (
+      {isError ? (
+        <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load claim batches. Please refresh the page.</div>
+      ) : !isLoading && batches.length === 0 ? (
         <EmptyState
           icon={FileStack}
           title="No claim batches yet"

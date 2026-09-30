@@ -36,6 +36,22 @@ beforeEach(() => {
   mockCreateMutateAsync.mockReset()
 })
 
+describe('TripCreatePage — density layout', () => {
+  it('caps the form at 1600px (density spec §2: forms cap, data pages do not)', () => {
+    const { container } = renderCreatePage()
+
+    const form = container.querySelector('form') as HTMLFormElement
+    expect(form.parentElement!.className).toMatch(/max-w-\[1600px\]/)
+  })
+
+  it('labels the notes field once — no duplicate "Notes" card title — with a 3-row textarea', () => {
+    renderCreatePage()
+
+    expect(screen.getAllByText('Notes')).toHaveLength(1)
+    expect(screen.getByLabelText('Notes')).toHaveAttribute('rows', '3')
+  })
+})
+
 describe('TripCreatePage — PP-65 create-failure error message', () => {
   it('shows the server-provided message instead of the generic banner', () => {
     mockCreateTrip.mockReturnValue({

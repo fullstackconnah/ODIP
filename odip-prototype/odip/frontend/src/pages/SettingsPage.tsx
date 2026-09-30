@@ -2,8 +2,9 @@ import { useEventTemplates, useActivities, useSettings, useUpdateSettings, usePr
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import { Pencil } from 'lucide-react'
+import { LayoutTemplate, Pencil } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
+import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
@@ -107,10 +108,15 @@ function AppearanceSettingsTab() {
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'appearance' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users' | 'notifications' | 'notifications-admin'>('templates')
-  const { data: templates = [] } = useEventTemplates()
+  const { data: templates = [], isLoading: templatesLoading } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
   const { data: activities = [] } = useActivities()
+
+  const activeTemplates = templates.filter((t) => t.isActive)
+  // Only claim "no templates" once the fetch has settled, so the empty state doesn't flash on load.
+  const templatesEmpty = !templatesLoading && activeTemplates.length === 0
+  const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
   const { isSuperAdmin, canManageNotifications } = usePermissions()
 
@@ -152,40 +158,53 @@ export default function SettingsPage() {
 
       {tab === 'templates' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => { setEditingTemplate(undefined); setPanelOpen(true) }} size="md">
-              + New Template
-            </Button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {templates.filter((t) => t.isActive).map((t) => (
-              <div key={t.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] group">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="font-semibold">{t.eventName}</h3>
-                    <span className="text-xs text-[var(--color-muted-foreground)] font-mono">{t.eventCode}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconOnly
-                    onClick={() => { setEditingTemplate(t); setPanelOpen(true) }}
-                    className="opacity-0 group-hover:opacity-100"
-                    title="Edit template"
-                    aria-label="Edit template"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="text-sm text-[var(--color-muted-foreground)] space-y-1">
-                  <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {t.defaultDestination || '—'} · {t.defaultRegion || '—'}</p>
-                  {t.standardDurationDays && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">schedule</span> {t.standardDurationDays} days</p>}
-                  {t.preferredTimeOfYear && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">calendar_today</span> {t.preferredTimeOfYear}</p>}
-                </div>
+          {templatesEmpty ? (
+            // The "+ New Template" action lives inside the empty state (not also in the toolbar)
+            // so there is exactly one control for it, right where the eye lands.
+            <EmptyState
+              icon={LayoutTemplate}
+              title="No event templates yet"
+              description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
+              action={{ label: '+ New Template', onClick: openNewTemplate }}
+            />
+          ) : (
+            <>
+              <div className="flex justify-end">
+                <Button onClick={openNewTemplate} size="md">
+                  + New Template
+                </Button>
               </div>
-            ))}
-          </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {activeTemplates.map((t) => (
+                  <div key={t.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] group">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h3 className="font-semibold">{t.eventName}</h3>
+                        <span className="text-xs text-[var(--color-muted-foreground)] font-mono">{t.eventCode}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        onClick={() => { setEditingTemplate(t); setPanelOpen(true) }}
+                        className="opacity-0 group-hover:opacity-100"
+                        title="Edit template"
+                        aria-label="Edit template"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="text-sm text-[var(--color-muted-foreground)] space-y-1">
+                      <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {t.defaultDestination || '—'} · {t.defaultRegion || '—'}</p>
+                      {t.standardDurationDays && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">schedule</span> {t.standardDurationDays} days</p>}
+                      {t.preferredTimeOfYear && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">calendar_today</span> {t.preferredTimeOfYear}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           <TemplateFormPanel
             isOpen={panelOpen}

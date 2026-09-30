@@ -5,8 +5,10 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, settingsData } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
+  // Event Templates tab data; defaults to "no templates" (see beforeEach).
+  mockUseEventTemplates: vi.fn((): { data: unknown[] | undefined; isLoading?: boolean } => ({ data: [] })),
   // A stable object reference, matching what TanStack Query actually hands a real useSettings()
   // call across re-renders (same cached `data` identity until it's refetched) — an inline object
   // literal in the mock factory would give QualificationSettingsTab's
@@ -31,7 +33,7 @@ function renderSettingsPage() {
 }
 
 vi.mock('@/api/hooks', () => ({
-  useEventTemplates: () => ({ data: [] }),
+  useEventTemplates: mockUseEventTemplates,
   useActivities: () => ({ data: [] }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
@@ -73,6 +75,50 @@ vi.mock('@/lib/permissions', () => ({
 
 beforeEach(() => {
   mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+  mockUseEventTemplates.mockReturnValue({ data: [] })
+})
+
+describe('SettingsPage — Event Templates tab', () => {
+  it('shows an empty state with a single "+ New Template" action when there are no templates', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage()
+
+    expect(screen.getByText('No event templates yet')).toBeInTheDocument()
+    // The action lives inside the empty state, not duplicated in the toolbar.
+    const actions = screen.getAllByRole('button', { name: '+ New Template' })
+    expect(actions).toHaveLength(1)
+
+    await user.click(actions[0])
+    expect(await screen.findByRole('heading', { name: 'New Template' })).toBeInTheDocument()
+  })
+
+  it('shows the empty state when every template is inactive', () => {
+    mockUseEventTemplates.mockReturnValue({
+      data: [{ id: 't1', eventName: 'Old Escape', eventCode: 'OE', isActive: false }],
+    })
+    renderSettingsPage()
+
+    expect(screen.getByText('No event templates yet')).toBeInTheDocument()
+    expect(screen.queryByText('Old Escape')).not.toBeInTheDocument()
+  })
+
+  it('lists active templates with the toolbar action and no empty state', () => {
+    mockUseEventTemplates.mockReturnValue({
+      data: [{ id: 't1', eventName: 'Beach Escape', eventCode: 'BE', isActive: true }],
+    })
+    renderSettingsPage()
+
+    expect(screen.getByText('Beach Escape')).toBeInTheDocument()
+    expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '+ New Template' })).toHaveLength(1)
+  })
+
+  it('does not claim there are no templates while they are still loading', () => {
+    mockUseEventTemplates.mockReturnValue({ data: undefined, isLoading: true })
+    renderSettingsPage()
+
+    expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
+  })
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {

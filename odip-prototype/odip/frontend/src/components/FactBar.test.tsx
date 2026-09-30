@@ -35,6 +35,35 @@ describe('FactBar', () => {
     expect(segment.querySelector('svg')).toBeTruthy()
   })
 
+  it('renders a ready-made element icon in a muted 16px slot before the label', () => {
+    render(
+      <FactBar
+        segments={[
+          { label: 'Participants', value: '4', icon: <span data-testid="glyph" className="material-symbols-outlined">groups</span> },
+        ]}
+      />,
+    )
+    const glyph = screen.getByTestId('glyph')
+    const slot = glyph.parentElement!
+    expect(slot.className).toMatch(/\bw-4\b/)
+    expect(slot.className).toMatch(/\bh-4\b/)
+    expect(slot.className).toMatch(/text-\[var\(--color-muted-foreground\)\]/)
+    expect(slot).toHaveAttribute('aria-hidden', 'true')
+    // The slot is the first thing in the segment, i.e. it sits before the label column.
+    const segment = slot.parentElement!
+    expect(segment.firstElementChild).toBe(slot)
+    expect(slot.compareDocumentPosition(screen.getByText('Participants')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('renders a segment without an icon exactly as before (no icon slot)', () => {
+    render(<FactBar segments={[{ label: 'Status', value: 'Confirmed' }]} />)
+    const segment = screen.getByText('Status').closest('div')!.parentElement!
+    // Only the label/value column — no leading slot, no svg.
+    expect(segment.children.length).toBe(1)
+    expect(segment.querySelector('svg')).toBeNull()
+    expect(segment.querySelector('[aria-hidden="true"]')).toBeNull()
+  })
+
   it('applies a vertical rule border to every segment after the first, not the first', () => {
     const { container } = render(
       <FactBar

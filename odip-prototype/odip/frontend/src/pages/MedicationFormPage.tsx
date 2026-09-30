@@ -289,7 +289,7 @@ export default function MedicationFormPage() {
   const backTo = isEdit ? `/participants/${existing?.participantId}?tab=medications` : `/participants/${participantIdParam}?tab=medications`
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-4">
         <Link to={backTo} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors">

@@ -105,7 +105,7 @@ export default function VehicleCreatePage() {
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/vehicles" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Vehicles</Link>

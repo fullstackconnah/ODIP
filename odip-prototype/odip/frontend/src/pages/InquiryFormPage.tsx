@@ -27,7 +27,7 @@ export default function InquiryFormPage() {
   const existing = editId ? inquiries.find(row => row.id === editId) : undefined
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <div className="flex items-start gap-4">
         <Button
           variant="ghost"

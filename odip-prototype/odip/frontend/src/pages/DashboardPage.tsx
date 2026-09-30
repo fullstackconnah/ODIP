@@ -109,8 +109,11 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader title="Management Dashboard" subtitle="Centralized overview of your NDIS trip operations." />
 
-      {/* ── KPI row — every metric in one row, tinted only when actionable ── */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
+      {/* ── KPI row — every metric in one row, tinted only when actionable ──
+          8.5rem (136px) minimum: at 1920 the content box is 1648px (1920 − 232 sidebar − 2×20
+          gutter), so 10 tiles need 10×136 + 9×8 = 1432px and 11 (with the alerts tile) need
+          1576px — both fit on one row. Below that auto-fit wraps whole tiles. ── */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
         <StatCard label="Upcoming Trips" value={d.upcomingTripCount} />
         <StatCard label="Active Participants" value={d.activeParticipantCount} />
         <StatCard label="Outstanding Tasks" value={d.outstandingTaskCount} />
@@ -146,11 +149,18 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Main Content Grid — Upcoming Trips (~60%) / Overdue Tasks (~40%) at 1920 ── */}
-      <div className="grid grid-cols-1 gap-[var(--section-gap)] lg:grid-cols-[3fr_2fr]">
+      {/* ── Main Content Grid — Upcoming Trips / Overdue Tasks ──
+          One column below xl, then an even split (1920: (1648 − 16) / 2 = 816px each). Each panel
+          is its own size container, and row columns switch on the *panel's* width rather than the
+          viewport's, so a column only shows when the row can afford it: at 1920 the Overdue Tasks
+          panel has 790px inside its padding, i.e. a 774px row = 62 badge + 176 trip + 66 due +
+          24 avatar + 43 "View" + 5×8 gaps = 412px of fixed cells, leaving ~362px for the title
+          (longest seeded title is 328px). Narrower panels drop the trip / due cells first, so the
+          title — which carries the participant name — is what gets the space. ── */}
+      <div className="grid grid-cols-1 items-start gap-[var(--section-gap)] xl:grid-cols-2">
 
         {/* Upcoming Trips */}
-        <Card>
+        <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Upcoming Trips</h3>
             <Link to="/trips" className="text-xs font-bold text-[var(--color-primary)] hover:underline">
@@ -171,16 +181,16 @@ export default function DashboardPage() {
                   <Link
                     key={t.id}
                     to={`/trips/${t.id}`}
-                    className="flex h-10 items-center gap-3 rounded-[var(--radius-sm)] px-2 transition-colors hover:bg-[var(--color-surface-container-low)]"
+                    className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] px-2 transition-colors hover:bg-[var(--color-surface-container-low)]"
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-foreground)]">{t.tripName}</span>
-                    <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] sm:inline">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-foreground)]" title={t.tripName}>{t.tripName}</span>
+                    <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @md:inline">
                       {formatDateAu(t.startDate)}
                     </span>
-                    <span className="hidden w-28 shrink-0 truncate text-xs text-[var(--color-muted-foreground)] md:inline">
+                    <span className="hidden w-28 shrink-0 truncate text-xs text-[var(--color-muted-foreground)] @2xl:inline">
                       {t.destination || 'TBD'}
                     </span>
-                    <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] sm:inline">
+                    <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @lg:inline">
                       {t.currentParticipantCount}/{t.maxParticipants || '—'} pax
                     </span>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${badge}`}>
@@ -195,7 +205,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Overdue Tasks */}
-        <Card>
+        <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Overdue Tasks</h3>
             <Link to="/tasks" className="text-xs font-bold text-[var(--color-primary)] hover:underline">
@@ -214,15 +224,18 @@ export default function DashboardPage() {
                 const badgeClass = priorityStyle[t.priority] || priorityStyle.Medium
                 const initials = (t.ownerName || 'UN').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                 return (
-                  <div key={t.id} className="flex h-10 items-center gap-3 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
+                  <div key={t.id} className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
                       {t.priority || 'Medium'}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-foreground)]">{t.title}</span>
-                    <span className="hidden w-24 shrink-0 truncate text-xs text-[var(--color-muted-foreground)] md:inline">
+                    {/* The title carries the participant name (e.g. "… — Sienna W."), so it is the
+                        cell that flexes; the trip and due cells give way to it when the panel is
+                        narrow. `title` reveals the full text where it still has to truncate. */}
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-foreground)]" title={t.title}>{t.title}</span>
+                    <span className="hidden w-44 shrink-0 truncate text-xs text-[var(--color-muted-foreground)] @3xl:inline" title={t.tripName}>
                       {t.tripName}
                     </span>
-                    <span className="hidden shrink-0 text-xs text-[var(--color-muted-foreground)] sm:inline">
+                    <span className="hidden shrink-0 text-xs text-[var(--color-muted-foreground)] @2xl:inline">
                       Due {dueAgo(t.dueDate)}
                     </span>
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-fixed)] text-[9px] font-bold text-[var(--color-on-primary-fixed)]">

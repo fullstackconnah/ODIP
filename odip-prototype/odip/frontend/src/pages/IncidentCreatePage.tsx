@@ -548,7 +548,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   ]
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/incidents" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Incidents</Link>

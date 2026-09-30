@@ -135,7 +135,7 @@ export default function TaskCreatePage() {
   // back to rendering the create-mode form with blank defaults.
   if (isEdit && isTaskError) {
     return (
-      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="text-sm text-[var(--color-muted-foreground)]">
           <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>
         </div>
@@ -148,7 +148,7 @@ export default function TaskCreatePage() {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import TripDetailPage from './TripDetailPage'
@@ -102,6 +102,24 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
     expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+  })
+})
+
+describe('TripDetailPage — fact bar category icons', () => {
+  it('gives each of the four facts its category icon (people, checklist, wheelchair, shield)', () => {
+    renderPage()
+
+    const facts: Array<[label: string, glyph: string]> = [
+      ['Participants / Staff', 'groups'],
+      ['Outstanding Tasks', 'checklist'],
+      ['High Support / Overnight', 'accessible'],
+      ['Insurance', 'health_and_safety'],
+    ]
+    for (const [label, glyph] of facts) {
+      // label span -> label/value column -> segment
+      const segment = screen.getByText(label).closest('div')!.parentElement!
+      expect(within(segment).getByText(glyph)).toBeInTheDocument()
+    }
   })
 })
 

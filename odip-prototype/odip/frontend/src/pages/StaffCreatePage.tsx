@@ -172,7 +172,7 @@ export default function StaffCreatePage() {
 
   if (isTargetSuperAdmin) {
     return (
-      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="text-sm text-[var(--color-muted-foreground)]">
           <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
         </div>
@@ -193,7 +193,7 @@ export default function StaffCreatePage() {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
