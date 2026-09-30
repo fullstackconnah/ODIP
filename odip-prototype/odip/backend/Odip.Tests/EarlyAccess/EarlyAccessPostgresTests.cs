@@ -17,7 +17,9 @@ namespace Odip.Tests.EarlyAccess;
 ///
 /// Runs wherever POSTGRES_CONNECTION_STRING points at a server (pr-validation.yml provides postgres:16 and sets it for
 /// the test step) and SKIPS otherwise — the deploy image's build-time test run has no database. The connection string's
-/// role needs CREATEDB; the database it names is only used to connect to the server and is never modified.
+/// role needs CREATEDB; the database it names is only used to connect to the server and is never modified. A configured
+/// server that cannot be reached also skips, except on CI; a server that answers with an error (bad password, no
+/// CREATEDB) fails the tests everywhere, because that is a misconfiguration worth seeing.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
@@ -257,6 +259,32 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(3, result.RequestCount); // seed (1) + the rival's bump (1) + this request (1)
         await using var check = _pg.CreateContext();
         Assert.Equal(3, (await check.EarlyAccessRequests.SingleAsync(e => e.Email == email)).RequestCount);
+    }
+
+    /// <summary>
+    /// The visitor closes the tab while the INSERT is being sent: the commit must still happen (and the operator email
+    /// still follow), because a cancelled call can land on the server anyway. Reverting the write to use the request's
+    /// token makes Npgsql throw here and this test fails.
+    /// </summary>
+    [SkippableFact]
+    public async Task ARequestCancelledDuringTheWrite_StillCompletesTheWrite()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("cancelled");
+        using var cancellation = new CancellationTokenSource();
+        var interceptor = new BeforeFirstSave(() =>
+        {
+            cancellation.Cancel();
+            return Task.CompletedTask;
+        });
+
+        EarlyAccessRecordResult result;
+        await using (var db = _pg.CreateContext(interceptor))
+            result = await NewService(db).RecordAsync("Me", "Org", email, cancellation.Token);
+
+        Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
+        await using var check = _pg.CreateContext();
+        Assert.Equal(1, await check.EarlyAccessRequests.CountAsync(e => e.Email == email));
     }
 
     [SkippableFact]

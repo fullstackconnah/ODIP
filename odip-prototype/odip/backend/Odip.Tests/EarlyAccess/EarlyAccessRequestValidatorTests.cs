@@ -196,6 +196,9 @@ public class EarlyAccessRequestValidatorTests
     [InlineData("\"jane\"@example.com")]
     [InlineData("jane@[127.0.0.1]")]
     [InlineData("jane@example.com,other@example.com")]
+    [InlineData("jane\u202E@example.com")]
+    [InlineData("jane@exa\u2066mple.com")]
+    [InlineData("jane@example.com\u2028Bcc: x@example.com")]
     public void InvalidEmails_AreRejected_WithAnEmailError(string email)
     {
         var dto = Valid();
@@ -236,6 +239,36 @@ public class EarlyAccessRequestValidatorTests
 
         Assert.Equal("Name contains characters that are not allowed.", Assert.Single(result.Errors["name"]));
         Assert.Equal("Organisation contains characters that are not allowed.", Assert.Single(result.Errors["organisation"]));
+    }
+
+    [Theory]
+    [InlineData("\u200B")]
+    [InlineData("\u2060\uFEFF")]
+    [InlineData("---")]
+    [InlineData(". , ;")]
+    public void NameAndOrganisation_WithNoLetterOrDigit_AreTreatedAsMissing(string value)
+    {
+        var dto = Valid();
+        dto.Name = value;
+        dto.Organisation = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal("Enter your name.", Assert.Single(result.Errors["name"]));
+        Assert.Equal("Enter your organisation.", Assert.Single(result.Errors["organisation"]));
+    }
+
+    [Theory]
+    [InlineData("3M")]
+    [InlineData("\u674e")]
+    [InlineData("\u00d8rsted A/S")]
+    public void ShortOrNonLatinNamesWithALetterOrDigit_AreAccepted(string value)
+    {
+        var dto = Valid();
+        dto.Name = value;
+        dto.Organisation = value;
+
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
     }
 
     [Theory]

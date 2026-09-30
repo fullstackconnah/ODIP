@@ -53,7 +53,8 @@ public static class EarlyAccessRequestValidator
     private static void CheckText(
         Dictionary<string, string[]> errors, string field, string label, string missingMessage, string value, int maxLength)
     {
-        if (value.Length == 0)
+        // A value with no letter or digit at all (only spaces, punctuation, zero-width marks) is as good as empty.
+        if (value.Length == 0 || !value.Any(char.IsLetterOrDigit))
             errors[field] = new[] { missingMessage };
         else if (value.Length > maxLength)
             errors[field] = new[] { $"{label} must be {maxLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
@@ -81,7 +82,8 @@ public static class EarlyAccessRequestValidator
     /// </summary>
     private static bool IsValidEmail(string email)
     {
-        if (email.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+        // Whitespace, controls, line/paragraph separators and bidi marks: the address goes raw into the PLAIN-TEXT email body.
+        if (email.Any(c => char.IsWhiteSpace(c) || IsDisallowedInOneLineText(c)))
             return false;
 
         var at = email.IndexOf('@');
