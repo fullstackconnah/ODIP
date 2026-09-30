@@ -237,14 +237,15 @@ public class EarlyAccessNotifierTests
 
     // ── Helpers ────────────────────────────────────────────────
 
-    /// <summary>Starts the hosted service, waits for the queue to empty and every send to finish, then stops it.</summary>
+    /// <summary>Starts the hosted service, waits for the queue to be drained, then stops it (which waits for the send in progress).</summary>
     private static async Task RunUntilDrained(EarlyAccessNotifier notifier)
     {
         await notifier.StartAsync(CancellationToken.None);
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (notifier.PendingCount > 0 && DateTime.UtcNow < deadline)
             await Task.Delay(10);
-        await Task.Delay(50); // let the last dequeued send complete
+        // Everything is dequeued. StopAsync waits for the loop to finish its current iteration, so the last send
+        // (and its logging) is complete when it returns; cancellation is only observed between iterations.
         await notifier.StopAsync(CancellationToken.None);
     }
 
