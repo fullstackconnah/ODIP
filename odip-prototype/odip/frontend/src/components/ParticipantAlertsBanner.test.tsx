@@ -116,3 +116,39 @@ describe('ParticipantAlertsBanner', () => {
     expect(onSelectTab).toHaveBeenCalledWith('details')
   })
 })
+
+// R2-09: the message was `truncate` (one line, ellipsis), so on a 390px phone three realistic alerts got 192-194px of the 324-474px
+// they need and a safety alert read as a fragment ("NDIS plan expired on 12/08/2026 - claims cannot be su..."); a 95-character message
+// was cut even at 768px. There is no hover on touch, so the `title` tooltip that "revealed" the rest never showed. jsdom does no
+// layout, so this pins the mechanism: the message wraps (no nowrap / ellipsis / clip) and is always fully in the DOM.
+describe('ParticipantAlertsBanner — alert text is never cut', () => {
+  const longMessage = 'Medication review overdue by 21 days (Risperidone 2mg) - schedule a review with the prescriber before the next trip departs on 14/10/2026 so the plan of care stays current'
+  const longButtonAlert: ParticipantAlertDto = { type: 'med-review', severity: 'Critical', message: longMessage, deepLinkTab: 'medications', linkTo: null }
+  const longLinkAlert: ParticipantAlertDto = { type: 'open-incident', severity: 'Warning', message: longMessage + ' (incident follow-up)', deepLinkTab: 'details', linkTo: '/incidents/inc-9' }
+
+  const CUTTING = ['truncate', 'whitespace-nowrap', 'text-ellipsis', 'overflow-hidden', 'line-clamp-1', 'line-clamp-2']
+
+  it('lets a tab-select row\'s message wrap: min-w-0 in the flex row, break-words, none of the classes that clip it', () => {
+    renderWithRouter(<ParticipantAlertsBanner alerts={[longButtonAlert]} />)
+    const message = screen.getByText(longMessage)
+    expect(message).toHaveClass('flex-1', 'min-w-0', 'break-words')
+    for (const c of CUTTING) expect(message, c).not.toHaveClass(c)
+  })
+
+  it('does the same for a linkTo row', () => {
+    renderWithRouter(<ParticipantAlertsBanner alerts={[longLinkAlert]} />)
+    const message = screen.getByText(longMessage + ' (incident follow-up)')
+    expect(message).toHaveClass('flex-1', 'min-w-0', 'break-words')
+    for (const c of CUTTING) expect(message, c).not.toHaveClass(c)
+  })
+
+  it('keeps the full text in the row\'s accessible name and content, with the icon and severity label pinned beside it', () => {
+    renderWithRouter(<ParticipantAlertsBanner alerts={[longButtonAlert]} />)
+    const row = screen.getByRole('button')
+    expect(row).toHaveTextContent(longMessage)
+    expect(row).toHaveTextContent('Critical')
+    // The row is a flex row that starts at the top edge so a wrapped message reads from the first line, not the middle.
+    expect(row).toHaveClass('flex', 'items-start')
+    expect(screen.getByText('Critical')).toHaveClass('shrink-0')
+  })
+})
