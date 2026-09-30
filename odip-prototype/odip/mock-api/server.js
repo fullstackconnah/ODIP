@@ -712,7 +712,15 @@ function portalParticipantSummary(participantId) {
 //   400 SHIFT_BREAK_* and validation, 403 MEDICATION_COMPETENCY_*, 404, 422 SHIFT_FINISH_BLOCKED /
 //   DOSE_SLOT_NOT_DUE.
 // MOCK_COMPETENCY=expired|missing makes the signed-in worker lack a current Medication Competency
-// (canRecordDoses false + reason; recording a dose 403s). Default: current.
+// (canRecordDoses false + reason; recording a dose 403s; and NO dose blocks Finish - a worker who
+// cannot record a dose is never asked to clear one). Default: current.
+//
+// The Finish checklist follows the real server: a running break blocks; a dose blocks only once its
+// time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over) and only
+// for a worker who can record doses. A slot takes one record; an idempotencyKey may only be reused for
+// the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
+// Null members are written as explicit nulls (the real API marks every nullable shift-package member
+// [JsonIgnore(Never)]); an error envelope omits the members it does not use, like the real ApiResponse.
 //
 // Fixtures: shift-0003 (Sienna, Published, 09:00-15:00) is the worked example - anaphylaxis, doses
 // with one OVERDUE once started, a high-risk (witnessed) dose, a PRN, routines, emergency contacts
@@ -829,13 +837,14 @@ const packageParticipants = {
 const DOSE_COMMON = { form: 'Tablet', route: 'Oral', supportLevel: 'Administer', isHighRisk: false, directions: null }
 
 // shiftId -> scheduled doses (provider-local wall-clock `at`, "overdue" = how it reads once the
-// shift is InProgress and nothing is recorded) and PRN medications. `recorded` prefills history.
+// shift is InProgress and nothing is recorded; `upcoming` = its time has not arrived yet, so it does
+// not block Finish) and PRN medications. `recorded` prefills history.
 const packageDoses = {
   'shift-0003': {
     slots: [
       { ...DOSE_COMMON, medicationId: 'med-0301', name: 'Levetiracetam', strength: '500mg', dose: '1 tablet', at: '2026-09-13T09:00:00', overdue: true, directions: 'With food' },
       { ...DOSE_COMMON, medicationId: 'med-0302', name: 'Ferrous sulfate', strength: '105mg', dose: '1 tablet', at: '2026-09-13T12:30:00' },
-      { ...DOSE_COMMON, medicationId: 'med-0303', name: 'Insulin glargine', strength: '100 units/mL', dose: '18 units', form: 'Injection', route: 'Subcutaneous', isHighRisk: true, at: '2026-09-13T13:00:00', directions: 'Rotate the injection site' },
+      { ...DOSE_COMMON, medicationId: 'med-0303', name: 'Insulin glargine', strength: '100 units/mL', dose: '18 units', form: 'Injection', route: 'Subcutaneous', isHighRisk: true, at: '2026-09-13T13:00:00', directions: 'Rotate the injection site', upcoming: true },
     ],
     prn: [
       { ...DOSE_COMMON, medicationId: 'med-0304', name: 'Paracetamol', strength: '500mg', dose: '2 tablets', indication: 'Mild pain or fever', maxDosesPer24h: 4, minIntervalMinutes: 240, baseDoses: 1, baseLastDoseAt: '2026-09-12T23:40:00Z', pendingOutcomeId: 'adm-prn-0304' },
@@ -954,6 +963,9 @@ function doseSlotDto(shiftId, def) {
   }
 }
 
+/** A provider-local wall-clock value ("2026-09-13T09:00:00") as a UTC instant with a Z. The package zone (Brisbane) is UTC+10 all year. */
+const localToUtcIso = (at) => new Date(`${at}+10:00`).toISOString()
+
 function prefilledAdministration(shiftId, def) {
   const p = portalShiftBase[shiftId]
   const r = def.recorded
@@ -963,7 +975,7 @@ function prefilledAdministration(shiftId, def) {
     status: r.status, doseGiven: r.doseGiven ?? null, recordedByName: r.recordedByName, recordedByUserId: null,
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: r.reason ?? null, prnReason: null, prnOutcome: null, prnOutcomeAt: null, limitBreachAcknowledged: false, notes: null,
-    createdAt: def.at, incidentId: null,
+    createdAt: localToUtcIso(def.at), incidentId: null,
   }
 }
 
@@ -989,7 +1001,9 @@ function finishBlockersFor(shiftId) {
   if (breaksFor(shiftId).some((b) => !b.endedAt)) {
     blockers.push({ code: 'BREAK_RUNNING', message: 'A break is still running. End it before you finish the shift.', medicationId: null, medicationName: null, scheduledAt: null })
   }
+  if (!competencyView().canRecordDoses) return blockers   // no dose blocks a worker who could not record it
   for (const def of (packageDoses[shiftId]?.slots || [])) {
+    if (def.upcoming) continue   // its time has not arrived: handed over, not blocked
     if (doseSlotDto(shiftId, def).outcome) continue
     const label = def.strength ? `${def.name} ${def.strength}` : def.name
     blockers.push({
@@ -1024,7 +1038,13 @@ function packageFor(shiftId, participantId) {
 const HTTP = Symbol('http-status')
 /** Lets a route answer with a non-200 status (the dispatcher below honours it). */
 const respond = (status, body) => ({ [HTTP]: status, body })
-const failEnvelope = (data, errors, code) => ({ success: false, data, message: null, errors, code })
+const failEnvelope = (data, errors, code) => {
+  const envelope = { success: false }
+  if (data != null) envelope.data = data
+  if (errors != null) envelope.errors = errors
+  if (code != null) envelope.code = code
+  return envelope
+}
 
 const NOT_IN_PROGRESS = {
   Published: ["This shift hasn't been started.", 'SHIFT_NOT_IN_PROGRESS'],
@@ -1103,20 +1123,35 @@ const packageRoutesPost = [
     if (guard) return guard
     const st = pkgState(shiftId)
     const defs = packageDoses[shiftId] || { slots: [], prn: [] }
-    const competency = competencyView()
-    if (!competency.canRecordDoses) return respond(403, failEnvelope(null, [competency.canRecordDosesReason], competency.canRecordDosesReasonCode))
 
     const slotDef = defs.slots.find((d) => d.medicationId === medicationId)
     const prnDef = defs.prn.find((d) => d.medicationId === medicationId)
     const med = slotDef || prnDef
     if (!med) return respond(404, failEnvelope(null, ['Medication not found'], null))
-    if (body?.idempotencyKey && st.keys[body.idempotencyKey]) return st.keys[body.idempotencyKey]   // a double tap returns the first record (200)
+
+    // The server's order: the portal's own checks (is this a dose due in the shift?) come BEFORE the recorder's Medication Competency gate.
+    const slotAt = body?.scheduledAt ? String(body.scheduledAt).slice(0, 19) : null
+    if (prnDef && slotAt) return respond(422, failEnvelope(null, ['An as-needed (PRN) dose has no scheduled time.'], 'DOSE_SLOT_NOT_DUE'))
+    if (slotDef && (!slotAt || slotAt !== slotDef.at)) {
+      return respond(422, failEnvelope(null, ["This isn't a dose due in this shift. Choose one of the doses listed for the shift."], 'DOSE_SLOT_NOT_DUE'))
+    }
+
+    const competency = competencyView()
+    if (!competency.canRecordDoses) return respond(403, failEnvelope(null, [competency.canRecordDosesReason], competency.canRecordDosesReasonCode))
+
+    // A key means "this exact request": a double tap returns the first record (200), but the same key for a different dose is refused.
+    if (body?.idempotencyKey && st.keys[body.idempotencyKey]) {
+      const prior = st.keys[body.idempotencyKey]
+      if (prior.participantMedicationId !== medicationId || (prior.scheduledAt ?? null) !== (slotAt ?? null) || prior.status !== body.status) {
+        return respond(400, failEnvelope(null, ['This request key was already used for a different dose.'], 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED'))
+      }
+      return prior
+    }
 
     if (body?.status !== 'Administered' && !String(body?.reason || '').trim()) {
       return respond(400, failEnvelope(null, ['A reason is required when a dose is refused, withheld, missed or the wrong medication was given.'], null))
     }
     if (prnDef) {
-      if (body.scheduledAt) return respond(422, failEnvelope(null, ['An as-needed (PRN) dose has no scheduled time.'], 'DOSE_SLOT_NOT_DUE'))
       if (body.status === 'Administered' && !String(body.prnReason || '').trim()) {
         return respond(400, failEnvelope(null, ['A PRN reason is required when recording an administered PRN dose.'], null))
       }
@@ -1130,10 +1165,6 @@ const packageRoutesPost = [
       return record
     }
 
-    const slotAt = body?.scheduledAt ? String(body.scheduledAt).slice(0, 19) : null
-    if (!slotAt || slotAt !== slotDef.at) {
-      return respond(422, failEnvelope(null, ["This isn't a dose due in this shift. Choose one of the doses listed for the shift."], 'DOSE_SLOT_NOT_DUE'))
-    }
     const key = `${medicationId}|${slotDef.at}`
     const existing = st.administrations[key] || (slotDef.recorded ? prefilledAdministration(shiftId, slotDef) : null)
     if (existing) return respond(409, failEnvelope(existing, ['This dose has already been recorded.'], 'ADMINISTRATION_ALREADY_RECORDED'))
@@ -2173,6 +2204,10 @@ const postRoutes = [
     const base = portalShiftBase[id] || portalShiftBase['shift-0003']
     const st = pkgState(base.id)
     if (currentStatus(base.id) === 'PendingReview') return buildPortalShiftDetail(base.id)   // idempotent replay
+    // A shift note is required - or an explicit "nothing to note" confirmation (checked before the handover and the checklist, like the server).
+    if (!(shiftNotesByShiftId[base.id] || []).length && !body?.nothingToNote) {
+      return respond(409, failEnvelope(null, ['Add a shift note before finishing.'], 'SHIFT_NOTE_REQUIRED'))
+    }
     const handoverText = String(body?.handoverText || '').trim() || null
     if (body?.nothingToHandOver && handoverText) {
       return respond(400, failEnvelope(null, ['Write a handover or confirm there is nothing to hand over, not both.'], 'SHIFT_HANDOVER_CONFLICT'))
