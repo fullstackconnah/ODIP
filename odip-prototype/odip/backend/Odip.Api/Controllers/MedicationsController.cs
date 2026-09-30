@@ -9,7 +9,9 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Medications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -29,15 +31,19 @@ public class MedicationsController : ControllerBase
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
+    private readonly MedicationSlotService _slots;
+
     public MedicationsController(
         OdipDbContext db, ICurrentTenant currentTenant,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        MedicationSlotService? slots = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+        _slots = slots ?? new MedicationSlotService(db);
     }
 
     // ── Participant medication list / create ─────────────────────────
@@ -239,113 +245,63 @@ public class MedicationsController : ControllerBase
     public async Task<ActionResult<ApiResponse<MarDayDto>>> GetMar(
         [FromQuery] DateOnly? date, [FromQuery] Guid? participantId, CancellationToken ct)
     {
-        var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        // The MAR's "one calendar day" is the provider-local window [00:00, next 00:00). "Today" (when no
+        // date is supplied) and "overdue" are both the PROVIDER's local notion, never UTC: a slot is an
+        // unrecorded dose more than 60 minutes past its provider-local time.
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var targetDate = date ?? DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_slots.UtcNow, provider.Zone));
         var dateStart = targetDate.ToDateTime(TimeOnly.MinValue);
         var dateEndExclusive = targetDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var now = DateTime.UtcNow;
 
-        var medQuery = _db.ParticipantMedications
-            .Include(m => m.Participant)
-            .Where(m => m.Status == MedicationStatus.Active);
-        if (participantId.HasValue)
-            medQuery = medQuery.Where(m => m.ParticipantId == participantId.Value);
-
-        // ── Regular medications expanded into per-time-of-day entries ──
-        var regularMeds = await medQuery
-            .Where(m => m.Type == MedicationType.Regular
-                && m.StartDate < dateEndExclusive
-                && (m.EndDate == null || m.EndDate >= dateStart))
-            .ToListAsync(ct);
-
-        var regularMedIds = regularMeds.Select(m => m.Id).ToList();
-        var dayAdministrations = regularMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => regularMedIds.Contains(a.ParticipantMedicationId)
-                    && a.ScheduledAt != null && a.ScheduledAt >= dateStart && a.ScheduledAt < dateEndExclusive)
-                .ToListAsync(ct);
+        var window = await _slots.GetWindowAsync(dateStart, dateEndExclusive, participantId, provider.Zone, includePrn: true, ct);
 
         // Deliverable 2 reverse link: ONE query for every administration that could show up in
         // today's MAR entries below, rather than one per entry.
-        var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(dayAdministrations.Select(a => a.Id).ToList(), ct);
+        var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(
+            window.Slots.Where(s => s.Administration != null).Select(s => s.Administration!.Id).ToList(), ct);
 
         var entries = new List<MarEntryDto>();
-        foreach (var m in regularMeds)
+        foreach (var slot in window.Slots)
         {
-            if (!TryValidateTimesOfDayCsv(m.TimesOfDay, out var times)) continue;
-            if (!MedicationScheduleCalculator.IsDue(m, targetDate)) continue;
+            var m = slot.Medication;
             var participantName = FullName(m.Participant);
+            var admin = slot.Administration;
+            var incidentId = admin == null ? null : LookupIncidentId(dayIncidentIds, admin.Id);
 
-            foreach (var t in times)
+            entries.Add(new MarEntryDto
             {
-                var scheduledAt = dateStart.Add(t);
-                var admin = dayAdministrations
-                    .Where(a => a.ParticipantMedicationId == m.Id && a.ScheduledAt == scheduledAt)
-                    .OrderByDescending(a => a.CreatedAt)
-                    .FirstOrDefault();
-                var isOverdue = admin == null && scheduledAt.AddMinutes(60) < now;
-                var incidentId = admin == null ? null : LookupIncidentId(dayIncidentIds, admin.Id);
-
-                entries.Add(new MarEntryDto
-                {
-                    MedicationId = m.Id,
-                    ParticipantId = m.ParticipantId,
-                    ParticipantName = participantName,
-                    MedicationName = m.Name,
-                    Strength = m.Strength,
-                    DoseDescription = m.DoseDescription,
-                    Form = m.Form,
-                    Route = m.Route,
-                    Packaging = m.Packaging,
-                    PharmacyName = m.PharmacyName,
-                    PharmacyPhone = m.PharmacyPhone,
-                    ScheduledTime = t.ToString(@"hh\:mm"),
-                    ScheduledAt = scheduledAt,
-                    IsHighRisk = m.IsHighRisk,
-                    SupportLevel = m.SupportLevel,
-                    IsOverdue = isOverdue,
-                    Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
-                    IncidentId = incidentId,
-                });
-            }
+                MedicationId = m.Id,
+                ParticipantId = m.ParticipantId,
+                ParticipantName = participantName,
+                MedicationName = m.Name,
+                Strength = m.Strength,
+                DoseDescription = m.DoseDescription,
+                Form = m.Form,
+                Route = m.Route,
+                Packaging = m.Packaging,
+                PharmacyName = m.PharmacyName,
+                PharmacyPhone = m.PharmacyPhone,
+                ScheduledTime = slot.TimeOfDay.ToString(@"hh\:mm"),
+                ScheduledAt = slot.ScheduledAt,
+                IsHighRisk = m.IsHighRisk,
+                SupportLevel = m.SupportLevel,
+                IsOverdue = slot.IsOverdue,
+                Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
+                IncidentId = incidentId,
+            });
         }
 
-        // ── PRN medications with rolling 24h counts ──
-        var prnMeds = await medQuery.Where(m => m.Type == MedicationType.Prn).ToListAsync(ct);
-        var prnMedIds = prnMeds.Select(m => m.Id).ToList();
-        var last24hCutoff = now.AddHours(-24);
-
-        var recentPrnAdmins = prnMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => prnMedIds.Contains(a.ParticipantMedicationId)
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.AdministeredAt != null && a.AdministeredAt >= last24hCutoff)
-                .ToListAsync(ct);
-
-        var pendingOutcomeAdmins = prnMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => prnMedIds.Contains(a.ParticipantMedicationId)
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.PrnOutcome == null)
-                .OrderByDescending(a => a.AdministeredAt)
-                .ToListAsync(ct);
-
         // Connection-map item 8 (tiny seam fix): the only administration id a MarPrnDto carries
-        // is OutcomePendingAdministrationId — batch-resolve incident ids for every candidate
-        // administration across both PRN queries in ONE call, same as dayIncidentIds above.
-        var prnAdministrationIds = recentPrnAdmins.Select(a => a.Id)
-            .Concat(pendingOutcomeAdmins.Select(a => a.Id))
-            .Distinct()
-            .ToList();
-        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(prnAdministrationIds, ct);
+        // is OutcomePendingAdministrationId — batch-resolve incident ids for every pending-outcome
+        // administration in ONE call, same as dayIncidentIds above.
+        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(
+            window.Prn.Where(p => p.OutcomePendingAdministration != null).Select(p => p.OutcomePendingAdministration!.Id).Distinct().ToList(), ct);
 
         var prnDtos = new List<MarPrnDto>();
-        foreach (var m in prnMeds)
+        foreach (var status in window.Prn)
         {
-            var doses = recentPrnAdmins.Where(a => a.ParticipantMedicationId == m.Id).ToList();
-            var pending = pendingOutcomeAdmins.FirstOrDefault(a => a.ParticipantMedicationId == m.Id);
+            var m = status.Medication;
+            var pending = status.OutcomePendingAdministration;
 
             prnDtos.Add(new MarPrnDto
             {
@@ -361,8 +317,8 @@ public class MedicationsController : ControllerBase
                 Packaging = m.Packaging,
                 PharmacyName = m.PharmacyName,
                 PharmacyPhone = m.PharmacyPhone,
-                DosesInLast24h = doses.Count,
-                LastDoseAt = doses.Count > 0 ? doses.Max(a => a.AdministeredAt) : null,
+                DosesInLast24h = status.DosesInLast24h,
+                LastDoseAt = status.LastDoseAt,
                 OutcomePendingAdministrationId = pending?.Id,
                 IncidentId = pending == null ? null : LookupIncidentId(prnIncidentIds, pending.Id),
             });
@@ -712,20 +668,8 @@ public class MedicationsController : ControllerBase
         return null;
     }
 
-    private static bool TryValidateTimesOfDayCsv(string? csv, out List<TimeSpan> times)
-    {
-        times = new List<TimeSpan>();
-        if (string.IsNullOrWhiteSpace(csv)) return false;
-
-        foreach (var part in csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (!TimeSpan.TryParseExact(part, "hh\\:mm", CultureInfo.InvariantCulture, out var t))
-                return false;
-            times.Add(t);
-        }
-
-        return times.Count > 0;
-    }
+    private static bool TryValidateTimesOfDayCsv(string? csv, out List<TimeSpan> times) =>
+        MedicationSlotCalculator.TryParseTimesOfDay(csv, out times);
 
     private static string FullName(Participant? p) =>
         p == null ? string.Empty

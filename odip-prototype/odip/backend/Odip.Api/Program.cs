@@ -177,6 +177,10 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>()
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffUnavailabilityQuery, Odip.Infrastructure.Rostering.StaffUnavailabilityQuery>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItemsQuery, Odip.Infrastructure.Rostering.StaffAvailabilityItemsQuery>();
 
+// ── Shift package: MAR slot computation with a window form (shared by the MAR and the portal) ──
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>();
+
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.Infrastructure.Services.NagerHolidayProvider>();
