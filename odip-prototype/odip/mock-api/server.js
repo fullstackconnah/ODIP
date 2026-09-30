@@ -3,6 +3,8 @@
 // dev proxy targets — base path /api/v1; override with MOCK_PORT)
 // Serves the ApiResponse<T> envelope the React frontend expects:
 //   { success, data, message, errors }
+// Also serves the public landing-page form at POST /api/public/early-access (outside the
+// base path and the envelope, like the real API — see handleEarlyAccess below).
 // All names/organisations are fictional.
 
 const http = require('http')
@@ -2508,6 +2510,73 @@ function sendResult(res, result) {
   send(res, 200, ok(result))
 }
 
+// ── Public early-access form (landing page) ──────────────────
+// Mirrors POST /api/public/early-access, which — like the real route — lives OUTSIDE BASE and outside the
+// ApiResponse envelope. Same contract as the API: 202 { status: 'received' } for a valid request after a
+// short delay; a filled honeypot (`website`) gets the same 202 and is dropped; invalid fields get a 400
+// ValidationProblemDetails whose `errors` are keyed name / organisation / email; a body over 4 KB gets 413.
+// Nothing is stored. (The 429 rate limit is not simulated here.)
+const EARLY_ACCESS_PATH = '/api/public/early-access'
+const EARLY_ACCESS_DELAY_MS = 400
+const EARLY_ACCESS_MAX_BODY = 4096
+
+function validateEarlyAccess(body) {
+  const errors = {}
+  const text = (v) => (typeof v === 'string' ? v.trim() : '')
+  const name = text(body.name)
+  if (!name) errors.name = ['Enter your name.']
+  else if (name.length > 100) errors.name = ['Name must be 100 characters or fewer.']
+  const organisation = text(body.organisation)
+  if (!organisation) errors.organisation = ['Enter your organisation.']
+  else if (organisation.length > 150) errors.organisation = ['Organisation must be 150 characters or fewer.']
+  const email = text(body.email)
+  if (!email) errors.email = ['Enter your email address.']
+  else if (email.length > 254) errors.email = ['Email must be 254 characters or fewer.']
+  else if (!/^[^\s@"<>,]+@[^\s@.]+(\.[^\s@.]+)*\.[^\s@.]{2,}$/.test(email)) errors.email = ['Enter a valid email address.']
+  return errors
+}
+
+function handleEarlyAccess(req, res) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { ...CORS_HEADERS, Allow: 'POST, OPTIONS' })
+    res.end()
+    return
+  }
+  let raw = ''
+  let tooLarge = false
+  req.on('data', (chunk) => {
+    raw += chunk
+    if (raw.length > EARLY_ACCESS_MAX_BODY) tooLarge = true
+  })
+  req.on('end', () => {
+    if (tooLarge) {
+      send(res, 413, { success: false, data: null, message: null, errors: ['The request could not be processed. Please check its size and format.'] })
+      return
+    }
+    let body = {}
+    try { body = JSON.parse(raw || '{}') } catch { body = {} }
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) body = {}
+
+    // Honeypot: a bot that fills the hidden field is told exactly what a real visitor is told.
+    const honeypotFilled = typeof body.website === 'string' && body.website.trim() !== ''
+    const errors = honeypotFilled ? {} : validateEarlyAccess(body)
+
+    setTimeout(() => {
+      if (Object.keys(errors).length > 0) {
+        res.writeHead(400, { ...CORS_HEADERS, 'Content-Type': 'application/problem+json; charset=utf-8' })
+        res.end(JSON.stringify({
+          type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1',
+          title: 'One or more validation errors occurred.',
+          status: 400,
+          errors,
+        }))
+        return
+      }
+      send(res, 202, { status: 'received' })
+    }, EARLY_ACCESS_DELAY_MS)
+  })
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
   const path = url.pathname.replace(/\/+$/, '') || '/'
@@ -2516,6 +2585,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, CORS_HEADERS)
     res.end()
+    return
+  }
+
+  if (path === EARLY_ACCESS_PATH) {
+    handleEarlyAccess(req, res)
     return
   }
 
