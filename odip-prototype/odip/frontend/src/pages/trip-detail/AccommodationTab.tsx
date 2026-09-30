@@ -284,7 +284,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <ExternalLink className="w-3.5 h-3.5" />
           </Button>
           {canWrite && (
-            <Button variant="ghost" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation" className="hover:text-[var(--color-destructive)]">
+            <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}

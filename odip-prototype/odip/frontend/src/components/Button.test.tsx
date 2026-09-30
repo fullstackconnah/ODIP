@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -199,5 +201,97 @@ describe('Button — 44px coarse-pointer hit area', () => {
   it('keeps a caller className working next to the pad', () => {
     render(<Button size="sm" className="ml-2">Edit</Button>)
     expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass('ml-2', ...pad)
+  })
+})
+
+// R3 F-02 / R2-10: Button concatenates its variant classes and the caller's className with no merge, so a ghost button given
+// a destructive colour className had TWO colour utilities for one property and the stylesheet order (alphabetical among the
+// arbitrary values) picked the winner: ghost's muted grey and primary green beat the caller's red. Delete / Remove lost their
+// destructive cue. The fix is a variant that carries one colour set; these tests pin it and the pattern that caused it.
+describe('Button — ghost-danger variant', () => {
+  const variants = ['primary', 'secondary', 'danger', 'ghost', 'ghost-danger'] as const
+
+  it('is destructive text at rest and on hover, with an error-container wash, and none of ghost\'s own colours', () => {
+    render(<Button variant="ghost-danger">Delete</Button>)
+    const btn = screen.getByRole('button', { name: 'Delete' })
+    expect(btn).toHaveClass('text-[var(--color-destructive)]', 'hover:text-[var(--color-destructive)]', 'hover:bg-[var(--color-error-container)]')
+    // The colours that beat the caller's red in the old ghost + className combination must not be on the element at all.
+    expect(btn).not.toHaveClass('text-[var(--color-muted-foreground)]')
+    expect(btn).not.toHaveClass('hover:text-[var(--color-primary)]')
+    expect(btn).not.toHaveClass('hover:bg-[var(--color-accent)]')
+  })
+
+  it('keeps the shared shape: same base, size, hit area and disabled handling as every other variant', () => {
+    render(
+      <>
+        <Button variant="ghost-danger" size="sm" iconOnly aria-label="Remove">x</Button>
+        <Button variant="ghost-danger" disabled>Gone</Button>
+      </>,
+    )
+    expect(screen.getByRole('button', { name: 'Remove' })).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', ...TAP_AREA.split(' '))
+    const gone = screen.getByRole('button', { name: 'Gone' })
+    expect(gone).toBeDisabled()
+    expect(gone).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]', 'disabled:opacity-50')
+  })
+
+  it('gives every variant exactly one resting text colour, one hover text colour and one hover background (nothing to collide)', () => {
+    for (const variant of variants) {
+      const { unmount } = render(<Button variant={variant}>{variant}</Button>)
+      const tokens = screen.getByRole('button', { name: variant }).className.split(/\s+/)
+      const rest = tokens.filter(t => /^text-(\[var\(--color-[^)]+\)\]|white)$/.test(t))
+      const hoverText = tokens.filter(t => t.startsWith('hover:text-'))
+      const hoverBg = tokens.filter(t => t.startsWith('hover:bg-'))
+      expect(rest.length, `${variant} resting text colours: ${rest.join(' ')}`).toBeLessThanOrEqual(1)
+      expect(hoverText.length, `${variant} hover text colours: ${hoverText.join(' ')}`).toBeLessThanOrEqual(1)
+      expect(hoverBg.length, `${variant} hover backgrounds: ${hoverBg.join(' ')}`).toBeLessThanOrEqual(1)
+      unmount()
+    }
+  })
+})
+
+describe('Button — no destructive colour overrides on a ghost button', () => {
+  /** Every non-test .tsx under src as [relative path, source]. */
+  function sources(): [string, string][] {
+    const root = resolve(__dirname, '..')
+    return (readdirSync(root, { recursive: true }) as string[])
+      .filter(f => f.endsWith('.tsx') && !/\.test\.tsx$/.test(f))
+      .map(f => [f, readFileSync(join(root, f), 'utf8')] as [string, string])
+  }
+
+  /** The opening tag of every `<Button ...>`, with braces balanced so an arrow function in `onClick` does not end it early. */
+  function buttonTags(src: string): { tag: string; index: number }[] {
+    const out: { tag: string; index: number }[] = []
+    for (const m of src.matchAll(/<Button\b/g)) {
+      let depth = 0
+      let i = m.index! + 7
+      for (; i < src.length; i++) {
+        const c = src[i]
+        if (c === '{') depth++
+        else if (c === '}') depth--
+        else if (c === '>' && depth === 0 && src[i - 1] !== '=') break
+      }
+      out.push({ tag: src.slice(m.index!, i + 1), index: m.index! })
+    }
+    return out
+  }
+
+  it('no <Button variant="ghost"> carries a destructive colour in its className: use variant="ghost-danger"', () => {
+    const offenders: string[] = []
+    for (const [file, src] of sources()) {
+      for (const { tag, index } of buttonTags(src)) {
+        if (/variant=["']ghost["']/.test(tag) && /className=[^>]*(destructive|error-container|text-red)/.test(tag)) {
+          offenders.push(`${file}:${src.slice(0, index).split('\n').length}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('the destructive actions that lost their red use the variant', () => {
+    const uses = (file: string) => buttonTags(readFileSync(join(resolve(__dirname, '..'), file), 'utf8')).filter(({ tag }) => /variant=["']ghost-danger["']/.test(tag)).length
+    expect(uses('pages/rostering/components/ShiftSlideOver.tsx')).toBe(1)
+    expect(uses('pages/rostering/components/PatternSlideOver.tsx')).toBe(1)
+    expect(uses('pages/trip-detail/AccommodationTab.tsx')).toBe(1)
+    expect(uses('pages/ParticipantDetailPage.tsx')).toBe(1)
   })
 })

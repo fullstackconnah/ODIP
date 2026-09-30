@@ -213,7 +213,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         {canWrite && (
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border p-[var(--card-pad)]">
             {isEdit ? (
-              <Button variant="ghost" onClick={() => setConfirmDelete(true)} className="text-[var(--color-destructive)] hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]">
+              <Button variant="ghost-danger" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>
             ) : <span />}
