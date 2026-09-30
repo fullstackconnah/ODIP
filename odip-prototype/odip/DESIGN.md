@@ -154,7 +154,7 @@ components:
     backgroundColor: "{colors.card}"
     textColor: "{colors.muted-foreground}"
     rounded: "{rounded.md}"
-    padding: "12px"
+    padding: "12px 8px"
   attention-tile-warning:
     backgroundColor: "{colors.warning-container}"
     textColor: "{colors.on-warning-container}"
@@ -513,25 +513,30 @@ as "2 QSC overdue"; those everyday counts now live in the header's meta row. It 
   Participant Alerts (only with `canViewAlerts`; link `/participants`; danger), Overdue (danger), Missing Accommodation, Missing Vehicles, Missing
   Staff and Open Incidents (warning), QSC Overdue (danger), Pending Leave (only with `canApproveLeave` and a non-empty queue; link
   `/rostering/leave`; warning). Only those two conditions drop an item; every other one keeps its place at zero, so the layout is stable.
-- **Tile.** A display-step tabular figure over a 13px medium label, in its own bordered `--radius-md` tile with the glance cell's inset. No icon,
-  and no chip on an item that needs attention. Source order is label then figure (the strip's order), so a screen reader hears "Overdue, 2". A
+- **Tile.** A display-step tabular figure over a 13px medium label, in its own bordered `--radius-md` tile with `--card-pad` above and below and 8px at the sides
+  (the compact card's inset: the glance cell's 12px, 16px from xl, wrapped "Critical Participant Alerts" at 1920). No icon, and no chip on an
+  item that needs attention. Source order is label then figure (the strip's order), so a screen reader hears "Overdue, 2". A
   linked tile's accessible name is its content ("Qualification Issues 5") and an unlinked one is a named group ("Overdue 2"), so the number and
   the label are always in the name and colour never carries the meaning alone.
 - **Non-zero is loud, zero is quiet.** A non-zero count is tinted exactly as a glance segment is (The Attention Tint Rule): danger takes the error
   container, warning the warning container, and the figure and the label take the matching on-container colour. A zero is untinted, on the card fill,
   with the figure and the label in `muted-foreground`. The two items that carry a caption say "All clear" at zero, as the lime positive chip beside
   the figure (the glance strip's own all-clear); it never appears on a tint.
-- **Loading is not zero.** An item whose own request is still in flight shows an en dash (`–`) in the muted figure style with `aria-busy="true"` and
-  a screen-reader-only "Loading": no definite 0, no tint, no "All clear". Critical Participant Alerts does this while the participant-alerts request loads.
+- **Loading and failure are not zero.** An item computed from its own request shows an en dash (`–`) in the muted figure style, never a definite 0,
+  while that request is in flight (`aria-busy="true"` and a screen-reader-only "Loading") and after it fails (not busy, and a screen-reader-only
+  "Couldn't load"). Either way it is untinted and never says "All clear": an all-clear is never claimed without data. Qualification Issues (the
+  staff list) and Critical Participant Alerts (the participant-alerts aggregate) do this.
 - **Shape.** Two columns below 768px (an odd last item takes the whole row, as on the trip strip). From 768px two balanced rows: ceil(n / 2) columns,
-  an odd last item stretching over the spare slot so no row has a hole. ONE row when the band's own width gives every item 9.5rem (152px), measured
-  by a container query so the 232px sidebar does not matter: n × 152 + (n − 1) × 8px, which is 1112, 1272 and 1432px for 7, 8 and 9 items. So the
-  band is one row at a 1920 viewport for every role, and two rows at 1280. Labels wrap inside their tile; nothing truncates, scrolls sideways or
-  shrinks the type.
+  an odd last item stretching over the spare slot so no row has a hole. ONE row when the band's own width gives every item 173px, measured by a
+  container query so the 232px sidebar does not matter: n × 173 + (n − 1) × 8px, which is 1259, 1440 and 1621px for 7, 8 and 9 items. 173px is what
+  the widest label ("Critical Participant Alerts", 152.6px at 13px) needs on one line inside the tile's 8px sides and borders, so a one-row band is
+  78px tall and never wraps a label. So the band is one row at a 1920 viewport for every role, and two balanced rows at 1440 and 1280. A label wraps
+  only where its tile is narrower than that (a 360px phone, a tablet); nothing truncates, scrolls sideways or shrinks the type.
 - **Touch.** A linked item is the whole tile and keeps a `--tap-min` floor (it is already taller than 44px).
 
 **The Quiet Zero Rule.** Only a count somebody can act on is loud. A zero never takes a tint and its figure is muted, and a value that is not
-known yet is an en dash, never a 0. If most items are tinted the band has stopped saying anything, so review the tones, not the tint.
+known yet, or failed to load, is an en dash, never a 0 and never an "All clear". If most items are tinted the band has stopped saying anything,
+so review the tones, not the tint.
 
 ### Status Badges & Alerts
 
@@ -559,7 +564,7 @@ everywhere; `size="md"` (13px semibold, 24px tall) is the one opt-in step up, fo
 - **Do** give a record's own page the detail header pattern by opting in (`variant="detail"`, `variant="glance"`), never by restyling the default header or bar
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
-- **Do** show an en dash with `aria-busy`, not a `0`, for a figure whose request is still loading
+- **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** use `Button` for every action; it owns height, radius and focus
 - **Do** keep compliance state, alerts and countdowns visually equal to ordinary data
 - **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels
@@ -577,5 +582,5 @@ everywhere; `size="md"` (13px semibold, 24px tall) is the one opt-in step up, fo
 - **Don't** add a second page heading
 - **Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
-- **Don't** tint an attention tile at zero, or claim "All clear" before the request behind it has finished
+- **Don't** tint an attention tile at zero, or claim "All clear" without data (while its request is in flight, or after it failed)
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment

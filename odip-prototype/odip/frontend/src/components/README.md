@@ -494,9 +494,10 @@ tile. **When to use StatCard vs a hand-rolled metric block**: any single-number 
 stat — keeps the "hero-metric template" tendency the design guardrails ban confined to
 one real, reused component instead of copy-pasted markup per page.
 
-`StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant` and `loading`. `variant` is `'default'` (the default: the small KPI
+`StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant`, `loading` and `error`. `variant` is `'default'` (the default: the small KPI
 tile, a 12px label over a `text-xl` value, unchanged and still what Vehicles uses) or `'attention'`, the opt-in tile of the dashboard's **attention
-band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-display`) over a 13px medium label, in its own bordered `--radius-md` tile.
+band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-display`) over a 13px medium label, in its own bordered `--radius-md` tile
+with an 8px side inset (the compact card's).
 
 - `tone`: `'danger'` fills the tile with the error-container and `'warning'` with the warning-container, and the figure and the label take the matching
   on-container colour. Those are the glance strip's own tints (it maps through `attentionForTone`). Any other tone, or none, is quiet: the card fill, with
@@ -506,12 +507,12 @@ band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-displa
 - `to`: the whole tile is a `Link` with a focus ring and a `--tap-min` floor, and its accessible name is its content ("Qualification Issues 5"). A tile
   without `to` is a named group ("Overdue 2"), so the number and the label are always in the name. A tinted tile carries `data-attention="error" | "warning"`,
   as a glance cell does.
-- `loading` (attention only; the default tile ignores it): the figure is an en dash in the muted style, the tile is `aria-busy`, a screen-reader-only
-  "Loading" replaces the number, and it is never tinted and shows no caption. Use it for a figure whose own request is still in flight, so it is never read
-  as a definite zero.
+- `loading` and `error` (attention only; the default tile ignores them): the figure is an en dash in the muted style, never tinted, with no caption, and a
+  screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
+  failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
 
 Lay the tiles out in a `<section aria-label="…" className="@container">`; `DashboardPage` shows the shapes (two columns below `md`, two balanced rows
-from `md`, one row once the band's own width gives every item 9.5rem). Source order is label, figure, caption, like a glance cell, so a screen reader
+from `md`, one row once the band's own width gives every item 173px, what the widest label needs on one line). Source order is label, figure, caption, like a glance cell, so a screen reader
 hears "Overdue, 2".
 
 ---

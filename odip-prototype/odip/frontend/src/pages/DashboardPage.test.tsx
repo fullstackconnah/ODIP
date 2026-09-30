@@ -678,6 +678,135 @@ describe('DashboardPage — needs-attention band: All clear and loading', () => 
   })
 })
 
+describe('DashboardPage — needs-attention band: no "All clear" without data', () => {
+  const qualification = () => itemFor('Qualification Issues')
+  const alerts = () => itemFor('Critical Participant Alerts')
+  const inFlight = { data: undefined, isLoading: true, isError: false }
+  const failed = { data: undefined, isLoading: false, isError: true }
+
+  // The shared contract of a placeholder: an en dash where the number would be, not tinted, no caption, no number.
+  const expectPlaceholder = (item: HTMLElement, { busy, say }: { busy: boolean; say: string }) => {
+    expect(within(item).getByText('\u2013')).toHaveClass('text-display', 'tabular-nums')
+    expect(within(item).getByText(say)).toHaveClass('sr-only')
+    if (busy) expect(item).toHaveAttribute('aria-busy', 'true')
+    else expect(item).not.toHaveAttribute('aria-busy')
+    expect(item).not.toHaveAttribute('data-attention')
+    expect(item).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
+    expect(within(item).queryByText('0')).not.toBeInTheDocument()
+    expect(within(item).queryByText('All clear')).not.toBeInTheDocument()
+  }
+
+  it('shows an en dash on Qualification Issues while the staff list loads: busy, untinted, no "All clear"', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(inFlight)
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    renderPage()
+
+    expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
+    expect(within(band()).getByRole('link', { name: 'Qualification Issues Loading' })).toHaveAttribute('href', '/qualifications')
+    // The alerts item HAS its data (none), so it keeps its own "All clear": exactly one remains.
+    expect(screen.getAllByText('All clear')).toHaveLength(1)
+    expect(within(alerts()).getByText('All clear')).toBeInTheDocument()
+  })
+
+  it('shows an en dash and "Couldn\'t load" on Qualification Issues when the staff request fails: not busy, no "All clear"', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(failed)
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    renderPage()
+
+    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
+    expect(within(band()).getByRole('link', { name: "Qualification Issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
+    expect(screen.getAllByText('All clear')).toHaveLength(1)
+    expect(within(alerts()).getByText('All clear')).toBeInTheDocument()
+  })
+
+  it('shows an en dash and "Couldn\'t load" on Critical Participant Alerts when the alerts request fails: not busy, no "All clear"', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue(failed)
+    renderPage()
+
+    expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
+    expect(within(band()).getByRole('link', { name: "Critical Participant Alerts Couldn't load" })).toHaveAttribute('href', '/participants')
+    // Qualification Issues has its data (no issues), so it keeps its own "All clear": exactly one remains.
+    expect(screen.getAllByText('All clear')).toHaveLength(1)
+    expect(within(qualification()).getByText('All clear')).toBeInTheDocument()
+    // No participant alerts section is invented from a failed request.
+    expect(screen.getAllByText('Critical Participant Alerts')).toHaveLength(1)
+  })
+
+  it('claims "All clear" nowhere while both requests are in flight', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(inFlight)
+    mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
+    renderPage()
+
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+    expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
+    expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
+    expect(bandItems().filter((el) => el.getAttribute('aria-busy') === 'true')).toHaveLength(2)
+  })
+
+  it('claims "All clear" nowhere while both requests have failed, and says so twice', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(failed)
+    mockUseParticipantAlertsAggregate.mockReturnValue(failed)
+    renderPage()
+
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+    expect(screen.getAllByText("Couldn't load")).toHaveLength(2)
+    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
+    expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
+  })
+
+  it('treats a failed request as a placeholder even when rows are still cached, so a stale count is never tinted', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue({ ...staffWithOneIssue, isLoading: false, isError: true })
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: true })
+    renderPage()
+
+    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
+    expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
+  })
+
+  it('still fails honestly for a role without alerts: the staff item is the only placeholder', () => {
+    asRole('SupportWorker')
+    mockUseStaff.mockReturnValue(failed)
+    renderPage()
+
+    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
+    expect(screen.getAllByText("Couldn't load")).toHaveLength(1)
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+  })
+
+  it('settles from each placeholder: a zero becomes a quiet 0 with "All clear", a count becomes the danger treatment', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(failed)
+    mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
+    const { rerender } = renderPage()
+    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
+    expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
+
+    // The staff retry succeeds with nobody expiring; the alerts arrive with one Critical alert.
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false, isError: false })
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false })
+    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    expect(qualification()).not.toHaveAttribute('data-attention')
+    expect(within(qualification()).getByText('0')).toBeInTheDocument()
+    expect(within(qualification()).getByText('All clear')).toBeInTheDocument()
+    expect(alerts()).toHaveAttribute('data-attention', 'error')
+    expect(within(alerts()).getByText('1')).toBeInTheDocument()
+    expect(within(band()).queryByText("Couldn't load")).not.toBeInTheDocument()
+
+    // Later the staff list is refreshed with an expiring credential: the item is loud, not "All clear".
+    mockUseStaff.mockReturnValue({ ...staffWithOneIssue, isLoading: false, isError: false })
+    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    expect(qualification()).toHaveAttribute('data-attention', 'error')
+    expect(within(qualification()).getByText('1')).toBeInTheDocument()
+    expect(within(qualification()).queryByText('All clear')).not.toBeInTheDocument()
+  })
+})
+
 describe('DashboardPage — needs-attention band: links and accessible names', () => {
   it('links Qualification Issues, Critical Participant Alerts and Pending Leave, and only those, to the routes they always had', () => {
     asRole('Coordinator')
@@ -732,8 +861,9 @@ describe('DashboardPage — needs-attention band: links and accessible names', (
 })
 
 // jsdom has no layout, so the responsive contract is pinned as classes: two columns below md, two balanced rows from md, and
-// ONE row once the band's own width (a container query, so the sidebar does not matter) gives every item 9.5rem (152px):
-// n x 152 + (n - 1) x 8 = 1112 / 1272 / 1432px for 7 / 8 / 9 items.
+// ONE row once the band's own width (a container query, so the sidebar does not matter) gives every item 173px, what the widest
+// label needs on one line ("Critical Participant Alerts", 152.6px, plus the 8px sides and 1px borders): n x 173 + (n - 1) x 8 =
+// 1259 / 1440 / 1621px for 7 / 8 / 9 items.
 describe('DashboardPage — needs-attention band: responsive shape', () => {
   it('is a size container with two columns by default', () => {
     renderPage()
@@ -744,36 +874,36 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
     expect(bandGrid().className).not.toMatch(/auto-fit|minmax/)
   })
 
-  it('shapes 7 items (no alerts, no leave) as 4 + 3 and one row from 1112px, the odd last item taking the spare slot', () => {
+  it('shapes 7 items (no alerts, no leave) as 4 + 3 and one row from 1259px, the odd last item taking the spare slot', () => {
     asRole('SupportWorker')
     renderPage()
 
     expect(bandItems()).toHaveLength(7)
-    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1112px]:grid-cols-7')
+    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1259px]:grid-cols-7')
     const last = bandItems()[6]
-    expect(last).toHaveClass('col-span-2', '@min-[1112px]:col-span-1')
+    expect(last).toHaveClass('col-span-2', '@min-[1259px]:col-span-1')
     for (const item of bandItems().slice(0, 6)) expect(item.className).not.toMatch(/col-span/)
   })
 
-  it('shapes 8 items (alerts, no leave) as 4 + 4 and one row from 1272px, with nothing to stretch', () => {
+  it('shapes 8 items (alerts, no leave) as 4 + 4 and one row from 1440px, with nothing to stretch', () => {
     asRole('Coordinator')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
     expect(bandItems()).toHaveLength(8)
-    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1272px]:grid-cols-8')
+    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1440px]:grid-cols-8')
     for (const item of bandItems()) expect(item.className).not.toMatch(/col-span/)
   })
 
-  it('shapes 9 items (alerts and leave) as 5 + 4 and one row from 1432px, the odd last item taking the spare slot', () => {
+  it('shapes 9 items (alerts and leave) as 5 + 4 and one row from 1621px, the odd last item taking the spare slot', () => {
     asRole('Coordinator')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveCount.mockReturnValue(2)
     renderPage()
 
     expect(bandItems()).toHaveLength(9)
-    expect(bandGrid()).toHaveClass('md:grid-cols-5', '@min-[1432px]:grid-cols-9')
-    expect(bandItems()[8]).toHaveClass('col-span-2', '@min-[1432px]:col-span-1')
+    expect(bandGrid()).toHaveClass('md:grid-cols-5', '@min-[1621px]:grid-cols-9')
+    expect(bandItems()[8]).toHaveClass('col-span-2', '@min-[1621px]:col-span-1')
     // Whole items: nothing truncates or scrolls sideways.
     expect(bandGrid().className).not.toMatch(/overflow|truncate/)
   })

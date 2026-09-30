@@ -50,11 +50,12 @@ describe('StatCard — default variant (unchanged)', () => {
     expect(caption).toHaveClass('text-xs', 'text-[var(--color-muted-foreground)]')
   })
 
-  it('ignores `loading`, which only the attention variant honours', () => {
-    const { container } = renderCard(<StatCard label="Overdue" value={2} loading />)
+  it('ignores `loading` and `error`, which only the attention variant honours', () => {
+    const { container } = renderCard(<StatCard label="Overdue" value={2} loading error />)
 
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(container.querySelector('[aria-busy]')).toBeNull()
+    expect(screen.queryByText("Couldn't load")).toBeNull()
   })
 })
 
@@ -73,6 +74,15 @@ describe('StatCard — attention variant', () => {
     expect(figure.parentElement).toHaveClass('order-1')
     // Source order is label then figure (a screen reader hears "Overdue, 12"); `order` puts the figure on top.
     expect(label.compareDocumentPosition(figure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps an 8px side inset (the compact card\'s) so the longest label fits one line in a 176px tile', () => {
+    renderCard(<StatCard variant="attention" label="Critical Participant Alerts" value={4} tone="danger" />)
+
+    const el = tile('Critical Participant Alerts')
+    // 12px sides (the glance cell's) left 150px inside the borders and wrapped a 152.6px label at 1920; 8px leaves 158px.
+    expect(el).toHaveClass('px-2', 'py-[var(--card-pad)]', 'border', 'rounded-md')
+    expect(el).not.toHaveClass('px-3')
   })
 
   it('is quiet with no tone: card fill, muted figure and label, no data-attention', () => {
@@ -201,6 +211,43 @@ describe('StatCard — attention variant', () => {
     renderCard(<StatCard variant="attention" label="Overdue" value={0} loading />)
 
     expect(screen.getByRole('group', { name: 'Overdue Loading' })).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('shows an en dash and "Couldn\'t load" when the request failed: muted, not busy, never tinted, no caption, no number', () => {
+    renderCard(
+      <StatCard variant="attention" label="Qualification Issues" value={0} to="/qualifications" tone="danger" caption="All clear" error />,
+    )
+
+    const link = screen.getByRole('link', { name: "Qualification Issues Couldn't load" })
+    expect(link).toHaveAttribute('href', '/qualifications')
+    // Failed is not in flight: nothing is about to change, so it is not busy.
+    expect(link).not.toHaveAttribute('aria-busy')
+    expect(link).not.toHaveAttribute('data-attention')
+    expect(link).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
+    const dash = screen.getByText('\u2013')
+    expect(dash).toHaveClass('text-display', 'tabular-nums')
+    expect(dash).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText("Couldn't load")).toHaveClass('sr-only')
+    // Never an "All clear", and never a definite 0, without data.
+    expect(screen.queryByText('All clear')).toBeNull()
+    expect(screen.queryByText('0')).toBeNull()
+    expect(screen.queryByText('Loading')).toBeNull()
+  })
+
+  it('names an unlinked failed tile "<label> Couldn\'t load"', () => {
+    renderCard(<StatCard variant="attention" label="Overdue" value={3} tone="warning" error />)
+
+    const group = screen.getByRole('group', { name: "Overdue Couldn't load" })
+    expect(group).not.toHaveAttribute('aria-busy')
+    expect(group).not.toHaveAttribute('data-attention')
+    expect(screen.queryByText('3')).toBeNull()
+  })
+
+  it('lets loading win when both are set (a retry in flight is still loading)', () => {
+    renderCard(<StatCard variant="attention" label="Overdue" value={0} loading error />)
+
+    expect(screen.getByRole('group', { name: 'Overdue Loading' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByText("Couldn't load")).toBeNull()
   })
 
   it('is not busy once loaded', () => {

@@ -37,7 +37,18 @@ export type StatCardProps = {
    * definite zero.
    */
   loading?: boolean
+  /**
+   * `attention` variant only (the default tile ignores it): the request behind the value failed, so there is no number to show.
+   * Like `loading` it is an en dash in the muted figure style, never tinted, with no caption (an "All clear" is never claimed
+   * without data), but it is not busy, and a screen reader hears "Couldn't load" where a number would be. `loading` wins if
+   * both are set.
+   */
+  error?: boolean
 }
+
+// What a screen reader hears in place of the number while the tile has no data.
+const LOADING_TEXT = 'Loading'
+const ERROR_TEXT = "Couldn't load"
 
 // Tile background tint (applied with `!` because Card sets its own background) and value colour
 // per tone. 'neutral' adds nothing, so a StatCard without `tone` renders exactly as before.
@@ -102,21 +113,26 @@ const ATTENTION_LOOK: Record<'quiet' | FactBarAttention, string> = {
   error: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
-// Shape: the glance strip's cell inset (12px sides, --card-pad above and below), as its own bordered --radius-md tile so a
-// band that wraps onto a second row never leaves a hole in a shared strip.
-const ATTENTION_TILE = 'flex min-w-0 flex-col gap-0.5 rounded-md border border-[var(--color-border)] px-3 py-[var(--card-pad)]'
+// Shape: its own bordered --radius-md tile (so a band that wraps onto a second row never leaves a hole in a shared strip), with
+// --card-pad above and below and the compact card's 8px at the sides. The glance cell's 12px side inset (16px from xl) is too
+// much here: nine tiles share a 1920 row, each 176px wide, and "Critical Participant Alerts" is 152.6px at 13px, so 12px sides
+// (150px of room inside the borders) wrapped it and made the whole row 16px taller. At 8px it has 158px and every label is one line.
+const ATTENTION_TILE = 'flex min-w-0 flex-col gap-0.5 rounded-md border border-[var(--color-border)] px-2 py-[var(--card-pad)]'
 
 // A linked tile keeps a --tap-min floor (44px on touch; it is already taller than that, so this is the contract, not a resize).
 const ATTENTION_LINK =
   'min-h-[var(--tap-min)] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]'
 
-function AttentionTile({ label, value, className, to, tone = 'neutral', caption, loading = false }: StatCardProps) {
-  // A tile that is still loading does not know its count, so it is never tinted and shows no caption.
-  const attention = loading ? undefined : attentionForTone(GLANCE_TONE[tone])
+function AttentionTile({ label, value, className, to, tone = 'neutral', caption, loading = false, error = false }: StatCardProps) {
+  // No data to show: the request is still in flight (`loading`) or it failed (`error`). Either way the tile does not know its
+  // count, so it is never tinted and shows no caption: an "All clear" is never claimed without data.
+  const noData = loading || error
+  const noDataText = loading ? LOADING_TEXT : ERROR_TEXT
+  const attention = noData ? undefined : attentionForTone(GLANCE_TONE[tone])
   const classes = `${ATTENTION_TILE} ${ATTENTION_LOOK[attention ?? 'quiet']} ${className ?? ''}`.trim()
 
   let captionNode = null
-  if (!loading && caption) {
+  if (!noData && caption) {
     captionNode = attention ? (
       <span className="text-xs font-medium">{caption}</span>
     ) : (
@@ -130,10 +146,11 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
     <>
       <span className="order-2 text-balance text-[13px] font-medium leading-tight">{label}</span>
       <div className="order-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-display tabular-nums" aria-hidden={loading || undefined}>
-          {loading ? '–' : value}
+        <span className="text-display tabular-nums" aria-hidden={noData || undefined}>
+          {noData ? '–' : value}
         </span>
-        {loading && <span className="sr-only">Loading</span>}
+        {/* The dash is decoration for assistive tech; what it hears where the number would be is why there is none. */}
+        {noData && <span className="sr-only">{noDataText}</span>}
         {captionNode}
       </div>
     </>
@@ -148,7 +165,7 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
   }
   // A tile with no link is a named group ("Overdue 1"), so its accessible name carries the number as well as the label,
   // just as a linked tile's name comes from its content.
-  const name = `${label} ${loading ? 'Loading' : value}${!loading && caption ? ` ${caption}` : ''}`
+  const name = `${label} ${noData ? noDataText : value}${!noData && caption ? ` ${caption}` : ''}`
   return (
     <div role="group" aria-label={name} aria-busy={loading || undefined} data-attention={attention} className={classes}>
       {content}

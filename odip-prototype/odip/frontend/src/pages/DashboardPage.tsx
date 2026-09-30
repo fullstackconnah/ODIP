@@ -47,13 +47,15 @@ const counted = (n: number, singular: string, plural: string) => `${n} ${n === 1
 // The attention band's shape by item count (7 without alerts, 8 with them, 9 with a pending-leave item too). Below md it is two
 // columns (an odd last item takes the whole row, like the trip glance strip on a phone). From md it is two balanced rows
 // (ceil(n / 2) columns; an odd last item stretches over the spare slot, so a row is never left with a hole). It becomes ONE
-// row once the band's own width gives every item 9.5rem (152px): n × 152 + (n − 1) × 8px gaps. That is a container query on
-// the band, not a viewport breakpoint, so the 232px sidebar and the pointer's gutter do not matter. Full class strings, so
-// Tailwind can see them.
+// row once the band's own width gives every item 173px: n × 173 + (n − 1) × 8px gaps, so 1259 / 1440 / 1621px for 7 / 8 / 9.
+// 173px is what the widest label needs on ONE line ("Critical Participant Alerts" is 152.6px at 13px, plus the tile's 8px
+// sides and 1px borders, plus a pixel or two of slack), so a one-row band is always one line tall per label (78px) and never
+// wraps one. That is a container query on the band, not a viewport breakpoint, so the 232px sidebar and the pointer's gutter
+// do not matter. Full class strings, so Tailwind can see them.
 const BAND_SHAPE: Record<number, { grid: string; last: string }> = {
-  7: { grid: 'md:grid-cols-4 @min-[1112px]:grid-cols-7', last: 'col-span-2 @min-[1112px]:col-span-1' },
-  8: { grid: 'md:grid-cols-4 @min-[1272px]:grid-cols-8', last: '' },
-  9: { grid: 'md:grid-cols-5 @min-[1432px]:grid-cols-9', last: 'col-span-2 @min-[1432px]:col-span-1' },
+  7: { grid: 'md:grid-cols-4 @min-[1259px]:grid-cols-7', last: 'col-span-2 @min-[1259px]:col-span-1' },
+  8: { grid: 'md:grid-cols-4 @min-[1440px]:grid-cols-8', last: '' },
+  9: { grid: 'md:grid-cols-5 @min-[1621px]:grid-cols-9', last: 'col-span-2 @min-[1621px]:col-span-1' },
 }
 const BAND_SHAPE_FALLBACK = { grid: 'md:grid-cols-4', last: '' }
 
@@ -61,8 +63,8 @@ export default function DashboardPage() {
   const { canViewAlerts, canApproveLeave } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
-  const { data: allStaff = [] } = useStaff({ isActive: 'true' })
-  const { data: alertsAggregate = [], isLoading: alertsLoading } = useParticipantAlertsAggregate(canViewAlerts)
+  const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
+  const { data: alertsAggregate = [], isLoading: alertsLoading, isError: alertsError } = useParticipantAlertsAggregate(canViewAlerts)
   const pendingLeaveCount = usePendingLeaveCount(canApproveLeave)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
@@ -126,13 +128,21 @@ export default function DashboardPage() {
   // conditions the dashboard always had (the alerts item needs canViewAlerts, Pending Leave needs canApproveLeave and a
   // non-empty queue); everything else stays in place at zero and just goes quiet. Every count, link and caption is the one
   // the KPI row carried; the everyday counts moved into the header's summary line.
+  //
+  // The two items computed from their own request never claim "All clear", or show a definite 0, without data: while the
+  // request is in flight (`loading`) or after it failed (`error`) the item is an en dash placeholder, never tinted and with no
+  // caption. A false negative here is worse than a placeholder, since coordinators rely on these two items to know whether any
+  // staff qualification or participant needs urgent attention. Qualification Issues counts the staff list; Critical
+  // Participant Alerts counts the participant-alerts aggregate.
   const attentionItems: StatCardProps[] = [
     {
       label: 'Qualification Issues',
       value: qualIssueCount,
       to: '/qualifications',
       tone: tinted(qualIssueCount, 'danger'),
-      caption: qualIssueCount === 0 ? 'All clear' : undefined,
+      loading: staffLoading,
+      error: staffError,
+      caption: !staffLoading && !staffError && qualIssueCount === 0 ? 'All clear' : undefined,
     },
     ...(canViewAlerts
       ? [
@@ -141,11 +151,9 @@ export default function DashboardPage() {
             value: criticalAlertItems.length,
             to: '/participants',
             tone: tinted(criticalAlertItems.length, 'danger'),
-            // Don't claim "All clear" — or a definite zero — while the alerts request is still in flight: a false
-            // negative here is worse than a placeholder, since coordinators rely on this item to know whether any
-            // participant needs urgent attention. `loading` shows an en dash instead of the 0 and never tints it.
             loading: alertsLoading,
-            caption: !alertsLoading && criticalAlertItems.length === 0 ? 'All clear' : undefined,
+            error: alertsError,
+            caption: !alertsLoading && !alertsError && criticalAlertItems.length === 0 ? 'All clear' : undefined,
           },
         ]
       : []),
