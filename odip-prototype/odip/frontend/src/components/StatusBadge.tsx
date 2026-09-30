@@ -1,9 +1,22 @@
+export type StatusBadgeSize = 'sm' | 'md'
+
 export type StatusBadgeProps = {
   status: string
   label?: string
   colorMap?: Record<string, string>
   pulse?: boolean
   className?: string
+  /**
+   * `sm` (default) is the 12px pill used in tables and inline. `md` is the 13px semibold, 24px-tall pill that
+   * leads the meta row of a detail-page header (see `PageHeaderMeta`). Colour is the same at both sizes.
+   */
+  size?: StatusBadgeSize
+}
+
+// `sm` is exactly the pill every existing caller renders; only `md` is new.
+const SIZE_CLASS: Record<StatusBadgeSize, string> = {
+  sm: 'text-xs px-2 py-0.5',
+  md: 'text-[13px] leading-5 font-semibold px-2.5 py-0.5',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -64,11 +77,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
 
-export function StatusBadge({ status, label, colorMap, pulse, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label, colorMap, pulse, className, size = 'sm' }: StatusBadgeProps) {
   const key = status.toLowerCase().replace(/\s+/g, '')
   const color = colorMap?.[key] ?? STATUS_COLORS[key] ?? DEFAULT_COLOR
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full ${color} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
+    <span className={`${SIZE_CLASS[size]} rounded-full ${color} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
       {label ?? status}
     </span>
   )

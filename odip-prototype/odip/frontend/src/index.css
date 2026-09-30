@@ -76,6 +76,17 @@
   --field-gap-x: 16px;     /* form grid column gap */
   --gutter: 20px;          /* main content side padding */
   --tap-min: 0px;          /* touch-target floor (min-height/width) for content-sized controls — tabs, standalone action links; none on fine pointers */
+
+  /*
+   * Type: the ONE display step, above the 20px headline. Opt-in and reserved for detail pages: the title of
+   * PageHeader variant="detail" and the figures of FactBar variant="glance". Plus Jakarta Sans 800 (loaded in
+   * index.html). It does not flip with the pointer. Consume it through the `text-display` utility below; never
+   * restate the values in a component.
+   */
+  --text-display: 1.75rem;           /* 28px */
+  --text-display-lh: 1.2;
+  --text-display-weight: 800;
+  --text-display-tracking: -0.015em;
 }
 
 @media (pointer: coarse) {
@@ -116,6 +127,19 @@
       translate: -50% -50%;
     }
   }
+}
+
+/*
+ * text-display: the display type step (see --text-display* in the token block). It sets the family as well as the
+ * size, leading, weight and tracking, so one class serves a heading and a figure (a span would otherwise inherit
+ * Manrope). Reserved for the detail-page title and the glance-strip figures.
+ */
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  line-height: var(--text-display-lh);
+  font-weight: var(--text-display-weight);
+  letter-spacing: var(--text-display-tracking);
 }
 
 @layer base {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T11:36:34Z",
+  "generatedAt": "2026-09-30T14:11:53Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -96,9 +96,13 @@
       }
     },
     "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one step above the headline: a detail-page title and its glance figures only. 28px, Plus Jakarta Sans 800, 1.2 leading, -0.015em (the text-display utility)."
+      },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Page title, 20px, one per screen."
+        "purpose": "Page title, 20px, one per screen (28px display on a detail page)."
       },
       "title": {
         "displayName": "Title",
@@ -222,7 +226,102 @@
           "coarse": "44px"
         }
       ]
-    }
+    },
+    "typeTokens": {
+      "note": "Plain :root custom properties in the index.css token block, next to the density tokens. They do not flip under pointer: coarse. Consume through the text-display utility; never restate the values.",
+      "tokens": [
+        {
+          "name": "--text-display",
+          "value": "1.75rem (28px)"
+        },
+        {
+          "name": "--text-display-lh",
+          "value": "1.2"
+        },
+        {
+          "name": "--text-display-weight",
+          "value": "800"
+        },
+        {
+          "name": "--text-display-tracking",
+          "value": "-0.015em"
+        }
+      ]
+    },
+    "patterns": [
+      {
+        "name": "Detail header pattern",
+        "status": "opt-in; every default unchanged",
+        "shipsOn": [
+          "Trip detail (2026-09-30)"
+        ],
+        "adoptNext": [
+          "Participant detail",
+          "Staff detail",
+          "Claim detail",
+          "Accommodation detail"
+        ],
+        "api": [
+          {
+            "component": "PageHeader",
+            "prop": "variant",
+            "values": [
+              "default",
+              "detail"
+            ],
+            "effect": "detail: display-step title grouped with its meta row; still the one h1; actions wrap under the title below 768px as before"
+          },
+          {
+            "component": "PageHeaderMeta",
+            "prop": "children",
+            "effect": "a status then quiet facts joined by middots; falsy children are dropped before separators are placed"
+          },
+          {
+            "component": "StatusBadge",
+            "prop": "size",
+            "values": [
+              "sm",
+              "md"
+            ],
+            "effect": "md: 13px semibold, 24px tall, for the status that leads a meta row"
+          },
+          {
+            "component": "FactBar",
+            "prop": "variant",
+            "values": [
+              "default",
+              "glance"
+            ],
+            "effect": "glance: equal cells, display-step tabular figure, 13px label and icon beneath, chip beside the figure; 2x2 below 768px, one row from there"
+          },
+          {
+            "component": "FactBar segment",
+            "prop": "attention",
+            "values": [
+              "warning",
+              "error"
+            ],
+            "effect": "glance only: fills the segment with warning-container / error-container and tints its text from the matching on-container colour"
+          },
+          {
+            "component": "glanceState(tone, label)",
+            "prop": "tone",
+            "values": [
+              "positive",
+              "warning",
+              "negative",
+              "neutral"
+            ],
+            "effect": "returns { badge, attention } from one tone so the chip and the tint cannot disagree"
+          },
+          {
+            "component": "glanceRatio(numerator, denominator)",
+            "prop": "numerator, denominator",
+            "effect": "the ONE spelling of an \"x / y\" figure: a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
+          }
+        ]
+      }
+    ]
   },
   "components": [
     {
@@ -296,6 +395,22 @@
       "description": "32px on a mouse, 44px on touch (a --tap-min floor), rounded-md (not a pill); active is Pale Sprout with bold near-black text.",
       "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-active\" href=\"#\">Trips</a><a class=\"ds-nav-item\" href=\"#\">Participants</a></nav>",
       "css": ".ds-nav{width:208px;background:#f5f3ef;padding:12px;display:flex;flex-direction:column;gap:2px}.ds-nav-item{display:flex;align-items:center;height:32px;padding:0 12px;border-radius:0.5rem;font-size:14px;font-weight:500;color:#515f74;text-decoration:none}.ds-nav-item:hover{background:#eae8e4}.ds-nav-item.ds-active{background:#bbf37c;color:#0f2000;font-weight:700}"
+    },
+    {
+      "name": "Detail Header",
+      "kind": "custom",
+      "refersTo": "glance-cell",
+      "description": "PageHeader variant=\"detail\": the display-step title (28px, 800) grouped with a quiet meta row. A status pill leads, the facts follow joined by middots. Still the one h1.",
+      "html": "<div class=\"ds-dh\"><h1 class=\"ds-dh-title\">Sunshine Coast Beach Escape</h1><div class=\"ds-dh-meta\"><span class=\"ds-badge-md\">Confirmed</span><span>Caloundra QLD</span><span class=\"ds-mono\">SCB-2608</span><span>14–17 Aug 2026</span><span>4 days</span></div></div>",
+      "css": ".ds-dh{display:flex;flex-direction:column;gap:8px}.ds-dh-title{margin:0;font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;color:#1b1c1a}.ds-dh-meta{display:flex;flex-wrap:wrap;align-items:center;font-size:13px;color:#43493a}.ds-dh-meta>*+*::before{content:'·';padding:0 8px}.ds-badge-md{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:13px;line-height:20px;font-weight:600;background:#bbf37c;color:#0f2000}.ds-mono{font-family:ui-monospace,monospace;color:#515f74}"
+    },
+    {
+      "name": "Glance Strip",
+      "kind": "custom",
+      "refersTo": "glance-cell",
+      "description": "FactBar variant=\"glance\": equal cells in one ruled strip, a display-step tabular figure with the chip beside it and a 13px label beneath. A cell whose badge signals attention is filled with the warning or error container; quiet cells stay on the card fill.",
+      "html": "<div class=\"ds-glance\"><div class=\"ds-gc ds-gc-warning\"><div class=\"ds-gc-fig\">5 / 3 <span class=\"ds-chip\">Waitlist</span></div><div class=\"ds-gc-label\">Participants / Staff</div></div><div class=\"ds-gc ds-gc-error\"><div class=\"ds-gc-fig\">2 <span class=\"ds-chip\">Action Needed</span></div><div class=\"ds-gc-label\">Outstanding Tasks</div></div><div class=\"ds-gc\"><div class=\"ds-gc-fig\">2 / 2 <span class=\"ds-chip ds-chip-neutral\">1 WC</span></div><div class=\"ds-gc-label\">High Support / Overnight</div></div></div>",
+      "css": ".ds-glance{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;width:720px;border:1px solid #c3c9b5;border-radius:0.5rem;overflow:hidden;background:#fff}.ds-gc{display:flex;flex-direction:column;gap:2px;padding:12px 16px;color:#1b1c1a;border-left:1px solid #c3c9b5}.ds-gc:first-child{border-left:0}.ds-gc-fig{order:1;display:flex;align-items:center;gap:8px;font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;font-variant-numeric:tabular-nums}.ds-gc-label{order:2;font-size:13px;font-weight:500;color:#43493a}.ds-gc-warning{background:#fef3c7;color:#92400e}.ds-gc-error{background:#ffdad6;color:#93000a}.ds-gc-warning .ds-gc-label,.ds-gc-error .ds-gc-label{color:inherit}.ds-chip{font:700 12px/16px Manrope,system-ui,sans-serif;padding:2px 8px;border-radius:9999px;background:#fff;color:inherit}.ds-chip-neutral{background:#e4e2de;color:#43493a}"
     }
   ],
   "narrative": {
@@ -331,6 +446,11 @@
         "section": "typography"
       },
       {
+        "name": "The One Display Step Rule",
+        "body": "The system has exactly one type step above the 20px headline: `--text-display` (28px, 800), consumed as `text-display`. It belongs to a detail page's title and its glance figures and to nothing else. A list page, a card title, a modal or a stat card never takes it, and no second display size is added. The title is still the page's single `<h1>`, from `PageHeader`.",
+        "section": "typography"
+      },
+      {
         "name": "The Density Rule",
         "body": "Row height comes from `--row-h`, never from added padding. If a table is too tall, the answer is fewer columns, not more air.",
         "section": "layout"
@@ -344,6 +464,16 @@
         "name": "The Flat-By-Default Rule",
         "body": "Surfaces are flat at rest. If a panel in the page flow needs a drop shadow to be visible, its background is wrong. Floating layers may carry one.",
         "section": "elevation"
+      },
+      {
+        "name": "The Attention Tint Rule",
+        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used. If most segments are tinted, review the tones, not the tint.",
+        "section": "components"
+      },
+      {
+        "name": "The Detail Header Pattern",
+        "body": "A record's own page can opt into the detail header: `PageHeader variant=\"detail\"` (display title grouped with a `PageHeaderMeta` row led by `StatusBadge size=\"md\"`) and `FactBar variant=\"glance\"` (big tabular figures, 13px labels beneath, a 2x2 grid below 768px, attention tints). Every default is unchanged, so a page that does not opt in renders pixel-for-pixel as before. Trip detail ships it; participant, staff, claim and accommodation detail adopt it next. It stops at the header: the tab strip and panels below stay the ordinary dense page.",
+        "section": "components"
       }
     ],
     "dos": [
@@ -353,6 +483,8 @@
       "**Do** put row actions in `RowActions` (opacity reveal, always visible on coarse) and keep an action that must always be seen (a status pill, a queue's only call to action) outside it",
       "**Do** show read-only detail with `FactList` / `FactBar`",
       "**Do** render one `<h1>` per screen via `PageHeader`",
+      "**Do** give a record's own page the detail header pattern by opting in (`variant=\"detail\"`, `variant=\"glance\"`), never by restyling the default header or bar",
+      "**Do** derive a glance segment's chip and tint from one tone with `glanceState`",
       "**Do** use `Button` for every action; it owns height, radius and focus",
       "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",
       "**Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels and the header hairline"
@@ -365,6 +497,8 @@
       "**Don't** use pure `#ffffff` as a page background or pure `#000000` as text",
       "**Don't** invent a colour outside the semantic list to express a new state",
       "**Don't** add a second page heading",
+      "**Don't** use the display step (`text-display`) anywhere but a detail page's title and its glance figures, or add a second display size",
+      "**Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container",
       "**Don't** restyle a single module more heavily than any other; design effort is uniform by commitment"
     ]
   }

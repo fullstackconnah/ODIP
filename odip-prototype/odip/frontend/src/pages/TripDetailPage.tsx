@@ -1,29 +1,17 @@
 import { useParams, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateRange } from '@/lib/dateRange'
 import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
-import { PageHeader } from '@/components/PageHeader'
+import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
+import { glanceRatio, glanceState } from '@/components/glanceState'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
-
-/** Small pill used inside FactBar segments — matches StatusBadge's visual language (same
- * rounded-full/text-xs shape) for the "state" chips (Waitlist/Active, Action Needed/On Track, etc.)
- * that aren't themselves a StatusBadge status value. */
-function FactChip({ tone, children }: { tone: 'positive' | 'warning' | 'negative' | 'neutral'; children: React.ReactNode }) {
-  const toneClass = {
-    positive: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-    warning: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-    negative: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-    neutral: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
-  }[tone]
-  return <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{children}</span>
-}
 
 /** Material Symbols category glyph for a fact-bar segment — the same icons the pre-density stat
  * tiles carried (people, checklist, wheelchair, shield). FactBar pins the size and colour. */
@@ -90,58 +78,54 @@ export default function TripDetailPage() {
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
 
+  // Each segment's chip AND its attention tint come from one tone (`glanceState`), so the strip can never tint a
+  // segment its own badge calls fine. Waitlist is warning; Action Needed and Outstanding are negative; the rest
+  // (Active, On Track, Covered, the wheelchair count) are quiet and keep the card fill. Every "x / y" figure is spelled
+  // by `glanceRatio`, so the ratios in one strip cannot drift apart at display size.
+  const insuranceConfirmed = trip.insuranceConfirmedCount ?? 0
+  const insuranceOutstanding = trip.insuranceOutstandingCount ?? 0
   const factBarSegments: FactBarSegment[] = [
     {
       label: 'Participants / Staff',
       icon: factIcon('groups'),
-      value: `${trip.currentParticipantCount} / ${trip.staffAssignedCount}`,
-      badge: (trip.waitlistCount ?? 0) > 0
-        ? <FactChip tone="warning">Waitlist</FactChip>
-        : <FactChip tone="positive">Active</FactChip>,
+      value: glanceRatio(trip.currentParticipantCount, trip.staffAssignedCount),
+      ...((trip.waitlistCount ?? 0) > 0 ? glanceState('warning', 'Waitlist') : glanceState('positive', 'Active')),
     },
     {
       label: 'Outstanding Tasks',
       icon: factIcon('checklist'),
       value: trip.outstandingTaskCount ?? 0,
-      badge: (trip.outstandingTaskCount ?? 0) > 0
-        ? <FactChip tone="negative">Action Needed</FactChip>
-        : <FactChip tone="positive">On Track</FactChip>,
+      ...((trip.outstandingTaskCount ?? 0) > 0 ? glanceState('negative', 'Action Needed') : glanceState('positive', 'On Track')),
     },
     {
       label: 'High Support / Overnight',
       icon: factIcon('accessible'),
-      value: `${trip.highSupportCount ?? 0} / ${trip.overnightSupportCount ?? 0}`,
-      badge: <FactChip tone="neutral">{trip.wheelchairCount ?? 0} WC</FactChip>,
+      value: glanceRatio(trip.highSupportCount ?? 0, trip.overnightSupportCount ?? 0),
+      ...glanceState('neutral', `${trip.wheelchairCount ?? 0} WC`),
     },
     {
       label: 'Insurance',
       icon: factIcon('health_and_safety'),
-      value: `${trip.insuranceConfirmedCount ?? 0}/${(trip.insuranceConfirmedCount ?? 0) + (trip.insuranceOutstandingCount ?? 0)}`,
-      badge: (trip.insuranceOutstandingCount ?? 0) > 0
-        ? <FactChip tone="negative">Outstanding</FactChip>
-        : <FactChip tone="positive">Covered</FactChip>,
+      value: glanceRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding),
+      ...(insuranceOutstanding > 0 ? glanceState('negative', 'Outstanding') : glanceState('positive', 'Covered')),
     },
   ]
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {/* Detail header pattern: display title + meta row (PageHeader variant="detail"), then the glance strip
+          (FactBar variant="glance"). The tab strip and everything below it is the ordinary dense page. */}
       <PageHeader
+        variant="detail"
         title={trip.tripName}
         subtitle={
-          <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
-            <StatusBadge status={trip.status} />
-            {trip.destination && (
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>location_on</span>
-                {trip.destination}
-              </span>
-            )}
+          <PageHeaderMeta>
+            <StatusBadge status={trip.status} size="md" />
+            {trip.destination}
             {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>calendar_month</span>
-              {formatDateAu(trip.startDate)} — {formatDateAu(trip.endDate)} ({trip.durationDays} days)
-            </span>
-          </div>
+            {formatDateRange(trip.startDate, trip.endDate)}
+            {typeof trip.durationDays === 'number' && `${trip.durationDays} ${trip.durationDays === 1 ? 'day' : 'days'}`}
+          </PageHeaderMeta>
         }
         action={
           <div className="flex gap-2 shrink-0">
@@ -159,7 +143,7 @@ export default function TripDetailPage() {
         }
       />
 
-      <FactBar segments={factBarSegments} />
+      <FactBar variant="glance" segments={factBarSegments} />
 
       {/* Tabs */}
       <div className="-mx-4 md:mx-0 px-4 md:px-0">
