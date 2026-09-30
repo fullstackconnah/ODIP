@@ -20,9 +20,10 @@ public sealed record RoutineOccurrence(ParticipantRoutine Routine, DateTime? Occ
 ///
 /// Here each routine is placed on every calendar date the window touches (one, or two for an overnight shift) whose weekday it
 /// applies on: a timed routine occupies [date + start, date + end) (a routine whose end is before its start crosses midnight),
-/// and is relevant when that overlaps the half-open window [start, end). An untimed routine is relevant only when critical
-/// ("must-know regardless of timing"), on any date of the window it applies on. Inactive routines never match.
-/// Ordered critical-first, then chronologically within the window (untimed last), then by title.
+/// and is relevant when that overlaps the half-open window [start, end). The date BEFORE the window's first date is tried too:
+/// a Sunday 22:00-06:00 routine is still running at 00:00-06:00 on Monday, so it belongs to a Monday 00:00-08:00 shift. An untimed
+/// routine is relevant only when critical ("must-know regardless of timing"), on any date of the window it applies on. Inactive
+/// routines never match. Ordered critical-first, then chronologically within the window (untimed last), then by title.
 /// </summary>
 public static class RoutineWindowMatcher
 {
@@ -38,20 +39,21 @@ public static class RoutineWindowMatcher
         {
             if (!routine.IsActive) continue;
 
-            var applicableDates = new List<DateOnly>();
-            for (var d = firstDate; d <= lastDate; d = d.AddDays(1))
-                if (routine.Days.HasFlag(ParticipantRoutineDayMapper.ToFlag(d.DayOfWeek))) applicableDates.Add(d);
-            if (applicableDates.Count == 0) continue;
-
             if (routine.StartTime is not { } start || routine.EndTime is not { } end)
             {
-                // Untimed: no window to compare, so only the must-know (critical) ones are surfaced.
-                if (routine.IsCritical) matches.Add(new RoutineOccurrence(routine, null, false));
+                // Untimed: no window to compare, so only the must-know (critical) ones are surfaced, when they apply on a date of the window.
+                var appliesInWindow = false;
+                for (var d = firstDate; d <= lastDate; d = d.AddDays(1))
+                    appliesInWindow |= routine.Days.HasFlag(ParticipantRoutineDayMapper.ToFlag(d.DayOfWeek));
+                if (routine.IsCritical && appliesInWindow) matches.Add(new RoutineOccurrence(routine, null, false));
                 continue;
             }
 
-            foreach (var date in applicableDates)
+            // Timed: the evening before the window counts too (a routine that crosses midnight can still be running when the window opens).
+            for (var date = firstDate.AddDays(-1); date <= lastDate; date = date.AddDays(1))
             {
+                if (!routine.Days.HasFlag(ParticipantRoutineDayMapper.ToFlag(date.DayOfWeek))) continue;
+
                 var occurrenceStart = date.ToDateTime(start);
                 var occurrenceEnd = date.ToDateTime(end);
                 if (occurrenceEnd < occurrenceStart) occurrenceEnd = occurrenceEnd.AddDays(1);   // crosses midnight

@@ -138,6 +138,22 @@ describe('getRelevantRoutines — overnight shifts (after-midnight matching)', (
     expect(getRelevantRoutines([tuesdayMorning, mondayEvening], untilMidnight).map(r => r.id)).toEqual(['mon-pm'])
   })
 
+  it('matches a cross-midnight routine that started the day BEFORE the shift window', () => {
+    // 2026-08-17 is a Monday. A Sunday-only 22:00 -> 06:00 routine is still running from 00:00 to 06:00 Monday.
+    const earlyMonday = { serviceDate: '2026-08-17', startTime: '00:00:00', endTime: '08:00:00', endsNextDay: false }
+    const sundayNight = makeRoutine({ id: 'sun-night', days: ['Sunday'], startTime: '22:00:00', endTime: '06:00:00' })
+    const mondayNight = makeRoutine({ id: 'mon-night', days: ['Monday'], startTime: '22:00:00', endTime: '06:00:00' })
+
+    expect(getRelevantRoutines([sundayNight, mondayNight], earlyMonday).map(r => r.id)).toEqual(['sun-night'])
+  })
+
+  it('a previous-day routine that already ended does not leak into the shift window', () => {
+    const earlyMonday = { serviceDate: '2026-08-17', startTime: '00:00:00', endTime: '08:00:00', endsNextDay: false }
+    const sundayEvening = makeRoutine({ id: 'sun-eve', days: ['Sunday'], startTime: '20:00:00', endTime: '22:00:00' })
+
+    expect(getRelevantRoutines([sundayEvening], earlyMonday)).toEqual([])
+  })
+
   it('a day shift is unchanged: a routine on the next day never matches', () => {
     const tuesdayMorning = makeRoutine({ days: ['Tuesday'], startTime: '10:00:00', endTime: '11:00:00' })
 

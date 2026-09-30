@@ -70,6 +70,29 @@ public class RoutineWindowMatcherTests
     }
 
     [Fact]
+    public void ACrossMidnightRoutineThatStartedTheDayBeforeTheWindow_IsStillMatched()
+    {
+        // 14 July 2026 is a Tuesday, so a Monday 00:00-08:00 window is 13 July. A Sunday-only 22:00-06:00 routine began on Sunday
+        // evening and is still running until 06:00 Monday: it belongs to that shift, clipped to the window start.
+        var sundayNight = R("Sunday night support", "22:00", "06:00", ParticipantRoutineDays.Sunday);
+        var mondayNight = R("Monday night support", "22:00", "06:00", ParticipantRoutineDays.Monday);
+
+        var matches = RoutineWindowMatcher.Match([sundayNight, mondayNight], L(13, 0), L(13, 8));
+
+        var match = Assert.Single(matches);
+        Assert.Equal("Sunday night support", match.Routine.Title);
+        Assert.Equal(L(13, 0), match.OccursAtLocal);
+        Assert.False(match.AfterMidnight);
+    }
+
+    [Fact]
+    public void ADayBeforeRoutine_ThatHasAlreadyEnded_IsNotMatched()
+    {
+        // Sunday 20:00-22:00 ended before Monday began: it does not leak into Monday 00:00-08:00.
+        Assert.Empty(Titles([R("Sunday evening", "20:00", "22:00", ParticipantRoutineDays.Sunday)], L(13, 0), L(13, 8)));
+    }
+
+    [Fact]
     public void ARoutineAlreadyUnderwayAtTheStart_IsClippedToTheShiftStart()
     {
         var match = RoutineWindowMatcher.Match([R("Morning routine", "06:00", "10:00")], L(14, 8), L(14, 16)).Single();

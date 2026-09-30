@@ -22,6 +22,8 @@ function toMinutes(time: string): number {
  * end is before its start crosses midnight itself. So a 02:00 or 06:30 routine now matches a
  * 22:00-06:00 shift, on the NEXT day's weekday — the old rule compared the routine's time of day with
  * the stretched window but never stretched the routine, and only checked the start day's weekday.
+ * The day BEFORE the service day is tried for timed routines too: a Sunday 22:00-06:00 routine is still
+ * running at 00:00-06:00 on Monday, so it belongs to a Monday 00:00-08:00 shift.
  * The server applies the same rule (backend RoutineWindowMatcher -> `shiftRoutines`).
  *
  * Sorted critical-first, then chronologically inside the shift window (untimed last).
@@ -36,6 +38,8 @@ export function getRelevantRoutines(
   // Day offsets (minutes from the service day's midnight) the window touches: the service day, and the
   // next day when the window runs past midnight.
   const dayOffsets = shiftEnd > MINUTES_PER_DAY ? [0, MINUTES_PER_DAY] : [0]
+  // A timed routine may also have started the evening before the service day and still be running when the window opens.
+  const timedDayOffsets = [-MINUTES_PER_DAY, ...dayOffsets]
   const dayNameAt = (offset: number) => format(addDays(serviceDate, offset / MINUTES_PER_DAY), 'EEEE')
 
   const matches: { routine: ParticipantRoutineDto; occursAt: number | null }[] = []
@@ -43,13 +47,14 @@ export function getRelevantRoutines(
     if (!r.isActive) continue
     // PD-4: r.days is a non-empty day-name list (the full 7 for "every day") — a routine applies on a
     // calendar day when that day is in the set, not via an every-day/single-day distinction.
-    const applicable = dayOffsets.filter(offset => r.days.includes(dayNameAt(offset)))
-    if (applicable.length === 0) continue
-
     if (!r.startTime || !r.endTime) {
-      if (r.isCritical) matches.push({ routine: r, occursAt: null })
+      const appliesInWindow = dayOffsets.some(offset => r.days.includes(dayNameAt(offset)))
+      if (r.isCritical && appliesInWindow) matches.push({ routine: r, occursAt: null })
       continue
     }
+
+    const applicable = timedDayOffsets.filter(offset => r.days.includes(dayNameAt(offset)))
+    if (applicable.length === 0) continue
 
     const start = toMinutes(r.startTime)
     const end = toMinutes(r.endTime)
