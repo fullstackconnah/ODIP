@@ -196,11 +196,13 @@ public class PortalController : ControllerBase
         var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
 
         // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress). Derived from the dose
-        // slots already fetched above, so the detail never queries them twice.
-        var finishBlockers = shift.Status == ShiftStatus.InProgress
-            ? ShiftPackageService.BuildFinishBlockers(doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning))
-            : new List<PortalFinishBlockerDto>();
+        // slots already fetched above, so the detail never queries them twice. A worker without a current Medication Competency cannot
+        // record a dose, so no dose blocks them (see ShiftPackageService); a dose whose time has not arrived yet never blocks either.
         var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
+        var finishBlockers = shift.Status == ShiftStatus.InProgress
+            ? ShiftPackageService.BuildFinishBlockers(
+                doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning), competency.IsCurrent, NowUtc, provider.Zone)
+            : new List<PortalFinishBlockerDto>();
 
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
         // returns only the active one, so the resubmitting worker sees ReturnCount and nothing about
@@ -390,21 +392,20 @@ public class PortalController : ControllerBase
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Write a handover or confirm there is nothing to hand over, not both.", ShiftErrorCodes.ShiftHandoverConflict));
 
-        // The End checklist, ENFORCED: every dose due in the rostered window needs an outcome (or a "not given this
-        // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the
-        // current shift detail as data so the client can refresh what it shows.
+        // The End checklist, ENFORCED: every dose that has come due in the rostered window needs an outcome (or a "not given this
+        // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the current
+        // shift detail as data so the client can refresh what it shows. See ShiftPackageService for the two rules that keep the
+        // checklist satisfiable (only doses already due, and only for a worker who can record them).
         //
-        // Only a Finish that would otherwise go ahead is checked: InProgress, or the manual-start path (Published with a supplied
-        // ActualStart). A shift that was never started and supplies no start keeps its existing 409 SHIFT_NOT_IN_PROGRESS below -
-        // the worker must be told it hasn't been started, not that doses are outstanding.
-        var finishWouldProceed = shift.Status == ShiftStatus.InProgress
-            || (shift.Status == ShiftStatus.Published && dto.ActualStart is not null);
-        if (finishWouldProceed)
+        // Only an InProgress shift is checked. The manual-start path (Published with a supplied ActualStart) has no package route to
+        // record a dose - recording needs an InProgress shift (D2) - and no completion for a break, so there is nothing the worker could
+        // clear; the coordinator's completion review shows any unrecorded dose. A shift that was never started and supplies no start
+        // keeps its existing 409 SHIFT_NOT_IN_PROGRESS below: the worker must be told it hasn't been started, not that doses are outstanding.
+        if (shift.Status == ShiftStatus.InProgress)
         {
-            var checkedCompletion = shift.Status == ShiftStatus.InProgress
-                ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct)
-                : null;
-            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, ct);
+            var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+            var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
+            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, competency.IsCurrent, ct);
             if (blockers.Count > 0)
             {
                 var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };

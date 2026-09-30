@@ -309,7 +309,7 @@ public class PortalFinishValidationTests
         {
             Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ParticipantId = f.Participant.Id, Name = name, Strength = strength, DoseDescription = "1 tablet",
             Type = type, TimesOfDay = type == MedicationType.Regular ? times : null, Frequency = frequency, DaysOfWeek = days,
-            StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active, SupportLevel = MedicationSupportLevel.Administer,
             PrnIndication = type == MedicationType.Prn ? "Pain" : null, PrnMaxDosesPer24h = type == MedicationType.Prn ? 4 : null,
         };
         f.Db.ParticipantMedications.Add(med);
@@ -487,6 +487,7 @@ public class PortalFinishValidationTests
     {
         // The worker started at 09:05 (actual); a 09:00 dose is before their actual start but inside the rostered window.
         var f = Create();
+        f.Advance(TimeSpan.FromHours(5));   // 16:00 local: all three slots have come due
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
 
@@ -499,6 +500,7 @@ public class PortalFinishValidationTests
     public async Task DosesOutsideTheWindow_AndPrnMedications_AndOtherDays_NeverBlock()
     {
         var f = Create();
+        f.Advance(TimeSpan.FromHours(2));   // 13:00 local: both slots have come due
         AddNote(f);
         AddMed(f, "Before", "08:59");                                           // before the 09:00 start
         AddMed(f, "AtTheEnd", "17:00");                                         // the window is half-open: 17:00 is the next shift's
@@ -513,7 +515,8 @@ public class PortalFinishValidationTests
     [Fact]
     public async Task AnOvernightShift_BlocksOnAnAfterMidnightDose_UntilItHasAnOutcome()
     {
-        var f = Create(endsNextDay: true, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0));
+        // 03:30 local on the 15th (AEST) = 17:30 UTC on the 14th: the 02:00 slot has come due, the shift has not ended yet.
+        var f = Create(endsNextDay: true, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), now: new DateTimeOffset(2026, 7, 14, 17, 30, 0, TimeSpan.Zero));
         AddNote(f);
         var med = AddMed(f, "Melatonin", "23:00,02:00");
         Record(f, med, new DateTime(2026, 7, 14, 23, 0, 0));
@@ -526,16 +529,21 @@ public class PortalFinishValidationTests
     }
 
     [Fact]
-    public async Task TheManualStartPath_AlsoEnforcesDoseOutcomes()
+    public async Task TheManualStartPath_DoesNotCheckDoseOutcomes_TheWorkerHasNoPackageRouteToRecordThem()
     {
+        // A worker who never tapped Start finishes with a manual start time. Recording a dose from the package needs an InProgress shift
+        // (D2), so there is nothing they could do to clear a dose blocker: the Finish goes through and the coordinator's review shows the
+        // unrecorded dose.
         var f = Create(ShiftStatus.Published);
+        f.Advance(TimeSpan.FromHours(6));   // 17:00 local
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
 
         var result = await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto { ActualStart = ActualStartUtc }, default);
 
-        Assert.Single(Failure(result, 422).Data!.FinishBlockers);
-        Assert.Empty(await f.Db.ShiftCompletions.ToListAsync());   // no completion was created by the rejected attempt
+        Assert.Equal(ShiftStatus.PendingReview, Detail(result).Status);
+        Assert.Single(await f.Db.ShiftCompletions.ToListAsync());
+        Assert.Empty(await f.Db.MedicationAdministrations.ToListAsync());   // nothing was invented for the unrecorded dose
     }
 
     [Fact]
@@ -549,6 +557,102 @@ public class PortalFinishValidationTests
         var result = await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default);
 
         Assert.Equal(ShiftErrorCodes.ShiftNotInProgress, Failure(result, 409).Code);
+    }
+
+    // ── the checklist must stay satisfiable (independent review findings 1 and 3) ──
+
+    [Fact]
+    public async Task AWorkerWithoutMedicationCompetency_OnAShiftWithDueDoses_IsNotLockedOutOfFinish()
+    {
+        // Recording a dose is gated on the credential, so a worker without one could never clear a dose blocker: the two rules
+        // would be mutually unsatisfiable and Finish would be 422 forever. No dose blocks them; the coordinator's review shows what
+        // was not recorded.
+        var f = Create(workerCompetent: false);
+        f.Advance(TimeSpan.FromHours(6));   // 17:00 local
+        AddNote(f);
+        AddMed(f, "Levetiracetam", "09:00");
+
+        var before = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        Assert.Empty(before.FinishBlockers);
+        Assert.False(before.CanRecordDoses);
+
+        var finished = Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default));
+
+        Assert.Equal(ShiftStatus.PendingReview, finished.Status);
+    }
+
+    [Fact]
+    public async Task AWorkerWithoutMedicationCompetency_StillMustEndARunningBreak()
+    {
+        var f = Create(workerCompetent: false);
+        AddNote(f);
+        AddMed(f, "Levetiracetam", "09:00");
+        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+
+        var body = await FinishBlocked(f);
+
+        Assert.Equal(ShiftFinishBlockerCodes.BreakRunning, Assert.Single(body.Data!.FinishBlockers).Code);
+    }
+
+    [Fact]
+    public async Task AWorkerWhoseCredentialHasExpired_IsNotBlockedOnDoses_ButACurrentOneIs()
+    {
+        var expired = Create();
+        expired.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 13);   // last valid day was yesterday (provider-local)
+        expired.Db.SaveChanges();
+        AddNote(expired);
+        AddMed(expired, "Levetiracetam", "09:00");
+        Assert.Equal(ShiftStatus.PendingReview, Detail(await expired.Controller.FinishShift(expired.Shift.Id, new FinishShiftDto(), default)).Status);
+
+        var current = Create();
+        AddNote(current);
+        AddMed(current, "Levetiracetam", "09:00");
+        Assert.Single((await FinishBlocked(current)).Data!.FinishBlockers);
+    }
+
+    [Fact]
+    public async Task ADoseWhoseTimeHasNotArrived_DoesNotBlockAnEarlyFinish_AndNoRecordIsInvented()
+    {
+        // 11:00 local. The 09:00 dose is done; the 15:00 one is for whoever is on then (recording it "not given" would be permanent:
+        // a slot takes one record, so the next worker could no longer give it).
+        var f = Create();
+        AddNote(f);
+        var med = AddMed(f, "Levetiracetam", "09:00,15:00");
+        Record(f, med, Nine);
+
+        var detailBefore = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        Assert.Empty(detailBefore.FinishBlockers);
+        var finished = Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default));
+
+        Assert.Equal(ShiftStatus.PendingReview, finished.Status);
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());   // only the 09:00 record: nothing was made up for 15:00
+    }
+
+    [Fact]
+    public async Task ADoseBecomesABlocker_AtItsScheduledInstant_NotBefore()
+    {
+        // Sydney is UTC+10 in July: 11:00 local = 01:00 UTC. A slot at 11:00 is due now; a slot at 11:01 is not.
+        var f = Create();
+        AddNote(f);
+        AddMed(f, "OnTheDot", "11:00");
+        AddMed(f, "AMinuteLater", "11:01");
+
+        var body = await FinishBlocked(f);
+
+        Assert.Equal("OnTheDot", Assert.Single(body.Data!.FinishBlockers).MedicationName);
+    }
+
+    [Fact]
+    public async Task TheDetailsBlockers_FollowTheSameRules_SoTheChecklistNeverDisagreesWithFinish()
+    {
+        var f = Create();
+        f.Advance(TimeSpan.FromHours(2));   // 13:00 local
+        AddMed(f, "Due", "12:30");
+        AddMed(f, "Upcoming", "15:00");
+
+        var blockers = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).FinishBlockers;
+
+        Assert.Equal("Due", Assert.Single(blockers).MedicationName);
     }
 
     // ── breaks ──
@@ -607,6 +711,7 @@ public class PortalFinishValidationTests
     public async Task ADoseBlockerIsDedupedWhenAScheduleListsTheSameTimeTwice()
     {
         var f = Create();
+        f.Advance(TimeSpan.FromHours(2));   // 13:00 local
         AddNote(f);
         AddMed(f, "Twice", "09:00,09:00");
 

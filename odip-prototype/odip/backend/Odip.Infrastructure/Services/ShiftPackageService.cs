@@ -17,10 +17,18 @@ public sealed record ShiftDoses(IReadOnlyList<PortalDoseSlotDto> Slots, IReadOnl
 /// share - the critical care facts (need-to-know), emergency contacts, doses due in the window, routines matched to the
 /// window, the End checklist - so the two surfaces cannot disagree.
 ///
-/// The End checklist (BRIEF section 3) is ENFORCED by the server, not merely shown: every dose due in the shift's ROSTERED
-/// window needs an outcome (given, refused, withheld, or "not given this shift" with a reason, recorded as a Missed
+/// The End checklist (BRIEF section 3) is ENFORCED by the server, not merely shown: every dose that has come due in the shift's
+/// ROSTERED window needs an outcome (given, refused, withheld, or "not given this shift" with a reason, recorded as a Missed
 /// administration), and a running break must be ended. The portal DTO carries the same list as <c>finishBlockers</c> so the
 /// client can render the checklist before it ever calls Finish.
+///
+/// Two rules keep that checklist satisfiable - an unsatisfiable checklist locks the worker out of Finish and strands the
+/// completion before review:
+///  - a dose blocks only once its time has ARRIVED (a 15:00 dose does not block a 13:00 early finish - recording it "not given"
+///    would be permanent, because a slot takes one record, and would stop the next worker giving it);
+///  - a dose blocks only a worker who CAN record it (Medication Competency): recording is gated, so a worker without a current
+///    credential could never clear it. Their unrecorded doses show to the coordinator as "nothing recorded" in the completion review.
+/// Every medication support level blocks alike, matching the existing MAR (which has never filtered by it).
 /// </summary>
 public sealed class ShiftPackageService
 {
@@ -37,25 +45,31 @@ public sealed class ShiftPackageService
 
     /// <summary>
     /// The blockers that stop <paramref name="shift"/> being finished now, in checklist order (running break first, then
-    /// doses by scheduled time). <paramref name="completion"/> is the active completion, or null on the manual-start
-    /// path where none exists yet. Empty means Finish may proceed.
+    /// doses by scheduled time). <paramref name="completion"/> is the active completion (null means none, so no break can be running).
+    /// <paramref name="canRecordDoses"/> is whether the worker holds a current Medication Competency - when false no dose blocks, because
+    /// they could never clear it. Empty means Finish may proceed.
     /// </summary>
-    public async Task<List<PortalFinishBlockerDto>> GetFinishBlockersAsync(Shift shift, ShiftCompletion? completion, CancellationToken ct)
+    public async Task<List<PortalFinishBlockerDto>> GetFinishBlockersAsync(
+        Shift shift, ShiftCompletion? completion, bool canRecordDoses, CancellationToken ct)
     {
         var breakRunning = completion is not null
             && await _db.ShiftBreaks.AnyAsync(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null, ct);
 
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
-        var doses = await GetDosesAsync(shift, provider, includePrn: false, ct);
-        return BuildFinishBlockers(doses.Slots, breakRunning);
+        var doses = canRecordDoses
+            ? await GetDosesAsync(shift, provider, includePrn: false, ct)
+            : new ShiftDoses(Array.Empty<PortalDoseSlotDto>(), Array.Empty<PortalPrnDto>());
+        return BuildFinishBlockers(doses.Slots, breakRunning, canRecordDoses, _slots.UtcNow, provider.Zone);
     }
 
     /// <summary>
-    /// The pure half of the End checklist: a running break first, then every dose slot with no outcome in scheduled-time order. Shared by
+    /// The pure half of the End checklist: a running break first, then - for a worker who can record doses - every dose slot whose time has
+    /// arrived (its UTC instant is at or before <paramref name="nowUtc"/>) and that has no outcome, in scheduled-time order. Shared by
     /// <see cref="GetFinishBlockersAsync"/> (the Finish pre-check) and the shift detail (which already holds the dose slots, so it never
     /// queries them twice).
     /// </summary>
-    public static List<PortalFinishBlockerDto> BuildFinishBlockers(IEnumerable<PortalDoseSlotDto> slots, bool breakRunning)
+    public static List<PortalFinishBlockerDto> BuildFinishBlockers(
+        IEnumerable<PortalDoseSlotDto> slots, bool breakRunning, bool canRecordDoses, DateTime nowUtc, TimeZoneInfo zone)
     {
         var blockers = new List<PortalFinishBlockerDto>();
         if (breakRunning)
@@ -65,7 +79,12 @@ public sealed class ShiftPackageService
                 null, null, null));
         }
 
-        foreach (var slot in slots.Where(s => s.Outcome is null).OrderBy(s => s.ScheduledAt).ThenBy(s => s.MedicationName, StringComparer.Ordinal))
+        if (!canRecordDoses) return blockers;
+
+        var due = slots
+            .Where(s => s.Outcome is null && ProviderLocalTime.LocalToUtc(s.ScheduledAt, zone) <= nowUtc)
+            .OrderBy(s => s.ScheduledAt).ThenBy(s => s.MedicationName, StringComparer.Ordinal);
+        foreach (var slot in due)
         {
             var label = string.IsNullOrWhiteSpace(slot.Strength) ? slot.MedicationName : $"{slot.MedicationName} {slot.Strength}";
             blockers.Add(new PortalFinishBlockerDto(

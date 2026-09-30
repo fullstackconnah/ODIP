@@ -252,7 +252,11 @@ export interface AcknowledgeHandoverDto {
 export const FINISH_BLOCKER_CODES = ['DOSE_OUTCOME_MISSING', 'BREAK_RUNNING'] as const
 export type FinishBlockerCode = typeof FINISH_BLOCKER_CODES[number]
 
-/** One thing that must be cleared before Finish. */
+/**
+ * One thing that must be cleared before Finish. A dose blocker appears once the dose's time has arrived and only for a worker who can
+ * record doses (`canRecordDoses`); a `BREAK_RUNNING` blocker has `medicationId`, `medicationName` and `scheduledAt` all `null`
+ * (tell the two apart by `code`, or by `medicationId === null`).
+ */
 export interface PortalFinishBlockerDto {
   code: FinishBlockerCode
   message: string

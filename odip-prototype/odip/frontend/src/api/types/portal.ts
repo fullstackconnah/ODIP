@@ -144,7 +144,11 @@ export interface PortalShiftDetailDto {
   handover: PortalHandoverDto | null
   /** The last 3 holders (most recent first, including the handover's author): name and shift date only. */
   handoverTrail: PortalHandoverTrailEntryDto[]
-  /** What still blocks Finish right now (only while InProgress; empty otherwise). Finish answers 422 while non-empty. */
+  /**
+   * What still blocks Finish right now (only while InProgress; empty otherwise): a running break, and the doses that have COME DUE with no
+   * outcome - for a worker who can record doses only (`canRecordDoses`). A dose still ahead is handed over, not blocked. Finish answers
+   * 422 while non-empty, by the same rule.
+   */
   finishBlockers: PortalFinishBlockerDto[]
   /** The provider's IANA zone. Wall-clock fields in this DTO (`startTime`, dose `scheduledAt`, routine `occursAt`) are in it. */
   timeZoneId: string
