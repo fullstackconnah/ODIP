@@ -548,14 +548,17 @@ Only the trip detail page opts in today; the other detail pages adopt it next.
 
 ```tsx
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
-import { glanceState } from '@/components/glanceState'
+import { glanceRatio, glanceState } from '@/components/glanceState'
 
 const segments: FactBarSegment[] = [
   { label: 'Outstanding Tasks', value: 2, icon, ...glanceState('negative', 'Action Needed') },  // tinted (error-container)
-  { label: 'Insurance', value: '5/5', icon, ...glanceState('positive', 'Covered') },            // quiet
+  { label: 'Insurance', value: glanceRatio(5, 5), icon, ...glanceState('positive', 'Covered') }, // quiet, "5 / 5"
 ]
 <FactBar variant="glance" segments={segments} />
 ```
+
+**Spell every ratio with `glanceRatio(x, y)`**, which returns `"x / y"` (a space each side of the slash). At display size a hand-written `` `${a}/${b}` ``
+beside `"12 / 10"` is obvious, and one shared formatter is what stops two figures in a strip, or on two pages, drifting apart.
 
 `glanceState(tone, label)` returns `{ badge, attention }` from ONE tone (`'positive' | 'warning' | 'negative' | 'neutral'`), so the fill can never
 disagree with its chip: `warning` tints warning, `negative` tints error, `positive` and `neutral` stay quiet. On a tint the chip (`FactChip`) becomes a

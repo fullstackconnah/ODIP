@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T13:54:49Z",
+  "generatedAt": "2026-09-30T14:11:53Z",
   "title": "Design System: ODIP",
   "extensions": {
     "colorMeta": {
@@ -313,6 +313,11 @@
               "neutral"
             ],
             "effect": "returns { badge, attention } from one tone so the chip and the tint cannot disagree"
+          },
+          {
+            "component": "glanceRatio(numerator, denominator)",
+            "prop": "numerator, denominator",
+            "effect": "the ONE spelling of an \"x / y\" figure: a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
           }
         ]
       }

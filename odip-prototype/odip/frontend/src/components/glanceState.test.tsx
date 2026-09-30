@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { attentionForTone, glanceState } from './glanceState'
+import { attentionForTone, glanceRatio, glanceState } from './glanceState'
 import { FactBar, type FactBarSegment, type FactChipTone } from './FactBar'
+
+describe('glanceRatio — the one spelling of an "x / y" figure', () => {
+  it('puts a space each side of the slash, so "12 / 14" and "5 / 3" can never be "12/14"', () => {
+    expect(glanceRatio(12, 14)).toBe('12 / 14')
+    expect(glanceRatio(5, 3)).toBe('5 / 3')
+  })
+
+  it('keeps zeros and joins strings the same way', () => {
+    expect(glanceRatio(0, 0)).toBe('0 / 0')
+    expect(glanceRatio('4', 5)).toBe('4 / 5')
+  })
+
+  it.each([[0, 1], [7, 7], [12, 10], [100, 250]])('is always exactly "n / m" for %i, %i (never a bare slash)', (a, b) => {
+    expect(glanceRatio(a, b)).toMatch(/^\d+ \/ \d+$/)
+  })
+})
 
 describe('attentionForTone — which badge tones tint a segment', () => {
   it.each([

@@ -16,6 +16,15 @@ export function attentionForTone(tone: FactChipTone): FactBarAttention | undefin
 }
 
 /**
+ * The ONE spelling of an "x / y" figure in a glance strip: a space each side of the slash. Build every ratio through
+ * this (Participants / Staff, High Support / Overnight, Insurance ...) so two figures at display size can never drift
+ * apart, "12 / 10" beside "12/14". It only joins the two parts; the caller decides what a missing count means.
+ */
+export function glanceRatio(numerator: number | string, denominator: number | string): string {
+  return `${numerator} / ${denominator}`
+}
+
+/**
  * One tone decides both the chip and the segment tint of a `FactBar variant="glance"` segment, so the fill can
  * never disagree with the badge it holds. Spread the result into the segment:
  *

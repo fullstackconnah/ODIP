@@ -468,7 +468,8 @@ It stops at the header: the tab strip and every panel below stay the ordinary de
 - **Glance strip.** `FactBar variant="glance"`: equal cells in one ruled `--radius-md` strip. Each cell is a display-step tabular figure
   with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Outstanding
   Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
-  of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`.
+  of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. A ratio is always spelled
+  "x / y", a space each side of the slash, through the one `glanceRatio` formatter, so no two figures drift ("12 / 10" beside "12/14").
 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in

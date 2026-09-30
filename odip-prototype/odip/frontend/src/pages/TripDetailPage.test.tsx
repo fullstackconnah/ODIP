@@ -248,9 +248,35 @@ describe('TripDetailPage — glance strip', () => {
     const strip = cellOf('Insurance').parentElement!
     expect(strip).toHaveClass('grid', 'grid-cols-2', 'md:grid-flow-col', 'overflow-hidden')
     expect(strip.children).toHaveLength(4)
-    for (const figure of ['5 / 3', '2', '2 / 2', '4/5']) {
+    for (const figure of ['5 / 3', '2', '2 / 2', '4 / 5']) {
       expect(screen.getByText(figure)).toHaveClass('text-display', 'tabular-nums')
     }
+  })
+
+  it('spells every ratio figure the same way, " / " with a space each side, including a two-digit Insurance', () => {
+    // 12 confirmed + 2 outstanding = "12 / 14". The strip once rendered this one as "12/14" beside "12 / 10".
+    trip = withTrip({ ...attentionCounts, currentParticipantCount: 12, staffAssignedCount: 10, insuranceConfirmedCount: 12, insuranceOutstandingCount: 2 })
+    renderPage()
+
+    expect(screen.getByText('12 / 10')).toBeInTheDocument()
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    expect(screen.getByText('12 / 14')).toBeInTheDocument()
+
+    // No figure anywhere in the strip is squeezed ("12/14") or otherwise off the "x / y" pattern.
+    const strip = cellOf('Insurance').parentElement!
+    const figures = Array.from(strip.querySelectorAll('span.text-display')).map(f => f.textContent ?? '')
+    expect(figures).toHaveLength(4)
+    for (const figure of figures.filter(f => f.includes('/'))) expect(figure).toMatch(/^\d+ \/ \d+$/)
+    expect(figures).not.toContain('12/14')
+  })
+
+  it('keeps a zero insurance ratio in the same form, and the chip follows the outstanding count', () => {
+    trip = withTrip({ ...attentionCounts, insuranceConfirmedCount: 0, insuranceOutstandingCount: 0 })
+    renderPage()
+
+    expect(screen.getByText('0 / 0')).toHaveClass('text-display')
+    expect(within(cellOf('Insurance')).getByText('Covered')).toBeInTheDocument()
+    expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
   })
 
   it('tints the segments whose badge signals attention: Waitlist warning, Action Needed and Outstanding error', () => {
