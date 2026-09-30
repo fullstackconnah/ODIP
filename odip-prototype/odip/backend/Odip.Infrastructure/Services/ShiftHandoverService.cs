@@ -22,8 +22,11 @@ public sealed record HandoverView(PortalHandoverDto? Latest, IReadOnlyList<Porta
 
 /// <summary>
 /// The handover baton pass (D4). A handover is text a worker leaves on their completion at Finish; the LATEST handover
-/// for a participant is the most recent submitted-or-approved completion's, from any of the participant's OTHER shifts
-/// (an active completion with a SubmittedAt: Finish sets it, a Return clears IsActive). The next worker marks it read
+/// for a participant is the one from the most recent shift that STARTED BEFORE the reader's own and has a submitted-or-approved
+/// completion (an active completion with a SubmittedAt: Finish sets it, a Return clears IsActive). "Most recent" is the SHIFT's
+/// chronology (service date, then start time), with the submission time only a tiebreak: a baton passes forward through the
+/// roster, so an old shift that was returned and re-submitted days later must not displace a newer shift's handover, and a worker
+/// opening an old shift is never shown the handover of a later one. The next worker marks it read
 /// (<see cref="AcknowledgeAsync"/>) - never silently assumed read. A short custody trail lists the last
 /// <see cref="TrailLength"/> holders (name and shift date only, never the text).
 ///
@@ -50,7 +53,8 @@ public sealed class ShiftHandoverService
                 from c in _db.ShiftCompletions
                 join s in _db.Shifts on c.ShiftId equals s.Id
                 where s.ParticipantId == shift.ParticipantId && s.Id != shift.Id && c.IsActive && c.SubmittedAt != null
-                orderby c.SubmittedAt descending, c.Id
+                    && (s.ServiceDate < shift.ServiceDate || (s.ServiceDate == shift.ServiceDate && s.StartTime < shift.StartTime))
+                orderby s.ServiceDate descending, s.StartTime descending, c.SubmittedAt descending, c.Id
                 select new
                 {
                     CompletionId = c.Id, SubmittedAt = c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver,

@@ -214,7 +214,10 @@ export interface PortalShiftRoutineDto {
 
 // ── Handover ────────────────────────────────────────────────
 
-/** The latest handover for the participant, as the next worker sees it. The read state is the CALLER's. */
+/**
+ * The latest handover for the participant, as the next worker sees it: from the most recent shift that STARTED BEFORE the caller's
+ * own (shift chronology, not the time it was submitted). The read state is the CALLER's.
+ */
 export interface PortalHandoverDto {
   /** The completion the handover belongs to — send it back as `completionId` when acknowledging. */
   completionId: string

@@ -167,7 +167,7 @@ export interface ShiftCompletionReviewDto {
   timeZoneId: string
   /** Scheduled doses in the rostered window, time order. `outcome: null` means nothing was recorded. */
   doses: PortalDoseSlotDto[]
-  /** "As needed" doses administered between the actual start and end. */
+  /** "As needed" (PRN) doses the submitting worker administered between the actual start and end. */
   prnDoses: ReviewPrnDoseDto[]
   notes: ShiftNoteDto[]
 }

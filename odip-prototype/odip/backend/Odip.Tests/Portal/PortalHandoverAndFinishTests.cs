@@ -12,8 +12,9 @@ using static Odip.Tests.Portal.ShiftPackageFixture;
 namespace Odip.Tests.Portal;
 
 /// <summary>
-/// The handover baton pass (D4): the latest handover for a participant is the most recent submitted-or-approved
-/// completion's, the next worker marks it read, and a short trail shows the last 3 holders.
+/// The handover baton pass (D4): the latest handover for a participant is the submitted-or-approved completion of the most
+/// recent shift that STARTED BEFORE the reader's own (shift chronology, not submission time), the next worker marks it read,
+/// and a short trail shows the last 3 holders.
 /// </summary>
 public class PortalHandoverTests
 {
@@ -122,6 +123,52 @@ public class PortalHandoverTests
         Assert.False(handover.NothingToHandOver);
         Assert.False(handover.RequiresAcknowledgement);
         Assert.Equal("Latest Previous", handover.AuthorName);
+    }
+
+    [Fact]
+    public void AnEarlierShiftReturnedAndResubmittedLater_DoesNotDisplaceALaterShiftsHandover()
+    {
+        // Monday's completion was returned and the worker re-submitted it days later; Tuesday's was submitted on time. The baton
+        // passes forward through the roster, so Tuesday's handover is the latest even though Monday's was submitted most recently.
+        var f = Create(ShiftStatus.Published);   // the caller's own shift is 14 July
+        var monday = AddSubmitted(f, "Monday", new DateOnly(2026, 7, 6), T.AddDays(3), "Monday note, resubmitted late");
+        var tuesday = AddSubmitted(f, "Tuesday", new DateOnly(2026, 7, 7), T, "Tuesday note");
+
+        var detail = Get(f);
+
+        Assert.Equal(tuesday.Id, detail.Handover!.CompletionId);
+        Assert.Equal("Tuesday note", detail.Handover.Text);
+        Assert.Equal([tuesday.Id, monday.Id], detail.HandoverTrail.Select(t => t.CompletionId));
+    }
+
+    [Fact]
+    public void AHandoverFromAShiftThatStartsLater_IsNeverShownOnAnEarlierShift()
+    {
+        // A worker opening an old shift is not shown the handover of one that came after it.
+        var f = Create(ShiftStatus.Published);   // 14 July 09:00
+        AddSubmitted(f, "Earlier", new DateOnly(2026, 7, 13), T, "The 13th");
+        AddSubmitted(f, "Later", new DateOnly(2026, 7, 15), T.AddDays(2), "The 15th");
+
+        var detail = Get(f);
+
+        Assert.Equal("Earlier Previous", detail.Handover!.AuthorName);
+        Assert.Single(detail.HandoverTrail);
+    }
+
+    [Fact]
+    public void OnTheSameDay_OnlyAShiftThatStartedEarlierPassesTheBaton()
+    {
+        // The caller's shift starts 09:00. A 07:00 shift that day is before it; a 13:00 one is not.
+        var f = Create(ShiftStatus.Published);
+        var morning = AddSubmitted(f, "Morning", ServiceDate, T, "Morning note");
+        var afternoon = AddSubmitted(f, "Afternoon", ServiceDate, T.AddHours(1), "Afternoon note");
+        f.Db.Shifts.Single(s => s.Id == afternoon.ShiftId).StartTime = new TimeOnly(13, 0);
+        f.Db.SaveChanges();
+
+        var detail = Get(f);
+
+        Assert.Equal(morning.Id, detail.Handover!.CompletionId);
+        Assert.Single(detail.HandoverTrail);
     }
 
     [Fact]

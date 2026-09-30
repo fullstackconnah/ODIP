@@ -154,7 +154,8 @@ public class ShiftCompletionReviewDtoTests
         MedicationAdministration Given(DateTime at) => new()
         {
             Id = Guid.NewGuid(), TenantId = prn.TenantId, ParticipantMedicationId = prn.Id, ParticipantId = prn.ParticipantId,
-            Status = MedicationAdministrationStatus.Administered, RecordedByName = "Ben Turner", PrnReason = "Headache", AdministeredAt = at, DoseGiven = "2 tablets",
+            Status = MedicationAdministrationStatus.Administered, RecordedByName = "Ben Turner", RecordedByUserId = a.Worker.Id,
+            PrnReason = "Headache", AdministeredAt = at, DoseGiven = "2 tablets",
         };
         a.Db.MedicationAdministrations.AddRange(
             Given(ActualStart.AddHours(2)),      // during the shift
@@ -167,6 +168,46 @@ public class ShiftCompletionReviewDtoTests
         var dose = Assert.Single(prnDoses);
         Assert.Equal("Paracetamol", dose.MedicationName);
         Assert.Equal(ActualStart.AddHours(2), dose.Outcome.AdministeredAt);
+    }
+
+    [Fact]
+    public async Task PrnDoses_AreThisWorkersOwn_AnotherWorkersDoseOnAnOverlappingShiftIsNot()
+    {
+        // Two workers on overlapping shifts for one participant: each completion shows only the as-needed doses that worker gave.
+        var a = Arrange();
+        var colleague = MedicationTestIdentities.SeedCompetentUser(a.Db, "Cara", "Lee", tenantId: a.Shift.TenantId);
+        var prn = AddMed(a, "Paracetamol", null, MedicationType.Prn);
+        MedicationAdministration Given(Guid byUserId, string byName, DateTime at) => new()
+        {
+            Id = Guid.NewGuid(), TenantId = prn.TenantId, ParticipantMedicationId = prn.Id, ParticipantId = prn.ParticipantId,
+            Status = MedicationAdministrationStatus.Administered, RecordedByName = byName, RecordedByUserId = byUserId,
+            PrnReason = "Headache", AdministeredAt = at, DoseGiven = "2 tablets",
+        };
+        a.Db.MedicationAdministrations.AddRange(
+            Given(a.Worker.Id, "Ben Turner", ActualStart.AddHours(1)),
+            Given(colleague.Id, "Cara Lee", ActualStart.AddHours(2)));
+        a.Db.SaveChanges();
+
+        var dose = Assert.Single(Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).PrnDoses);
+
+        Assert.Equal("Ben Turner", dose.Outcome.RecordedByName);
+    }
+
+    [Fact]
+    public async Task PrnDoses_ExcludeAnUnscheduledRecordAgainstARegularMedication()
+    {
+        // An ad-hoc record with no scheduled time against a REGULAR medication is not an "as needed" dose.
+        var a = Arrange();
+        var regular = AddMed(a, "Levetiracetam", "09:00");
+        a.Db.MedicationAdministrations.Add(new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), TenantId = regular.TenantId, ParticipantMedicationId = regular.Id, ParticipantId = regular.ParticipantId,
+            Status = MedicationAdministrationStatus.Administered, RecordedByName = "Ben Turner", RecordedByUserId = a.Worker.Id,
+            AdministeredAt = ActualStart.AddHours(2),
+        });
+        a.Db.SaveChanges();
+
+        Assert.Empty(Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).PrnDoses);
     }
 
     [Fact]
