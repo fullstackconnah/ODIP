@@ -89,9 +89,13 @@ public class SameTenantWritePathTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
+        // The recorder must hold a current Medication Competency (D3 gate) — a same-tenant competent user,
+        // resolved the way the SuperAdmin "view as" mechanism resolves one.
+        var recorder = Odip.Tests.Medications.MedicationTestIdentities.SeedCompetentUser(db, tenantId: tenantAId);
         var tenantMock = new Mock<ICurrentTenant>();
         tenantMock.Setup(t => t.TenantId).Returns(tenantAId);
         tenantMock.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenantMock.Setup(t => t.ViewAsUserId).Returns(recorder.Id);
         var controller = new MedicationsController(db, tenantMock.Object);
 
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = foreignWitness.Id };

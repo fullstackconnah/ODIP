@@ -217,6 +217,15 @@ public record CreateAdministrationDto
     public string? Notes { get; init; }
     public Guid? TripInstanceId { get; init; }
     public bool AcknowledgeLimitBreach { get; init; }
+
+    /// <summary>
+    /// Optional idempotency key (a UUID generated when the record-dose sheet opens is ideal). A second
+    /// submit with the same key returns the first request's record with 200 instead of creating another —
+    /// so a double tap or a retry after a dropped response is safe. Independent of the one-record-per-
+    /// scheduled-slot rule, which also rejects a different key for an already-recorded slot with 409.
+    /// </summary>
+    [StringLength(100)]
+    public string? IdempotencyKey { get; init; }
 }
 
 public record UpdateAdministrationDto

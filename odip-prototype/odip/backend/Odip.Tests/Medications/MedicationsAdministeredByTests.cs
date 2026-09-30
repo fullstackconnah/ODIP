@@ -64,6 +64,7 @@ public class MedicationsAdministeredByTests
         {
             Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
             FirstName = firstName, LastName = lastName, Role = UserRole.SupportWorker, IsActive = true,
+            IsMedicationCompetent = true, MedicationCompetencyExpiryDate = new DateOnly(2099, 1, 1),
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -128,11 +129,11 @@ public class MedicationsAdministeredByTests
     }
 
     [Fact]
-    public async Task RecordAdministration_UnresolvableIdentity_FallsBackToJwtClaimName()
+    public async Task RecordAdministration_UnresolvableIdentity_IsRefusedBecauseCompetencyCannotBeVerified()
     {
-        // No ControllerContext at all (as MedicationsWitnessTests' non-self-witness fixtures
-        // construct it) — RecordedByUserId can't be resolved, but RecordedByName must still be
-        // populated via the GetRecordedByName() claim fallback rather than left empty.
+        // No ControllerContext and no ViewAsUserId: no staff user can be resolved, so the Medication
+        // Competency gate cannot be evaluated. A dose is never recorded against an identity we cannot
+        // check (this used to fall back to the JWT claim name; the gate now comes first).
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMed(db, participant.Id);
@@ -141,10 +142,11 @@ public class MedicationsAdministeredByTests
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered };
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<AdministrationDto>>(ok.Value);
-        Assert.Null(body.Data!.RecordedByUserId);
-        Assert.Equal("Unknown", body.Data.RecordedByName);
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(403, forbidden.StatusCode);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(forbidden.Value);
+        Assert.Equal("MEDICATION_COMPETENCY_UNVERIFIABLE", body.Code);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
     }
 
     [Fact]
@@ -173,6 +175,7 @@ public class MedicationsAdministeredByTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMed(db, participant.Id);
+        tenant.Setup(t => t.ViewAsUserId).Returns(SeedUser(db, "Casey", "Recorder").Id);
         var controller = new MedicationsController(db, tenant.Object);
 
         var clientInstant = new DateTime(2026, 8, 30, 21, 15, 0, DateTimeKind.Utc);
@@ -203,6 +206,7 @@ public class MedicationsAdministeredByTests
         var (db, tenant) = CreateDb();
         var participant = SeedParticipant(db);
         var med = SeedMed(db, participant.Id);
+        tenant.Setup(t => t.ViewAsUserId).Returns(SeedUser(db, "Casey", "Recorder").Id);
         var controller = new MedicationsController(db, tenant.Object);
 
         var before = DateTime.UtcNow;

@@ -9,6 +9,12 @@ namespace Odip.Domain.Entities;
 /// </summary>
 public class MedicationAdministration : ITenantEntity
 {
+    /// <summary>Database name of the filtered unique index on (TenantId, IdempotencyKey) WHERE the key is
+    /// not null (OdipDbContext + migration AddMedicationAdministrationIdempotencyKey). The recorder matches
+    /// this name on PostgresException.ConstraintName to turn a racing duplicate submit into an idempotent
+    /// replay instead of a 500.</summary>
+    public const string IdempotencyIndexName = "IX_MedicationAdministrations_TenantId_IdempotencyKey";
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Tenant? Tenant { get; set; }
@@ -92,6 +98,17 @@ public class MedicationAdministration : ITenantEntity
     /// what was actually given instead of the prescribed medication. Optional for every other
     /// status.</summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Optional client-generated key (a UUID per "record this dose" sheet is ideal) that makes a submit
+    /// idempotent: a retry or double tap carrying the same key returns the record the first request
+    /// created instead of creating another. Null for every pre-existing row and for callers that send no
+    /// key. Uniqueness is (TenantId, key) over NON-NULL keys only (a filtered unique index), so it cannot
+    /// conflict with any existing data. NOT a per-slot constraint — "one record per scheduled dose slot" is
+    /// an application-level rule (existing data may already hold duplicates per slot, so a plain unique
+    /// index on (medication, ScheduledAt) would fail the deploy migration).
+    /// </summary>
+    public string? IdempotencyKey { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

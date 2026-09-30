@@ -1406,6 +1406,15 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
             entity.HasIndex(e => new { e.WitnessUserId, e.WitnessStatus });
+
+            // Idempotent submits: unique per tenant over NON-NULL keys only. Filtered so every existing row
+            // (all NULL) is outside the index and the migration cannot fail on existing data. Deliberately
+            // NOT a unique index on (ParticipantMedicationId, ScheduledAt): see MedicationAdministration.IdempotencyKey.
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName(MedicationAdministration.IdempotencyIndexName)
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         });
 
         // ── ParticipantNote ───────────────────────────────────────
