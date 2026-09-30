@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
+import { TAP_AREA_LINKS } from './tapArea'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -501,10 +502,13 @@ export function DataTable<T>({
                     const content = renderCell(row, col, rowIndex)
                     const text = col.wrap ? null : plainTextOf(row, col, content)
 
+                    // TAP_AREA_LINKS: under a coarse pointer every link in a body cell (a name, a trip, "Open")
+                    // gets a 44px hit area from a transparent ::before, so a caller's `render` needs nothing and
+                    // a 19px link is not a 19px target on a phone. Nothing at all on a mouse.
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${col.className ?? ''}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
                       >
@@ -552,7 +556,7 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
               aria-label="Previous page"
-              className="h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
@@ -560,7 +564,7 @@ export function DataTable<T>({
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= Math.ceil(pagination.totalCount / pagination.pageSize)}
               aria-label="Next page"
-              className="h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>
@@ -588,7 +592,9 @@ const ROW_ACTIONS_REVEAL = [
 // renders): its <a>/<button> children are p-1.5 (28px), which would out-size the 24px row actions
 // beside them. Pinning them to the same --control-h-sm square as `Button iconOnly` keeps a row's
 // actions one height. Targets only ActionButtons' direct icon children, so text buttons in the
-// same cluster are untouched. Drop it once ActionButtons itself renders `Button iconOnly`.
+// same cluster are untouched. Drop it once ActionButtons itself renders `Button iconOnly`. (Under a
+// coarse pointer ActionButtons agrees with this pin on its own: it is 36px there wherever it sits, with
+// TAP_AREA's 44px hit area and the 8px gap `RowActions` and ActionButtons both open.)
 const ROW_ACTIONS_LEGACY_ICONS = [
   '[&>div>:is(a,button)]:inline-flex [&>div>:is(a,button)]:items-center [&>div>:is(a,button)]:justify-center',
   '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',

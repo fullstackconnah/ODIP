@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/Button'
+import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -67,7 +68,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
         <Link
           to={`/participants/${row.participantId}`}
           title={row.participantName}
-          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[12rem] md:truncate"
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[12rem] md:truncate ${TAP_TRUNCATED_LINK}`}
         >
           {row.participantName}
         </Link>
@@ -269,7 +270,7 @@ export default function IncidentsPage() {
         <Link
           to={`/trips/${i.tripInstanceId}`}
           title={i.tripName}
-          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem]"
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${TAP_TRUNCATED_LINK}`}
         >
           {i.tripName}
         </Link>
@@ -283,7 +284,7 @@ export default function IncidentsPage() {
         <Link
           to={`/participants/${i.involvedParticipantId}`}
           title={i.involvedParticipantName}
-          className="inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[9rem] md:truncate 2xl:max-w-[12rem]"
+          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${TAP_TRUNCATED_LINK}`}
         >
           {i.involvedParticipantName}
         </Link>
@@ -402,7 +403,7 @@ export default function IncidentsPage() {
             <span className="font-semibold">{qscHeadline}</span>
             <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
           </p>
-          <Link to="/incidents?qsc=overdue" className="shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2">
+          <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
             View overdue incidents
           </Link>
         </div>

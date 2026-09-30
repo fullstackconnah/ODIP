@@ -80,14 +80,20 @@ export default function TenantSwitcher() {
 
   return (
     <div ref={ref} className="relative">
+      {/* `--tap-min` floor: 44px tall under a coarse pointer (the header is 48px), unchanged on a mouse. Below sm the
+          tenant name is dropped from the trigger, because a SuperAdmin's two switchers (badge + name + caret each),
+          the bell and the avatar do not fit a 390px header: the badge and caret stay and the name moves into the
+          accessible name and the tooltip. */}
       <button
         onClick={() => setOpen(o => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#e0e7ff] transition-colors"
+        aria-label={`SA ${current?.name ?? 'Loading…'}`}
+        title={current?.name}
+        className="flex min-h-[var(--tap-min)] items-center gap-1.5 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#e0e7ff] transition-colors"
       >
         <span className="text-xs bg-[#6366f1] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
-        <span className="text-sm font-semibold text-[#3730a3]">{current?.name ?? 'Loading…'}</span>
+        <span className="hidden text-sm font-semibold text-[#3730a3] sm:inline">{current?.name ?? 'Loading…'}</span>
         <span className="text-[#6366f1] text-xs">▾</span>
       </button>
 
@@ -101,7 +107,7 @@ export default function TenantSwitcher() {
               <button
                 key={tenant.id}
                 onClick={() => setPendingTenant({ id: tenant.id, name: tenant.name })}
-                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   tenant.id === viewingId
                     ? 'bg-[rgba(99,102,241,0.15)]'
                     : 'hover:bg-[rgba(255,255,255,0.05)]'

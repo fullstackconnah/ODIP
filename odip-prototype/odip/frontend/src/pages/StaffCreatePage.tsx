@@ -10,6 +10,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
@@ -174,7 +175,7 @@ export default function StaffCreatePage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
+          <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
         </div>
         <PageHeader title="Edit Staff Member" />
         <Card className="space-y-2">
@@ -196,7 +197,7 @@ export default function StaffCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/staff" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Staff</Link>
+        <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
       </div>
       <PageHeader title={isEdit ? 'Edit Staff Member' : 'New Staff Member'} />
 

@@ -54,3 +54,17 @@ describe('VehicleCreatePage — specific server error surfaced (PP-73)', () => {
     expect(screen.getByText(/failed to create vehicle\. please check your input and try again\./i)).toBeInTheDocument()
   })
 })
+
+// Density polish (touch): the "← Back to Vehicles" text link was a 19px tap target. It takes the shared TAP_FLOOR
+// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
+// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
+describe('VehicleCreatePage — Back link touch target', () => {
+  it('floors the "Back to Vehicles" link at --tap-min and keeps its destination and hover colour', () => {
+    renderCreatePage()
+
+    const back = screen.getByRole('link', { name: /back to vehicles/i })
+    expect(back).toHaveAttribute('href', '/vehicles')
+    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
+    expect(back.className).not.toMatch(/44px/)
+  })
+})

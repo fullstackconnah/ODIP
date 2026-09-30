@@ -20,23 +20,26 @@ export type RosterGridProps = {
 
 /**
  * The sticky first column's width is a CSS variable set on the frame (BOARD_FRAME), not a constant, so
- * it can be wider where the screen has the room. Below 1480px it is lib/roster's ROSTER_STICKY_COL_WIDTH
+ * it can be wider where the screen has the room. Below 1500px it is lib/roster's ROSTER_STICKY_COL_WIDTH
  * (195px) — the fallback in the var(), i.e. exactly what the board had before, at every width it fits.
- * From 1480px it is 264px.
+ * From 1500px it is 280px.
  *
- * Why 264: a participant row header is one line — name, ratio chip, coverage badge — and the badge only
- * stays unabridged ("6 days uncovered": 98px of 12px text + 12px padding = 110px) if the content box
- * fits name + 8 + chip 28 + 8 + badge 110. Content box = column - 1px rule - 16px padding, and the
- * ParticipantRow container query flips to the unabridged wording at 15rem = 240px of content, i.e. a
- * 257px column at least. 264px is the first round width past that: 247px of content leaves ~9px spare
- * beside the shortest fixture name ("Liam Okafor", 83px) — the 240px column first suggested cannot hold
- * it (223px of content). Longer names truncate, with a title.
+ * Why 280: a participant row header is one line — name (plus the 12px restrictive-practice marker and its 4px
+ * gap), ratio chip, coverage badge — and the row's identity is the name, so the width is sized to show the
+ * longest fixture name whole. The coverage badge is a compact count (warning icon + one digit: a week has at
+ * most 7 uncovered days) at every width, 35px; the ratio chip is 31px; two 8px gaps. That is 82px of chrome
+ * beside the name. "Grace Palmer-Hughes" is 151px, 167px with its marker, so the content box (column - 1px
+ * rule - 16px padding) needs 249px, i.e. a 266px column at the very least. 280px leaves ~14px spare (263px
+ * of content, 181px for the name group); a longer name truncates, with its title. (It was 264px while the
+ * coverage state was spelled out: "6 days uncovered" is a 110px pill, which left the name 90px and cut it to
+ * "Grace Pa…".) Sizing by the badge and not by the wording is deliberate: widening to fit the words would
+ * take 344px, and every pixel comes out of the seven day columns, where the shift chips already truncate.
  *
- * Why 1480: a week strip needs its 7 x 127px tracks plus 24px of gaps and 8px of padding = 921px, so the
- * board's true minimum is column + 921 + 2px frame border (264 -> 1187px). The board gets the viewport
- * less the 232px sidebar and 2 x 20px gutters (272px): 1459px, plus ~17px for a classic scrollbar, is
- * 1476 — hence 1480. Below that the 195px column (1116px, fits from 1390px) stays and the row header
- * uses its compact badge. At 1920 the day columns end up 193px wide, 10px less than with 195px.
+ * Why 1500: a week strip needs its 7 x 127px tracks plus 24px of gaps and 8px of padding = 921px, so the
+ * board's true minimum is column + 921 + 2px frame border (280 -> 1203px). The board gets the viewport
+ * less the 232px sidebar and 2 x 20px gutters (272px), plus ~17px for a classic scrollbar: 1203 + 272 +
+ * 17 = 1492 — hence 1500. Below that the 195px column (1116px, fits from 1390px) stays. At 1920 the day
+ * columns end up 191px wide, 2px less than with 264px.
  */
 const STICKY_COL = `var(--roster-sticky-col, ${ROSTER_STICKY_COL_WIDTH}px)`
 const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))` }
@@ -46,10 +49,10 @@ const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${R
  * header row genuinely stays pinned: a sticky header only sticks to its nearest scroller, and this
  * wrapper used to be one with no height limit, so `top-0` never engaged. The sticky first column pins
  * horizontally in the same frame. 11.5rem is the page chrome above the board (app bar, header, toolbar)
- * plus the bottom gutter; the 20rem floor keeps a short window usable. `min-[1480px]:[--roster-sticky-col:264px]`
+ * plus the bottom gutter; the 20rem floor keeps a short window usable. `min-[1500px]:[--roster-sticky-col:280px]`
  * is the wide-screen column width (see STICKY_COL).
  */
-const BOARD_FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1480px]:[--roster-sticky-col:264px] md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]'
+const BOARD_FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1500px]:[--roster-sticky-col:280px] md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]'
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
 

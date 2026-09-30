@@ -146,3 +146,50 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     expect(window.location.reload).toHaveBeenCalledTimes(1) // only from the earlier switch, not from exit
   })
 })
+
+// Density polish (touch): same treatment as TenantSwitcher. A 32px trigger and 36px rows take a --tap-min floor, and
+// below sm the user's name leaves the trigger (kept in its accessible name and tooltip) so the SuperAdmin header fits.
+describe('UserSwitcher — touch target and small-screen trigger', () => {
+  it('floors the trigger at --tap-min without changing its look on a mouse', () => {
+    setSuperAdminSignedIn()
+    render(<UserSwitcher />)
+
+    const trigger = screen.getByRole('button', { name: /view as user/i })
+    expect(trigger).toHaveClass('flex', 'min-h-[var(--tap-min)]', 'items-center', 'gap-1.5', 'px-2.5', 'py-1.5', 'rounded-lg')
+    expect(trigger.className).not.toMatch(/44px/)
+  })
+
+  it('hides the name below sm but keeps it in the accessible name and tooltip when a user is being viewed', () => {
+    setSuperAdminSignedIn()
+    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    render(<UserSwitcher />)
+
+    const trigger = screen.getByRole('button', { name: 'USR Jamie Support' })
+    expect(trigger).toHaveAttribute('title', 'Jamie Support')
+    const name = screen.getByText('Jamie Support', { selector: 'span' })
+    expect(name).toHaveClass('hidden', 'sm:inline')
+    expect(screen.getByText('USR')).not.toHaveClass('hidden')
+  })
+
+  it('says "View as user…" in the accessible name before anyone is being viewed, with no tooltip', () => {
+    setSuperAdminSignedIn()
+    render(<UserSwitcher />)
+
+    const trigger = screen.getByRole('button', { name: 'USR View as user…' })
+    expect(trigger).not.toHaveAttribute('title')
+  })
+
+  it('floors the menu rows at --tap-min, including "Exit view"', async () => {
+    setSuperAdminSignedIn()
+    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    const exit = screen.getByRole('button', { name: /exit view/i })
+    expect(exit).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center')
+    for (const name of [/^jamie support/i, /^casey coordinator/i]) {
+      expect(screen.getByRole('button', { name })).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
+    }
+  })
+})

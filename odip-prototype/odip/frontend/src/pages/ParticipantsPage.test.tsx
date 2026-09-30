@@ -527,3 +527,24 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
     expect(row.querySelector('svg.lucide-chevron-right')).not.toBeNull()
   })
 })
+
+// Density polish (touch): the name link truncates (md:truncate), which clips its own TAP_AREA pad, so from md up on a
+// coarse pointer it takes vertical padding instead and the link box itself is 44px. Below md the cell is a card, the link
+// does not truncate and the DataTable's TAP_AREA_LINKS pad applies. A mouse sees neither (both are pointer-coarse:).
+describe('ParticipantsPage — name link touch target', () => {
+  it('pads the truncating name link to --tap-min from md up on touch, without changing its truncation or accessible name', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ fullName: 'Grace Palmer-Hughes' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const link = screen.getByRole('link', { name: 'Open Grace Palmer-Hughes profile' })
+    expect(link).toHaveClass(
+      'md:pointer-coarse:py-[calc((var(--tap-min)_-_1.25rem)_/_2)]',
+      'inline-block', 'align-middle', 'md:max-w-[16rem]', 'md:truncate', 'font-medium',
+    )
+    expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
+    expect(link.className).not.toMatch(/before:/)
+  })
+})

@@ -182,21 +182,26 @@ export default function SchedulePage() {
             pins horizontally in the same frame. scroll-pt/pl keep a keyboard-focused cell from landing
             underneath the pinned header row or resource column.
           */}
-          <div className="overflow-auto scroll-pt-20 scroll-pl-44 md:scroll-pl-80 md:max-h-[max(20rem,calc(100dvh_-_12.5rem))]">
+          <div className="overflow-auto scroll-pt-20 scroll-pl-44 md:scroll-pl-80 xl:scroll-pl-[23rem] md:max-h-[max(20rem,calc(100dvh_-_12.5rem))]">
             {/* text-sm on the table: without it every cell inherits the browser's 16px (Tailwind sets no size
                 on table cells), which is what made this matrix's cell text 16px. DataTable sets it the same way. */}
             <table
-              className="w-full table-fixed border-separate border-spacing-0 text-sm tabular-nums min-w-[calc(11rem_+_var(--trips)_*_10rem)] md:min-w-[calc(20rem_+_var(--trips)_*_10rem)]"
+              className="w-full table-fixed border-separate border-spacing-0 text-sm tabular-nums min-w-[calc(11rem_+_var(--trips)_*_10rem)] md:min-w-[calc(20rem_+_var(--trips)_*_10rem)] xl:min-w-[calc(23rem_+_var(--trips)_*_10rem)]"
               style={{ '--trips': tripCount } as React.CSSProperties}
             >
               <colgroup>
-                {/* Resources column: 176px on a phone (name/role stack above the chips), 320px (20rem) from md up. The 320 is
-                    arithmetic, not taste: 2 x 12px cell padding + 20px chevron and gap + a name + 6px gap + 8px gap + the
-                    94px qualification strip (3 icons + "+N") leaves 168px for the name, so "Marcus Papadopoulos" (147px at
-                    14px/600, the longest staff name in the fixtures) fits whole with about 20px of role beside it. The
-                    vehicle rows need less (indent 20 + "Hire WAV (Coastline Rentals)" 193). Any narrower and that staff name
-                    truncates; the width is the same at 1366 and 1920, only the trip columns flex. */}
-                <col className="w-44 md:w-80" />
+                {/* Resources column: 176px on a phone (name/role stack above the chips), 320px (20rem) from md up, 368px
+                    (23rem) from xl. The 320 is arithmetic, not taste: 2 x 12px cell padding + 20px chevron and gap + a name +
+                    6px gap + 8px gap + the 94px qualification strip (3 icons + "+N") leaves 168px for the name, so "Marcus
+                    Papadopoulos" (147px at 14px/600, the longest staff name in the fixtures) fits whole. Any narrower and
+                    that staff name truncates. The vehicle rows need less (indent 20 + "Hire WAV (Coastline Rentals)" 193).
+                    The extra 3rem from xl is for the ROLE: the line shows the role alone (the region is in the title), and
+                    "Senior Support Worker" is 135px at 13px, the longest role in the fixtures, so beside "Mei Zhang" (70px)
+                    it needs 135px of the 147px that 368px leaves; 22rem (352px) leaves 131px, four short. Roles beside the
+                    fixtures' longer names ("Marcus Papadopoulos") still truncate, with their title. Only from xl, so
+                    narrower windows keep the trip columns their room; at exactly 1280px four trips are still 10rem each,
+                    and wider windows give the trip columns everything the first column does not take. */}
+                <col className="w-44 md:w-80 xl:w-[23rem]" />
                 {trips.map((trip: ScheduleTripDto) => <col key={trip.id} />)}
               </colgroup>
 
@@ -264,7 +269,10 @@ export default function SchedulePage() {
 
                 {sectionStaff && staff?.map((s: ScheduleStaffDto) => {
                   const expanded = expandedStaff.has(s.id)
-                  const roleText = `${s.role?.replace(/([A-Z])/g, ' $1').trim() ?? ''}${s.region ? ` · ${s.region}` : ''}`
+                  // The line shows the role alone; the region is secondary, so it lives in the titles (`roleText`) and the
+                  // role gets the room the location used to take ("Team Le…" -> "Team Leader").
+                  const roleLabel = s.role?.replace(/([A-Z])/g, ' $1').trim() ?? ''
+                  const roleText = `${roleLabel}${s.region ? ` · ${s.region}` : ''}`
                   return (
                     <React.Fragment key={s.id}>
                       <tr className={ROW}>
@@ -286,7 +294,7 @@ export default function SchedulePage() {
                                   18px off "Callum Radford" (84px of 102). The name only truncates, with this title,
                                   once the whole cell is narrower than the name itself. */}
                               <span className="min-w-0 truncate text-sm font-semibold" title={s.fullName}>{s.fullName}</span>
-                              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-muted-foreground)]" title={roleText || undefined}>{roleText}</span>
+                              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-muted-foreground)]" title={roleText || undefined}>{roleLabel}</span>
                             </button>
                             <QualBadgeList
                               className="max-md:pl-5"

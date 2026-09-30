@@ -67,14 +67,18 @@ export default function UserSwitcher() {
 
   return (
     <div ref={ref} className="relative">
+      {/* Same floor and the same small-screen treatment as TenantSwitcher's trigger: 44px tall on touch, and below sm
+          the user's name leaves the trigger (kept in its accessible name and tooltip) so the header fits 390px. */}
       <button
         onClick={() => setOpen(o => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 bg-[#fff7ed] border border-[#fed7aa] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#ffedd5] transition-colors"
+        aria-label={`USR ${currentViewUser?.fullName ?? 'View as user…'}`}
+        title={currentViewUser?.fullName}
+        className="flex min-h-[var(--tap-min)] items-center gap-1.5 bg-[#fff7ed] border border-[#fed7aa] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#ffedd5] transition-colors"
       >
         <span className="text-xs bg-[#ea580c] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
-        <span className="text-sm font-semibold text-[#9a3412]">
+        <span className="hidden text-sm font-semibold text-[#9a3412] sm:inline">
           {currentViewUser?.fullName ?? 'View as user…'}
         </span>
         <span className="text-[#ea580c] text-xs">▾</span>
@@ -89,7 +93,7 @@ export default function UserSwitcher() {
             {viewingUserId && (
               <button
                 onClick={() => { setOpen(false); setConfirmingExit(true) }}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[rgba(255,255,255,0.05)] mb-1 border-b border-[#334155] pb-2"
+                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[rgba(255,255,255,0.05)] mb-1 border-b border-[#334155] pb-2"
               >
                 <span className="text-sm text-[#64748b]">↩ Exit view</span>
               </button>
@@ -102,7 +106,7 @@ export default function UserSwitcher() {
                 key={user.id}
                 onClick={() => !user.isActive ? undefined : setPendingUser(user)}
                 disabled={!user.isActive}
-                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   user.id === viewingUserId
                     ? 'bg-[rgba(234,88,12,0.15)]'
                     : user.isActive ? 'hover:bg-[rgba(255,255,255,0.05)]' : ''

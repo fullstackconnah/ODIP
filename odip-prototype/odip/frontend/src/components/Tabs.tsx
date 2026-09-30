@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 
 /**
  * One tab in the consolidated Tabs primitive.
@@ -63,13 +63,37 @@ export type TabsProps = {
  * - Touch target: every tab has a `--tap-min` height floor — 0 (no change: `py-2` + a 20px line + the
  *   2px underline is ~38px) on a mouse, 44px under `pointer: coarse` so a fingertip lands on it. The
  *   token flips; the component doesn't branch on the pointer type.
- * - Overflow: the tablist scrolls horizontally on small viewports so 11-tab pages like
- *   `ParticipantDetailPage` don't overflow the page gutter. Long strips wrap via `flex-wrap`
- *   too — billing-style 3-tab pages stay on one line; longer strips roll over gracefully.
+ * - Overflow: below md (768px) the strip is ONE row that scrolls sideways (`flex-nowrap` +
+ *   `overflow-x-auto`, scrollbar hidden), so an 11-tab page like `ParticipantDetailPage` costs a
+ *   single 44px row on a phone instead of five wrapped ones (~240px before any content). The active
+ *   tab is scrolled into view inside the strip when it changes. From md up the strip wraps
+ *   (`md:flex-wrap`) instead: billing-style 3-tab pages stay on one line and longer strips roll
+ *   over onto a second row, exactly as before.
  */
 export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: TabsProps) {
   const baseId = useId()
+  const listRef = useRef<HTMLDivElement | null>(null)
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  // Keep the active tab in view *inside the strip*. Below md the strip is a single scrolling row, so a
+  // tab chosen near the edge (or arrived at by `?tab=`) can sit half off-screen. Only the strip's own
+  // horizontal scroll is moved: `scrollIntoView` would also scroll the page to reveal the strip, which
+  // is the wrong side effect on load. A tab that is already fully visible is left alone, and from md up
+  // (a wrapping strip that never overflows) this does nothing. `scroll-smooth` on the strip animates
+  // the move, and the global reduced-motion rule turns that off. jsdom has no `scrollTo` on elements,
+  // hence the `scrollLeft` fallback.
+  useEffect(() => {
+    const list = listRef.current
+    const tab = tabRefs.current[active]
+    if (!list || !tab || list.scrollWidth <= list.clientWidth) return
+    const listBox = list.getBoundingClientRect()
+    const tabBox = tab.getBoundingClientRect()
+    if (tabBox.left >= listBox.left && tabBox.right <= listBox.right) return
+    const centred = list.scrollLeft + (tabBox.left - listBox.left) - (listBox.width - tabBox.width) / 2
+    const left = Math.max(0, Math.min(centred, list.scrollWidth - list.clientWidth))
+    if (typeof list.scrollTo === 'function') list.scrollTo({ left })
+    else list.scrollLeft = left
+  }, [active])
 
   // Resolve the initial focus target before seeding state: if the parent passes an
   // `active` id that doesn't correspond to a tab at all, or that corresponds to a disabled
@@ -156,13 +180,17 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
   return (
     <div className={className}>
       <div
+        ref={listRef}
         role="tablist"
         aria-label={ariaLabel}
-        // flex-wrap keeps short strips on one line (billing's 3-tab look) but lets 11-tab
-        // participant detail roll onto a second row instead of overflowing. overflow-x-auto
-        // is the safety net for >7ish tabs on narrow viewports — it scrolls rather than
-        // overflowing the page gutter.
-        className="flex flex-wrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto"
+        // Below md: one row (`flex-nowrap`) that scrolls sideways (`overflow-x-auto`) with its scrollbar
+        // hidden, like a native tab bar; each tab keeps its full 44px `--tap-min` height under a coarse
+        // pointer. From md up: `md:flex-wrap` keeps short strips on one line (billing's 3-tab look) and
+        // lets 11-tab participant detail roll onto a second row instead of overflowing; `overflow-x-auto`
+        // stays as the safety net there too. The scrollbar is hidden only below md, where the strip is
+        // the scrolling surface (Tailwind has no scrollbar-width utility, hence the arbitrary property
+        // and the WebKit pseudo).
+        className="flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth md:flex-wrap max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden"
       >
         {tabs.map(tab => {
           const isActive = tab.id === active
@@ -191,7 +219,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={`flex min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
+              className={`flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
                 isActive
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'

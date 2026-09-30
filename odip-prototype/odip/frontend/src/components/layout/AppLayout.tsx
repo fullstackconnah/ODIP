@@ -205,13 +205,18 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
       >
         Skip to content
       </a>
-      {/* Mobile overlay */}
+      {/*
+        Mobile overlay. Below lg the open drawer (z-[60]) and its scrim (z-[55]) sit ABOVE the fixed bottom nav
+        (z-50). They used to be z-50 and z-40: the nav comes later in the DOM, so it painted over the drawer's own
+        "Sign Out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
+        there is no bottom nav, and it keeps z-50 (`lg:z-50`) so a Modal (z-50, later in the DOM) still covers it.
+      */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/40 z-[55] lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         {/* Brand — ~48px tall total */}
         <div className="flex items-center gap-2.5 h-12 px-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center shrink-0">
@@ -233,7 +238,10 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           </div>
         )}
 
-        {/* Nav */}
+        {/* Nav. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
+            `--tap-min` floor: 32px (28px for a group child) on a mouse as before, 44px under a coarse pointer, where
+            this is the touch drawer (and the permanent sidebar of a touch tablet). The list scrolls inside the
+            drawer when 44px items no longer fit its height. */}
         <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto pt-1">
           {navItems.map(item => {
             if ('children' in item) {
@@ -254,7 +262,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                     aria-expanded={isOpen}
                     aria-controls={groupId}
                     onClick={() => toggleGroup(item.label)}
-                    className={`flex items-center w-full gap-3 px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
+                    className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
                       isGroupActive
                         ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
                         : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
@@ -290,7 +298,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                             tabIndex={isOpen ? undefined : -1}
                             aria-label={badgeCount > 0 ? navBadgeLabel(badgeCount, badgeNoun, label) : undefined}
                             className={({ isActive }) =>
-                              `flex items-center gap-3 pl-7 pr-3 h-7 rounded-md text-sm transition-all duration-150 ${
+                              `flex items-center gap-3 pl-7 pr-3 h-7 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
                                 computeActive(isActive)
                                   ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
                                   : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
@@ -318,7 +326,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
               <NavLink key={to} to={to} end={isExactMatchOnly(to)}
                 aria-label={showWitnessBadge ? navBadgeLabel(pendingWitnessCount, 'witness approval', label) : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
+                  `flex items-center gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
                     isActive
                       ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
                       : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
@@ -337,7 +345,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         {/* Bottom */}
         <div className="pt-2 shrink-0">
           <button onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-1.5 h-8 rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
+            className="flex items-center gap-3 px-3 py-1.5 h-8 min-h-[var(--tap-min)] rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
             <LogOut className="w-4 h-4" />
             Sign Out
           </button>
@@ -365,10 +373,12 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                   {user.tenantName}
                 </span>
               )}
-              <div className="hidden md:flex items-center h-8 bg-[var(--color-sidebar)] rounded-md px-3 gap-2 w-[360px]">
+              {/* 32px on a mouse; the --tap-min floor makes the box 44px on touch (the header is 48px) and the input
+                  stretches to fill it, so a tap anywhere in the field lands in the input, not just on its 20px line. */}
+              <div className="hidden md:flex items-center h-8 min-h-[var(--tap-min)] bg-[var(--color-sidebar)] rounded-md px-3 gap-2 w-[360px]">
                 <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
                 <input
-                  className="bg-transparent border-none outline-none text-sm w-full placeholder:text-[var(--color-muted-foreground)]/60 text-[var(--color-foreground)]"
+                  className="bg-transparent border-none outline-none text-sm w-full pointer-coarse:self-stretch placeholder:text-[var(--color-muted-foreground)]/60 text-[var(--color-foreground)]"
                   placeholder="Search trips, participants..."
                   aria-label="Search trips and participants"
                   type="text"

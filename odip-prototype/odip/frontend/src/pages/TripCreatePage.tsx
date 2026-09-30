@@ -9,6 +9,7 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -83,7 +84,7 @@ export default function TripCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/trips" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Trips</Link>
+        <Link to="/trips" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Trips</Link>
       </div>
       <PageHeader title="Create New Trip" />
 

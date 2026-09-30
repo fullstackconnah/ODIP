@@ -627,3 +627,36 @@ describe('IncidentsPage — row actions', () => {
     expect(file.closest('[class*="group-hover/row:opacity-100"]')).toBeNull()
   })
 })
+
+// Density polish (touch): the participant / trip / involved-participant links in the table truncate (md:truncate,
+// overflow hidden), and a truncating link clips its own TAP_AREA pad, so on a touch tablet they were still 20px tall.
+// From md up, under a coarse pointer, they take vertical padding instead (the link box itself becomes 44px); below md
+// the cells are cards, the links do not truncate, and the DataTable's TAP_AREA_LINKS pad reaches 44px. The QSC banner's
+// "View overdue incidents" link is a standalone link and takes the --tap-min floor.
+describe('IncidentsPage — 44px touch targets for its links', () => {
+  const PAD = 'md:pointer-coarse:py-[calc((var(--tap-min)_-_1.25rem)_/_2)]'
+
+  it('gives the truncating participant and trip links vertical padding from md up on touch, keeping their truncation', () => {
+    mockUseIncidents.mockReturnValue({
+      data: [baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day', involvedParticipantId: 'p-9', involvedParticipantName: 'Priya Nair' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    for (const name of ['Beach Day', 'Priya Nair']) {
+      const link = screen.getByRole('link', { name })
+      expect(link, name).toHaveClass(PAD, 'inline-block', 'align-middle', 'md:truncate', 'text-[var(--color-primary)]')
+      // Padding, not the pad: the ::before of an overflow-hidden link is clipped by the link itself.
+      expect(link.className, name).not.toMatch(/before:/)
+    }
+  })
+
+  it('floors the QSC banner link "View overdue incidents" at --tap-min', () => {
+    mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
+    renderPage()
+
+    const link = screen.getByRole('link', { name: 'View overdue incidents' })
+    expect(link).toHaveAttribute('href', '/incidents?qsc=overdue')
+    expect(link).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'shrink-0', 'whitespace-nowrap', 'underline')
+  })
+})

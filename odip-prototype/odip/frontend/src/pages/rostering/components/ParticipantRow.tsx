@@ -41,16 +41,19 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         layout exists to surface. A trip bar rendered below can explain an otherwise-empty week without this
         reading as a failure.
 
-        The cell is a size container. At the wide sticky-column width (RosterGrid: 264px, 247px of content
-        inside the rule and padding) the coverage state reads in full — "6 days uncovered", "Fully covered" —
-        and, with the 28px ratio chip and two 8px gaps, still leaves 92px for the name, so a name up to that
-        length shows whole; a longer one truncates with its title. Below 15rem (240px) of content — the 195px
-        column used under 1480px viewports — the coverage state collapses to a warning icon + the count, or
-        a check, so the row still fits one line; the full wording stays on the badge's title and aria-label.
-        None of it uses visually-hidden (sr-only) text: those 1px clip boxes are what a "clipped without an
-        ellipsis" audit reports, and role="img" + aria-label announces the same thing.
+        The coverage state is a COUNT BADGE at every column width: a warning icon and the number of uncovered
+        days on the amber tint, or a check when the week is fully covered. The words ("6 days uncovered",
+        "Fully covered") are the badge's title and aria-label, not text in the row. They used to be spelled out
+        in the wide column, and that is what cost the row its identity: 110px of "6 days uncovered" plus the 31px
+        ratio chip and two 8px gaps left 90px of the 247px content box for the name, so "Grace Palmer-Hughes"
+        (151px, plus the 12px restrictive-practice marker and its 4px gap = 167px) read "Grace Pa…" while the
+        same three words repeated down every row. The 35px count badge leaves 165px of the 247px box at the old
+        264px column and 181px at RosterGrid's 280px one, so a name up to ~167px shows whole with its marker
+        (a longer one truncates, with its title). Below 1500px the 195px column keeps the same badge and gives
+        the name ~96px, as it always did. There is no visually-hidden (sr-only) text: those 1px clip boxes are
+        what a "clipped without an ellipsis" audit reports, and role="img" + aria-label announces the same thing.
       */}
-      <div className="@container sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to={`/participants/${row.participantId}`}
@@ -76,9 +79,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             {ratioLabel}
           </span>
           {hideCoverageBadge ? null : covered ? (
-            <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-[13px] text-muted-foreground">
-              <Check className="h-3.5 w-3.5 @[15rem]:hidden" aria-hidden="true" />
-              <span className="hidden @[15rem]:inline">Fully covered</span>
+            <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-muted-foreground">
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           ) : (
             <span
@@ -87,9 +89,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               title={uncoveredLabel}
               className="inline-flex h-5 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
             >
-              <AlertTriangle className="h-3 w-3 @[15rem]:hidden" aria-hidden="true" />
-              <span className="tabular-nums @[15rem]:hidden">{row.daysWithoutCover}</span>
-              <span className="hidden @[15rem]:inline">{uncoveredLabel}</span>
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+              <span className="tabular-nums">{row.daysWithoutCover}</span>
             </span>
           )}
         </div>

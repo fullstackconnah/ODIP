@@ -140,7 +140,7 @@
   }
   .mobile-card-table tbody td::before {
     content: attr(data-label);
-    font-size: 10px;
+    font-size: 12px; /* the 12px type floor (DESIGN.md): it was 10px */
     font-weight: 600;
     color: var(--color-muted-foreground);
     text-transform: uppercase;
@@ -150,6 +150,17 @@
   }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
+  }
+}
+
+/*
+ * Touch: neighbouring cells of a card can each hold a control that reaches 44px (a 35px "Open" link beside a 36px
+ * row action: 4.6px + 4px of hit area past their edges). The 8px between cells left those two overlapping by under a
+ * pixel; 12px clears any such pair. Cards on a mouse keep 8px.
+ */
+@media screen and (max-width: 767px) and (pointer: coarse) {
+  .mobile-card-table tbody tr {
+    gap: 0.75rem;
   }
 }
 

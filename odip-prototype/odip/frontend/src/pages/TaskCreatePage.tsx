@@ -11,6 +11,7 @@ import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 
@@ -137,7 +138,7 @@ export default function TaskCreatePage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>
+          <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
         </div>
         <PageHeader title="Edit Task" />
         <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
@@ -151,7 +152,7 @@ export default function TaskCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/tasks" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Tasks</Link>
+        <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
       </div>
       <PageHeader title={isEdit ? 'Edit Task' : 'New Task'} />
 

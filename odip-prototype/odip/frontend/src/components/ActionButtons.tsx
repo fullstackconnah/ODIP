@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Pencil, Trash2, ArchiveRestore } from 'lucide-react'
+import { TAP_AREA } from './tapArea'
 
 export type ActionButtonsProps = {
   editTo?: string
@@ -9,6 +10,17 @@ export type ActionButtonsProps = {
   showArchived?: boolean
 }
 
+/**
+ * The shape every icon control here shares. On a mouse it is what it always was: a 28px square (p-1.5 around a
+ * 16px icon). Under `pointer: coarse` it is the `--control-h-sm` square (36px, the same size `Button iconOnly` is
+ * there) with the icon centred, and TAP_AREA reaches its hit area out to 44px without growing it. Two of them
+ * therefore need 8px between them on touch (4px of pad each side), which the wrapper's `pointer-coarse:gap-2`
+ * gives; a mouse keeps `gap-1`. Inside a DataTable row `RowActions` pins the same 24px / 36px square from outside
+ * (see ROW_ACTIONS_LEGACY_ICONS), and the two agree on touch.
+ */
+const ICON_BUTTON =
+  `${TAP_AREA} rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors pointer-coarse:inline-flex pointer-coarse:size-[var(--control-h-sm)] pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:p-0`
+
 export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchived }: ActionButtonsProps) {
   const stop = (e: React.MouseEvent, fn?: () => void) => {
     e.stopPropagation()
@@ -16,31 +28,31 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 pointer-coarse:gap-2">
       {editTo && (
         <Link to={editTo} onClick={e => e.stopPropagation()}
-          className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors inline-block"
+          className={`${ICON_BUTTON} inline-block hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
           title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </Link>
       )}
       {onEdit && (
         <button onClick={e => stop(e, onEdit)}
-          className="p-1.5 rounded hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
+          className={`${ICON_BUTTON} hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
           title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </button>
       )}
       {showArchived && onRestore && (
         <button onClick={e => stop(e, onRestore)}
-          className="p-1.5 rounded hover:bg-green-500/20 text-[var(--color-muted-foreground)] hover:text-green-400 transition-colors"
+          className={`${ICON_BUTTON} hover:bg-green-500/20 hover:text-green-400`}
           title="Restore" aria-label="Restore">
           <ArchiveRestore className="w-4 h-4" />
         </button>
       )}
       {!showArchived && onDelete && (
         <button onClick={e => stop(e, onDelete)}
-          className="p-1.5 rounded hover:bg-red-500/20 text-[var(--color-muted-foreground)] hover:text-red-400 transition-colors"
+          className={`${ICON_BUTTON} hover:bg-red-500/20 hover:text-red-400`}
           title="Archive" aria-label="Archive">
           <Trash2 className="w-4 h-4" />
         </button>

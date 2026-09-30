@@ -90,3 +90,17 @@ describe('TripCreatePage — PP-65 create-failure error message', () => {
     expect(await screen.findByText('Trip detail')).toBeInTheDocument()
   })
 })
+
+// Density polish (touch): the "← Back to Trips" text link was a 19px tap target. It takes the shared TAP_FLOOR
+// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
+// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
+describe('TripCreatePage — Back link touch target', () => {
+  it('floors the "Back to Trips" link at --tap-min and keeps its destination and hover colour', () => {
+    renderCreatePage()
+
+    const back = screen.getByRole('link', { name: /back to trips/i })
+    expect(back).toHaveAttribute('href', '/trips')
+    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
+    expect(back.className).not.toMatch(/44px/)
+  })
+})

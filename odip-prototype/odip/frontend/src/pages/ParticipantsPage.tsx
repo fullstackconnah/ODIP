@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { Button } from '@/components/Button'
+import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
@@ -136,7 +137,7 @@ function useParticipantsScreen() {
           to={`/participants/${p.id}`}
           aria-label={`Open ${p.fullName} profile`}
           title={p.fullName}
-          className="inline-block align-middle font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm md:max-w-[16rem] md:truncate"
+          className={`inline-block align-middle font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm md:max-w-[16rem] md:truncate ${TAP_TRUNCATED_LINK}`}
         >
           {p.fullName}
         </Link>

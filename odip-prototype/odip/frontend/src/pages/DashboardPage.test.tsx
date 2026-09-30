@@ -328,3 +328,75 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
     expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
   })
 })
+
+// Density polish (touch): the "View All" links (16px), the overdue-task "View" links (16px) and the upcoming-trip
+// rows (40px) were all under 44px on a phone. Each takes a `--tap-min` floor: 0px on a mouse, so the desktop
+// dashboard is exactly what it was, 44px tall under `pointer: coarse`. jsdom has no CSS, so the class contract is
+// what is pinned here.
+describe('DashboardPage — 44px touch targets', () => {
+  const FLOOR = ['min-h-[var(--tap-min)]']
+  const renderWithLists = () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [{
+        participantId: 'p1', participantName: 'Jamie Smith', isActive: true,
+        alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null }],
+        criticalCount: 1, warningCount: 0, infoCount: 0,
+      }],
+      isLoading: false,
+    })
+    mockUseDashboard.mockReturnValue({
+      data: {
+        upcomingTripCount: 1, activeParticipantCount: 0, outstandingTaskCount: 0,
+        overdueTaskCount: 1, conflictCount: 0, tripsMissingAccommodation: 0,
+        tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0,
+        upcomingTrips: [{ id: 't-1', tripName: 'Beach Trip', destination: 'Caloundra QLD', startDate: '2026-08-28', status: 'Confirmed', currentParticipantCount: 3, maxParticipants: 8 }],
+        overdueTasks: [{ id: 'task-1', title: 'Chase invoice', priority: 'High', dueDate: new Date(Date.now() - 3600000).toISOString(), tripName: 'Beach Trip', ownerName: 'Sam Owner' }],
+      },
+      isLoading: false, isError: false,
+    })
+    return renderPage()
+  }
+
+  it('floors all three "View All" links (Upcoming Trips, Overdue Tasks, Critical Participant Alerts) at --tap-min', () => {
+    renderWithLists()
+
+    const viewAll = screen.getAllByRole('link', { name: 'View All' })
+    expect(viewAll.map(a => a.getAttribute('href'))).toEqual(['/trips', '/tasks', '/participants'])
+    for (const link of viewAll) {
+      expect(link).toHaveClass('pointer-coarse:inline-flex', ...FLOOR, 'pointer-coarse:items-center', 'font-bold', 'hover:underline')
+    }
+  })
+
+  it('keeps the link text sizes: text-xs for the two panels, text-sm for the alerts heading row', () => {
+    renderWithLists()
+
+    const [trips, tasks, alerts] = screen.getAllByRole('link', { name: 'View All' })
+    expect(trips).toHaveClass('text-xs')
+    expect(tasks).toHaveClass('text-xs')
+    expect(alerts).toHaveClass('text-sm')
+  })
+
+  it('lifts each upcoming-trip row to --tap-min while it stays h-10 (40px) on a mouse', () => {
+    renderWithLists()
+
+    const row = screen.getByRole('link', { name: /Beach Trip/ })
+    expect(row).toHaveClass('flex', 'h-10', ...FLOOR, 'items-center')
+    expect(row).toHaveAttribute('href', '/trips/t-1')
+  })
+
+  it('gives an overdue task row room for a 44px "View" link, and floors the link in both directions', () => {
+    renderWithLists()
+
+    const view = document.querySelector('a[href="/tasks/task-1/edit"]') as HTMLElement
+    expect(view).toHaveClass(...FLOOR, 'min-w-[var(--tap-min)]', 'items-center', 'justify-center', 'shrink-0', 'font-bold')
+    // The row is h-10 on a mouse and grows to the floor on touch so the link fits it.
+    expect(view.parentElement).toHaveClass('h-10', ...FLOOR)
+  })
+
+  it('never hard-codes 44px: every floor is the --tap-min token', () => {
+    const { container } = renderWithLists()
+
+    expect(container.innerHTML).not.toMatch(/(?:min-h|min-w|h|w)-\[44px\]/)
+  })
+})

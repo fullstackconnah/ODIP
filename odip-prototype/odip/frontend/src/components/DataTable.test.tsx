@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { CellText, DataTable, RowActions } from './DataTable'
 import type { Column } from './DataTable'
 import { Button } from './Button'
-import { TAP_AREA } from './tapArea'
+import { TAP_AREA, TAP_AREA_LINKS } from './tapArea'
 import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 
 type Row = { id: string; name: string; age: number }
@@ -1014,5 +1014,70 @@ describe('DataTable — keyboard activation of a clickable row', () => {
 
     expect(onRowClick).toHaveBeenCalledTimes(2)
     expect(onRowClick).toHaveBeenCalledWith(rows[0])
+  })
+})
+
+// Density polish (touch): a 19px name link in a table cell was a 19px tap target on a phone. DataTable puts
+// TAP_AREA_LINKS on every BODY cell, so every link in a cell (a caller's `render`) reaches 44px under a coarse
+// pointer without the caller knowing, and a mouse sees nothing (every class is behind `pointer-coarse:`).
+describe('DataTable — 44px hit area for the links in a cell (coarse pointer)', () => {
+  const linkColumns: Column<Row>[] = [
+    { key: 'name', header: 'Name', render: r => <a href={`/people/${r.id}`}>{r.name}</a> },
+    { key: 'age', header: 'Age', type: 'text' },
+  ]
+
+  it('puts TAP_AREA_LINKS on every body cell, whether or not the cell holds a link', () => {
+    render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
+
+    const cells = screen.getAllByRole('cell')
+    expect(cells).toHaveLength(rows.length * linkColumns.length)
+    for (const cell of cells) expect(cell).toHaveClass(...TAP_AREA_LINKS.split(' '))
+  })
+
+  it('leaves the header cells alone: a column title is not a control', () => {
+    render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
+
+    for (const th of screen.getAllByRole('columnheader')) {
+      expect(th.className).not.toContain('[&_a]')
+    }
+  })
+
+  it('scopes the pad to descendant links under a coarse pointer, so a mouse gets no position or pseudo-element', () => {
+    render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
+
+    const cell = screen.getByRole('link', { name: 'Bianca' }).closest('td') as HTMLElement
+    const classes = cell.className.split(/\s+/).filter(c => c.includes('[&_a]'))
+    expect(classes.length).toBeGreaterThan(8)
+    for (const c of classes) expect(c.startsWith('pointer-coarse:[&_a]:')).toBe(true)
+    // Floored by --tap-min, so the reach past the text is (44 - height) / 2 and never a hard-coded value.
+    expect(classes).toEqual(expect.arrayContaining([
+      'pointer-coarse:[&_a]:relative',
+      'pointer-coarse:[&_a]:before:absolute',
+      'pointer-coarse:[&_a]:before:min-h-[var(--tap-min)]',
+      'pointer-coarse:[&_a]:before:min-w-[var(--tap-min)]',
+    ]))
+  })
+
+  it('keeps the cell itself unchanged: still one nowrap line from md up, and a plain string still truncates', () => {
+    render(<DataTable data={rows} columns={linkColumns} keyField="id" />)
+
+    const cell = screen.getByRole('link', { name: 'Bianca' }).closest('td') as HTMLElement
+    expect(cell).toHaveClass('md:whitespace-nowrap', 'px-[var(--cell-px)]', 'align-middle')
+    expect(cell.className).not.toMatch(/(^|\s)(relative|absolute|min-h-|h-)/)
+  })
+
+  it('lifts the pager buttons to the --control-h token under a coarse pointer, and leaves a mouse at --control-h-sm', () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        pagination={{ page: 2, pageSize: 2, totalCount: 6, onPageChange: vi.fn() }}
+      />,
+    )
+
+    for (const name of ['Previous page', 'Next page']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('h-[var(--control-h-sm)]', 'pointer-coarse:h-[var(--control-h)]')
+    }
   })
 })

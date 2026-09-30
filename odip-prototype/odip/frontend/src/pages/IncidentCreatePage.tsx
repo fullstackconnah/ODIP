@@ -8,6 +8,7 @@ import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
+import { TAP_FLOOR } from '@/components/tapArea'
 import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
@@ -551,7 +552,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/incidents" className="hover:text-[var(--color-foreground)] transition-colors">&larr; Back to Incidents</Link>
+        <Link to="/incidents" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Incidents</Link>
       </div>
       <PageHeader title={isEdit ? 'Edit Incident Report' : 'Report New Incident'} />
 

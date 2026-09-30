@@ -6,6 +6,7 @@ import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeve
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
 import { StatCard } from '@/components/StatCard'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { Link } from 'react-router-dom'
 import {
   Map, ListChecks, ChevronRight, ShieldAlert
@@ -163,7 +164,7 @@ export default function DashboardPage() {
         <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Upcoming Trips</h3>
-            <Link to="/trips" className="text-xs font-bold text-[var(--color-primary)] hover:underline">
+            <Link to="/trips" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
               View All
             </Link>
           </div>
@@ -181,7 +182,7 @@ export default function DashboardPage() {
                   <Link
                     key={t.id}
                     to={`/trips/${t.id}`}
-                    className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] px-2 transition-colors hover:bg-[var(--color-surface-container-low)]"
+                    className="flex h-10 min-h-[var(--tap-min)] items-center gap-2 rounded-[var(--radius-sm)] px-2 transition-colors hover:bg-[var(--color-surface-container-low)]"
                   >
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-foreground)]" title={t.tripName}>{t.tripName}</span>
                     <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @md:inline">
@@ -208,7 +209,7 @@ export default function DashboardPage() {
         <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Overdue Tasks</h3>
-            <Link to="/tasks" className="text-xs font-bold text-[var(--color-primary)] hover:underline">
+            <Link to="/tasks" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
               View All
             </Link>
           </div>
@@ -224,7 +225,7 @@ export default function DashboardPage() {
                 const badgeClass = priorityStyle[t.priority] || priorityStyle.Medium
                 const initials = (t.ownerName || 'UN').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                 return (
-                  <div key={t.id} className="flex h-10 items-center gap-2 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
+                  <div key={t.id} className="flex h-10 min-h-[var(--tap-min)] items-center gap-2 rounded-[var(--radius-sm)] px-2 hover:bg-[var(--color-surface-container-low)]">
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${badgeClass}`}>
                       {t.priority || 'Medium'}
                     </span>
@@ -243,7 +244,7 @@ export default function DashboardPage() {
                     </span>
                     <Link
                       to={`/tasks/${t.id}/edit`}
-                      className="flex shrink-0 items-center gap-0.5 text-xs font-bold text-[var(--color-primary)] hover:underline"
+                      className="flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center gap-0.5 text-xs font-bold text-[var(--color-primary)] hover:underline"
                     >
                       View <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </Link>
@@ -260,7 +261,7 @@ export default function DashboardPage() {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-lg font-display font-bold text-[var(--color-foreground)]">Critical Participant Alerts</h3>
-            <Link to="/participants" className="text-sm font-bold text-[var(--color-primary)] hover:underline">
+            <Link to="/participants" className={`${TAP_FLOOR} text-sm font-bold text-[var(--color-primary)] hover:underline`}>
               View All
             </Link>
           </div>

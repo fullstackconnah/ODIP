@@ -86,3 +86,16 @@ describe('AccommodationPage — empty states (PP-94)', () => {
     expect(screen.getByText(/no properties yet/i)).toBeInTheDocument()
   })
 })
+
+// Density polish (touch): the card's title link was a 24px target. It is a standalone link on the card's header line, so
+// it takes the --tap-min floor (inline-flex + centring under `pointer: coarse` only, so a mouse sees the same link).
+describe('AccommodationPage — card title link touch target', () => {
+  it('floors the property-name link at --tap-min and keeps its destination', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    const title = screen.getAllByRole('link', { name: 'Sunrise House' })[0]
+    expect(title).toHaveAttribute('href', '/accommodation/acc-1')
+    expect(title).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'font-semibold', 'hover:underline')
+  })
+})

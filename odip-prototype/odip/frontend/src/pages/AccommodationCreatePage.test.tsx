@@ -83,3 +83,17 @@ describe('AccommodationCreatePage — specific server error surfaced (PP-71)', (
     expect(screen.getByText(/you don't have permission to add accommodation/i)).toBeInTheDocument()
   })
 })
+
+// Density polish (touch): the "← Back to Accommodation" text link was a 19px tap target. It takes the shared TAP_FLOOR
+// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
+// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
+describe('AccommodationCreatePage — Back link touch target', () => {
+  it('floors the "Back to Accommodation" link at --tap-min and keeps its destination and hover colour', () => {
+    renderCreatePage()
+
+    const back = screen.getByRole('link', { name: /back to accommodation/i })
+    expect(back).toHaveAttribute('href', '/accommodation')
+    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
+    expect(back.className).not.toMatch(/44px/)
+  })
+})

@@ -226,6 +226,20 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(container.querySelector('colgroup col')).toHaveClass('w-44', 'md:w-80')
   })
 
+  it('widens the Resources column to 23rem from xl, with the table minimum and the scroll padding to match', () => {
+    const { container } = renderPage()
+
+    // The extra 3rem is what lets a role ("Senior Support Worker", 130px at 13px) show beside a name without hover.
+    expect(container.querySelector('colgroup col')).toHaveClass('w-44', 'md:w-80', 'xl:w-[23rem]')
+    // The fixed-layout table's floor and the keyboard-focus scroll padding are the same column width, or the trip
+    // columns would be squeezed below their 10rem minimum / a focused cell would land under the pinned column.
+    expect(container.querySelector('table')).toHaveClass(
+      'md:min-w-[calc(20rem_+_var(--trips)_*_10rem)]',
+      'xl:min-w-[calc(23rem_+_var(--trips)_*_10rem)]',
+    )
+    expect(container.querySelector('table')!.parentElement).toHaveClass('md:scroll-pl-80', 'xl:scroll-pl-[23rem]')
+  })
+
   it('renders the assignment chip at row-h less 6px (28px) with 14px text', () => {
     renderPage()
 
@@ -262,5 +276,65 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(screen.getByText('Create a trip first to see the schedule overview.')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Resource health' })).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})
+
+// Density polish (schedule roles): at 1920 the staff role read "Coordina…" / "Team Le…" because the line was
+// "Role · Region" in the 20px of width the name left over. The visible line is now the role alone and the region
+// moves into the title, so the role gets all the room and the location is still one hover away.
+describe('SchedulePage — staff role is the role alone, the region is in the title', () => {
+  const trips = richOverview.trips
+  const statuses = (...s: string[]) => trips.map((t, i) => ({ tripId: t.id, status: s[i] ?? 'Available', assignmentRole: null, assignmentStatus: null, assignmentId: null })) as ScheduleStaffDto['tripStatuses']
+  const staffOverview = (overrides: Partial<ScheduleStaffDto>): ScheduleOverviewDto => ({
+    trips,
+    staff: [makeStaff('staff-3', 'Priya Nadarajah', statuses(), { role: 'TeamLeader', region: 'Greater Brisbane', ...overrides })],
+    vehicles: [],
+  })
+
+  it('shows "Team Leader" alone on the line, with no location beside it', () => {
+    currentOverview = staffOverview({})
+    renderPage()
+
+    const cell = screen.getByRole('button', { name: /^Priya Nadarajah/ }).closest('td') as HTMLElement
+    const role = within(cell).getByText('Team Leader')
+    expect(role).toHaveTextContent(/^Team Leader$/)
+    expect(cell).not.toHaveTextContent('Greater Brisbane')
+    expect(cell).not.toHaveTextContent('·')
+  })
+
+  it('moves the region into the titles: the role span and the whole name button both carry "Team Leader · Greater Brisbane"', () => {
+    currentOverview = staffOverview({})
+    renderPage()
+
+    const button = screen.getByRole('button', { name: /^Priya Nadarajah/ })
+    const role = within(button).getByText('Team Leader')
+    expect(role).toHaveAttribute('title', 'Team Leader · Greater Brisbane')
+    expect(button).toHaveAttribute('title', 'Priya Nadarajah — Team Leader · Greater Brisbane')
+    expect(within(button).getByText('Priya Nadarajah')).toHaveAttribute('title', 'Priya Nadarajah')
+  })
+
+  it('keeps the name-first priority: the name never yields to the role, which is still the flexible, truncating part', () => {
+    currentOverview = staffOverview({ role: 'SeniorSupportWorker' })
+    renderPage()
+
+    const cell = screen.getByRole('button', { name: /^Priya Nadarajah/ }).closest('td') as HTMLElement
+    const role = within(cell).getByText('Senior Support Worker')
+    expect(role).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(within(cell).getByText('Priya Nadarajah')).toHaveClass('min-w-0', 'truncate')
+    expect(within(cell).getByText('Priya Nadarajah')).not.toHaveClass('flex-1')
+  })
+
+  it('shows a role with no region without a stray separator, and an empty role as an empty line with no title', () => {
+    currentOverview = staffOverview({ region: null })
+    const { unmount } = renderPage()
+    const cell = screen.getByRole('button', { name: /^Priya Nadarajah/ }).closest('td') as HTMLElement
+    expect(within(cell).getByText('Team Leader')).toHaveAttribute('title', 'Team Leader')
+    expect(screen.getByRole('button', { name: /^Priya Nadarajah/ })).toHaveAttribute('title', 'Priya Nadarajah — Team Leader')
+    unmount()
+
+    currentOverview = staffOverview({ role: '' as ScheduleStaffDto['role'], region: null })
+    renderPage()
+    const button = screen.getByRole('button', { name: /^Priya Nadarajah/ })
+    expect(button).toHaveAttribute('title', 'Priya Nadarajah')
   })
 })

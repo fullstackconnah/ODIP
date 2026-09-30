@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ActionButtons } from '@/components/ActionButtons'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
@@ -69,7 +70,7 @@ export default function AccommodationPage() {
           {filtered.map((a: any) => (
             <div key={a.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] hover:border-[var(--color-primary)]/30 transition-colors">
               <div className="flex items-start justify-between mb-2">
-                <Link to={`/accommodation/${a.id}`} className="font-semibold hover:underline">{a.propertyName}</Link>
+                <Link to={`/accommodation/${a.id}`} className={`${TAP_FLOOR} font-semibold hover:underline`}>{a.propertyName}</Link>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={a.isActive ? 'Active' : 'Inactive'} />
                   <ActionButtons

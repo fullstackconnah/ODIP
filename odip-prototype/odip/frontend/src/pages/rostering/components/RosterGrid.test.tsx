@@ -46,7 +46,8 @@ describe('RosterGrid — always renders the full grid', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
     expect(screen.getByText('Mia Chen')).toBeInTheDocument()
-    expect(screen.getByText('Fully covered')).toBeInTheDocument()
+    // The coverage state is a compact badge (a check here); "Fully covered" is its accessible name and title.
+    expect(screen.getByRole('img', { name: 'Fully covered' })).toBeInTheDocument()
   })
 })
 
@@ -185,19 +186,23 @@ describe('RosterGrid — density', () => {
     expect(screen.getByText('Mon').parentElement).toHaveClass('sticky', 'top-0')
   })
 
-  it('widens the sticky first column to 264px from a 1480px viewport through a CSS variable; below that it keeps the 195px column', () => {
+  it('widens the sticky first column to 280px from a 1500px viewport through a CSS variable; below that it keeps the 195px column', () => {
     const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
     const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
 
     // Only the wide-screen class sets the variable; the grid template and the scroll padding read it with the
     // 195px lib width as the var() fallback, so a narrower window gets exactly the board it always had (195 +
-    // the week strip's 921px fits from 1390px) and a wide one gets the room a one-line participant header needs.
-    expect(container.firstElementChild).toHaveClass('min-[1480px]:[--roster-sticky-col:264px]')
+    // the week strip's 921px fits from 1390px) and a wide one gets the room a one-line participant header needs:
+    // 280px = 17px rule and padding + the longest fixture name with its marker (167px) + 8 + the 31px ratio chip
+    // + 8 + the 35px coverage count badge, with ~14px to spare. 1500px is where 280 + 921 + 2 + the 272px of
+    // sidebar and gutters + ~17px of scrollbar (1492px) fits.
+    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]')
+    expect(container.firstElementChild!.className).not.toMatch(/1480px|264px/)
   })
 
   it('gives the loading skeleton the same frame, so the column does not jump when the real board arrives', () => {
     const { container } = render(<RosterGridSkeleton days={WEEK_DAYS} />)
 
-    expect(container.firstElementChild).toHaveClass('min-[1480px]:[--roster-sticky-col:264px]', 'overflow-auto')
+    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]', 'overflow-auto')
   })
 })

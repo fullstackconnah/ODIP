@@ -58,6 +58,49 @@ describe('RiskEntriesSection', () => {
     expect(screen.getByText('No risks recorded')).toBeInTheDocument()
   })
 
+  // Density polish (Risks card): the empty state was an EmptyState (40px icon, 18px title, three lines of
+  // guidance, a 44px button) that made the card a ~300px void. It is now the compact strip Health Conditions
+  // and the ADL grids use: one bordered, centred, muted line.
+  it('shows nothing recorded as a compact strip, not a page-level EmptyState', () => {
+    const { container } = render(<RiskEntriesSection participantId="participant-1" />)
+
+    const strip = screen.getByText('No risks recorded')
+    // A single text line: no icon, no heading, no paragraph of guidance, no button inside it.
+    expect(strip.tagName).toBe('P')
+    expect(strip.querySelector('svg, button, a')).toBeNull()
+    expect(strip).toHaveClass('rounded-[var(--radius-md)]', 'border', 'border-[var(--color-border)]', 'py-5', 'text-center', 'text-sm', 'text-[var(--color-muted-foreground)]')
+    // None of the EmptyState primitive's page-level furniture (40px faded icon, 18px title, 44px action).
+    expect(container.querySelector('.w-10.h-10')).toBeNull()
+    expect(strip.className).not.toMatch(/py-(6|10)|text-lg/)
+    expect(screen.queryByText(/capture potential risks/i)).not.toBeInTheDocument()
+  })
+
+  it("keeps the guidance copy as the strip's tooltip", () => {
+    render(<RiskEntriesSection participantId="participant-1" />)
+
+    expect(screen.getByText('No risks recorded')).toHaveAttribute(
+      'title',
+      'Capture potential risks in supporting this participant, categorised by who is at risk — the participant, other participants, the public, or staff.',
+    )
+  })
+
+  it("offers one Add risk button, the card header's, and not a second one in the empty strip", () => {
+    render(<RiskEntriesSection participantId="participant-1" />)
+
+    expect(screen.getAllByRole('button', { name: 'Add risk' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Add risk' }).closest('.space-y-4')?.firstElementChild).toContainElement(
+      screen.getByRole('button', { name: 'Add risk' }),
+    )
+  })
+
+  it('shows the strip, with no Add risk button at all, for a role that cannot write risks', () => {
+    setUserRole('ReadOnly')
+    render(<RiskEntriesSection participantId="participant-1" />)
+
+    expect(screen.getByText('No risks recorded')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add risk' })).not.toBeInTheDocument()
+  })
+
   it('renders active risk entries with a party badge, description, and mitigation notes', () => {
     mockUseParticipantRiskEntries.mockReturnValue({
       data: [makeEntry({ atRiskParty: 'Staff', description: 'Risk of aggression towards staff.', mitigationNotes: 'Two-person support.' })],
@@ -104,8 +147,8 @@ describe('RiskEntriesSection', () => {
 
     render(<RiskEntriesSection participantId="participant-1" />)
 
-    // Both the header button and the empty-state action read "Add risk" — the header one is first.
-    await user.click(screen.getAllByRole('button', { name: 'Add risk' })[0])
+    // The header button is the only "Add risk": the empty strip no longer repeats it.
+    await user.click(screen.getByRole('button', { name: 'Add risk' }))
     await user.type(screen.getByPlaceholderText('Describe the risk...'), 'Risk of wandering.')
     await user.click(screen.getByRole('button', { name: 'Save risk entry' }))
 
@@ -120,7 +163,7 @@ describe('RiskEntriesSection', () => {
 
     render(<RiskEntriesSection participantId="participant-1" />)
 
-    await user.click(screen.getAllByRole('button', { name: 'Add risk' })[0])
+    await user.click(screen.getByRole('button', { name: 'Add risk' }))
     await user.click(screen.getByRole('button', { name: 'Save risk entry' }))
 
     expect(screen.getByText('Description is required')).toBeInTheDocument()

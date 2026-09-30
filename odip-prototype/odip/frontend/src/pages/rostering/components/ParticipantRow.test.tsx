@@ -106,41 +106,62 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
     expect(isBefore(marker, chip)).toBe(true)
   })
 
-  it('is a size container, so the coverage badge can switch between its full and compact wording by column width', () => {
-    renderRow({ fullName: 'Mia Chen' })
+  it('does not switch its wording by column width: no container query, so the name gets the room at every width', () => {
+    renderRow({ fullName: 'Mia Chen', daysWithoutCover: 6 })
 
-    expect(headerOf('Mia Chen')).toHaveClass('@container')
+    // The old design spelled "6 days uncovered" out in a 15rem-wide header (@container), and those 110px
+    // are what truncated "Grace Palmer-Hughes" to "Grace Pa…" at 1920. One compact badge, always.
+    expect(headerOf('Mia Chen')).not.toHaveClass('@container')
+    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    expect(badge.outerHTML).not.toMatch(/@\[|@container/)
+    expect(headerOf('Mia Chen').innerHTML).not.toMatch(/@\[|@container/)
   })
 })
 
-describe('ParticipantRow header — coverage badge wording', () => {
-  it('says "6 days uncovered" in full from a 15rem header, and as a warning icon + the count below it', () => {
+describe('ParticipantRow header — coverage badge (a compact count; the words are its name and title)', () => {
+  it('shows "6 days uncovered" as a warning icon + the count, with the full wording as its title and accessible name', () => {
     renderRow({ daysWithoutCover: 6 })
 
     const badge = screen.getByRole('img', { name: '6 days uncovered' })
     expect(badge).toHaveAttribute('title', '6 days uncovered')
-    const full = within(badge).getByText('6 days uncovered')
-    expect(full).toHaveClass('hidden', '@[15rem]:inline')
-    const count = within(badge).getByText('6')
-    expect(count).toHaveClass('@[15rem]:hidden')
+    // Only the count is text in the row; the words are not rendered at all (they cost the name 110px).
+    expect(badge).toHaveTextContent(/^6$/)
+    expect(within(badge).getByText('6')).toHaveClass('tabular-nums')
+    expect(screen.queryByText('6 days uncovered')).not.toBeInTheDocument()
+    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     // The amber warning-container tint is the colour meaning; it is unchanged.
-    expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
-    expect(badge.querySelector('svg')).toHaveClass('@[15rem]:hidden')
+    expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]', 'h-5', 'rounded-sm')
   })
 
-  it('pluralises: one day is "1 day uncovered"', () => {
+  it('pluralises the title and name: one day is "1 day uncovered"', () => {
     renderRow({ daysWithoutCover: 1 })
 
-    expect(screen.getByRole('img', { name: '1 day uncovered' })).toHaveTextContent('1 day uncovered')
+    const badge = screen.getByRole('img', { name: '1 day uncovered' })
+    expect(badge).toHaveAttribute('title', '1 day uncovered')
+    expect(badge).toHaveTextContent(/^1$/)
   })
 
-  it('reads "Fully covered" in full from a 15rem header and as a check below it', () => {
+  it('shows "Fully covered" as a check, with the words as its title and accessible name', () => {
     renderRow({ daysWithoutCover: 0 })
 
     const badge = screen.getByRole('img', { name: 'Fully covered' })
-    expect(within(badge).getByText('Fully covered')).toHaveClass('hidden', '@[15rem]:inline')
-    expect(badge.querySelector('svg')).toHaveClass('@[15rem]:hidden')
+    expect(badge).toHaveAttribute('title', 'Fully covered')
+    expect(badge).toHaveTextContent('')
+    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByText('Fully covered')).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /uncovered/ })).not.toBeInTheDocument()
+  })
+
+  it('leaves the name the room the badge used to take: the badge is the compact size, not a 110px pill', () => {
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6 })
+
+    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    // A count is one glyph wide (a week has at most 7 uncovered days): icon + gap + digit inside px-1.5.
+    expect(badge).toHaveClass('px-1.5', 'gap-1')
+    expect(badge.className).not.toMatch(/(^|\s)(w-|min-w-|max-w-)/)
+    // The name group is the flexible part; badge and chip are shrink-0 (asserted above), so the freed
+    // room goes to the name.
+    expect(screen.getByRole('link', { name: 'Grace Palmer-Hughes' }).parentElement).toHaveClass('min-w-0')
   })
 
   it('shows no coverage state at all on a week with no shifts anywhere, but still the ratio chip', () => {
