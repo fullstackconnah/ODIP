@@ -111,16 +111,16 @@ export default function ServiceAgreementDraftPage() {
           <FormField label="State" className={span.short}>
             <select value={state} onChange={e => setState(e.target.value as AgreementState)}>{states.map(value => <option key={value} value={value}>{value}</option>)}</select>
           </FormField>
-          <FormField label="Plan start" className={span.short}>
+          <FormField label="Plan start" className={span.date}>
             <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)} />
           </FormField>
-          <FormField label="Plan end" className={span.short}>
+          <FormField label="Plan end" className={span.date}>
             <input type="date" value={planEndDate} onChange={e => setPlanEndDate(e.target.value)} />
           </FormField>
-          <FormField label="Agreement start" className={span.short}>
+          <FormField label="Agreement start" className={span.date}>
             <input type="date" value={agreementStartDate} onChange={e => setAgreementStartDate(e.target.value)} />
           </FormField>
-          <FormField label="Agreement end" className={span.short}>
+          <FormField label="Agreement end" className={span.date}>
             <input type="date" value={agreementEndDate} onChange={e => setAgreementEndDate(e.target.value)} />
           </FormField>
           <FormField label="Representative" className={span.medium}>

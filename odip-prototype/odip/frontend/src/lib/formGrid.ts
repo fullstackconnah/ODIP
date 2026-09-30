@@ -19,6 +19,16 @@ export const span = {
   medium: 'md:col-span-1 xl:col-span-6',
   /** Notes, address, descriptions, textareas. */
   long: 'md:col-span-2 xl:col-span-12',
+  /**
+   * Native date and date-time controls. A `type="date"` input is 165px wide at the 32px control height and a
+   * `datetime-local` 241px (measured, Chrome), and `short` is narrower than that wherever these fields sit: 233px
+   * for the incident wizard's Date & Time at 1280 (the AM/PM segment was cut off), and 105-137px in a participant-
+   * detail section card at 1280-1536 (the year was cut off: "14/03/19"). The 12 columns are a viewport breakpoint
+   * but the grid often lives in a much narrower card, so a date needs a span that clears its control everywhere:
+   * six columns is the smallest that fits a date in the narrowest section card (26rem = 416px, 188px wide) and a
+   * date-time in the narrowest wizard column at 1280 (358px). Below xl it is one of the two columns, as `short` is.
+   */
+  date: 'md:col-span-1 xl:col-span-6',
 } as const
 
 /**

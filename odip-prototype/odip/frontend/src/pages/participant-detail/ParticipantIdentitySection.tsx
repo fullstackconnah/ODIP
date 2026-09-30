@@ -94,7 +94,7 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
             <FormField label="Middle Name" className={span.medium}>
               <input value={draft.middleName} onChange={(e) => setDraft((d) => ({ ...d, middleName: e.target.value }))} />
             </FormField>
-            <FormField label="Date of Birth" className={span.short}>
+            <FormField label="Date of Birth" className={span.date}>
               <input type="date" value={draft.dateOfBirth} onChange={(e) => setDraft((d) => ({ ...d, dateOfBirth: e.target.value }))} />
             </FormField>
             <FormField label="Gender" className={span.short}>

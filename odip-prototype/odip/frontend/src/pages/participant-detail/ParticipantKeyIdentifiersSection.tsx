@@ -72,19 +72,19 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
           <FormField label="Pension Card Number" className={span.medium}>
             <input value={draft.pensionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, pensionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Pension Card Expiry" className={span.short}>
+          <FormField label="Pension Card Expiry" className={span.date}>
             <input type="date" value={draft.pensionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, pensionCardExpiry: e.target.value }))} />
           </FormField>
           <FormField label="Medicare Number" className={span.medium}>
             <input value={draft.medicareNumber} onChange={(e) => setDraft((d) => ({ ...d, medicareNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Medicare Expiry" className={span.short}>
+          <FormField label="Medicare Expiry" className={span.date}>
             <input type="date" value={draft.medicareExpiry} onChange={(e) => setDraft((d) => ({ ...d, medicareExpiry: e.target.value }))} />
           </FormField>
           <FormField label="Companion Card Number" className={span.medium}>
             <input value={draft.companionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, companionCardNumber: e.target.value }))} />
           </FormField>
-          <FormField label="Companion Card Expiry" className={span.short}>
+          <FormField label="Companion Card Expiry" className={span.date}>
             <input type="date" value={draft.companionCardExpiry} onChange={(e) => setDraft((d) => ({ ...d, companionCardExpiry: e.target.value }))} />
           </FormField>
           <FormField label="Private Health Fund" className={span.medium}>

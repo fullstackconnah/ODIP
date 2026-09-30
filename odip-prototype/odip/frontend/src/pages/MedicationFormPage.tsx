@@ -493,7 +493,7 @@ export default function MedicationFormPage() {
                   <FormField label="Every N days" required error={errors.intervalDays?.message} className={span.short}>
                     <input type="number" min="1" step="1" {...register('intervalDays')} placeholder="e.g. 2" />
                   </FormField>
-                  <FormField label="Starting from" required error={errors.anchorDate?.message} className={span.short}>
+                  <FormField label="Starting from" required error={errors.anchorDate?.message} className={span.date}>
                     <input type="date" {...register('anchorDate')} />
                   </FormField>
                 </div>
@@ -640,13 +640,13 @@ export default function MedicationFormPage() {
             <input {...register('storageRequirements')} placeholder="e.g. Refrigerate" />
           </FormField>
           <div className="contents">
-            <FormField label="Start Date" className={span.short}>
+            <FormField label="Start Date" className={span.date}>
               <input type="date" {...register('startDate')} />
             </FormField>
-            <FormField label="End Date" className={span.short}>
+            <FormField label="End Date" className={span.date}>
               <input type="date" {...register('endDate')} />
             </FormField>
-            <FormField label="Next Review Due" className={span.short}>
+            <FormField label="Next Review Due" className={span.date}>
               <input type="date" {...register('nextReviewDue')} />
             </FormField>
           </div>
@@ -664,7 +664,7 @@ export default function MedicationFormPage() {
               <FormField label="Consent Given By" required error={errors.consentGivenBy?.message} className={span.medium}>
                 <input {...register('consentGivenBy')} placeholder="e.g. Participant / Guardian name" />
               </FormField>
-              <FormField label="Consent Date" required error={errors.consentDate?.message} className={span.short}>
+              <FormField label="Consent Date" required error={errors.consentDate?.message} className={span.date}>
                 <input type="date" {...register('consentDate')} />
               </FormField>
             </div>

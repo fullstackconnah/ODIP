@@ -58,7 +58,7 @@ export function ComplianceStep({
           <input {...register('qscReferenceNumber')} placeholder="QSC reference #" />
         </FormField>
 
-        <FormField label="QSC Reported At" className={span.short}>
+        <FormField label="QSC Reported At" className={span.date}>
           <input type="datetime-local" {...register('qscReportedAt')} />
         </FormField>
 

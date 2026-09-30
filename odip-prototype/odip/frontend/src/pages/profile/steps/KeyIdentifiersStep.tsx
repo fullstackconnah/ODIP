@@ -99,11 +99,11 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
       <Card title="Identification Cards">
         <div className={formGrid}>
           <FormField label="Pension Card Number" className={span.medium}><input id="pensionCardNumber" {...register('pensionCardNumber')} /></FormField>
-          <FormField label="Pension Card Expiry" className={span.short}><input id="pensionCardExpiry" type="date" {...register('pensionCardExpiry')} /></FormField>
+          <FormField label="Pension Card Expiry" className={span.date}><input id="pensionCardExpiry" type="date" {...register('pensionCardExpiry')} /></FormField>
           <FormField label="Medicare Number" className={span.medium}><input id="medicareNumber" {...register('medicareNumber')} /></FormField>
-          <FormField label="Medicare Expiry" className={span.short}><input id="medicareExpiry" type="date" {...register('medicareExpiry')} /></FormField>
+          <FormField label="Medicare Expiry" className={span.date}><input id="medicareExpiry" type="date" {...register('medicareExpiry')} /></FormField>
           <FormField label="Companion Card Number" className={span.medium}><input id="companionCardNumber" {...register('companionCardNumber')} /></FormField>
-          <FormField label="Companion Card Expiry" className={span.short}><input id="companionCardExpiry" type="date" {...register('companionCardExpiry')} /></FormField>
+          <FormField label="Companion Card Expiry" className={span.date}><input id="companionCardExpiry" type="date" {...register('companionCardExpiry')} /></FormField>
         </div>
       </Card>
 

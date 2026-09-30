@@ -94,11 +94,11 @@ export function NdisFundingStep({
                 <input id="ndisNumber" {...register('ndisNumber')} placeholder="e.g. 431234567" />
               </FormField>
 
-              <FormField label="Plan Start Date" className={span.short}>
+              <FormField label="Plan Start Date" className={span.date}>
                 <input id="planStartDate" type="date" {...register('planStartDate')} />
               </FormField>
 
-              <FormField label="Plan End Date" className={span.short}>
+              <FormField label="Plan End Date" className={span.date}>
                 <input id="planEndDate" type="date" {...register('planEndDate')} />
               </FormField>
 

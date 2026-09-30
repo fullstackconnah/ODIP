@@ -76,10 +76,10 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
                 <FormField label="NDIS Number" className={span.short}>
                   <input value={draft.ndisNumber} onChange={(e) => setDraft((d) => ({ ...d, ndisNumber: e.target.value }))} placeholder="e.g. 431234567" />
                 </FormField>
-                <FormField label="Plan Start Date" className={span.short}>
+                <FormField label="Plan Start Date" className={span.date}>
                   <input type="date" value={draft.planStartDate} onChange={(e) => setDraft((d) => ({ ...d, planStartDate: e.target.value }))} />
                 </FormField>
-                <FormField label="Plan End Date" className={span.short}>
+                <FormField label="Plan End Date" className={span.date}>
                   <input type="date" value={draft.planEndDate} onChange={(e) => setDraft((d) => ({ ...d, planEndDate: e.target.value }))} />
                 </FormField>
               </>
