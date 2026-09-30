@@ -13,7 +13,7 @@ const {
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
-  mockUseParticipantBookings: vi.fn(() => ({ data: [] })),
+  mockUseParticipantBookings: vi.fn<() => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
   mockUseParticipantAlerts: vi.fn(() => ({ data: undefined })),
   // DOC-01 — mocked like every other hook this file already stubs, so the button-render/click
   // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
@@ -791,5 +791,232 @@ describe('ParticipantDetailPage — Rostering tab', () => {
 
     expect(screen.queryByRole('button', { name: 'Rostering' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('rostering-tab')).not.toBeInTheDocument()
+  })
+})
+
+// Density verdict (mobile) — below md the header can't fit three PDF buttons, "Agreement draft" and Edit
+// without stacking five 44px rows over the participant's name, so the four document actions fold into
+// one "Documents" menu (the shared Dropdown "menu" variant) and Edit stays a visible button. jsdom has no
+// matchMedia — every test above therefore sees the wide layout — so these stub one.
+describe('ParticipantDetailPage — Documents menu below md', () => {
+  const ERROR_COPY = /couldn't download the file/i
+
+  function stubMatchMedia(matches: boolean) {
+    const mql = {
+      matches, media: '', onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    }
+    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia
+  }
+
+  function idleDownloads() {
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+  }
+
+  function renderWithAgreementRoute() {
+    return render(
+      <MemoryRouter initialEntries={['/participants/participant-1']}>
+        <Routes>
+          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/participants/:id/agreement-draft" element={<div data-testid="agreement-draft-route" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  beforeEach(() => {
+    // Admin: canWrite (Edit + Agreement draft) and canWriteParticipantDetails (caregiver control).
+    setUserRole('Admin')
+    idleDownloads()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    stubMatchMedia(false)
+  })
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia')
+    idleDownloads()
+  })
+
+  it('folds the three PDF buttons and Agreement draft into one Documents menu and keeps Edit visible', () => {
+    renderAt('participant-1')
+
+    expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /intake form pdf/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /participant profile pdf/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /client overview pdf/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /agreement draft/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^edit$/i })).toHaveAttribute('href', '/participants/participant-1/profile')
+  })
+
+  it('lists the three PDFs and Agreement draft when the menu opens', async () => {
+    const user = userEvent.setup()
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
+      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Agreement draft',
+    ])
+  })
+
+  it('carries the coarse-pointer height floor on every option row and on the trigger, since Dropdown takes no height prop', async () => {
+    const user = userEvent.setup()
+    renderAt('participant-1')
+
+    // Trigger: the skin wrapper (button -> Dropdown's own div -> wrapper) gives the button --control-h
+    // (32px, 44px under a touch pointer).
+    const skin = screen.getByRole('button', { name: 'Documents' }).parentElement!.parentElement!
+    expect(skin).toHaveClass('[&_button]:h-[var(--control-h)]')
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+
+    // Option rows are 32px (py-1.5 + a 20px line); the icon slot's --tap-min floor lifts them to 44px under touch.
+    for (const option of screen.getAllByRole('option')) {
+      const slots = Array.from(option.querySelectorAll('span')).filter(el => el.classList.contains('min-h-[calc(var(--tap-min)-12px)]'))
+      expect(slots).toHaveLength(1)
+    }
+  })
+
+  it('omits Agreement draft (and Edit) for a role without canWrite, like the wide layout does', async () => {
+    setUserRole('SupportWorker')
+    const user = userEvent.setup()
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
+      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF',
+    ])
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Intake Form PDF', mockUseDownloadIntakeFormPdf, 'Sophie Brown - Intake Form.pdf'],
+    ['Participant Profile PDF', mockUseDownloadParticipantProfilePdf, 'Sophie Brown - Participant Profile.pdf'],
+    ['Client Overview PDF', mockUseDownloadClientOverviewPdf, 'Sophie Brown - Client Overview.pdf'],
+  ])('choosing %s starts that download with the participant id and the same file name as the button', async (label, hook, fileName) => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    hook.mockReturnValue({ mutate, isPending: false, isError: false })
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await user.click(screen.getByRole('option', { name: label }))
+
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName })
+    // Picking an item closes the menu.
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('choosing Agreement draft navigates to the agreement-draft page', async () => {
+    const user = userEvent.setup()
+    renderWithAgreementRoute()
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await user.click(screen.getByRole('option', { name: 'Agreement draft' }))
+
+    expect(screen.getByTestId('agreement-draft-route')).toBeInTheDocument()
+  })
+
+  it('shows "Preparing…" on the trigger and disables only the option whose download is pending', async () => {
+    const user = userEvent.setup()
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: /preparing/i }))
+
+    expect(screen.getByRole('option', { name: 'Intake Form PDF' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('option', { name: 'Participant Profile PDF' })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('does not start a download when a pending option is chosen', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate, isPending: true, isError: false })
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: /preparing/i }))
+    await user.click(screen.getByRole('option', { name: 'Intake Form PDF' }))
+
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('collapses the per-button error lines into one shared alert', () => {
+    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    renderAt('participant-1')
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByRole('alert')).toHaveTextContent(ERROR_COPY)
+  })
+
+  it('shows no alert when every download is idle', () => {
+    renderAt('participant-1')
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps the full button set (and no menu) from md up', () => {
+    stubMatchMedia(true)
+    renderAt('participant-1')
+
+    expect(screen.queryByRole('button', { name: 'Documents' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /participant profile pdf/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /client overview pdf/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /agreement draft/i })).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+  })
+
+  it('still renders the caregiver control and Edit next to the menu, so nothing is lost below md', () => {
+    renderAt('participant-1')
+
+    expect(screen.getByTestId('caregiver-link-control')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /generate caregiver link/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+  })
+})
+
+// Density verdict (mobile) — coarse-pointer tap targets and the compact empty state. jsdom applies no CSS,
+// so these assert the class contract each fix relies on.
+describe('ParticipantDetailPage — coarse-pointer targets and empty tables', () => {
+  it('lifts the icon-only Back button to the --tap-min floor (44px under a coarse pointer, unchanged on a mouse)', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('link', { name: 'Back to participants' })).toHaveClass('min-h-[var(--tap-min)]', 'min-w-[var(--tap-min)]')
+  })
+
+  it('renders the caregiver-link buttons as Buttons (--control-h tall, 44px under a coarse pointer)', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockUseCaregiverSubmissions.mockReturnValue({ data: [{ id: 's1', participantId: 'participant-1', status: 'Draft' }] })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('button', { name: /regenerate caregiver link/i })).toHaveClass('h-[var(--control-h)]')
+    expect(screen.getByRole('button', { name: 'Revoke' })).toHaveClass('h-[var(--control-h)]')
+  })
+
+  it('gives the bookings-tab trip link the --tap-min floor so the row link is a real tap target', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockUseParticipantBookings.mockReturnValue({
+      data: [{ id: 'b1', tripInstanceId: 'trip-9', tripName: 'Beach Weekend', bookingStatus: 'Confirmed', bookingDate: '2026-10-01' }],
+    })
+    renderAtTab('participant-1', 'bookings')
+
+    expect(screen.getByRole('link', { name: 'Beach Weekend' })).toHaveClass('min-h-[var(--tap-min)]')
+  })
+
+  it('collapses a zero-row Health Conditions / ADL table to a strip (header hidden, py-5 message cell)', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    for (const testId of ['health-conditions-section', 'adl-assessments-section']) {
+      const wrapper = screen.getByTestId(testId).parentElement!
+      expect(wrapper).toHaveClass('col-span-full', '[&_table:has(td[colspan])_thead]:hidden', '[&_td[colspan]]:py-5')
+    }
   })
 })

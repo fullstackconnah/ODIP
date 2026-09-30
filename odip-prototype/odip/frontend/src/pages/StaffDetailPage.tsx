@@ -23,6 +23,10 @@ type Tab = 'availability' | 'credentials' | 'upcoming' | 'incidents' | 'completi
 
 const TAB_KEYS: Tab[] = ['availability', 'credentials', 'upcoming', 'incidents', 'completions']
 
+/** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
+ * 44px floor under a coarse pointer (fits the 48px coarse row). */
+const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
+
 type CredentialStatus = 'expired' | 'expiring' | 'ok' | 'no-date'
 
 interface CredentialRow {
@@ -116,7 +120,7 @@ export default function StaffDetailPage() {
           </div>
         }
         action={
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button to="/staff" variant="secondary" size="md" aria-label="Back to staff">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
@@ -203,7 +207,7 @@ export default function StaffDetailPage() {
                   key: 'participantName',
                   header: 'Participant',
                   render: (s: StaffOverviewUpcomingShiftDto) => (
-                    <Link to={`/participants/${s.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/participants/${s.participantId}`} className={ROW_LINK}>
                       {s.participantName}
                     </Link>
                   ),
@@ -222,7 +226,7 @@ export default function StaffDetailPage() {
                   key: 'tripName',
                   header: 'Trip',
                   render: (a: StaffOverviewTripAssignmentDto) => (
-                    <Link to={`/trips/${a.tripInstanceId}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/trips/${a.tripInstanceId}`} className={ROW_LINK}>
                       {a.tripName}
                     </Link>
                   ),
@@ -248,7 +252,7 @@ export default function StaffDetailPage() {
                   key: 'title',
                   header: 'Title',
                   render: (i: IncidentListDto) => (
-                    <Link to={`/incidents/${i.id}`} className="font-medium hover:text-[var(--color-primary)]">
+                    <Link to={`/incidents/${i.id}`} className={ROW_LINK}>
                       {i.title}
                     </Link>
                   ),
@@ -266,7 +270,7 @@ export default function StaffDetailPage() {
         <Card
           title="Recent completions"
           action={
-            <Link to="/rostering/completions" className="text-xs text-[var(--color-primary)] hover:underline">
+            <Link to="/rostering/completions" className="inline-flex min-h-[var(--tap-min)] items-center text-xs text-[var(--color-primary)] hover:underline">
               Open completions review →
             </Link>
           }

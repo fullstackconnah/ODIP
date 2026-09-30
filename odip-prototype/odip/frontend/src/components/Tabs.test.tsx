@@ -232,3 +232,20 @@ describe('Tabs primitive — accessibility and keyboard', () => {
     for (const p of hidden) expect(p).toHaveAttribute('tabindex', '-1')
   })
 })
+
+// Density verdict (mobile) — jsdom applies no CSS, so this asserts the class contract: every tab takes
+// a floor from the --tap-min token (0 on a mouse, 44px under `pointer: coarse`) rather than a fixed
+// pixel height, so the touch target grows without Tabs branching on the pointer type.
+describe('Tabs primitive — touch target height', () => {
+  it('gives every tab the --tap-min height floor, disabled or not', () => {
+    const tabs: TabItem[] = [
+      { id: 'one', label: 'One', content: <div>panel-one</div> },
+      { id: 'two', label: 'Two', content: <div>panel-two</div>, disabled: true },
+    ]
+    render(<Harness tabs={tabs} initial="one" />)
+
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('min-h-[var(--tap-min)]')
+    }
+  })
+})

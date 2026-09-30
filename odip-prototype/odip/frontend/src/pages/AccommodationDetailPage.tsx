@@ -7,6 +7,11 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { FactList } from '@/components/FactList'
 
+// FactList's value track is a bare `1fr` (= minmax(auto, 1fr)), so an unbreakable value — an email
+// address, a URL — stretches the track past the card and scrolls the whole page sideways on a phone.
+// minmax(0,1fr) lets the track shrink to the card and break-words wraps the value inside it.
+const FACT_LIST_WRAP = 'grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words'
+
 export default function AccommodationDetailPage() {
   const { id } = useParams()
   const { data: property, isLoading, isError, refetch } = useAccommodationDetail(id)
@@ -55,6 +60,7 @@ export default function AccommodationDetailPage() {
         {/* Details */}
         <Card title="Property Details">
           <FactList
+            className={FACT_LIST_WRAP}
             items={[
               { label: 'Provider / Owner', value: property.providerOwner },
               { label: 'Max Capacity', value: property.maxCapacity },
@@ -75,6 +81,7 @@ export default function AccommodationDetailPage() {
         {/* Contact & Address */}
         <Card title="Contact & Address">
           <FactList
+            className={FACT_LIST_WRAP}
             items={[
               { label: 'Contact Person', value: property.contactPerson },
               { label: 'Email', value: property.email },
@@ -97,6 +104,7 @@ export default function AccommodationDetailPage() {
         {(property.accessibilityNotes || property.hoistBathroomNotes || property.generalNotes) && (
           <Card title="Notes" className="col-span-full">
             <FactList
+              className={FACT_LIST_WRAP}
               items={[
                 { label: 'Accessibility Notes', value: property.accessibilityNotes },
                 { label: 'Hoist / Bathroom Notes', value: property.hoistBathroomNotes },

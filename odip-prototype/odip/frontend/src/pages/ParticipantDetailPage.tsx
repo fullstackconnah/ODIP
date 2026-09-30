@@ -1,9 +1,11 @@
-import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import {
   useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
+import type { BookingListDto } from '@/api/types/bookings'
 import { DataTable } from '@/components/DataTable'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
@@ -11,7 +13,7 @@ import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
@@ -26,9 +28,49 @@ import {
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
+/** Tailwind's `md` breakpoint, in the same rem unit its `md:` variants compile to (48rem = 768px at the
+ * default font size), so this switch and the header's `md:` classes always flip together. The header
+ * shows the full Documents button set from here up and folds it into one menu below (see DocumentsMenu). */
+const MD_QUERY = '(min-width: 48rem)'
+
+function subscribeMdUp(notify: () => void): () => void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}
+  const mql = window.matchMedia(MD_QUERY)
+  mql.addEventListener('change', notify)
+  return () => mql.removeEventListener('change', notify)
+}
+
+/** Where matchMedia doesn't exist (jsdom) assume a wide viewport, i.e. the full button set. */
+function getMdUp(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia(MD_QUERY).matches
+    : true
+}
+
+/** Deliberately a JS switch and not `hidden md:flex` twins: the desktop buttons and the mobile menu
+ * both own download state and a `role="alert"` error line, and rendering both would duplicate them. */
+function useIsMdUp(): boolean {
+  return useSyncExternalStore(subscribeMdUp, getMdUp, () => true)
+}
+
+/** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
+ * 44px floor under a coarse pointer (fits the 48px coarse row). */
+const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
+
+/**
+ * A zero-row (or still-loading) DataTable's only body row is one `td[colspan]` message cell — a table
+ * with a column header over nothing, ~102px tall for one line of text. Health Conditions and the ADL
+ * grids always come back fully populated from the API, so this only shows in the edge cases; when it
+ * does it should read as a strip, not a panel: hide the header over an empty body and trim the message
+ * cell to py-5, which lands the whole empty table at ≈62px. Populated tables are untouched (their
+ * body has no `td[colspan]`).
+ */
+const COMPACT_EMPTY_TABLE = '[&_table:has(td[colspan])_thead]:hidden [&_td[colspan]]:py-5'
+
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
+  const isMdUp = useIsMdUp()
   const [searchParams] = useSearchParams()
   type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'claims' | 'rostering' | 'history'
   const initialTab = searchParams.get('tab')
@@ -58,7 +100,9 @@ export default function ParticipantDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        <Button to="/participants" variant="ghost" size="md" iconOnly aria-label="Back to participants" className="mt-1 shrink-0">
+        {/* iconOnly is a --control-h-sm square (36px on a coarse pointer); the --tap-min floor lifts it to
+            44 there and is 0 — no change — on a mouse. */}
+        <Button to="/participants" variant="ghost" size="md" iconOnly aria-label="Back to participants" className="mt-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1 min-w-0">
@@ -72,67 +116,84 @@ export default function ParticipantDetailPage() {
               </div>
             }
             action={
-              <div className="flex flex-wrap items-start justify-end gap-2">
-                {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
-                    downloading/printing documents is a read action, and this page has no more specific
-                    canView... flag of its own to gate read-level content on (see usePermissions — the
-                    closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
-                    features), so these follow the rest of the page's ungated read-only content. */}
-                <div className="flex flex-col items-start gap-1">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
-                    disabled={downloadIntakeForm.isPending}
-                  >
-                    {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
-                  </Button>
-                  {downloadIntakeForm.isError && (
-                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                      Couldn't download the file. Try again, or contact support if this keeps happening.
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col items-start gap-1">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
-                    disabled={downloadParticipantProfile.isPending}
-                  >
-                    {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
-                  </Button>
-                  {downloadParticipantProfile.isError && (
-                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                      Couldn't download the file. Try again, or contact support if this keeps happening.
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col items-start gap-1">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
-                    disabled={downloadClientOverview.isPending}
-                  >
-                    {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
-                  </Button>
-                  {downloadClientOverview.isError && (
-                    <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                      Couldn't download the file. Try again, or contact support if this keeps happening.
-                    </p>
-                  )}
-                </div>
-                {canWrite && (
-                  <Button to={`/participants/${id}/agreement-draft`} variant="secondary" size="md">
-                    <FileText className="w-4 h-4" /> Agreement draft
-                  </Button>
+              // justify-start below md (the cluster sits under the title, left-aligned); justify-end
+              // from md up, unchanged.
+              <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end">
+                {isMdUp ? (
+                  <>
+                    {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
+                        downloading/printing documents is a read action, and this page has no more specific
+                        canView... flag of its own to gate read-level content on (see usePermissions — the
+                        closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
+                        features), so these follow the rest of the page's ungated read-only content. */}
+                    <div className="flex flex-col items-start gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
+                        disabled={downloadIntakeForm.isPending}
+                      >
+                        {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
+                      </Button>
+                      {downloadIntakeForm.isError && (
+                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                          Couldn't download the file. Try again, or contact support if this keeps happening.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-start gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
+                        disabled={downloadParticipantProfile.isPending}
+                      >
+                        {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
+                      </Button>
+                      {downloadParticipantProfile.isError && (
+                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                          Couldn't download the file. Try again, or contact support if this keeps happening.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-start gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
+                        disabled={downloadClientOverview.isPending}
+                      >
+                        {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
+                      </Button>
+                      {downloadClientOverview.isError && (
+                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                          Couldn't download the file. Try again, or contact support if this keeps happening.
+                        </p>
+                      )}
+                    </div>
+                    {canWrite && (
+                      <Button to={`/participants/${id}/agreement-draft`} variant="secondary" size="md">
+                        <FileText className="w-4 h-4" /> Agreement draft
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  // Below md: five stacked 44px rows would bury the name, so the three PDFs and
+                  // "Agreement draft" fold into one Documents menu. Edit stays a visible button.
+                  <DocumentsMenu
+                    participantId={id!}
+                    fullName={p.fullName}
+                    canWrite={canWrite}
+                    intake={downloadIntakeForm}
+                    profile={downloadParticipantProfile}
+                    overview={downloadClientOverview}
+                  />
                 )}
                 {/* cg04 Task 9 (design §5) — the caregiver-link header control. Gated on
                     canWriteParticipantDetails (a write action), unlike the ungated Documents
@@ -241,7 +302,7 @@ export default function ParticipantDetailPage() {
               state to hide behind a condition — DataTable's own emptyMessage handles a
               still-loading/zero-row edge case instead. A bare wrapper, not a Card: the DataTable
               already draws its own border, and a Card around it made two nested borders. */}
-          <div className="col-span-full">
+          <div className={`col-span-full ${COMPACT_EMPTY_TABLE}`}>
             <ParticipantHealthConditionsSection participantId={id} />
           </div>
           {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
@@ -250,7 +311,7 @@ export default function ParticipantDetailPage() {
               behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
               edge case instead. Same convention (and same bare wrapper) as
               ParticipantHealthConditionsSection above. */}
-          <div className="col-span-full">
+          <div className={`col-span-full ${COMPACT_EMPTY_TABLE}`}>
             <ParticipantAdlAssessmentsSection participantId={id} />
           </div>
           {/* INTAKE-09 — a compact section rather than its own tab; see RiskEntriesSection's
@@ -274,8 +335,8 @@ export default function ParticipantDetailPage() {
             {
               key: 'tripName',
               header: 'Trip',
-              render: (b: any) => (
-                <Link to={`/trips/${b.tripInstanceId}`} className="font-medium hover:text-[var(--color-primary)]">
+              render: (b: BookingListDto) => (
+                <Link to={`/trips/${b.tripInstanceId}`} className={ROW_LINK}>
                   {b.tripName || 'Trip'}
                 </Link>
               ),
@@ -323,6 +384,102 @@ export default function ParticipantDetailPage() {
 }
 
 /**
+ * The shared Dropdown "menu" trigger is a primary-CTA pill (gradient fill, rounded-full, bold, 40px
+ * tall). In this header Edit is the primary action, so the trigger is restyled from out here to read
+ * as a secondary Button: --control-h tall (32px, 44px under a coarse pointer, the same token Button
+ * md uses), radius-sm, bordered card fill. Dropdown takes no className/appearance prop, so this is a
+ * descendant-selector skin scoped to the one trigger button its wrapper contains (the option panel is
+ * portalled to <body> and unaffected).
+ */
+const DOCUMENTS_TRIGGER_SKIN = [
+  '[&_button]:h-[var(--control-h)]', '[&_button]:px-4', '[&_button]:py-0',
+  '[&_button]:rounded-[var(--radius-sm)]', '[&_button]:border', '[&_button]:border-[var(--color-border)]',
+  '[&_button]:bg-none', '[&_button]:bg-[var(--color-card)]', '[&_button:hover]:bg-[var(--color-accent)]',
+  '[&_button]:font-medium', '[&_button]:text-[var(--color-foreground)]', '[&_button]:shadow-none',
+].join(' ')
+
+/**
+ * Dropdown option rows are `py-1.5` around a 20px line = 32px, and take no height prop. The row is a
+ * flex box that sizes to its tallest child, so each item's icon slot carries a coarse-pointer floor:
+ * (--tap-min - the row's 12px of vertical padding) of content lifts the row to 44px under a touch
+ * pointer. --tap-min is 0 on a mouse, so calc() goes negative, min-height clamps to 0 and the 32px
+ * row is untouched.
+ */
+const MENU_ITEM_ICON = 'flex min-h-[calc(var(--tap-min)-12px)] items-center'
+
+/** The slice of a react-query mutation DocumentsMenu drives — a PDF download. */
+type PdfDownload = {
+  mutate: (variables: { id: string; fileName: string }) => void
+  isPending: boolean
+  isError: boolean
+}
+
+/**
+ * The header's document actions below md, folded into one menu (the shared Dropdown "menu" variant,
+ * as ItineraryTab's export uses): the three PDF downloads plus "Agreement draft" (canWrite only, same
+ * gate as the desktop button). Each download keeps its desktop file name and pending state; the
+ * per-button error lines collapse into one shared `role="alert"` under the trigger.
+ */
+function DocumentsMenu({
+  participantId, fullName, canWrite, intake, profile, overview,
+}: {
+  participantId: string
+  fullName: string
+  canWrite: boolean
+  intake: PdfDownload
+  profile: PdfDownload
+  overview: PdfDownload
+}) {
+  const navigate = useNavigate()
+  const downloads = [
+    { value: 'intake', label: 'Intake Form PDF', fileName: `${fullName} - Intake Form.pdf`, mutation: intake },
+    { value: 'profile', label: 'Participant Profile PDF', fileName: `${fullName} - Participant Profile.pdf`, mutation: profile },
+    { value: 'overview', label: 'Client Overview PDF', fileName: `${fullName} - Client Overview.pdf`, mutation: overview },
+  ]
+  const busy = downloads.some(d => d.mutation.isPending)
+  const failed = downloads.some(d => d.mutation.isError)
+
+  const items: DropdownItem[] = [
+    ...downloads.map(d => ({
+      value: d.value,
+      label: d.label,
+      icon: <span className={MENU_ITEM_ICON}><Download className="w-4 h-4" /></span>,
+      disabled: d.mutation.isPending,
+    })),
+    ...(canWrite ? [{ value: 'agreement', label: 'Agreement draft', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
+  ]
+
+  const onSelect = (value: string) => {
+    const download = downloads.find(d => d.value === value)
+    if (download) {
+      download.mutation.mutate({ id: participantId, fileName: download.fileName })
+      return
+    }
+    if (value === 'agreement') navigate(`/participants/${participantId}/agreement-draft`)
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div className={DOCUMENTS_TRIGGER_SKIN}>
+        <Dropdown
+          variant="menu"
+          align="left"
+          label={busy ? 'Preparing…' : 'Documents'}
+          icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          items={items}
+          onSelect={onSelect}
+        />
+      </div>
+      {failed && (
+        <p role="alert" className="text-xs text-[var(--color-destructive)]">
+          Couldn't download the file. Try again, or contact support if this keeps happening.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
  * cg04 Task 9 (design §5) — status chip + Generate/Regenerate/Revoke for this participant's
  * caregiver form link. Gated on canWriteParticipantDetails, per B14 in the discovery fact
  * sheet (never canWrite — this is a write action on a sensitive, unauthenticated-facing link,
@@ -350,30 +507,28 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
 
   return (
     <div data-testid="caregiver-link-control" className="flex flex-col items-start gap-1">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={active?.status ?? 'None'} />
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="md"
           onClick={async () => {
             const res = await generate.mutateAsync({ participantId })
             const token = res.data!.token
             setIssued({ url: `${window.location.origin}/caregiver/${token}`, expiresAt: res.data!.expiresAt })
           }}
           disabled={generate.isPending}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-all disabled:opacity-50"
         >
           {generate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
           {active ? 'Regenerate caregiver link' : 'Generate caregiver link'}
-        </button>
+        </Button>
         {active && (
-          <button
-            type="button"
-            onClick={() => setConfirmingRevoke(true)}
-            disabled={revoke.isPending}
-            className="px-3 py-2 rounded-lg text-sm text-[var(--color-destructive)] hover:bg-[var(--color-accent)]"
-          >
-            Revoke
-          </button>
+          // The span carries the destructive colour itself: a ghost Button sets its own text colour, and two
+          // competing text-colour utilities on one element resolve by stylesheet order, not by intent.
+          <Button type="button" variant="ghost" size="md" onClick={() => setConfirmingRevoke(true)} disabled={revoke.isPending}>
+            <span className="text-[var(--color-destructive)]">Revoke</span>
+          </Button>
         )}
       </div>
       {issued && (

@@ -60,6 +60,9 @@ export type TabsProps = {
  *   first / last enabled tab. Disabled tabs are skipped.
  * - Falls back to the first enabled tab when the parent's `active` doesn't match any tab
  *   or matches a disabled tab, so the roving tabindex never strands every tab at -1.
+ * - Touch target: every tab has a `--tap-min` height floor — 0 (no change: `py-2` + a 20px line + the
+ *   2px underline is ~38px) on a mouse, 44px under `pointer: coarse` so a fingertip lands on it. The
+ *   token flips; the component doesn't branch on the pointer type.
  * - Overflow: the tablist scrolls horizontally on small viewports so 11-tab pages like
  *   `ParticipantDetailPage` don't overflow the page gutter. Long strips wrap via `flex-wrap`
  *   too — billing-style 3-tab pages stay on one line; longer strips roll over gracefully.
@@ -188,7 +191,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: 
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
+              className={`flex min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
                 isActive
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'

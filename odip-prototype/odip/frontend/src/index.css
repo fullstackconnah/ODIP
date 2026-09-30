@@ -75,6 +75,7 @@
   --field-gap-y: 12px;     /* form grid row gap */
   --field-gap-x: 16px;     /* form grid column gap */
   --gutter: 20px;          /* main content side padding */
+  --tap-min: 0px;          /* touch-target floor (min-height/width) for content-sized controls — tabs, standalone action links; none on fine pointers */
 }
 
 @media (pointer: coarse) {
@@ -89,6 +90,7 @@
     --field-gap-y: 16px;
     --field-gap-x: 16px;
     --gutter: 16px;
+    --tap-min: 44px;
   }
 }
 
