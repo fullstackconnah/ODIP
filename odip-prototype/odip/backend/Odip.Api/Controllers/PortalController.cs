@@ -393,16 +393,25 @@ public class PortalController : ControllerBase
         // The End checklist, ENFORCED: every dose due in the rostered window needs an outcome (or a "not given this
         // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the
         // current shift detail as data so the client can refresh what it shows.
-        var checkedCompletion = shift.Status == ShiftStatus.InProgress
-            ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct)
-            : null;
-        var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, ct);
-        if (blockers.Count > 0)
+        //
+        // Only a Finish that would otherwise go ahead is checked: InProgress, or the manual-start path (Published with a supplied
+        // ActualStart). A shift that was never started and supplies no start keeps its existing 409 SHIFT_NOT_IN_PROGRESS below -
+        // the worker must be told it hasn't been started, not that doses are outstanding.
+        var finishWouldProceed = shift.Status == ShiftStatus.InProgress
+            || (shift.Status == ShiftStatus.Published && dto.ActualStart is not null);
+        if (finishWouldProceed)
         {
-            var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
-            var blocked = ApiResponse<PortalShiftDetailDto>.Fail(detail, blockers.Select(b => b.Message).ToList());
-            blocked.Code = ShiftErrorCodes.ShiftFinishBlocked;
-            return UnprocessableEntity(blocked);
+            var checkedCompletion = shift.Status == ShiftStatus.InProgress
+                ? await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct)
+                : null;
+            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, ct);
+            if (blockers.Count > 0)
+            {
+                var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
+                var blocked = ApiResponse<PortalShiftDetailDto>.Fail(detail, blockers.Select(b => b.Message).ToList());
+                blocked.Code = ShiftErrorCodes.ShiftFinishBlocked;
+                return UnprocessableEntity(blocked);
+            }
         }
 
         var now = NowUtc;

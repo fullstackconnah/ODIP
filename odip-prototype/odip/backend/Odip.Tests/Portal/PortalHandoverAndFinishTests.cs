@@ -538,6 +538,19 @@ public class PortalFinishValidationTests
         Assert.Empty(await f.Db.ShiftCompletions.ToListAsync());   // no completion was created by the rejected attempt
     }
 
+    [Fact]
+    public async Task FinishingAShiftThatWasNeverStarted_IsStill409NotStarted_EvenWithDosesDue()
+    {
+        // The checklist must not mask the existing "this shift hasn't been started" answer.
+        var f = Create(ShiftStatus.Published);
+        AddNote(f);
+        AddMed(f, "Levetiracetam", "09:00");
+
+        var result = await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default);
+
+        Assert.Equal(ShiftErrorCodes.ShiftNotInProgress, Failure(result, 409).Code);
+    }
+
     // ── breaks ──
 
     [Fact]
